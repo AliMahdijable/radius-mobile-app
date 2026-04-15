@@ -5,6 +5,7 @@ import '../providers/subscribers_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
 import '../models/subscriber_model.dart';
+import 'app_snackbar.dart';
 
 class AddSubscriberSheet extends ConsumerStatefulWidget {
   const AddSubscriberSheet({super.key});
@@ -53,9 +54,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedPackageId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اختر الباقة'), backgroundColor: Colors.red),
-      );
+      AppSnackBar.warning(context, 'اختر الباقة');
       return;
     }
 
@@ -85,14 +84,10 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
       setState(() => _selectedPackageId = null);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إنشاء المشترك بنجاح'), backgroundColor: Colors.green),
-      );
+      AppSnackBar.success(context, 'تم إنشاء المشترك بنجاح');
       await ref.read(subscribersProvider.notifier).loadSubscribers();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل إنشاء المشترك'), backgroundColor: Colors.red),
-      );
+      AppSnackBar.error(context, 'فشل إنشاء المشترك');
     }
   }
 

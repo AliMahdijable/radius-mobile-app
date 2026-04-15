@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/messages_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../widgets/app_snackbar.dart';
 
 class BroadcastScreen extends ConsumerStatefulWidget {
   const BroadcastScreen({super.key});
@@ -22,9 +23,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
 
   Future<void> _startBroadcast() async {
     if (_messageController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى كتابة الرسالة')),
-      );
+      AppSnackBar.warning(context, 'يرجى كتابة الرسالة');
       return;
     }
 

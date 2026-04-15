@@ -4,6 +4,7 @@ import '../providers/schedules_provider.dart';
 import '../models/schedule_model.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
+import '../widgets/app_snackbar.dart';
 
 class SchedulesScreen extends ConsumerStatefulWidget {
   const SchedulesScreen({super.key});
@@ -163,10 +164,11 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                       .saveSchedule(newSchedule);
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content:
-                          Text(ok ? 'تم حفظ الجدولة' : 'فشل حفظ الجدولة'),
-                    ));
+                    if (ok) {
+                      AppSnackBar.success(context, 'تم حفظ الجدولة');
+                    } else {
+                      AppSnackBar.error(context, 'فشل حفظ الجدولة');
+                    }
                   }
                 },
                 child: const Text('حفظ'),
@@ -318,12 +320,11 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                                           .triggerSchedule(
                                               schedule.scheduleType);
                                       if (mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(SnackBar(
-                                          content: Text(ok
-                                              ? 'تم تشغيل الجدولة'
-                                              : 'فشل التشغيل'),
-                                        ));
+                                        if (ok) {
+                                          AppSnackBar.success(context, 'تم تشغيل الجدولة');
+                                        } else {
+                                          AppSnackBar.error(context, 'فشل التشغيل');
+                                        }
                                       }
                                     },
                                     tooltip: 'تشغيل الآن',

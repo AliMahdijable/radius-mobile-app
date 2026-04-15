@@ -148,18 +148,30 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
     }
   }
 
-  Future<bool> sendMessage(String to, String message) async {
+  Future<({bool success, String? error})> sendMessage(
+      String to, String message) async {
     final adminId = await _getAdminId();
-    if (adminId == null) return false;
+    if (adminId == null) {
+      return (success: false, error: 'لم يتم العثور على معرف المدير');
+    }
     try {
       final response = await _dio.post(ApiConstants.waSendMessage, data: {
         'adminId': adminId,
         'to': to,
         'message': message,
       });
-      return response.data['success'] == true;
+      if (response.data['success'] == true) {
+        return (success: true, error: null);
+      }
+      final msg = response.data['message']?.toString() ??
+          response.data['error']?.toString();
+      return (success: false, error: msg ?? 'فشل إرسال الرسالة');
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message']?.toString() ??
+          e.response?.data?['error']?.toString();
+      return (success: false, error: msg ?? 'خطأ في الاتصال بالخادم');
     } catch (_) {
-      return false;
+      return (success: false, error: 'خطأ غير متوقع');
     }
   }
 
