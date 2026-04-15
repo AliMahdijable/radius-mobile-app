@@ -726,7 +726,7 @@ class _SubscriberDetailsScreenState
                         final newDebt = _toDouble(fresh?['notes']);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final remDays = fresh?['remaining_days']?.toString() ?? '';
-                        _sendWhatsAppFromTemplate('renewal',
+                        await _sendWhatsAppFromTemplate('renewal',
                           extraVars: {
                             '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
                             '{paid_amount}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
@@ -1073,7 +1073,7 @@ class _SubscriberDetailsScreenState
                         await notifier.loadSubscribers();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes']);
-                        _sendWhatsAppFromTemplate('activation_notice', extraVars: {
+                        await _sendWhatsAppFromTemplate('activation_notice', extraVars: {
                           '{package_name}': profileName,
                           '{package_price}': _formatNumber(userPrice),
                           '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
@@ -1450,7 +1450,7 @@ class _SubscriberDetailsScreenState
                             await notifier.loadSubscribers();
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes']);
-                            _sendWhatsAppFromTemplate('payment_confirmation',
+                            await _sendWhatsAppFromTemplate('payment_confirmation',
                               extraVars: {
                                 '{paid_amount}': _formatNumber(payAmount),
                                 '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
