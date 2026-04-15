@@ -121,10 +121,16 @@ class _SubscriberDetailsScreenState
 
     setState(() => _isProcessing = true);
     final notifier = ref.read(subscribersProvider.notifier);
-    final results = await Future.wait([
+
+    final futures = <Future>[
       notifier.getSubscriberDetails(id),
       notifier.getUserOverview(id),
-    ]);
+    ];
+    if (ref.read(subscribersProvider).packages.isEmpty) {
+      futures.add(notifier.loadPackages());
+    }
+
+    final results = await Future.wait(futures);
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
@@ -146,7 +152,6 @@ class _SubscriberDetailsScreenState
     }
 
     final sub = widget.subscriber;
-    final packages = ref.read(subscribersProvider).packages;
     final originalUsername = details['username']?.toString() ?? sub.username;
     final originalProfileId = details['profile_id'] ??
         (details['profile_details'] is Map ? details['profile_details']['id'] : null) ??
@@ -161,6 +166,8 @@ class _SubscriberDetailsScreenState
     int? selectedProfileId = originalProfileId is int
         ? originalProfileId
         : int.tryParse(originalProfileId?.toString() ?? '');
+    bool saving = false;
+    bool showAllPackages = false;
 
     if (!mounted) return;
 
@@ -170,189 +177,299 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        bool saving = false;
-        return StatefulBuilder(builder: (ctx, setSheet) {
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(child: Container(width: 40, height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Container(padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.edit, color: AppTheme.primary, size: 20)),
-                  const SizedBox(width: 10),
-                  Text('تعديل بيانات المشترك',
-                      style: Theme.of(ctx).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ]),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: unCtrl,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم المستخدم',
-                    prefixIcon: Icon(Icons.alternate_email, size: 20)),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: pwCtrl,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  decoration: const InputDecoration(
-                    labelText: 'كلمة المرور',
-                    prefixIcon: Icon(Icons.lock_outline, size: 20)),
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(
-                    controller: fnCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'الاسم الأول',
-                      prefixIcon: Icon(Icons.person_outline, size: 20)),
-                  )),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(
-                    controller: lnCtrl,
-                    decoration: const InputDecoration(labelText: 'الاسم الأخير'),
-                  )),
-                ]),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: phCtrl,
-                  keyboardType: TextInputType.phone,
-                  textDirection: TextDirection.ltr, textAlign: TextAlign.left,
-                  decoration: const InputDecoration(
-                    labelText: 'رقم الهاتف',
-                    prefixIcon: Icon(Icons.phone_outlined, size: 20)),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: expCtrl,
-                  textDirection: TextDirection.ltr, textAlign: TextAlign.left,
-                  decoration: const InputDecoration(
-                    labelText: 'تاريخ الانتهاء',
-                    hintText: 'YYYY-MM-DD HH:MM:SS',
-                    prefixIcon: Icon(Icons.calendar_today, size: 20)),
-                ),
-                const SizedBox(height: 12),
-                if (packages.isNotEmpty) ...[
-                  Text('الباقة', style: TextStyle(fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
-                  const SizedBox(height: 4),
-                  Builder(builder: (_) {
-                    final seen = <int>{};
-                    final uniquePkgs = packages.where((p) {
-                      if (p.idx <= 0 || seen.contains(p.idx)) return false;
-                      seen.add(p.idx);
-                      return true;
-                    }).toList();
-                    final hasMatch = selectedProfileId != null &&
-                        selectedProfileId! > 0 &&
-                        uniquePkgs.any((p) => p.idx == selectedProfileId);
-                    final currentPkgName = sub.profileName ??
-                        details['profile_name']?.toString() ??
-                        (details['profile_details'] is Map
-                            ? details['profile_details']['name']?.toString()
-                            : null);
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom +
+                MediaQuery.of(sheetCtx).padding.bottom,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            final packages = ref.read(subscribersProvider).packages;
+            final seen = <int>{};
+            final uniquePkgs = packages.where((p) {
+              if (p.idx <= 0 || seen.contains(p.idx)) return false;
+              seen.add(p.idx);
+              return true;
+            }).toList();
+
+            final currentPkgName = sub.profileName ??
+                details['profile_name']?.toString() ??
+                (details['profile_details'] is Map
+                    ? details['profile_details']['name']?.toString()
+                    : null);
+
+            final currentPkg = selectedProfileId != null
+                ? uniquePkgs.cast<PackageModel?>().firstWhere(
+                    (p) => p!.idx == selectedProfileId, orElse: () => null)
+                : null;
+
+            final displayPkgs = showAllPackages
+                ? uniquePkgs
+                : uniquePkgs.take(5).toList();
+
+            return Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 16),
+              child: SingleChildScrollView(child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(child: Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 16),
+                  Row(children: [
+                    Container(padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Theme.of(ctx).colorScheme.outline.withOpacity(0.3))),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: hasMatch ? selectedProfileId : null,
-                          isExpanded: true,
-                          hint: Text(
-                            currentPkgName ?? 'اختر الباقة',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: currentPkgName != null
-                                  ? Theme.of(ctx).colorScheme.onSurface
-                                  : null,
-                            ),
-                          ),
-                          items: uniquePkgs.map((p) => DropdownMenuItem<int>(
-                            value: p.idx,
-                            child: Text(p.name, style: const TextStyle(fontSize: 13)),
-                          )).toList(),
-                          onChanged: (v) => setSheet(() => selectedProfileId = v),
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.edit, color: AppTheme.primary, size: 20)),
+                    const SizedBox(width: 10),
+                    Text('تعديل بيانات المشترك',
+                        style: Theme.of(ctx).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                  ]),
+                  const SizedBox(height: 20),
+
+                  Text('معلومات المشترك', style: TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: TextField(
+                      controller: fnCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'الاسم الأول',
+                        prefixIcon: Icon(Icons.person_outline, size: 20)),
+                    )),
+                    const SizedBox(width: 10),
+                    Expanded(child: TextField(
+                      controller: lnCtrl,
+                      decoration: const InputDecoration(labelText: 'الاسم الأخير'),
+                    )),
+                  ]),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phCtrl,
+                    keyboardType: TextInputType.phone,
+                    textDirection: TextDirection.ltr, textAlign: TextAlign.left,
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الهاتف',
+                      prefixIcon: Icon(Icons.phone_outlined, size: 20)),
+                  ),
+                  const SizedBox(height: 20),
+
+                  Text('بيانات الدخول', style: TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: unCtrl,
+                    textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.left,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المستخدم',
+                      prefixIcon: Icon(Icons.alternate_email, size: 20)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: pwCtrl,
+                    textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.left,
+                    decoration: const InputDecoration(
+                      labelText: 'كلمة المرور',
+                      prefixIcon: Icon(Icons.lock_outline, size: 20)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: expCtrl,
+                    textDirection: TextDirection.ltr, textAlign: TextAlign.left,
+                    decoration: const InputDecoration(
+                      labelText: 'تاريخ الانتهاء',
+                      hintText: 'YYYY-MM-DD HH:MM:SS',
+                      prefixIcon: Icon(Icons.calendar_today, size: 20)),
+                  ),
+                  const SizedBox(height: 20),
+
+                  Row(children: [
+                    Text('الباقة', style: TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    const Spacer(),
+                    if (currentPkg != null || currentPkgName != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6)),
+                        child: Text(
+                          'الحالية: ${currentPkg?.name ?? currentPkgName ?? '—'}',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.primary),
                         ),
                       ),
-                    );
-                  }),
+                  ]),
+                  const SizedBox(height: 10),
+
+                  if (uniquePkgs.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange.withOpacity(0.2))),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          const Text('لا توجد باقات متاحة',
+                              style: TextStyle(fontSize: 13, color: Colors.orange)),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () async {
+                              await notifier.loadPackages();
+                              setSheet(() {});
+                            },
+                            child: const Icon(Icons.refresh, size: 16, color: Colors.orange),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    ...displayPkgs.map((pkg) {
+                      final isSelected = selectedProfileId == pkg.idx;
+                      final isCurrentPkg = (originalProfileId is int && pkg.idx == originalProfileId) ||
+                          pkg.idx == int.tryParse(originalProfileId?.toString() ?? '');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: GestureDetector(
+                          onTap: () => setSheet(() => selectedProfileId = pkg.idx),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppTheme.primary.withOpacity(0.08)
+                                  : Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppTheme.primary.withOpacity(0.4)
+                                    : Colors.transparent,
+                                width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSelected ? Icons.check_circle : Icons.circle_outlined,
+                                  size: 18,
+                                  color: isSelected ? AppTheme.primary : Colors.grey),
+                                const SizedBox(width: 10),
+                                Expanded(child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Flexible(child: Text(pkg.name,
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                                          color: isSelected ? AppTheme.primary : null),
+                                        overflow: TextOverflow.ellipsis)),
+                                      if (isCurrentPkg) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(4)),
+                                          child: const Text('الحالية',
+                                            style: TextStyle(fontSize: 9, color: Colors.blue,
+                                                fontWeight: FontWeight.w600)),
+                                        ),
+                                      ],
+                                    ]),
+                                    if (pkg.rateLimit != null)
+                                      Text(pkg.rateLimit!,
+                                        style: TextStyle(fontSize: 10,
+                                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                                  ],
+                                )),
+                                Text(AppHelpers.formatMoney(pkg.price),
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                    color: isSelected ? AppTheme.primary : AppTheme.teal600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    if (uniquePkgs.length > 5)
+                      TextButton(
+                        onPressed: () => setSheet(() => showAllPackages = !showAllPackages),
+                        child: Text(
+                          showAllPackages
+                              ? 'عرض أقل'
+                              : 'عرض الكل (${uniquePkgs.length} باقة)',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 24),
+
+                  SizedBox(height: 50, child: ElevatedButton.icon(
+                    onPressed: saving ? null : () async {
+                      setSheet(() => saving = true);
+                      try {
+                        bool anySuccess = true;
+                        final newUsername = unCtrl.text.trim();
+                        if (newUsername != originalUsername && newUsername.isNotEmpty) {
+                          final ok = await notifier.renameSubscriber(id, newUsername);
+                          if (!ok) anySuccess = false;
+                        }
+
+                        final opId = originalProfileId is int
+                            ? originalProfileId
+                            : int.tryParse(originalProfileId?.toString() ?? '');
+                        if (selectedProfileId != null && selectedProfileId != opId) {
+                          final ok = await notifier.changeProfile(id, selectedProfileId!);
+                          if (!ok) anySuccess = false;
+                        }
+
+                        details['firstname'] = fnCtrl.text.trim();
+                        details['lastname'] = lnCtrl.text.trim();
+                        details['phone'] = phCtrl.text.trim();
+                        details['expiration'] = expCtrl.text.trim();
+                        if (pwCtrl.text.isNotEmpty) {
+                          details['password'] = pwCtrl.text;
+                          details['confirm_password'] = pwCtrl.text;
+                        }
+                        details.remove('id');
+                        details.remove('idx');
+                        details.remove('profile_details');
+
+                        final ok = await notifier.updateSubscriber(id, details);
+                        if (!ok) anySuccess = false;
+
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          _showSnack(anySuccess ? 'تم التعديل بنجاح' : 'فشل بعض التعديلات',
+                              success: anySuccess);
+                          await notifier.loadSubscribers();
+                          if (mounted) context.pop();
+                        }
+                      } finally {
+                        if (mounted) setSheet(() => saving = false);
+                      }
+                    },
+                    icon: saving
+                        ? const SizedBox(width: 20, height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.save),
+                    label: Text(saving ? 'جاري الحفظ...' : 'حفظ التعديلات'),
+                  )),
+                  const SizedBox(height: 20),
                 ],
-                const SizedBox(height: 24),
-                SizedBox(height: 50, child: ElevatedButton.icon(
-                  onPressed: saving ? null : () async {
-                    setSheet(() => saving = true);
-                    try {
-                      bool anySuccess = true;
-                      final newUsername = unCtrl.text.trim();
-                      if (newUsername != originalUsername && newUsername.isNotEmpty) {
-                        final ok = await notifier.renameSubscriber(id, newUsername);
-                        if (!ok) anySuccess = false;
-                      }
-
-                      final opId = originalProfileId is int
-                          ? originalProfileId
-                          : int.tryParse(originalProfileId?.toString() ?? '');
-                      if (selectedProfileId != null && selectedProfileId != opId) {
-                        final ok = await notifier.changeProfile(id, selectedProfileId!);
-                        if (!ok) anySuccess = false;
-                      }
-
-                      details['firstname'] = fnCtrl.text.trim();
-                      details['lastname'] = lnCtrl.text.trim();
-                      details['phone'] = phCtrl.text.trim();
-                      details['expiration'] = expCtrl.text.trim();
-                      if (pwCtrl.text.isNotEmpty) {
-                        details['password'] = pwCtrl.text;
-                        details['confirm_password'] = pwCtrl.text;
-                      }
-                      details.remove('id');
-                      details.remove('idx');
-                      details.remove('profile_details');
-
-                      final ok = await notifier.updateSubscriber(id, details);
-                      if (!ok) anySuccess = false;
-
-                      if (mounted) {
-                        Navigator.pop(ctx);
-                        _showSnack(anySuccess ? 'تم التعديل بنجاح' : 'فشل بعض التعديلات',
-                            success: anySuccess);
-                        await notifier.loadSubscribers();
-                        if (mounted) context.pop();
-                      }
-                    } finally {
-                      if (mounted) setSheet(() => saving = false);
-                    }
-                  },
-                  icon: saving
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.save),
-                  label: Text(saving ? 'جاري الحفظ...' : 'حفظ التعديلات'),
-                )),
-                const SizedBox(height: 20),
-              ],
-            )),
-          );
-        });
+              )),
+            );
+          }),
+        );
       },
     );
   }
@@ -585,10 +702,10 @@ class _SubscriberDetailsScreenState
                         final remDays = fresh?['remaining_days']?.toString() ?? '';
                         _sendWhatsAppFromTemplate('renewal',
                           extraVars: {
-                            '{package_price}': pkgPrice ?? '',
-                            '{paid_amount}': pkgPrice ?? '',
-                            '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                            '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                            '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
+                            '{paid_amount}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
+                            '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                            '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                             '{expiry_date}': expDate,
                             '{expiration_date}': expDate,
                             '{days_remaining}': remDays,
@@ -932,9 +1049,9 @@ class _SubscriberDetailsScreenState
                         final newDebt = _toDouble(fresh?['notes']);
                         _sendWhatsAppFromTemplate('activation_notice', extraVars: {
                           '{package_name}': profileName,
-                          '{package_price}': userPrice.toStringAsFixed(0),
-                          '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                          '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                          '{package_price}': _formatNumber(userPrice),
+                          '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                          '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                         });
                         if (mounted) context.pop();
                       }
@@ -994,8 +1111,9 @@ class _SubscriberDetailsScreenState
       if (match.isEmpty) return;
 
       final sub = widget.subscriber;
-      final debtVal = sub.hasDebt ? sub.debtAmount.abs().toStringAsFixed(0) : '0';
-      final creditVal = sub.debtAmount > 0 ? sub.debtAmount.toStringAsFixed(0) : '0';
+      final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
+      final creditVal = sub.debtAmount > 0 ? _formatNumber(sub.debtAmount) : '0';
+      final pkgPriceFormatted = _formatNumber(double.tryParse(sub.price ?? '0') ?? 0);
 
       String msg = match.first.messageContent;
       final vars = {
@@ -1008,11 +1126,11 @@ class _SubscriberDetailsScreenState
         '{expiration_date}': sub.expiration ?? '',
         '{expiry_date}': sub.expiration ?? '',
         '{package_name}': sub.profileName ?? '',
-        '{package_price}': sub.price ?? '0',
+        '{package_price}': pkgPriceFormatted,
         '{debt_amount}': debtVal,
         '{credit_amount}': creditVal,
         '{discount_amount}': '0',
-        '{discounted_price}': sub.price ?? '0',
+        '{discounted_price}': pkgPriceFormatted,
         '{paid_amount}': '0',
         '{username}': sub.username,
         ...?extraVars,
@@ -1292,9 +1410,9 @@ class _SubscriberDetailsScreenState
                             final newDebt = _toDouble(fresh?['notes']);
                             _sendWhatsAppFromTemplate('payment_confirmation',
                               extraVars: {
-                                '{paid_amount}': payAmount.toStringAsFixed(0),
-                                '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                                '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                                '{paid_amount}': _formatNumber(payAmount),
+                                '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                                '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                                 '{expiry_date}': fresh?['expiration']?.toString() ?? '',
                                 '{expiration_date}': fresh?['expiration']?.toString() ?? '',
                               });
