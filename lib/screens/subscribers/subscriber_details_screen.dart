@@ -650,6 +650,9 @@ class _SubscriberDetailsScreenState
 
     final partialCtrl = TextEditingController();
     final partialFocus = FocusNode();
+    bool isCash = false;
+    bool isPartialCash = false;
+    bool submitting = false;
 
     if (!mounted) return;
 
@@ -660,11 +663,6 @@ class _SubscriberDetailsScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        bool isCash = false;
-        bool isPartialCash = false;
-
-        bool submitting = false;
-
         return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
             padding: EdgeInsets.only(
@@ -1051,6 +1049,8 @@ class _SubscriberDetailsScreenState
     final amountCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
     final amountFocusPay = FocusNode();
+    bool payAll = false;
+    bool submitting = false;
 
     showModalBottomSheet(
       context: context,
@@ -1059,9 +1059,6 @@ class _SubscriberDetailsScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        bool payAll = false;
-        bool submitting = false;
-
         return StatefulBuilder(builder: (ctx, setSheet) {
 
           return Padding(
@@ -1360,6 +1357,7 @@ class _SubscriberDetailsScreenState
     final amountCtrl = TextEditingController();
     final commentCtrl = TextEditingController();
     final amountFocusAdd = FocusNode();
+    bool submitting = false;
 
     showModalBottomSheet(
       context: context,
@@ -1368,8 +1366,6 @@ class _SubscriberDetailsScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        bool submitting = false;
-
         return StatefulBuilder(builder: (ctx, setSheet) {
 
           return Padding(
