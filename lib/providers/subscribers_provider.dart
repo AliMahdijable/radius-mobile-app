@@ -623,18 +623,112 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     try {
       final adminId = await _storage.getAdminId();
 
-      // 1) Always load priceList first — it's the most reliable source
+      // 1) Load priceList for user_price lookup (like web's getUserPrice)
       if (_priceMap.isEmpty && adminId != null) {
         await _loadPriceList(adminId);
       }
 
-      final packages = <PackageModel>[];
+      List<Map<String, dynamic>> rawPackages = [];
 
-      // 2) PRIMARY: Build packages directly from priceList
-      //    priceList items have: id, name, price, user_price, cost
-      //    This is the same data the web project uses for getUserPrice()
-      if (_priceMap.isNotEmpty) {
-        dev.log('Building packages from priceList (${_priceMap.length} items)...', name: 'PKG');
+      // 2) PRIMARY: POST /index/profile (same as web fetchAddPackages)
+      //    This endpoint returns only regular profiles, NOT extensions
+      try {
+        dev.log('POST /index/profile ...', name: 'PKG');
+        final payload = EncryptionService.encrypt({
+          'page': 1,
+          'count': 10,
+          'sortBy': null,
+          'direction': 'asc',
+          'search': '',
+          'columns': [
+            'name', 'price', 'pool', 'downrate', 'uprate',
+            'type', 'expiration_amount', 'users_count', 'online_users_count',
+          ],
+        });
+
+        final response = await _sas4Dio.post(
+          ApiConstants.sas4Profiles,
+          data: {'payload': payload},
+          options: Options(contentType: 'application/x-www-form-urlencoded'),
+        );
+
+        var resData = response.data;
+        dev.log('POST response type: ${resData.runtimeType}', name: 'PKG');
+        if (resData is String) {
+          dev.log('POST response is String, decrypting...', name: 'PKG');
+          resData = EncryptionService.decrypt(resData);
+          dev.log('Decrypted type: ${resData.runtimeType}', name: 'PKG');
+        }
+
+        if (resData is Map && resData['data'] is List) {
+          rawPackages = (resData['data'] as List)
+              .whereType<Map<String, dynamic>>().toList();
+          dev.log('POST parsed ${rawPackages.length} from data[]', name: 'PKG');
+        } else if (resData is List) {
+          rawPackages = resData.whereType<Map<String, dynamic>>().toList();
+          dev.log('POST parsed ${rawPackages.length} from root[]', name: 'PKG');
+        } else {
+          dev.log('POST unexpected response: $resData', name: 'PKG');
+        }
+      } catch (e) {
+        dev.log('POST /index/profile FAILED: $e', name: 'PKG');
+      }
+
+      // 3) FALLBACK 1: GET /list/profile/5 (no permission needed)
+      if (rawPackages.isEmpty) {
+        try {
+          dev.log('GET /list/profile/5 ...', name: 'PKG');
+          final response = await _sas4Dio.get(ApiConstants.sas4ListProfile);
+
+          var resData = response.data;
+          dev.log('GET response type: ${resData.runtimeType}', name: 'PKG');
+          if (resData is String) {
+            resData = EncryptionService.decrypt(resData);
+          }
+
+          if (resData is Map && resData['data'] is List) {
+            rawPackages = (resData['data'] as List)
+                .whereType<Map<String, dynamic>>().toList();
+          } else if (resData is List) {
+            rawPackages = resData.whereType<Map<String, dynamic>>().toList();
+          }
+          dev.log('GET parsed ${rawPackages.length} packages', name: 'PKG');
+        } catch (e) {
+          dev.log('GET /list/profile/5 FAILED: $e', name: 'PKG');
+        }
+      }
+
+      // 4) Build PackageModel list + merge user_price from priceList
+      final packages = <PackageModel>[];
+      if (rawPackages.isNotEmpty) {
+        for (final raw in rawPackages) {
+          final pkgId = raw['id'] ?? raw['idx'];
+          final id = pkgId is int ? pkgId : int.tryParse(pkgId?.toString() ?? '') ?? 0;
+          if (id <= 0) continue;
+          final name = (raw['name'] ?? '').toString();
+          if (name.isEmpty) continue;
+
+          final pi = _priceMap[id];
+          final userPrice = pi?['user_price']?.toString()
+              ?? raw['user_price']?.toString();
+
+          packages.add(PackageModel(
+            idx: id,
+            name: name,
+            price: (raw['price'] ?? raw['profile_price'])?.toString(),
+            userPrice: userPrice,
+            type: raw['type']?.toString(),
+            expirationAmount: raw['expiration_amount'] is int
+                ? raw['expiration_amount']
+                : int.tryParse(raw['expiration_amount']?.toString() ?? ''),
+          ));
+        }
+        dev.log('Built ${packages.length} from profile API', name: 'PKG');
+      }
+
+      // 5) FALLBACK 2: build from priceList if ALL profile APIs failed
+      if (packages.isEmpty && _priceMap.isNotEmpty) {
+        dev.log('APIs failed, building from priceList (${_priceMap.length})...', name: 'PKG');
         for (final entry in _priceMap.entries) {
           if (entry.key <= 0) continue;
           final item = entry.value;
@@ -645,95 +739,15 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             name: name,
             price: (item['price'] ?? item['profile_price'])?.toString(),
             userPrice: item['user_price']?.toString(),
-            type: item['type']?.toString(),
-            expirationAmount: item['expiration_amount'] is int
-                ? item['expiration_amount']
-                : int.tryParse(item['expiration_amount']?.toString() ?? ''),
           ));
         }
-        dev.log('Built ${packages.length} packages from priceList', name: 'PKG');
+        dev.log('Built ${packages.length} from priceList fallback', name: 'PKG');
       }
 
-      // 3) FALLBACK: If priceList was empty, try API endpoints
-      if (packages.isEmpty) {
-        List<Map<String, dynamic>> rawPackages = [];
-
-        // 3a) POST /index/profile
-        try {
-          dev.log('priceList empty, trying POST /index/profile...', name: 'PKG');
-          final payload = EncryptionService.encrypt({
-            'page': 1,
-            'count': 10,
-            'sortBy': null,
-            'direction': 'asc',
-            'search': '',
-            'columns': [
-              'name', 'price', 'pool', 'downrate', 'uprate',
-              'type', 'expiration_amount', 'users_count', 'online_users_count',
-            ],
-          });
-
-          final response = await _sas4Dio.post(
-            ApiConstants.sas4Profiles,
-            data: {'payload': payload},
-            options: Options(contentType: 'application/x-www-form-urlencoded'),
-          );
-
-          var resData = response.data;
-          if (resData is String) resData = EncryptionService.decrypt(resData);
-
-          if (resData is Map && resData['data'] is List) {
-            rawPackages = (resData['data'] as List)
-                .whereType<Map<String, dynamic>>().toList();
-          } else if (resData is List) {
-            rawPackages = resData.whereType<Map<String, dynamic>>().toList();
-          }
-          dev.log('POST /index/profile: ${rawPackages.length} items', name: 'PKG');
-        } catch (e) {
-          dev.log('POST /index/profile failed: $e', name: 'PKG');
-        }
-
-        // 3b) GET /list/profile/5
-        if (rawPackages.isEmpty) {
-          try {
-            dev.log('Trying GET /list/profile/5...', name: 'PKG');
-            final response = await _sas4Dio.get(ApiConstants.sas4ListProfile);
-
-            var resData = response.data;
-            if (resData is String) resData = EncryptionService.decrypt(resData);
-
-            if (resData is Map && resData['data'] is List) {
-              rawPackages = (resData['data'] as List)
-                  .whereType<Map<String, dynamic>>().toList();
-            } else if (resData is List) {
-              rawPackages = resData.whereType<Map<String, dynamic>>().toList();
-            }
-            dev.log('GET /list/profile/5: ${rawPackages.length} items', name: 'PKG');
-          } catch (e) {
-            dev.log('GET /list/profile/5 failed: $e', name: 'PKG');
-          }
-        }
-
-        for (final raw in rawPackages) {
-          final pkgId = raw['id'] ?? raw['idx'];
-          final id = pkgId is int ? pkgId : int.tryParse(pkgId?.toString() ?? '') ?? 0;
-          if (id <= 0) continue;
-          final name = (raw['name'] ?? '').toString();
-          if (name.isEmpty) continue;
-          packages.add(PackageModel(
-            idx: id,
-            name: name,
-            price: (raw['price'] ?? raw['profile_price'])?.toString(),
-            userPrice: raw['user_price']?.toString(),
-            type: raw['type']?.toString(),
-            expirationAmount: raw['expiration_amount'] is int
-                ? raw['expiration_amount']
-                : int.tryParse(raw['expiration_amount']?.toString() ?? ''),
-          ));
-        }
+      dev.log('=== FINAL: ${packages.length} packages ===', name: 'PKG');
+      for (final p in packages) {
+        dev.log('  [${p.idx}] ${p.name} price=${p.displayPrice} type=${p.type}', name: 'PKG');
       }
-
-      dev.log('Final packages: ${packages.length}', name: 'PKG');
       state = state.copyWith(packages: packages);
     } catch (e, st) {
       dev.log('loadPackages error: $e\n$st', name: 'PKG');
