@@ -177,11 +177,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
             final daysInt =
                 days is int ? days : int.tryParse(days?.toString() ?? '');
 
-            if (daysInt != null && daysInt >= 0 && daysInt <= 3) {
+            if (daysInt != null && daysInt > 0 && daysInt <= 3) {
               nearExpiry++;
               nearExpiryList.add(Map<String, dynamic>.from(sub));
             }
-            if (daysInt != null && daysInt < 0 && daysInt >= -1) {
+            if (daysInt != null && daysInt <= 0 && daysInt >= -1) {
               expiredToday++;
               expiredTodayList.add(Map<String, dynamic>.from(sub));
             }
