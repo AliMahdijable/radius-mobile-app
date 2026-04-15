@@ -647,28 +647,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       }
       dev.log('Built ${packages.length} packages from priceList', name: 'PKG');
 
-      // Step 3: Try profile API to get type info (for extension filtering)
-      //         /index/profile returns type field which tells us monthly vs extension
-      Set<int> profileApiIds = {};
+      // Step 3: GET /list/profile/5 — returns only regular profiles (no extensions)
+      //         Response: {status: 200, data: [{id: 134, name: "..."}, ...]}
+      Set<int> regularIds = {};
       try {
-        final payload = EncryptionService.encrypt({
-          'page': 1,
-          'count': 10,
-          'sortBy': null,
-          'direction': 'asc',
-          'search': '',
-          'columns': [
-            'name', 'price', 'pool', 'downrate', 'uprate',
-            'type', 'expiration_amount', 'users_count', 'online_users_count',
-          ],
-        });
-
-        final response = await _sas4Dio.post(
-          ApiConstants.sas4Profiles,
-          data: {'payload': payload},
-          options: Options(contentType: 'application/x-www-form-urlencoded'),
-        );
-
+        final response = await _sas4Dio.get(ApiConstants.sas4ListProfile);
         var resData = response.data;
         if (resData is String) resData = EncryptionService.decrypt(resData);
 
@@ -681,20 +664,19 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
         for (final raw in items) {
           if (raw is! Map<String, dynamic>) continue;
-          final pkgId = raw['id'] ?? raw['idx'];
-          final id = pkgId is int ? pkgId : int.tryParse(pkgId?.toString() ?? '') ?? 0;
-          if (id > 0) profileApiIds.add(id);
+          final rawId = raw['id'];
+          final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0;
+          if (id > 0) regularIds.add(id);
         }
-        dev.log('Profile API returned ${profileApiIds.length} IDs: $profileApiIds', name: 'PKG');
+        dev.log('/list/profile/5 returned ${regularIds.length} IDs: $regularIds', name: 'PKG');
       } catch (e) {
-        dev.log('Profile API failed (OK, will show all): $e', name: 'PKG');
+        dev.log('/list/profile/5 failed (will show all): $e', name: 'PKG');
       }
 
-      // Step 4: If profile API gave us IDs, filter packages to only those IDs
-      //         (profile API only returns regular/monthly packages, NOT extensions)
-      if (profileApiIds.isNotEmpty) {
-        packages.removeWhere((p) => !profileApiIds.contains(p.idx));
-        dev.log('Filtered to ${packages.length} packages (profile API IDs)', name: 'PKG');
+      // Step 4: Filter to only regular profiles (removes extensions like 1-day)
+      if (regularIds.isNotEmpty) {
+        packages.removeWhere((p) => !regularIds.contains(p.idx));
+        dev.log('Filtered to ${packages.length} regular packages', name: 'PKG');
       }
 
       dev.log('=== FINAL: ${packages.length} packages ===', name: 'PKG');
