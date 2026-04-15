@@ -26,6 +26,17 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
 
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
+  static const _sortFields = [
+    _SortFieldDef('username', 'اسم المستخدم', Icons.person_rounded),
+    _SortFieldDef('firstname', 'الاسم', Icons.badge_rounded),
+    _SortFieldDef('name', 'الباقة', Icons.inventory_2_rounded),
+    _SortFieldDef('mobile', 'رقم الهاتف', Icons.phone_rounded),
+    _SortFieldDef('expiration', 'تاريخ الانتهاء', Icons.event_rounded),
+    _SortFieldDef('remaining_days', 'الأيام المتبقية', Icons.schedule_rounded),
+    _SortFieldDef('notes', 'الديون', Icons.account_balance_wallet_rounded),
+    _SortFieldDef('parent_username', 'تابع إلى', Icons.supervisor_account_rounded),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +57,146 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     _debounce = Timer(const Duration(milliseconds: 400), () {
       ref.read(subscribersProvider.notifier).searchSubscribers(query);
     });
+  }
+
+  void _showSortSheet(BuildContext context, String currentSort, String currentDir) {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String selectedField = currentSort;
+        String selectedDir = currentDir;
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurface.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.sort_rounded, size: 20, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text('ترتيب حسب', style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8, runSpacing: 8,
+                    children: _sortFields.map((f) {
+                      final isSelected = selectedField == f.key;
+                      return GestureDetector(
+                        onTap: () {
+                          setSheetState(() => selectedField = f.key);
+                          ref.read(subscribersProvider.notifier)
+                              .setSort(f.key, selectedDir);
+                          setState(() => _currentPage = 0);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? theme.colorScheme.primary.withOpacity(0.12)
+                                : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected
+                                  ? theme.colorScheme.primary.withOpacity(0.4)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(f.icon, size: 15, color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(0.5)),
+                              const SizedBox(width: 6),
+                              Text(f.label, style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withOpacity(0.7),
+                              )),
+                              if (isSelected) ...[
+                                const SizedBox(width: 4),
+                                Icon(Icons.check_rounded, size: 14,
+                                    color: theme.colorScheme.primary),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.swap_vert_rounded, size: 20, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text('الاتجاه', style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DirectionBtn(
+                          icon: Icons.arrow_upward_rounded,
+                          label: 'تصاعدي',
+                          selected: selectedDir == 'asc',
+                          onTap: () {
+                            setSheetState(() => selectedDir = 'asc');
+                            ref.read(subscribersProvider.notifier)
+                                .setSort(selectedField, 'asc');
+                            setState(() => _currentPage = 0);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _DirectionBtn(
+                          icon: Icons.arrow_downward_rounded,
+                          label: 'تنازلي',
+                          selected: selectedDir == 'desc',
+                          onTap: () {
+                            setSheetState(() => selectedDir = 'desc');
+                            ref.read(subscribersProvider.notifier)
+                                .setSort(selectedField, 'desc');
+                            setState(() => _currentPage = 0);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   static const _filters = [
@@ -95,38 +246,56 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       }
     }
 
+    final currentSort = state.sortBy;
+    final currentDirection = state.sortDirection;
+    final sortLabel = _sortFields
+        .firstWhere((f) => f.key == currentSort, orElse: () => _sortFields[0])
+        .label;
+
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (v) {
-              setState(() {
-                _isSearchMode = v.isNotEmpty;
-                _currentPage = 0;
-              });
-              _onSearch(v);
-            },
-            decoration: InputDecoration(
-              hintText: 'بحث عن مشترك...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _isSearchMode
-                  ? IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {
-                          _isSearchMode = false;
-                          _currentPage = 0;
-                        });
-                        ref
-                            .read(subscribersProvider.notifier)
-                            .searchSubscribers('');
-                      },
-                    )
-                  : null,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) {
+                    setState(() {
+                      _isSearchMode = v.isNotEmpty;
+                      _currentPage = 0;
+                    });
+                    _onSearch(v);
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'بحث عن مشترك...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _isSearchMode
+                        ? IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _isSearchMode = false;
+                                _currentPage = 0;
+                              });
+                              ref
+                                  .read(subscribersProvider.notifier)
+                                  .searchSubscribers('');
+                            },
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _SortButton(
+                label: sortLabel,
+                isAsc: currentDirection == 'asc',
+                onTap: () => _showSortSheet(context, currentSort, currentDirection),
+              ),
+            ],
           ),
         ),
 
@@ -256,13 +425,15 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         padding: const EdgeInsets.only(bottom: 100),
                         itemCount: displayList.length,
                         itemBuilder: (context, index) {
+                          final sub = displayList[index];
                           return SubscriberCard(
-                            subscriber: displayList[index],
+                            subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
+                            lastPayment: state.lastPayments[sub.username],
                             onTap: () {
                               context.push(
-                                '/subscriber/${displayList[index].username}',
-                                extra: displayList[index],
+                                '/subscriber/${sub.username}',
+                                extra: sub,
                               );
                             },
                           );
@@ -308,6 +479,97 @@ class _FilterDef {
   final IconData icon;
   final Color color;
   const _FilterDef(this.key, this.label, this.icon, this.color);
+}
+
+class _SortFieldDef {
+  final String key;
+  final String label;
+  final IconData icon;
+  const _SortFieldDef(this.key, this.label, this.icon);
+}
+
+class _SortButton extends StatelessWidget {
+  final String label;
+  final bool isAsc;
+  final VoidCallback onTap;
+  const _SortButton({required this.label, required this.isAsc, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sort_rounded, size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: 4),
+            Icon(
+              isAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+              size: 14, color: theme.colorScheme.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DirectionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _DirectionBtn({
+    required this.icon, required this.label,
+    required this.selected, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primary.withOpacity(0.12)
+              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary.withOpacity(0.4)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.5)),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.7),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _FilterChip extends StatelessWidget {

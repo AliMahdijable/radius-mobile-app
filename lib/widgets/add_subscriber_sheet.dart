@@ -79,7 +79,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
 
     return Padding(
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+        bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom,
         left: 20, right: 20, top: 16,
       ),
       child: Form(
@@ -179,24 +179,35 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
               ),
               const SizedBox(height: 12),
 
-              DropdownButtonFormField<int>(
-                value: _selectedPackageId,
-                decoration: const InputDecoration(
-                  labelText: 'الباقة',
-                  prefixIcon: Icon(Icons.sell_rounded, size: 20),
-                ),
-                items: packages.map((pkg) {
-                  return DropdownMenuItem(
-                    value: pkg.idx,
-                    child: Text(
-                      '${pkg.name} — ${AppHelpers.formatMoney(pkg.price)}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (v) => setState(() => _selectedPackageId = v),
-                validator: (v) => v == null ? 'اختر الباقة' : null,
-              ),
+              Builder(builder: (_) {
+                final seen = <int>{};
+                final uniquePkgs = packages.where((p) {
+                  if (p.idx <= 0 || seen.contains(p.idx)) return false;
+                  seen.add(p.idx);
+                  return true;
+                }).toList();
+                final hasMatch = _selectedPackageId != null &&
+                    _selectedPackageId! > 0 &&
+                    uniquePkgs.any((p) => p.idx == _selectedPackageId);
+                return DropdownButtonFormField<int>(
+                  value: hasMatch ? _selectedPackageId : null,
+                  decoration: const InputDecoration(
+                    labelText: 'الباقة',
+                    prefixIcon: Icon(Icons.sell_rounded, size: 20),
+                  ),
+                  items: uniquePkgs.map((pkg) {
+                    return DropdownMenuItem(
+                      value: pkg.idx,
+                      child: Text(
+                        '${pkg.name} — ${AppHelpers.formatMoney(pkg.price)}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setState(() => _selectedPackageId = v),
+                  validator: (v) => v == null ? 'اختر الباقة' : null,
+                );
+              }),
               const SizedBox(height: 24),
 
               SizedBox(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
 import '../core/network/dio_client.dart';
+import '../core/services/encryption_service.dart';
 
 class DashboardState {
   final int totalSubscribers;
@@ -224,7 +225,44 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         }
       } catch (_) {}
 
-      final offline = active - online;
+      // Fetch actual offline count via SAS4 encrypted call (same as React Dashboard)
+      int offline = active - online;
+      try {
+        final offlinePayload = EncryptionService.encrypt({
+          'page': 1,
+          'count': 1,
+          'sortBy': 'username',
+          'direction': 'asc',
+          'search': '',
+          'status': 1,
+          'connection': 1,
+          'profile_id': -1,
+          'parent_id': -1,
+          'sub_users': 1,
+          'mac': '',
+          'columns': ['idx'],
+        });
+        final offlineResp = await _sas4Dio.post(
+          ApiConstants.sas4ListUsers,
+          data: {'payload': offlinePayload},
+          options: Options(contentType: 'application/x-www-form-urlencoded'),
+        );
+        dynamic offlineParsed = offlineResp.data;
+        if (offlineParsed is String) {
+          offlineParsed = EncryptionService.decrypt(offlineParsed);
+        }
+        if (offlineParsed is Map) {
+          final tc = offlineParsed['totalCount'] ??
+              offlineParsed['total'] ??
+              offlineParsed['count'];
+          if (tc != null) {
+            offline = tc is int ? tc : (int.tryParse(tc.toString()) ?? offline);
+          }
+        }
+      } catch (e) {
+        dev.log('Offline count fetch error: $e', name: 'DASH');
+      }
+      if (offline < 0) offline = 0;
 
       state = state.copyWith(
         totalSubscribers: total,

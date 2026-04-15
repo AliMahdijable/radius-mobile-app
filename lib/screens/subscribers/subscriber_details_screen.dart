@@ -6,6 +6,7 @@ import '../../core/utils/helpers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
+import '../../providers/templates_provider.dart';
 
 class SubscriberDetailsScreen extends ConsumerStatefulWidget {
   final SubscriberModel subscriber;
@@ -47,7 +48,7 @@ class _SubscriberDetailsScreenState
       isScrollControlled: true,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
           left: 20, right: 20, top: 20,
         ),
         child: Column(
@@ -110,126 +111,245 @@ class _SubscriberDetailsScreenState
   }
 
   // ── Edit ───────────────────────────────────────────────────────────────
-  void _showEditSheet() {
+  void _showEditSheet() async {
+    final id = _subscriberId;
+    if (id == null) {
+      _showSnack('معرف المشترك غير متوفر', success: false);
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    final notifier = ref.read(subscribersProvider.notifier);
+    final results = await Future.wait([
+      notifier.getSubscriberDetails(id),
+      notifier.getUserOverview(id),
+    ]);
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+
+    final details = results[0] as Map<String, dynamic>?;
+    final overview = results[1] as Map<String, dynamic>?;
+
+    if (details == null) {
+      _showSnack('فشل جلب بيانات المشترك', success: false);
+      return;
+    }
+
+    if (overview != null) {
+      for (final key in overview.keys) {
+        if (details[key] == null ||
+            (details[key] is String && (details[key] as String).isEmpty)) {
+          details[key] = overview[key];
+        }
+      }
+    }
+
     final sub = widget.subscriber;
-    final fnCtrl = TextEditingController(text: sub.firstname);
-    final lnCtrl = TextEditingController(text: sub.lastname);
-    final phCtrl = TextEditingController(text: sub.displayPhone);
+    final packages = ref.read(subscribersProvider).packages;
+    final originalUsername = details['username']?.toString() ?? sub.username;
+    final originalProfileId = details['profile_id'] ??
+        (details['profile_details'] is Map ? details['profile_details']['id'] : null) ??
+        sub.profileId;
+
+    final unCtrl = TextEditingController(text: originalUsername);
+    final pwCtrl = TextEditingController(text: details['password']?.toString() ?? '');
+    final fnCtrl = TextEditingController(text: details['firstname']?.toString() ?? sub.firstname);
+    final lnCtrl = TextEditingController(text: details['lastname']?.toString() ?? sub.lastname);
+    final phCtrl = TextEditingController(text: details['phone']?.toString() ?? sub.displayPhone);
+    final expCtrl = TextEditingController(text: details['expiration']?.toString() ?? sub.expiration ?? '');
+    int? selectedProfileId = originalProfileId is int
+        ? originalProfileId
+        : int.tryParse(originalProfileId?.toString() ?? '');
+
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         bool saving = false;
-        return StatefulBuilder(builder: (ctx, setSheetState) {
+        return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
             padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              left: 20, right: 20, top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              left: 20, right: 20, top: 16,
             ),
-            child: Column(
+            child: SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
                 Row(children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
+                  Container(padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: AppTheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.edit, color: AppTheme.primary, size: 20),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.edit, color: AppTheme.primary, size: 20)),
                   const SizedBox(width: 10),
                   Text('تعديل بيانات المشترك',
                       style: Theme.of(ctx).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ]),
                 const SizedBox(height: 20),
+                TextField(
+                  controller: unCtrl,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم المستخدم',
+                    prefixIcon: Icon(Icons.alternate_email, size: 20)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pwCtrl,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
+                  decoration: const InputDecoration(
+                    labelText: 'كلمة المرور',
+                    prefixIcon: Icon(Icons.lock_outline, size: 20)),
+                ),
+                const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: fnCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'الاسم الأول',
-                        prefixIcon: Icon(Icons.person_outline, size: 20),
-                      ),
-                    ),
-                  ),
+                  Expanded(child: TextField(
+                    controller: fnCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'الاسم الأول',
+                      prefixIcon: Icon(Icons.person_outline, size: 20)),
+                  )),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: lnCtrl,
-                      decoration: const InputDecoration(labelText: 'الاسم الأخير'),
-                    ),
-                  ),
+                  Expanded(child: TextField(
+                    controller: lnCtrl,
+                    decoration: const InputDecoration(labelText: 'الاسم الأخير'),
+                  )),
                 ]),
                 const SizedBox(height: 12),
                 TextField(
                   controller: phCtrl,
                   keyboardType: TextInputType.phone,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
+                  textDirection: TextDirection.ltr, textAlign: TextAlign.left,
                   decoration: const InputDecoration(
                     labelText: 'رقم الهاتف',
-                    prefixIcon: Icon(Icons.phone_outlined, size: 20),
-                  ),
+                    prefixIcon: Icon(Icons.phone_outlined, size: 20)),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: expCtrl,
+                  textDirection: TextDirection.ltr, textAlign: TextAlign.left,
+                  decoration: const InputDecoration(
+                    labelText: 'تاريخ الانتهاء',
+                    hintText: 'YYYY-MM-DD HH:MM:SS',
+                    prefixIcon: Icon(Icons.calendar_today, size: 20)),
+                ),
+                const SizedBox(height: 12),
+                if (packages.isNotEmpty) ...[
+                  Text('الباقة', style: TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                  const SizedBox(height: 4),
+                  Builder(builder: (_) {
+                    final seen = <int>{};
+                    final uniquePkgs = packages.where((p) {
+                      if (p.idx <= 0 || seen.contains(p.idx)) return false;
+                      seen.add(p.idx);
+                      return true;
+                    }).toList();
+                    final hasMatch = selectedProfileId != null &&
+                        selectedProfileId! > 0 &&
+                        uniquePkgs.any((p) => p.idx == selectedProfileId);
+                    final currentPkgName = sub.profileName ??
+                        details['profile_name']?.toString() ??
+                        (details['profile_details'] is Map
+                            ? details['profile_details']['name']?.toString()
+                            : null);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Theme.of(ctx).colorScheme.outline.withOpacity(0.3))),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: hasMatch ? selectedProfileId : null,
+                          isExpanded: true,
+                          hint: Text(
+                            currentPkgName ?? 'اختر الباقة',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: currentPkgName != null
+                                  ? Theme.of(ctx).colorScheme.onSurface
+                                  : null,
+                            ),
+                          ),
+                          items: uniquePkgs.map((p) => DropdownMenuItem<int>(
+                            value: p.idx,
+                            child: Text(p.name, style: const TextStyle(fontSize: 13)),
+                          )).toList(),
+                          onChanged: (v) => setSheet(() => selectedProfileId = v),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
                 const SizedBox(height: 24),
-                SizedBox(
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: saving
-                        ? null
-                        : () async {
-                            final id = _subscriberId;
-                            if (id == null) {
-                              _showSnack('معرف المشترك غير متوفر', success: false);
-                              return;
-                            }
-                            setSheetState(() => saving = true);
-                            try {
-                              final notifier = ref.read(subscribersProvider.notifier);
-                              final details = await notifier.getSubscriberDetails(id);
-                              if (details == null) {
-                                if (mounted) {
-                                  _showSnack('فشل جلب بيانات المشترك', success: false);
-                                }
-                                return;
-                              }
-                              details['firstname'] = fnCtrl.text.trim();
-                              details['lastname'] = lnCtrl.text.trim();
-                              details['phone'] = phCtrl.text.trim();
-                              details.remove('id');
-                              details.remove('idx');
-                              details.remove('profile_details');
+                SizedBox(height: 50, child: ElevatedButton.icon(
+                  onPressed: saving ? null : () async {
+                    setSheet(() => saving = true);
+                    try {
+                      bool anySuccess = true;
+                      final newUsername = unCtrl.text.trim();
+                      if (newUsername != originalUsername && newUsername.isNotEmpty) {
+                        final ok = await notifier.renameSubscriber(id, newUsername);
+                        if (!ok) anySuccess = false;
+                      }
 
-                              final ok = await notifier.updateSubscriber(id, details);
+                      final opId = originalProfileId is int
+                          ? originalProfileId
+                          : int.tryParse(originalProfileId?.toString() ?? '');
+                      if (selectedProfileId != null && selectedProfileId != opId) {
+                        final ok = await notifier.changeProfile(id, selectedProfileId!);
+                        if (!ok) anySuccess = false;
+                      }
 
-                              if (mounted) {
-                                Navigator.pop(ctx);
-                                _showSnack(
-                                  ok ? 'تم التعديل بنجاح' : 'فشل التعديل',
-                                  success: ok,
-                                );
-                                if (ok) notifier.loadSubscribers();
-                              }
-                            } finally {
-                              if (mounted) setSheetState(() => saving = false);
-                            }
-                          },
-                    icon: saving
-                        ? const SizedBox(
-                            width: 20, height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.save),
-                    label: Text(saving ? 'جاري الحفظ...' : 'حفظ التعديلات'),
-                  ),
-                ),
+                      details['firstname'] = fnCtrl.text.trim();
+                      details['lastname'] = lnCtrl.text.trim();
+                      details['phone'] = phCtrl.text.trim();
+                      details['expiration'] = expCtrl.text.trim();
+                      if (pwCtrl.text.isNotEmpty) {
+                        details['password'] = pwCtrl.text;
+                        details['confirm_password'] = pwCtrl.text;
+                      }
+                      details.remove('id');
+                      details.remove('idx');
+                      details.remove('profile_details');
+
+                      final ok = await notifier.updateSubscriber(id, details);
+                      if (!ok) anySuccess = false;
+
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        _showSnack(anySuccess ? 'تم التعديل بنجاح' : 'فشل بعض التعديلات',
+                            success: anySuccess);
+                        await notifier.loadSubscribers();
+                        if (mounted) context.pop();
+                      }
+                    } finally {
+                      if (mounted) setSheet(() => saving = false);
+                    }
+                  },
+                  icon: saving
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save),
+                  label: Text(saving ? 'جاري الحفظ...' : 'حفظ التعديلات'),
+                )),
                 const SizedBox(height: 20),
               ],
-            ),
+            )),
           );
         });
       },
@@ -245,8 +365,8 @@ class _SubscriberDetailsScreenState
     }
 
     final sub = widget.subscriber;
-    if (sub.hasDebt && sub.debtAmount < 0) {
-      _showSnack('لا يمكن حذف مشترك عليه دين: ${AppHelpers.formatMoney(sub.debtAmount)}',
+    if (sub.hasDebt) {
+      _showSnack('لا يمكن حذف مشترك عليه دين: ${AppHelpers.formatMoney(sub.debtAmount.abs())}',
           success: false);
       return;
     }
@@ -290,53 +410,207 @@ class _SubscriberDetailsScreenState
   // ── Extend / Renew ─────────────────────────────────────────────────────
   Future<void> _extendSubscription() async {
     final id = _subscriberId;
-    final profileId = widget.subscriber.profileId;
     if (id == null) {
       _showSnack('معرف المشترك غير متوفر', success: false);
       return;
     }
-    if (profileId == null) {
-      _showSnack('معرف الباقة غير متوفر', success: false);
+
+    setState(() => _isProcessing = true);
+    final notifier = ref.read(subscribersProvider.notifier);
+    final extData = await notifier.getExtensionData(id);
+    if (!mounted) return;
+
+    if (extData == null) {
+      setState(() => _isProcessing = false);
+      _showSnack('فشل جلب بيانات التمديد', success: false);
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تأكيد التجديد'),
-        content: Text(
-          'تجديد اشتراك "${widget.subscriber.fullName}"\n'
-          'الباقة: ${widget.subscriber.profileName ?? "—"}\n'
-          'السعر: ${widget.subscriber.price != null ? AppHelpers.formatMoney(widget.subscriber.price) : "—"}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تجديد'),
-          ),
-        ],
-      ),
-    );
+    final pkgId = extData['profile_id'] ??
+        (extData['profile_details'] is Map
+            ? extData['profile_details']['id']
+            : null) ??
+        widget.subscriber.profileId;
 
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isProcessing = true);
-    final success = await ref.read(subscribersProvider.notifier)
-        .extendSubscription(userId: id, profileId: profileId);
+    List<Map<String, dynamic>> allowedPkgs = [];
+    if (pkgId != null) {
+      final pid = pkgId is int ? pkgId : int.tryParse(pkgId.toString()) ?? 0;
+      allowedPkgs = await notifier.getAllowedExtensions(pid);
+    }
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
-    _showSnack(
-      success ? 'تم التجديد بنجاح' : 'فشل التجديد',
-      success: success,
+    final requiredPoints = extData['required_points']?.toString() ?? '0';
+    final availablePoints = extData['reward_points_balance']?.toString() ?? '0';
+    final balance = extData['balance']?.toString() ?? '0';
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String method = 'credit';
+        int selectedPkgId = pkgId is int
+            ? pkgId
+            : int.tryParse(pkgId?.toString() ?? '') ?? 0;
+        String? pkgPrice;
+        bool submitting = false;
+
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              left: 20, right: 20, top: 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Container(padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.teal600.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.autorenew, color: AppTheme.teal600, size: 20)),
+                  const SizedBox(width: 10),
+                  Text('تمديد المشترك', style: Theme.of(ctx).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+                ]),
+                const SizedBox(height: 16),
+                _InfoChip(label: 'المشترك', value: widget.subscriber.fullName),
+                _InfoChip(label: 'النقاط المطلوبة', value: '$requiredPoints نقطة'),
+                _InfoChip(label: 'النقاط المتاحة', value: '$availablePoints نقطة'),
+                _InfoChip(label: 'الرصيد المتاح', value: balance),
+                const SizedBox(height: 12),
+                if (allowedPkgs.isNotEmpty) ...[
+                  Text('الباقة', style: TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Theme.of(ctx).colorScheme.outline.withOpacity(0.3)),
+                    ),
+                    child: Builder(builder: (_) {
+                      final seen = <int>{};
+                      final filteredPkgs = allowedPkgs
+                          .where((p) => !(p['name']?.toString().toLowerCase().contains('pool') ?? false))
+                          .where((p) {
+                            final pid = p['idx'] ?? p['id'] ?? 0;
+                            final id = pid is int ? pid : int.tryParse(pid.toString()) ?? 0;
+                            if (id <= 0 || seen.contains(id)) return false;
+                            seen.add(id);
+                            return true;
+                          }).toList();
+                      final hasMatch = selectedPkgId > 0 &&
+                          filteredPkgs.any((p) {
+                            final pid = p['idx'] ?? p['id'] ?? 0;
+                            final id = pid is int ? pid : int.tryParse(pid.toString()) ?? 0;
+                            return id == selectedPkgId;
+                          });
+                      return DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: hasMatch ? selectedPkgId : null,
+                          isExpanded: true,
+                          hint: const Text('اختر الباقة'),
+                          items: filteredPkgs.map((p) {
+                            final pid = p['idx'] ?? p['id'] ?? 0;
+                            final id = pid is int ? pid : int.tryParse(pid.toString()) ?? 0;
+                            return DropdownMenuItem<int>(
+                              value: id,
+                              child: Text(p['name']?.toString() ?? '—', style: const TextStyle(fontSize: 13)),
+                            );
+                          }).toList(),
+                          onChanged: (v) async {
+                            if (v == null) return;
+                            setSheet(() => selectedPkgId = v);
+                            final det = await notifier.getPackageDetails(v);
+                            if (det != null) {
+                              setSheet(() => pkgPrice = (det['price'] ?? det['monthly_fee'])?.toString());
+                            }
+                          },
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Text('طريقة التمديد', style: TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Expanded(child: _MethodBtn(
+                    icon: Icons.star_rounded, label: 'بالنقاط',
+                    selected: method == 'reward_points',
+                    onTap: () => setSheet(() => method = 'reward_points'),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _MethodBtn(
+                    icon: Icons.account_balance_wallet_rounded, label: 'برصيد المدير',
+                    selected: method == 'credit',
+                    onTap: () => setSheet(() => method = 'credit'),
+                  )),
+                ]),
+                if (method == 'credit' && pkgPrice != null) ...[
+                  const SizedBox(height: 8),
+                  _InfoChip(label: 'تكلفة التمديد', value: AppHelpers.formatMoney(pkgPrice)),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(height: 50, child: ElevatedButton.icon(
+                  onPressed: submitting ? null : () async {
+                    setSheet(() => submitting = true);
+                    final success = await notifier.extendSubscription(
+                      userId: id, profileId: selectedPkgId, method: method);
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _showSnack(success ? 'تم التمديد بنجاح' : 'فشل التمديد',
+                          success: success);
+                      if (success) {
+                        await notifier.loadSubscribers();
+                        final fresh = await notifier.getSubscriberDetails(id);
+                        final newDebt = _toDouble(fresh?['notes']);
+                        final expDate = fresh?['expiration']?.toString() ?? '';
+                        final remDays = fresh?['remaining_days']?.toString() ?? '';
+                        _sendWhatsAppFromTemplate('renewal',
+                          extraVars: {
+                            '{package_price}': pkgPrice ?? '',
+                            '{paid_amount}': pkgPrice ?? '',
+                            '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
+                            '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                            '{expiry_date}': expDate,
+                            '{expiration_date}': expDate,
+                            '{days_remaining}': remDays,
+                            '{remaining_days}': remDays,
+                          });
+                        if (mounted) context.pop();
+                      }
+                    }
+                  },
+                  icon: submitting
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.autorenew),
+                  label: Text(submitting ? 'جاري التمديد...' : 'تمديد'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal600),
+                )),
+                const SizedBox(height: 20),
+              ],
+            ),
+          );
+        });
+      },
     );
-    if (success) {
-      ref.read(subscribersProvider.notifier).loadSubscribers();
-    }
   }
 
   // ── Activate ───────────────────────────────────────────────────────────
@@ -348,79 +622,924 @@ class _SubscriberDetailsScreenState
     }
 
     setState(() => _isProcessing = true);
-
     final notifier = ref.read(subscribersProvider.notifier);
-    final activationData = await notifier.getActivationData(id);
 
+    final results = await Future.wait([
+      notifier.getActivationData(id),
+      notifier.getSubscriberDetails(id),
+    ]);
     if (!mounted) return;
+    setState(() => _isProcessing = false);
+
+    final activationData = results[0] as Map<String, dynamic>?;
+    final userData = results[1] as Map<String, dynamic>?;
 
     if (activationData == null) {
-      setState(() => _isProcessing = false);
       _showSnack('فشل جلب بيانات التفعيل', success: false);
       return;
     }
 
-    setState(() => _isProcessing = false);
-
-    final userPrice = (activationData['user_price'] is num)
-        ? (activationData['user_price'] as num).toDouble()
-        : double.tryParse(activationData['user_price']?.toString() ?? '') ?? 0;
-    final units = (activationData['units'] is int)
-        ? activationData['units'] as int
-        : int.tryParse(activationData['units']?.toString() ?? '') ?? 30;
+    final userPrice = _toDouble(activationData['user_price']);
+    final units = activationData['units'];
     final profileName = activationData['profile_name']?.toString() ?? '—';
     final profileDuration = activationData['profile_duration']?.toString() ?? '—';
+    final requiredAmount = activationData['required_amount']?.toString() ?? '—';
+    final managerBalance = activationData['manager_balance']?.toString() ?? '—';
+    final rewardPoints = activationData['reward_points']?.toString() ?? '0';
+    final currentBalance = _toDouble(userData?['notes']);
 
-    final confirmed = await showDialog<bool>(
+    final partialCtrl = TextEditingController();
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تأكيد التفعيل'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('المشترك: ${widget.subscriber.fullName}'),
-            const SizedBox(height: 8),
-            _InfoChip(label: 'الباقة', value: profileName),
-            _InfoChip(label: 'المدة', value: profileDuration),
-            _InfoChip(label: 'السعر', value: AppHelpers.formatMoney(userPrice)),
-            _InfoChip(label: 'الوحدات', value: '$units يوم'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.successColor),
-            child: const Text('تفعيل'),
-          ),
-        ],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-    );
+      builder: (ctx) {
+        bool isCash = false;
+        bool isPartialCash = false;
+        bool submitting = false;
 
-    if (confirmed != true || !mounted) return;
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          final partialAmount = double.tryParse(partialCtrl.text) ?? 0;
+
+          double paidCash = 0;
+          double newDebtPreview = currentBalance;
+          if (isCash && !isPartialCash) {
+            paidCash = userPrice;
+            newDebtPreview = currentBalance;
+          } else if (isCash && isPartialCash) {
+            paidCash = partialAmount;
+            final remaining = userPrice - partialAmount;
+            newDebtPreview = currentBalance - remaining;
+          } else {
+            newDebtPreview = currentBalance - userPrice;
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              left: 20, right: 20, top: 16,
+            ),
+            child: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+
+                Row(children: [
+                  Container(padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('تفعيل المشترك', style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(widget.subscriber.fullName,
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    ],
+                  )),
+                ]),
+                const SizedBox(height: 18),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.teal700.withOpacity(0.08), AppTheme.teal900.withOpacity(0.04)]),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.teal600.withOpacity(0.15)),
+                  ),
+                  child: Column(children: [
+                    Row(children: [
+                      Expanded(child: _ActivationInfoTile(
+                        icon: Icons.wifi_rounded,
+                        label: 'الباقة',
+                        value: profileName,
+                        color: AppTheme.teal600,
+                      )),
+                      Container(width: 1, height: 40, color: AppTheme.teal600.withOpacity(0.1)),
+                      Expanded(child: _ActivationInfoTile(
+                        icon: Icons.schedule_rounded,
+                        label: 'المدة',
+                        value: profileDuration,
+                        color: AppTheme.infoColor,
+                      )),
+                    ]),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.successColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.sell_rounded, size: 18, color: AppTheme.successColor),
+                          const SizedBox(width: 8),
+                          Text('السعر: ', style: TextStyle(fontSize: 13,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                          Text(AppHelpers.formatMoney(userPrice),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+                                color: AppTheme.successColor)),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+
+                if (currentBalance != 0) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: (currentBalance < 0 ? Colors.red : Colors.green).withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: (currentBalance < 0 ? Colors.red : Colors.green).withOpacity(0.12)),
+                    ),
+                    child: Row(children: [
+                      Icon(
+                        currentBalance < 0 ? Icons.warning_amber_rounded : Icons.account_balance_wallet_rounded,
+                        size: 18, color: currentBalance < 0 ? Colors.red : Colors.green),
+                      const SizedBox(width: 8),
+                      Text(currentBalance < 0 ? 'دين سابق: ' : 'رصيد سابق: ',
+                          style: TextStyle(fontSize: 12,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                      Text(AppHelpers.formatMoney(currentBalance.abs()),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                            color: currentBalance < 0 ? Colors.red : Colors.green)),
+                    ]),
+                  ),
+                ],
+                const SizedBox(height: 16),
+
+                Text('نوع الدفع', style: TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: _MethodBtn(icon: Icons.money_rounded, label: 'نقدي',
+                    selected: isCash && !isPartialCash,
+                    onTap: () => setSheet(() { isCash = true; isPartialCash = false; partialCtrl.clear(); }),
+                  )),
+                  const SizedBox(width: 6),
+                  Expanded(child: _MethodBtn(icon: Icons.tune_rounded, label: 'جزئي',
+                    selected: isCash && isPartialCash,
+                    onTap: () => setSheet(() { isCash = true; isPartialCash = true; }),
+                  )),
+                  const SizedBox(width: 6),
+                  Expanded(child: _MethodBtn(icon: Icons.schedule_rounded, label: 'آجل',
+                    selected: !isCash,
+                    onTap: () => setSheet(() { isCash = false; isPartialCash = false; partialCtrl.clear(); }),
+                  )),
+                ]),
+
+                if (isCash && isPartialCash) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: partialCtrl,
+                    keyboardType: TextInputType.number,
+                    textDirection: TextDirection.ltr,
+                    onChanged: (_) => setSheet(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'المبلغ المدفوع نقداً',
+                      suffixText: 'IQD',
+                      prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                      suffixIcon: partialCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () => setSheet(() => partialCtrl.clear()),
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _QuickAmountChips(
+                    amounts: _buildPartialQuickAmounts(userPrice),
+                    selectedAmount: partialAmount,
+                    enabled: true,
+                    onSelected: (v) => setSheet(() {
+                      partialCtrl.text = v.toStringAsFixed(0);
+                    }),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('ملخص العملية', style: TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                      const SizedBox(height: 10),
+                      _SummaryRow(label: 'سعر الباقة', value: AppHelpers.formatMoney(userPrice)),
+                      if (currentBalance != 0)
+                        _SummaryRow(
+                          label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
+                          value: currentBalance < 0
+                              ? '-${AppHelpers.formatMoney(currentBalance.abs())}'
+                              : '+${AppHelpers.formatMoney(currentBalance)}',
+                          valueColor: currentBalance < 0 ? Colors.red : Colors.green,
+                        ),
+                      if (isCash && !isPartialCash)
+                        _SummaryRow(label: 'الدفع', value: 'نقدي كامل',
+                            valueColor: Colors.green),
+                      if (isCash && isPartialCash && partialAmount > 0) ...[
+                        _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(partialAmount),
+                            valueColor: Colors.green),
+                        _SummaryRow(label: 'المتبقي كدين', value: AppHelpers.formatMoney(userPrice - partialAmount),
+                            valueColor: Colors.orange),
+                      ],
+                      if (!isCash)
+                        _SummaryRow(label: 'الدفع', value: 'آجل (يضاف كدين)',
+                            valueColor: Colors.orange),
+                      const Divider(height: 16),
+                      Row(children: [
+                        Text('بعد التفعيل:', style: TextStyle(fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: (newDebtPreview < 0 ? Colors.red : Colors.green).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            newDebtPreview < 0
+                                ? 'دين ${AppHelpers.formatMoney(newDebtPreview.abs())}'
+                                : newDebtPreview > 0
+                                    ? 'رصيد ${AppHelpers.formatMoney(newDebtPreview)}'
+                                    : 'بدون دين أو رصيد',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                color: newDebtPreview < 0 ? Colors.red
+                                    : newDebtPreview > 0 ? Colors.green
+                                    : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                SizedBox(height: 50, child: ElevatedButton.icon(
+                  onPressed: submitting ? null : () async {
+                    setSheet(() => submitting = true);
+                    final notifier = ref.read(subscribersProvider.notifier);
+                    final success = await notifier.activateSubscriber(
+                      userId: id,
+                      userPrice: userPrice,
+                      activationUnits: units,
+                      currentNotes: currentBalance.toString(),
+                      isCash: isCash,
+                      isPartialCash: isPartialCash,
+                      partialCashAmount: partialAmount,
+                    );
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
+                      if (success) {
+                        await notifier.loadSubscribers();
+                        final fresh = await notifier.getSubscriberDetails(id);
+                        final newDebt = _toDouble(fresh?['notes']);
+                        _sendWhatsAppFromTemplate('activation_notice', extraVars: {
+                          '{package_name}': profileName,
+                          '{package_price}': userPrice.toStringAsFixed(0),
+                          '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
+                          '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                        });
+                        if (mounted) context.pop();
+                      }
+                    }
+                  },
+                  icon: submitting
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.bolt_rounded),
+                  label: Text(submitting ? 'جاري التفعيل...' : 'تفعيل الآن'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.successColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                )),
+                const SizedBox(height: 20),
+              ],
+            )),
+          );
+        });
+      },
+    );
+  }
+
+  List<double> _buildPartialQuickAmounts(double price) {
+    final amounts = <double>[];
+    final quarter = (price * 0.25).roundToDouble();
+    final half = (price * 0.5).roundToDouble();
+    final threeQ = (price * 0.75).roundToDouble();
+    for (final v in [quarter, half, threeQ]) {
+      if (v > 0 && v < price) amounts.add(v);
+    }
+    return amounts;
+  }
+
+  double _toDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0;
+    return 0;
+  }
+
+  Future<void> _sendWhatsAppFromTemplate(String templateType, {
+    Map<String, String>? extraVars,
+  }) async {
+    final phone = widget.subscriber.displayPhone;
+    if (phone.isEmpty) return;
+
+    try {
+      final templates = ref.read(templatesProvider).templates;
+      if (templates.isEmpty) {
+        await ref.read(templatesProvider.notifier).loadTemplates();
+      }
+      final allTemplates = ref.read(templatesProvider).templates;
+      final match = allTemplates.where(
+        (t) => t.templateType == templateType && t.isActive,
+      );
+      if (match.isEmpty) return;
+
+      final sub = widget.subscriber;
+      final debtVal = sub.hasDebt ? sub.debtAmount.abs().toStringAsFixed(0) : '0';
+      final creditVal = sub.debtAmount > 0 ? sub.debtAmount.toStringAsFixed(0) : '0';
+
+      String msg = match.first.messageContent;
+      final vars = {
+        '{subscriber_name}': sub.fullName,
+        '{firstname}': sub.firstname,
+        '{lastname}': sub.lastname,
+        '{phone}': sub.displayPhone,
+        '{remaining_days}': '${sub.remainingDays ?? 0}',
+        '{days_remaining}': '${sub.remainingDays ?? 0}',
+        '{expiration_date}': sub.expiration ?? '',
+        '{expiry_date}': sub.expiration ?? '',
+        '{package_name}': sub.profileName ?? '',
+        '{package_price}': sub.price ?? '0',
+        '{debt_amount}': debtVal,
+        '{credit_amount}': creditVal,
+        '{discount_amount}': '0',
+        '{discounted_price}': sub.price ?? '0',
+        '{paid_amount}': '0',
+        '{username}': sub.username,
+        ...?extraVars,
+      };
+      vars.forEach((k, v) => msg = msg.replaceAll(k, v));
+
+      await ref.read(whatsappProvider.notifier).sendMessage(phone, msg);
+    } catch (_) {}
+  }
+
+  // ── Pay Debt (تسديد دين) ──────────────────────────────────────────────
+  Future<void> _showPayDebtSheet() async {
+    final id = _subscriberId;
+    if (id == null) {
+      _showSnack('معرف المشترك غير متوفر', success: false);
+      return;
+    }
 
     setState(() => _isProcessing = true);
-    final success = await notifier.activateSubscriber(
-      userId: id,
-      userPrice: userPrice,
-      activationUnits: units,
-      currentNotes: widget.subscriber.notes ?? '0',
-    );
+    final notifier = ref.read(subscribersProvider.notifier);
+    final details = await notifier.getSubscriberDetails(id);
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
-    _showSnack(
-      success ? 'تم التفعيل بنجاح' : 'فشل التفعيل',
-      success: success,
-    );
-    if (success) {
-      ref.read(subscribersProvider.notifier).loadSubscribers();
+    final currentNotes = _toDouble(details?['notes']);
+    final currentDebt = currentNotes < 0 ? currentNotes.abs() : 0.0;
+
+    if (currentDebt <= 0) {
+      _showSnack('لا يوجد دين على هذا المشترك', success: false);
+      return;
     }
+
+    final amountCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        bool payAll = false;
+        bool submitting = false;
+
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          final amount = double.tryParse(amountCtrl.text) ?? 0;
+          final preview = currentNotes + (payAll ? currentDebt : amount);
+          final effectiveAmount = payAll ? currentDebt : amount;
+          final payRatio = currentDebt > 0
+              ? (effectiveAmount / currentDebt).clamp(0.0, 1.0)
+              : 0.0;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              left: 20, right: 20, top: 16,
+            ),
+            child: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Container(padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.payments_rounded, color: Colors.white, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('تسديد دين', style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(widget.subscriber.fullName,
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    ],
+                  )),
+                ]),
+                const SizedBox(height: 16),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.red.withOpacity(0.12)),
+                  ),
+                  child: Column(
+                    children: [
+                      Text('الدين الحالي',
+                          style: TextStyle(fontSize: 12,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                      const SizedBox(height: 4),
+                      Text(AppHelpers.formatMoney(currentDebt),
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                            color: Colors.red)),
+                      if (effectiveAmount > 0) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: payRatio,
+                            minHeight: 6,
+                            backgroundColor: Colors.red.withOpacity(0.15),
+                            valueColor: const AlwaysStoppedAnimation(Colors.green),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${(payRatio * 100).toStringAsFixed(0)}% من الدين',
+                          style: TextStyle(fontSize: 11,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  textDirection: TextDirection.ltr,
+                  enabled: !payAll,
+                  onChanged: (_) => setSheet(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'المبلغ المسدد',
+                    suffixText: 'IQD',
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                    suffixIcon: amountCtrl.text.isNotEmpty && !payAll
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () => setSheet(() => amountCtrl.clear()),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                _QuickAmountChips(
+                  amounts: _buildPayDebtQuickAmounts(currentDebt),
+                  selectedAmount: effectiveAmount,
+                  enabled: !payAll,
+                  onSelected: (v) => setSheet(() {
+                    amountCtrl.text = v.toStringAsFixed(0);
+                  }),
+                ),
+                const SizedBox(height: 6),
+
+                GestureDetector(
+                  onTap: () => setSheet(() {
+                    payAll = !payAll;
+                    if (payAll) {
+                      amountCtrl.text = currentDebt.toStringAsFixed(0);
+                    } else {
+                      amountCtrl.clear();
+                    }
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: payAll
+                          ? Colors.green.withOpacity(0.08)
+                          : Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: payAll ? Colors.green.withOpacity(0.3) : Colors.transparent),
+                    ),
+                    child: Row(children: [
+                      Icon(payAll ? Icons.check_box : Icons.check_box_outline_blank,
+                          size: 20, color: payAll ? Colors.green : Colors.grey),
+                      const SizedBox(width: 8),
+                      const Text('تسديد كامل الدين', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      if (payAll)
+                        Text(AppHelpers.formatMoney(currentDebt),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green)),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                TextField(
+                  controller: notesCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظات (اختياري)',
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.only(bottom: 20),
+                      child: Icon(Icons.note_outlined, size: 20)),
+                  ),
+                ),
+
+                if (effectiveAmount > 0) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: preview >= 0 ? Colors.green.withOpacity(0.06) : Colors.orange.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: preview >= 0 ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15)),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: (preview >= 0 ? Colors.green : Colors.orange).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                        child: Icon(preview >= 0 ? Icons.check_circle_rounded : Icons.timelapse_rounded,
+                            size: 18, color: preview >= 0 ? Colors.green : Colors.orange),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(preview >= 0 ? 'بعد التسديد' : 'الدين المتبقي',
+                              style: TextStyle(fontSize: 11,
+                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                          const SizedBox(height: 2),
+                          Text(
+                            preview >= 0
+                                ? 'رصيد ${AppHelpers.formatMoney(preview)}'
+                                : AppHelpers.formatMoney(preview.abs()),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                                color: preview >= 0 ? Colors.green : Colors.orange),
+                          ),
+                        ],
+                      )),
+                    ]),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(height: 50, child: ElevatedButton.icon(
+                  onPressed: submitting || (!payAll && effectiveAmount <= 0) ? null : () async {
+                    setSheet(() => submitting = true);
+                    final payAmount = payAll ? currentDebt : amount;
+                    final success = await notifier.payDebt(
+                      userId: id,
+                      username: widget.subscriber.username,
+                      amount: payAmount,
+                      paymentNotes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                    );
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _showSnack(success ? 'تم التسديد بنجاح' : 'فشل التسديد', success: success);
+                      if (success) {
+                        await notifier.loadSubscribers();
+                        final fresh = await notifier.getSubscriberDetails(id);
+                        final newDebt = _toDouble(fresh?['notes']);
+                        _sendWhatsAppFromTemplate('payment_confirmation',
+                          extraVars: {
+                            '{paid_amount}': payAmount.toStringAsFixed(0),
+                            '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
+                            '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                            '{expiry_date}': fresh?['expiration']?.toString() ?? '',
+                            '{expiration_date}': fresh?['expiration']?.toString() ?? '',
+                          });
+                        if (mounted) context.pop();
+                      }
+                    }
+                  },
+                  icon: submitting
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.payments_rounded),
+                  label: Text(submitting ? 'جاري التسديد...' : 'تسديد'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                )),
+                const SizedBox(height: 20),
+              ],
+            )),
+          );
+        });
+      },
+    );
+  }
+
+  List<double> _buildPayDebtQuickAmounts(double debt) {
+    final amounts = <double>[];
+    for (final v in [5000, 10000, 15000, 25000, 50000]) {
+      if (v < debt) amounts.add(v.toDouble());
+    }
+    return amounts;
+  }
+
+  // ── Add Debt (إضافة دين) ──────────────────────────────────────────────
+  Future<void> _showAddDebtSheet() async {
+    final id = _subscriberId;
+    if (id == null) {
+      _showSnack('معرف المشترك غير متوفر', success: false);
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    final notifier = ref.read(subscribersProvider.notifier);
+    final details = await notifier.getSubscriberDetails(id);
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+
+    final currentNotes = _toDouble(details?['notes']);
+    final currentDebt = currentNotes < 0 ? currentNotes.abs() : 0.0;
+    final currentCredit = currentNotes > 0 ? currentNotes : 0.0;
+
+    final amountCtrl = TextEditingController();
+    final commentCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        bool submitting = false;
+
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          final amount = double.tryParse(amountCtrl.text) ?? 0;
+          final preview = currentNotes - amount;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              left: 20, right: 20, top: 16,
+            ),
+            child: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Container(padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF9A825), Color(0xFFF57F17)]),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.add_card_rounded, color: Colors.white, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('إضافة دين', style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(widget.subscriber.fullName,
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    ],
+                  )),
+                ]),
+                const SizedBox(height: 16),
+
+                Row(children: [
+                  if (currentDebt > 0)
+                    Expanded(child: _DebtInfoCard(
+                      icon: Icons.trending_down_rounded,
+                      label: 'الدين الحالي',
+                      value: AppHelpers.formatMoney(currentDebt),
+                      color: Colors.red,
+                    )),
+                  if (currentDebt > 0 && currentCredit > 0)
+                    const SizedBox(width: 10),
+                  if (currentCredit > 0)
+                    Expanded(child: _DebtInfoCard(
+                      icon: Icons.account_balance_wallet_rounded,
+                      label: 'الرصيد الحالي',
+                      value: AppHelpers.formatMoney(currentCredit),
+                      color: Colors.green,
+                    )),
+                  if (currentDebt <= 0 && currentCredit <= 0)
+                    Expanded(child: _DebtInfoCard(
+                      icon: Icons.check_circle_outline_rounded,
+                      label: 'الرصيد',
+                      value: 'لا يوجد دين أو رصيد',
+                      color: Colors.grey,
+                    )),
+                ]),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  textDirection: TextDirection.ltr,
+                  onChanged: (_) => setSheet(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'قيمة الدين المضاف',
+                    suffixText: 'IQD',
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                    suffixIcon: amountCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () => setSheet(() => amountCtrl.clear()),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                _QuickAmountChips(
+                  amounts: const [5000.0, 10000.0, 15000.0, 25000.0, 35000.0, 50000.0],
+                  selectedAmount: amount,
+                  enabled: true,
+                  onSelected: (v) => setSheet(() {
+                    amountCtrl.text = v.toStringAsFixed(0);
+                  }),
+                ),
+                const SizedBox(height: 10),
+
+                TextField(
+                  controller: commentCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظات (اختياري)',
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.only(bottom: 20),
+                      child: Icon(Icons.note_outlined, size: 20)),
+                  ),
+                ),
+
+                if (amount > 0) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.withOpacity(0.15)),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.warning_amber_rounded,
+                            size: 18, color: Colors.red),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('الدين بعد الإضافة',
+                              style: TextStyle(fontSize: 11,
+                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            Text(AppHelpers.formatMoney(currentDebt),
+                                style: TextStyle(fontSize: 12,
+                                  color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.4),
+                                  decoration: TextDecoration.lineThrough)),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Icon(Icons.arrow_forward, size: 14, color: Colors.red)),
+                            Text(AppHelpers.formatMoney(preview.abs()),
+                                style: const TextStyle(fontSize: 14,
+                                  fontWeight: FontWeight.w700, color: Colors.red)),
+                          ]),
+                        ],
+                      )),
+                    ]),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(height: 50, child: ElevatedButton.icon(
+                  onPressed: submitting || amount <= 0 ? null : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dlgCtx) => AlertDialog(
+                        title: const Text('تأكيد إضافة الدين',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                        content: Text(
+                          'سيتم إضافة ${AppHelpers.formatMoney(amount)} كدين على "${widget.subscriber.fullName}".\n'
+                          'الدين الجديد: ${AppHelpers.formatMoney(preview.abs())}',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dlgCtx, false),
+                            child: const Text('إلغاء'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(dlgCtx, true),
+                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warningColor),
+                            child: const Text('تأكيد'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true) return;
+
+                    setSheet(() => submitting = true);
+                    final success = await notifier.addDebt(
+                      userId: id,
+                      username: widget.subscriber.username,
+                      amount: amount,
+                      comment: commentCtrl.text.trim().isEmpty ? null : commentCtrl.text.trim(),
+                    );
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
+                      if (success) {
+                        await notifier.loadSubscribers();
+                        if (mounted) context.pop();
+                      }
+                    }
+                  },
+                  icon: submitting
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.add_card_rounded),
+                  label: Text(submitting ? 'جاري الإضافة...' : 'إضافة دين'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warningColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                )),
+                const SizedBox(height: 20),
+              ],
+            )),
+          );
+        });
+      },
+    );
   }
 
   // ── Toggle Enable/Disable ─────────────────────────────────────────────
@@ -545,10 +1664,16 @@ class _SubscriberDetailsScreenState
                           Container(width: 1, height: 30,
                               color: Colors.white.withOpacity(0.2)),
                           _HeaderStat(
-                            label: 'الدين',
+                            label: sub.hasDebt
+                                ? 'الدين'
+                                : sub.hasCredit
+                                    ? 'الرصيد'
+                                    : 'الدين',
                             value: sub.hasDebt
-                                ? AppHelpers.formatMoney(sub.debtAmount)
-                                : 'لا يوجد',
+                                ? AppHelpers.formatMoney(sub.debtAmount.abs())
+                                : sub.hasCredit
+                                    ? '+${AppHelpers.formatMoney(sub.debtAmount)}'
+                                    : 'لا يوجد',
                           ),
                         ],
                       ),
@@ -618,92 +1743,118 @@ class _SubscriberDetailsScreenState
                       icon: Icons.credit_card,
                       label: 'الدين / الرصيد',
                       value: sub.hasDebt
-                          ? '${AppHelpers.formatMoney(sub.debtAmount)} (مديون)'
-                          : sub.notes != null &&
-                                  (double.tryParse(sub.notes!) ?? 0) > 0
-                              ? '${AppHelpers.formatMoney(sub.notes)} (رصيد)'
+                          ? '${AppHelpers.formatMoney(sub.debtAmount.abs())} (مديون)'
+                          : sub.hasCredit
+                              ? '+${AppHelpers.formatMoney(sub.debtAmount)} (رصيد)'
                               : 'لا يوجد',
-                      valueColor: sub.hasDebt ? Colors.red : Colors.green,
+                      valueColor: sub.hasDebt ? Colors.red : sub.hasCredit ? Colors.green : null,
                     ),
+                    if (sub.balanceAmount > 0)
+                      _DetailRow(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'الرصيد (Balance)',
+                        value: AppHelpers.formatMoney(sub.balanceAmount),
+                        valueColor: AppTheme.teal600,
+                      ),
+                    Builder(builder: (_) {
+                      final lp = ref.watch(subscribersProvider).lastPayments[sub.username];
+                      if (lp == null) return const SizedBox.shrink();
+                      final createdAt = lp['created_at']?.toString();
+                      if (createdAt == null) return const SizedBox.shrink();
+                      final date = DateTime.tryParse(createdAt);
+                      if (date == null) return const SizedBox.shrink();
+                      final daysAgo = DateTime.now().difference(date).inDays;
+                      if (daysAgo > 30) return const SizedBox.shrink();
+                      final timeLabel = daysAgo == 0 ? 'اليوم' : 'منذ $daysAgo يوم';
+                      final desc = lp['action_description']?.toString() ?? '';
+                      final amountMatch = RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc);
+                      final amountText = amountMatch?.group(0) ?? '';
+                      return _DetailRow(
+                        icon: Icons.monetization_on_rounded,
+                        label: 'آخر تسديد',
+                        value: '$timeLabel${amountText.isNotEmpty ? ' — $amountText' : ''}',
+                        valueColor: AppTheme.teal600,
+                      );
+                    }),
                   ],
                 ),
 
                 const SizedBox(height: 80),
               ],
             ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _isProcessing ? null : () => _showActionsSheet(isEnabled),
+        backgroundColor: AppTheme.primary,
+        child: const Icon(Icons.apps_rounded, color: Colors.white, size: 26),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
 
-      // ── Bottom Action Bar ──────────────────────────────────────────────
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color ?? theme.colorScheme.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
+  void _showActionsSheet(bool isEnabled) {
+    final sub = widget.subscriber;
+    final actions = [
+      _FabAction(Icons.edit_outlined, 'تعديل', AppTheme.primary, _showEditSheet),
+      _FabAction(Icons.bolt, 'تفعيل', AppTheme.successColor, _activateSubscriber),
+      _FabAction(Icons.autorenew, 'تمديد', AppTheme.teal600, _extendSubscription),
+      _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
+      if (sub.hasDebt)
+        _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
+      _FabAction(Icons.chat_outlined, 'واتساب', AppTheme.whatsappGreen, _showSendMessageSheet),
+      _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
+      _FabAction(
+        isEnabled ? Icons.block : Icons.check_circle_outline,
+        isEnabled ? 'تعطيل' : 'تفعيل حساب',
+        isEnabled ? AppTheme.warningColor : AppTheme.successColor,
+        () => _toggleSubscriber(enable: !isEnabled),
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _ActionChip(
-                    icon: Icons.edit_outlined,
-                    label: 'تعديل',
-                    color: AppTheme.primary,
-                    onTap: _isProcessing ? null : _showEditSheet,
-                  ),
-                  const SizedBox(width: 8),
-                  _ActionChip(
-                    icon: Icons.delete_outline,
-                    label: 'حذف',
-                    color: AppTheme.dangerColor,
-                    onTap: _isProcessing ? null : _deleteSubscriber,
-                  ),
-                  const SizedBox(width: 8),
-                  _ActionChip(
-                    icon: Icons.chat_outlined,
-                    label: 'واتساب',
-                    color: AppTheme.whatsappGreen,
-                    onTap: _isProcessing ? null : _showSendMessageSheet,
-                  ),
-                  const SizedBox(width: 8),
-                  _ActionChip(
-                    icon: Icons.autorenew,
-                    label: 'تجديد',
-                    color: AppTheme.teal600,
-                    onTap: _isProcessing ? null : _extendSubscription,
-                  ),
-                  const SizedBox(width: 8),
-                  _ActionChip(
-                    icon: Icons.bolt,
-                    label: 'تفعيل',
-                    color: AppTheme.successColor,
-                    onTap: _isProcessing ? null : _activateSubscriber,
-                  ),
-                  const SizedBox(width: 8),
-                  _ActionChip(
-                    icon: isEnabled
-                        ? Icons.block
-                        : Icons.check_circle_outline,
-                    label: isEnabled ? 'تعطيل' : 'تفعيل حساب',
-                    color: isEnabled
-                        ? AppTheme.warningColor
-                        : AppTheme.successColor,
-                    onTap: _isProcessing
-                        ? null
-                        : () => _toggleSubscriber(enable: !isEnabled),
-                  ),
-                ],
-              ),
+            padding: EdgeInsets.fromLTRB(16, 12, 16,
+                16 + MediaQuery.of(ctx).padding.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 16),
+                Text('العمليات', style: Theme.of(ctx).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 16),
+                GridView.count(
+                  crossAxisCount: 4,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 0.85,
+                  children: actions.map((a) => _SpeedDialItem(
+                    icon: a.icon,
+                    label: a.label,
+                    color: a.color,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      a.onTap();
+                    },
+                  )).toList(),
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -712,13 +1863,21 @@ class _SubscriberDetailsScreenState
 // Private helper widgets
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _ActionChip extends StatelessWidget {
+class _FabAction {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _FabAction(this.icon, this.label, this.color, this.onTap);
+}
+
+class _SpeedDialItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback? onTap;
 
-  const _ActionChip({
+  const _SpeedDialItem({
     required this.icon,
     required this.label,
     required this.color,
@@ -727,40 +1886,33 @@ class _ActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final disabled = onTap == null;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: disabled
-                ? Colors.grey.withOpacity(0.08)
-                : color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: disabled
-                  ? Colors.grey.withOpacity(0.15)
-                  : color.withOpacity(0.3),
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
+            child: Icon(icon, color: Colors.white, size: 22),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 20,
-                  color: disabled ? Colors.grey : color),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: disabled ? Colors.grey : color,
-                  )),
-            ],
-          ),
-        ),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.onSurface,
+          )),
+        ],
       ),
     );
   }
@@ -837,6 +1989,209 @@ class _DetailSection extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _MethodBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _MethodBtn({
+    required this.icon, required this.label,
+    required this.selected, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primary.withOpacity(0.12)
+              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary.withOpacity(0.4)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.5)),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.7),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAmountChips extends StatelessWidget {
+  final List<double> amounts;
+  final double selectedAmount;
+  final bool enabled;
+  final ValueChanged<double> onSelected;
+
+  const _QuickAmountChips({
+    required this.amounts,
+    required this.selectedAmount,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (amounts.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: amounts.map((v) {
+        final isSelected = (selectedAmount - v).abs() < 0.5;
+        return GestureDetector(
+          onTap: enabled ? () => onSelected(v) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? theme.colorScheme.primary.withOpacity(0.15)
+                  : theme.colorScheme.surfaceContainerHighest.withOpacity(enabled ? 0.5 : 0.25),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected
+                    ? theme.colorScheme.primary.withOpacity(0.4)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              AppHelpers.formatMoney(v),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: !enabled
+                    ? theme.colorScheme.onSurface.withOpacity(0.3)
+                    : isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _DebtInfoCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _DebtInfoCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.12)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(height: 6),
+          Text(label, style: TextStyle(fontSize: 11,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: 14,
+            fontWeight: FontWeight.w700, color: color),
+            textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivationInfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _ActivationInfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 6),
+        Text(label, style: TextStyle(fontSize: 10,
+          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45))),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(fontSize: 13,
+          fontWeight: FontWeight.w700, color: color),
+          textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ],
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+          const Spacer(),
+          Text(value, style: TextStyle(fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: valueColor ?? Theme.of(context).colorScheme.onSurface)),
         ],
       ),
     );

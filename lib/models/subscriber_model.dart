@@ -63,7 +63,14 @@ class SubscriberModel {
 
   bool get hasDebt {
     if (hasDebtFlag != null) return hasDebtFlag!;
-    return debtAmount < 0 || debtAmount > 0;
+    return debtAmount < 0;
+  }
+
+  bool get hasCredit => debtAmount > 0;
+
+  double get balanceAmount {
+    final b = double.tryParse(balance ?? '') ?? 0;
+    return b;
   }
 
   bool get isExpired => (remainingDays ?? 0) < 0;

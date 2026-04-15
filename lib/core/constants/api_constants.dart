@@ -90,6 +90,9 @@ class ApiConstants {
   static const String sas4UserSessions = '/index/UserSessions';
   static const String sas4Auth = '/auth';
 
+  static const String sas4AllowedExtensions = '/allowedExtensions';
+  static const String sas4ProfileDetail = '/profile';
+
   // SAS4 Simple GET endpoints (no encryption)
   static const String sas4PriceList = '/priceList';
 

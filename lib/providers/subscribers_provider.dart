@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:developer' as dev;
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -18,6 +16,9 @@ class SubscribersState {
   final String? error;
   final int totalRecords;
   final String filter;
+  final String sortBy;
+  final String sortDirection;
+  final Map<String, Map<String, dynamic>> lastPayments;
 
   const SubscribersState({
     this.subscribers = const [],
@@ -28,25 +29,70 @@ class SubscribersState {
     this.error,
     this.totalRecords = 0,
     this.filter = 'all',
+    this.sortBy = 'username',
+    this.sortDirection = 'asc',
+    this.lastPayments = const {},
   });
 
   List<SubscriberModel> get filteredSubscribers {
+    List<SubscriberModel> list;
     switch (filter) {
       case 'active':
-        return subscribers.where((s) => s.isActive).toList();
+        list = subscribers.where((s) => s.isActive).toList();
+        break;
       case 'expired':
-        return subscribers.where((s) => s.isExpired).toList();
+        list = subscribers.where((s) => s.isExpired).toList();
+        break;
       case 'online':
-        return subscribers.where((s) => s.isOnline).toList();
+        list = subscribers.where((s) => s.isOnline).toList();
+        break;
       case 'offline':
-        return subscribers.where((s) => s.isOffline).toList();
+        list = subscribers.where((s) => s.isOffline).toList();
+        break;
       case 'debtors':
-        return subscribers.where((s) => s.hasDebt).toList();
+        list = subscribers.where((s) => s.hasDebt).toList();
+        break;
       case 'nearExpiry':
-        return subscribers.where((s) => s.isNearExpiry).toList();
+        list = subscribers.where((s) => s.isNearExpiry).toList();
+        break;
       default:
-        return subscribers;
+        list = List.of(subscribers);
     }
+    return _applySorting(list);
+  }
+
+  List<SubscriberModel> _applySorting(List<SubscriberModel> list) {
+    final asc = sortDirection == 'asc';
+    list.sort((a, b) {
+      int result;
+      switch (sortBy) {
+        case 'name':
+          result = (a.profileName ?? '').compareTo(b.profileName ?? '');
+          break;
+        case 'mobile':
+          result = (a.displayPhone).compareTo(b.displayPhone);
+          break;
+        case 'expiration':
+          result = (a.expiration ?? '').compareTo(b.expiration ?? '');
+          break;
+        case 'notes':
+          result = (a.debtAmount).compareTo(b.debtAmount);
+          break;
+        case 'remaining_days':
+          result = (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0);
+          break;
+        case 'parent_username':
+          result = (a.parentUsername ?? '').compareTo(b.parentUsername ?? '');
+          break;
+        case 'firstname':
+          result = a.fullName.compareTo(b.fullName);
+          break;
+        default:
+          result = a.username.compareTo(b.username);
+      }
+      return asc ? result : -result;
+    });
+    return list;
   }
 
   int get activeCount => subscribers.where((s) => s.isActive).length;
@@ -65,6 +111,9 @@ class SubscribersState {
     String? error,
     int? totalRecords,
     String? filter,
+    String? sortBy,
+    String? sortDirection,
+    Map<String, Map<String, dynamic>>? lastPayments,
   }) {
     return SubscribersState(
       subscribers: subscribers ?? this.subscribers,
@@ -75,6 +124,9 @@ class SubscribersState {
       error: error,
       totalRecords: totalRecords ?? this.totalRecords,
       filter: filter ?? this.filter,
+      sortBy: sortBy ?? this.sortBy,
+      sortDirection: sortDirection ?? this.sortDirection,
+      lastPayments: lastPayments ?? this.lastPayments,
     );
   }
 }
@@ -112,33 +164,9 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       List<SubscriberModel> activeList = [];
       if (response.data['success'] == true) {
         final rawData = response.data['data'] as List? ?? [];
-
-        if (rawData.isNotEmpty) {
-          final first = rawData[0];
-          debugPrint('=== DEBUG SUBSCRIBER ===');
-          debugPrint('RAW keys: ${first is Map ? first.keys.toList() : "NOT MAP"}');
-          debugPrint('RAW profile_name: ${first['profile_name']}');
-          debugPrint('RAW profile_id: ${first['profile_id']}');
-          debugPrint('RAW profile_details: ${first['profile_details']}');
-          debugPrint('RAW price: ${first['price']}');
-          debugPrint('RAW profile_price: ${first['profile_price']}');
-          debugPrint('========================');
-        }
-
         activeList = rawData
             .map((e) => SubscriberModel.fromJson(e))
             .toList();
-      }
-
-      if (activeList.isNotEmpty) {
-        final f = activeList[0];
-        debugPrint('PARSED[0] profileName="${f.profileName}" profileId=${f.profileId} price="${f.price}"');
-      }
-
-      debugPrint('PriceMap: ${_priceMap.length} by ID, ${_priceByName.length} by name');
-      if (_priceMap.isNotEmpty) {
-        final firstKey = _priceMap.keys.first;
-        debugPrint('PriceMap[$firstKey] = ${_priceMap[firstKey]}');
       }
 
       final pkgs = state.packages;
@@ -153,7 +181,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           activeList[0].profileId == null;
 
       if (needsProfile) {
-        debugPrint('Profile missing, fetching from SAS4...');
         final profileMap = await _fetchProfileMapFromSas4();
         if (profileMap.isNotEmpty) {
           activeList = activeList.map((sub) {
@@ -179,17 +206,12 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         }
       }
 
-      if (activeList.isNotEmpty) {
-        final f = activeList[0];
-        debugPrint('FINAL[0] profileName="${f.profileName}" price="${f.price}" id=${f.profileId}');
-      }
-
       dev.log('Backend: ${activeList.length} active subscribers', name: 'SUBS');
 
       // Paginated SAS4 call: get ALL subscribers with is_online field
       final sas4All = await _fetchAllSas4();
 
-      debugPrint('SAS4: ${sas4All.length} total subscribers');
+      dev.log('SAS4: ${sas4All.length} total subscribers', name: 'SUBS');
 
       List<SubscriberModel> finalList;
 
@@ -249,7 +271,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           ));
         }
       } else {
-        debugPrint('SAS4 returned empty, using backend data as fallback');
+        dev.log('SAS4 returned empty, using backend data as fallback', name: 'SUBS');
         finalList = activeList;
       }
 
@@ -258,16 +280,39 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           .map((s) => _enrichWithPriceList(s))
           .toList();
 
-      debugPrint('Final: ${enriched.length} subs, ${enriched.where((s) => s.isOnline).length} online, ${enriched.where((s) => s.isExpired).length} expired');
+      dev.log('Final: ${enriched.length} subs, online=${enriched.where((s) => s.isOnline).length}, expired=${enriched.where((s) => s.isExpired).length}', name: 'SUBS');
 
       state = state.copyWith(
         subscribers: enriched,
         isLoading: false,
         totalRecords: enriched.length,
       );
+
+      loadLastPayments();
     } catch (e) {
       dev.log('loadSubscribers error: $e', name: 'SUBS');
       state = state.copyWith(isLoading: false, error: 'خطأ في تحميل البيانات');
+    }
+  }
+
+  Future<void> loadLastPayments() async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return;
+    try {
+      final res = await _backendDio.get('${ApiConstants.lastPayments}/$adminId');
+      if (res.data is Map && res.data['success'] == true) {
+        final payments = res.data['payments'] as List? ?? [];
+        final map = <String, Map<String, dynamic>>{};
+        for (final p in payments) {
+          if (p is Map<String, dynamic>) {
+            final username = p['subscriber_username']?.toString() ?? '';
+            if (username.isNotEmpty) map[username] = p;
+          }
+        }
+        state = state.copyWith(lastPayments: map);
+      }
+    } catch (e) {
+      dev.log('loadLastPayments error: $e', name: 'SUBS');
     }
   }
 
@@ -326,7 +371,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
       final response = await _sas4Dio.post(
         ApiConstants.sas4ListUsers,
-        data: 'payload=$payload',
+        data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
@@ -358,9 +403,9 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           };
         }
       }
-      debugPrint('SAS4 profile map: ${result.length} subscribers with profile data');
+      dev.log('SAS4 profile map: ${result.length} entries', name: 'SUBS');
     } catch (e) {
-      debugPrint('fetchProfileMap error: $e');
+      dev.log('fetchProfileMap error: $e', name: 'SUBS');
     }
     return result;
   }
@@ -419,8 +464,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     );
   }
 
-  /// Fetches ALL subscribers from SAS4 with sequential pagination.
-  /// Server returns ~10 per page regardless of count, so we loop.
   Future<List<Map<String, dynamic>>> _fetchAllSas4() async {
     final allItems = <Map<String, dynamic>>[];
     int page = 1;
@@ -431,7 +474,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       try {
         final payload = EncryptionService.encrypt({
           'page': page,
-          'count': 100,
+          'count': 1000,
           'sortBy': 'username',
           'direction': 'asc',
           'search': '',
@@ -450,11 +493,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           'mac': '',
         });
 
-        final response = await _sas4Dio.post(
-          ApiConstants.sas4ListUsers,
-          data: 'payload=$payload',
-          options: Options(contentType: 'application/x-www-form-urlencoded'),
-        );
+      final response = await _sas4Dio.post(
+        ApiConstants.sas4ListUsers,
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
 
         dynamic parsed = response.data;
         if (parsed is String) parsed = EncryptionService.decrypt(parsed);
@@ -484,15 +527,15 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       } catch (e) {
         retries++;
         if (retries > 3) {
-          debugPrint('SAS4 pagination: giving up at page $page after $retries retries');
+          dev.log('SAS4 pagination: giving up at page $page after $retries retries', name: 'SUBS');
           break;
         }
-        debugPrint('SAS4 pagination: retry $retries for page $page');
+        dev.log('SAS4 pagination: retry $retries for page $page', name: 'SUBS');
         await Future.delayed(Duration(milliseconds: 800 * retries));
       }
     }
 
-    debugPrint('SAS4 fetched: ${allItems.length}/$totalCount in ${page - 1} pages');
+    dev.log('SAS4 fetched: ${allItems.length}/$totalCount in ${page - 1} pages', name: 'SUBS');
     return allItems;
   }
 
@@ -543,30 +586,33 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   }
 
   Future<void> searchSubscribers(String query) async {
-    if (query.length < 2) {
+    if (query.isEmpty) {
       state = state.copyWith(searchResults: [], isSearching: false);
       return;
     }
     state = state.copyWith(isSearching: true);
-    try {
-      final response = await _backendDio.get(
-        '${ApiConstants.subscribersSearch}?search=$query&count=30',
-      );
-      if (response.data['success'] == true) {
-        final rawList = (response.data['data'] as List? ?? [])
-            .map((e) => SubscriberModel.fromJson(e))
-            .toList();
-        final pkgs = state.packages;
-        final list = rawList.map((s) => _enrichWithPackage(s, pkgs)).toList();
-        state = state.copyWith(searchResults: list, isSearching: false);
-      }
-    } catch (_) {
-      state = state.copyWith(isSearching: false);
-    }
+
+    final q = query.toLowerCase().trim();
+    final localResults = state.subscribers.where((s) {
+      return s.username.toLowerCase().contains(q) ||
+          s.firstname.toLowerCase().contains(q) ||
+          s.lastname.toLowerCase().contains(q) ||
+          s.fullName.toLowerCase().contains(q) ||
+          (s.phone ?? '').contains(q) ||
+          (s.mobile ?? '').contains(q) ||
+          (s.profileName ?? '').toLowerCase().contains(q) ||
+          (s.parentUsername ?? '').toLowerCase().contains(q);
+    }).toList();
+
+    state = state.copyWith(searchResults: localResults, isSearching: false);
   }
 
   void setFilter(String filter) {
     state = state.copyWith(filter: filter);
+  }
+
+  void setSort(String field, String direction) {
+    state = state.copyWith(sortBy: field, sortDirection: direction);
   }
 
   Future<void> loadPackages() async {
@@ -583,10 +629,8 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
       final response = await _sas4Dio.post(
         ApiConstants.sas4Profiles,
-        data: 'payload=$payload',
-        options: Options(
-          contentType: 'application/x-www-form-urlencoded',
-        ),
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
       final data = response.data['data'] as List? ?? [];
@@ -640,7 +684,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
       final response = await _sas4Dio.post(
         '/user',
-        data: 'payload=$payload',
+        data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
@@ -678,24 +722,88 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
+  Future<Map<String, dynamic>?> getExtensionData(int userId) async {
+    try {
+      final response =
+          await _sas4Dio.get('${ApiConstants.sas4ExtensionData}/$userId');
+      final data = response.data;
+      if (data is Map && data['status'] == 200 && data['data'] != null) {
+        return Map<String, dynamic>.from(data['data']);
+      }
+      if (data is Map && data['data'] != null) {
+        return Map<String, dynamic>.from(data['data']);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllowedExtensions(int packageId) async {
+    try {
+      final response = await _sas4Dio
+          .get('${ApiConstants.sas4AllowedExtensions}/$packageId');
+      if (response.data is Map && response.data['data'] is List) {
+        return (response.data['data'] as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      if (response.data is List) {
+        return (response.data as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getPackageDetails(int packageId) async {
+    try {
+      final response =
+          await _sas4Dio.get('${ApiConstants.sas4ProfileDetail}/$packageId');
+      final data = response.data;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data['data'] ?? data);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> activateSubscriber({
     required int userId,
     required double userPrice,
-    required int activationUnits,
+    required dynamic activationUnits,
     required String currentNotes,
-    String method = 'credit',
+    bool isCash = false,
+    bool isPartialCash = false,
+    double partialCashAmount = 0,
   }) async {
     try {
       final currentBalance = double.tryParse(currentNotes) ?? 0;
-      final newNotes = (currentBalance - userPrice).toString();
+      double newNotes;
+
+      if (isCash) {
+        if (isPartialCash) {
+          newNotes = currentBalance - userPrice + partialCashAmount;
+        } else {
+          newNotes = currentBalance;
+        }
+      } else {
+        newNotes = currentBalance - userPrice;
+      }
+
       final txnId = 'txn_${DateTime.now().millisecondsSinceEpoch}_$userId';
 
       final payload = EncryptionService.encrypt({
-        'method': method,
+        'method': 'credit',
         'pin': '',
         'user_id': userId.toString(),
         'money_collected': 1,
-        'notes': newNotes,
+        'notes': newNotes.toString(),
         'user_price': userPrice,
         'issue_invoice': true,
         'transaction_id': txnId,
@@ -705,14 +813,49 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final response = await _sas4Dio.post(
         ApiConstants.sas4ActivateUser,
         data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
-      if (response.data?['status'] == 200) {
-        await _sas4Dio.put(
-          '${ApiConstants.sas4GetUser}/$userId',
-          data: 'payload=${EncryptionService.encrypt({'notes': newNotes})}',
-          options: Options(contentType: 'application/x-www-form-urlencoded'),
+      final rData = response.data;
+      final isSuccess = response.statusCode == 200 ||
+          rData?['status'] == 200 ||
+          rData?['success'] == true;
+
+      if (isSuccess) {
+        await updateUserNotes(userId, newNotes);
+
+        String actionType;
+        String paymentLabel;
+        if (isCash) {
+          if (isPartialCash) {
+            actionType = 'activate_subscriber_partial_cash';
+            paymentLabel = 'نقدي جزئي';
+          } else {
+            actionType = 'activate_subscriber_cash';
+            paymentLabel = 'نقدي';
+          }
+        } else {
+          actionType = 'activate_subscriber_non_cash';
+          paymentLabel = 'غير نقدي';
+        }
+
+        final subName = _findUsername(userId);
+        logActivity(
+          action: actionType,
+          description: 'تفعيل $paymentLabel - المستخدم: $subName | السعر: $userPrice',
+          targetId: userId,
+          targetName: subName,
+          metadata: {
+            'user_price': userPrice,
+            'payment_type': paymentLabel,
+            'partial_cash_amount': isPartialCash ? partialCashAmount : null,
+            'new_balance': newNotes,
+            'previous_balance': double.tryParse(currentNotes) ?? 0,
+            'units': activationUnits,
+            'username': subName,
+          },
         );
+
         return true;
       }
       return false;
@@ -724,7 +867,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   Future<bool> extendSubscription({
     required int userId,
     required int profileId,
-    String method = 'credit',
+    required String method,
   }) async {
     try {
       final txnId = 'txn_${DateTime.now().millisecondsSinceEpoch}_$userId';
@@ -739,11 +882,74 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final response = await _sas4Dio.post(
         ApiConstants.sas4ExtendUser,
         data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
-      return response.data?['status'] == 200;
+      if (response.data?['status'] == 200) {
+        final subName = _findUsername(userId);
+        logActivity(
+          action: 'extend_subscriber',
+          description: 'تمديد اشتراك المشترك: $subName',
+          targetId: userId,
+          targetName: subName,
+          metadata: {
+            'package_id': profileId,
+            'extension_type': method == 'reward_points' ? 'نقاط' : 'رصيد',
+            'username': subName,
+          },
+        );
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<bool> renameSubscriber(int userId, String newUsername) async {
+    try {
+      final payload =
+          EncryptionService.encrypt({'new_username': newUsername});
+      final response = await _sas4Dio.post(
+        '${ApiConstants.sas4RenameUser}/$userId',
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+      return response.data?['status'] == 200 || response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> changeProfile(int userId, int profileId) async {
+    try {
+      final payload = EncryptionService.encrypt({
+        'user_id': userId.toString(),
+        'profile_id': profileId,
+        'change_type': 'immediate',
+      });
+      final response = await _sas4Dio.post(
+        ApiConstants.sas4ChangeProfile,
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+      return response.data?['status'] == 200 || response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getUserOverview(int userId) async {
+    try {
+      final response =
+          await _sas4Dio.get('${ApiConstants.sas4UserOverview}/$userId');
+      final data = response.data;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data['data'] ?? data);
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -755,7 +961,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
       final response = await _sas4Dio.post(
         endpoint,
-        data: 'payload=$payload',
+        data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
       return response.data?['status'] == 200 ||
@@ -771,11 +977,161 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final payload = EncryptionService.encrypt(data);
       final response = await _sas4Dio.put(
         '${ApiConstants.sas4GetUser}/$userId',
-        data: 'payload=$payload',
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+      final ok = response.statusCode == 200 || response.statusCode == 201;
+      if (ok) {
+        logActivity(
+          action: 'edit_subscriber',
+          description: 'تعديل بيانات المشترك: ${data['username'] ?? userId}',
+          targetId: userId,
+          targetName: data['username']?.toString() ?? userId.toString(),
+          metadata: {
+            'firstname': data['firstname'],
+            'lastname': data['lastname'],
+            'phone': data['phone'],
+          },
+        );
+      }
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _findUsername(int userId) {
+    final match = state.subscribers.where(
+      (s) => s.idx == userId.toString(),
+    );
+    if (match.isNotEmpty) return match.first.username;
+    return userId.toString();
+  }
+
+  Future<void> logActivity({
+    required String action,
+    required String description,
+    dynamic targetId,
+    String? targetName,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final adminId = await _storage.getAdminId();
+      final adminUsername = await _storage.getAdminUsername();
+      if (adminId == null) return;
+      await _backendDio.post(
+        '/api/activities/log-subscriber',
+        data: {
+          'adminId': adminId,
+          'adminUsername': adminUsername ?? adminId,
+          'action': action,
+          'description': description,
+          'targetId': targetId?.toString(),
+          'targetName': targetName,
+          'metadata': metadata,
+        },
+      );
+    } catch (e) {
+      dev.log('logActivity error: $e', name: 'SUBS');
+    }
+  }
+
+  /// Matches React's updateUserComments: GET full user, merge notes, PUT back.
+  Future<bool> updateUserNotes(int userId, double newNotesValue) async {
+    try {
+      final userDetails = await getSubscriberDetails(userId);
+      if (userDetails == null) return false;
+
+      userDetails['notes'] = newNotesValue.toString();
+      userDetails.remove('id');
+      userDetails.remove('idx');
+      userDetails.remove('profile_details');
+
+      final payload = EncryptionService.encrypt(userDetails);
+      final response = await _sas4Dio.put(
+        '${ApiConstants.sas4GetUser}/$userId',
+        data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
       return response.statusCode == 200 || response.statusCode == 201;
-    } catch (_) {
+    } catch (e) {
+      dev.log('updateUserNotes error: $e', name: 'SUBS');
+      return false;
+    }
+  }
+
+  /// Pay debt: newNotes = current + amount (moves negative toward zero)
+  Future<bool> payDebt({
+    required int userId,
+    required String username,
+    required double amount,
+    String? paymentNotes,
+  }) async {
+    try {
+      final details = await getSubscriberDetails(userId);
+      if (details == null) return false;
+
+      final currentNotes = double.tryParse(details['notes']?.toString() ?? '') ?? 0;
+      final newNotes = currentNotes + amount;
+      final remaining = newNotes < 0 ? newNotes.abs() : 0.0;
+      final credit = newNotes > 0 ? newNotes : 0.0;
+
+      final ok = await updateUserNotes(userId, newNotes);
+      if (ok) {
+        logActivity(
+          action: 'deduct_balance',
+          description: 'تسديد دين ${amount.toStringAsFixed(0)} من المشترك: $username${paymentNotes != null ? ' - $paymentNotes' : ''}',
+          targetId: userId,
+          targetName: username,
+          metadata: {
+            'amount': amount,
+            'previous_balance': currentNotes,
+            'new_balance': newNotes,
+            'remaining_debt': remaining,
+            'credit': credit,
+            'payment_notes': paymentNotes,
+          },
+        );
+      }
+      return ok;
+    } catch (e) {
+      dev.log('payDebt error: $e', name: 'SUBS');
+      return false;
+    }
+  }
+
+  /// Add debt: newNotes = current - amount (makes more negative)
+  Future<bool> addDebt({
+    required int userId,
+    required String username,
+    required double amount,
+    String? comment,
+  }) async {
+    try {
+      final details = await getSubscriberDetails(userId);
+      if (details == null) return false;
+
+      final currentNotes = double.tryParse(details['notes']?.toString() ?? '') ?? 0;
+      final newNotes = currentNotes - amount;
+
+      final ok = await updateUserNotes(userId, newNotes);
+      if (ok) {
+        logActivity(
+          action: 'add_balance',
+          description: 'إضافة دين للمشترك: $username${comment != null ? ' - $comment' : ''}',
+          targetId: userId,
+          targetName: username,
+          metadata: {
+            'amount': amount,
+            'previous_comment': currentNotes,
+            'new_comment': newNotes,
+            'comment': comment,
+          },
+        );
+      }
+      return ok;
+    } catch (e) {
+      dev.log('addDebt error: $e', name: 'SUBS');
       return false;
     }
   }
@@ -792,7 +1148,17 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       }
 
       final response = await _sas4Dio.delete('${ApiConstants.sas4GetUser}/$id');
-      return response.data?['status'] == 200 || response.statusCode == 200;
+      final ok = response.data?['status'] == 200 || response.statusCode == 200;
+      if (ok) {
+        final subName = _findUsername(id);
+        logActivity(
+          action: 'delete_subscriber',
+          description: 'حذف مشترك: $subName',
+          targetId: id,
+          targetName: subName,
+        );
+      }
+      return ok;
     } catch (_) {
       return false;
     }
@@ -804,6 +1170,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       await _sas4Dio.post(
         '${ApiConstants.sas4UserDebt}/$userId',
         data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
       return true;
     } catch (_) {
