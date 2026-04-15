@@ -822,7 +822,11 @@ class _SubscriberDetailsScreenState
                       suffixIcon: partialCtrl.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () => setSheet(() => partialCtrl.clear()),
+                              onPressed: () {
+                                partialCtrl.clear();
+                                FocusScope.of(ctx).unfocus();
+                                setSheet(() {});
+                              },
                             )
                           : null,
                     ),
@@ -832,9 +836,11 @@ class _SubscriberDetailsScreenState
                     amounts: _buildPartialQuickAmounts(userPrice),
                     selectedAmount: partialAmount,
                     enabled: true,
-                    onSelected: (v) => setSheet(() {
+                    onSelected: (v) {
+                      FocusScope.of(ctx).unfocus();
                       partialCtrl.text = v.toStringAsFixed(0);
-                    }),
+                      setSheet(() {});
+                    },
                   ),
                 ],
                 const SizedBox(height: 14),
@@ -1156,9 +1162,11 @@ class _SubscriberDetailsScreenState
                   amounts: _buildPayDebtQuickAmounts(currentDebt),
                   selectedAmount: effectiveAmount,
                   enabled: !payAll,
-                  onSelected: (v) => setSheet(() {
+                  onSelected: (v) {
+                    FocusScope.of(ctx).unfocus();
                     amountCtrl.text = v.toStringAsFixed(0);
-                  }),
+                    setSheet(() {});
+                  },
                 ),
                 const SizedBox(height: 6),
 
@@ -1420,9 +1428,11 @@ class _SubscriberDetailsScreenState
                   amounts: const [5000.0, 10000.0, 15000.0, 25000.0, 35000.0, 50000.0],
                   selectedAmount: amount,
                   enabled: true,
-                  onSelected: (v) => setSheet(() {
+                  onSelected: (v) {
+                    FocusScope.of(ctx).unfocus();
                     amountCtrl.text = v.toStringAsFixed(0);
-                  }),
+                    setSheet(() {});
+                  },
                 ),
                 const SizedBox(height: 10),
 
