@@ -1,0 +1,148 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+import '../core/constants/api_constants.dart';
+import '../core/services/storage_service.dart';
+import '../core/services/socket_service.dart';
+import '../models/user_model.dart';
+
+enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
+
+class AuthState {
+  final AuthStatus status;
+  final UserModel? user;
+  final String? error;
+
+  const AuthState({
+    this.status = AuthStatus.initial,
+    this.user,
+    this.error,
+  });
+
+  AuthState copyWith({AuthStatus? status, UserModel? user, String? error}) {
+    return AuthState(
+      status: status ?? this.status,
+      user: user ?? this.user,
+      error: error,
+    );
+  }
+}
+
+class AuthNotifier extends StateNotifier<AuthState> {
+  final StorageService _storage;
+  final SocketService _socket;
+
+  AuthNotifier(this._storage, this._socket) : super(const AuthState());
+
+  Future<void> checkAuth() async {
+    try {
+      final isLoggedIn = await _storage.isLoggedIn();
+      if (!isLoggedIn) {
+        state = state.copyWith(status: AuthStatus.unauthenticated);
+        return;
+      }
+      final token = await _storage.getToken();
+      final adminId = await _storage.getAdminId();
+      final username = await _storage.getAdminUsername();
+      final expiry = await _storage.getTokenExpiry();
+
+      if (token == null || adminId == null) {
+        state = state.copyWith(status: AuthStatus.unauthenticated);
+        return;
+      }
+
+      final user = UserModel(
+        id: adminId,
+        username: username ?? '',
+        role: 'admin',
+        token: token,
+        expiresAt: expiry ?? '',
+      );
+      _socket.connect(adminId);
+      state = state.copyWith(status: AuthStatus.authenticated, user: user);
+    } catch (e) {
+      state = state.copyWith(status: AuthStatus.unauthenticated);
+    }
+  }
+
+  Future<bool> login(String username, String password) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: ApiConstants.backendUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 30),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    ));
+
+    try {
+      final response = await dio.post(
+        ApiConstants.login,
+        data: {'username': username, 'password': password},
+      );
+
+      if (response.data['success'] == true) {
+        final user = UserModel.fromJson(response.data);
+
+        await _storage.saveAll(
+          token: user.token,
+          expiresAt: user.expiresAt,
+          adminId: user.id,
+          adminUsername: user.username,
+        );
+
+        _socket.connect(user.id);
+
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+        );
+        return true;
+      }
+
+      final msg = response.data['message']?.toString() ?? 'فشل تسجيل الدخول';
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: msg);
+      return false;
+    } on DioException catch (e) {
+      String message;
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+          message = 'انتهت مهلة الاتصال - تحقق من الإنترنت';
+          break;
+        case DioExceptionType.connectionError:
+          message = 'فشل الاتصال بالخادم - تحقق من الإنترنت';
+          break;
+        default:
+          if (e.response?.statusCode == 401) {
+            message = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+          } else {
+            message = 'خطأ في الاتصال';
+          }
+      }
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: message);
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        error: 'خطأ غير متوقع',
+      );
+      return false;
+    } finally {
+      dio.close();
+    }
+  }
+
+  Future<void> logout() async {
+    _socket.disconnect();
+    await _storage.clearAll();
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+}
+
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  return AuthNotifier(
+    ref.read(storageServiceProvider),
+    ref.read(socketServiceProvider),
+  );
+});
