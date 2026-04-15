@@ -11,6 +11,7 @@ import '../../core/services/storage_service.dart';
 import '../../providers/reports_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/report_controls.dart';
 
 class AccountStatementTab extends ConsumerStatefulWidget {
   const AccountStatementTab({super.key});
@@ -31,6 +32,8 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
 
   late String _dateFrom;
   late String _dateTo;
+  int _txnPage = 1;
+  int _txnPerPage = 10;
 
   final Set<String> _selectedActionTypes = {
     'SUBSCRIBER_ACTIVATE',
@@ -445,8 +448,21 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                               .withValues(alpha: .4))),
                 ]),
               )
-            else
-              ...state.transactions.map((t) => _TransactionRow(txn: t)),
+            else ...[
+              PaginationBar(
+                totalItems: state.transactions.length,
+                currentPage: _txnPage,
+                rowsPerPage: _txnPerPage,
+                itemLabel: 'عملية',
+                onPageChanged: (p) => setState(() => _txnPage = p),
+                onRowsPerPageChanged: (r) => setState(() { _txnPerPage = r; _txnPage = 1; }),
+              ),
+              const SizedBox(height: 4),
+              ...state.transactions
+                  .skip((_txnPage - 1) * _txnPerPage)
+                  .take(_txnPerPage)
+                  .map((t) => _TransactionRow(txn: t)),
+            ],
           ],
         ] else ...[
           Padding(

@@ -133,18 +133,20 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
           ]),
           const SizedBox(height: 8),
 
-          // Manager filter
-          if (state.managers.isNotEmpty)
+          // Active filter chips
+          if (_managerId != 'all')
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: ManagerFilter(
-                managers: state.managers,
-                selectedId: _managerId,
-                onChanged: (v) {
-                  setState(() => _managerId = v);
-                  _load();
-                },
-              ),
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Wrap(spacing: 6, children: [
+                Chip(
+                  label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
+                      style: const TextStyle(fontSize: 10)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: () { setState(() => _managerId = 'all'); _load(); },
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ]),
             ),
 
           // Stats
@@ -157,15 +159,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
           ]),
           const SizedBox(height: 10),
 
-          // Filter chips
-          Row(children: [
-            _FilterChip('الكل', _filter == 'all', () => setState(() { _filter = 'all'; _page = 1; })),
-            const SizedBox(width: 6),
-            _FilterChip('تفعيل', _filter == 'activate', () => setState(() { _filter = 'activate'; _page = 1; })),
-            const SizedBox(width: 6),
-            _FilterChip('تمديد', _filter == 'extend', () => setState(() { _filter = 'extend'; _page = 1; })),
-          ]),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
 
           // Pagination
           PaginationBar(
@@ -199,12 +193,16 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
   }
 
   void _showDateFilter() {
+    final managers = ref.read(reportsProvider).managers;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
+        String mgr = _managerId;
+        String flt = _filter;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
@@ -216,18 +214,65 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
                   Center(child: Container(width: 40, height: 4,
                       decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 16),
-                  Text('فلتر التاريخ', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 16),
+                  Text('الفلاتر', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 14),
+
+                  _SectionLabel('فترة سريعة'),
+                  const SizedBox(height: 6),
                   Wrap(spacing: 8, children: [
                     _qc('اليوم', () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); }),
                     _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
                     _qc('شهر', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                   ]),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
+                  _SectionLabel('نوع الحركة'),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    FilterChip(label: const Text('الكل', style: TextStyle(fontSize: 11)), selected: flt == 'all',
+                        onSelected: (_) => setSheet(() => flt = 'all'), selectedColor: AppTheme.primary.withValues(alpha: .15), checkmarkColor: AppTheme.primary, visualDensity: VisualDensity.compact),
+                    FilterChip(label: const Text('تفعيل', style: TextStyle(fontSize: 11)), selected: flt == 'activate',
+                        onSelected: (_) => setSheet(() => flt = 'activate'), selectedColor: AppTheme.successColor.withValues(alpha: .15), checkmarkColor: AppTheme.successColor, visualDensity: VisualDensity.compact),
+                    FilterChip(label: const Text('تمديد', style: TextStyle(fontSize: 11)), selected: flt == 'extend',
+                        onSelected: (_) => setSheet(() => flt = 'extend'), selectedColor: AppTheme.warningColor.withValues(alpha: .15), checkmarkColor: AppTheme.warningColor, visualDensity: VisualDensity.compact),
+                  ]),
+                  const SizedBox(height: 14),
+
+                  if (managers.isNotEmpty) ...[
+                    _SectionLabel('المدير'),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Theme.of(ctx).colorScheme.outline.withValues(alpha: .2)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: mgr, isExpanded: true, isDense: true,
+                          style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('جميع المدراء')),
+                            ...managers.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis))),
+                          ],
+                          onChanged: (v) { if (v != null) setSheet(() => mgr = v); },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
                   SizedBox(height: 48, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      setState(() { _dateFrom = from; _dateTo = to; });
+                      setState(() {
+                        _dateFrom = from;
+                        _dateTo = to;
+                        _managerId = mgr;
+                        _filter = flt;
+                        _page = 1;
+                      });
                       _load();
                     },
                     child: const Text('تطبيق'),
@@ -267,27 +312,6 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  final String label; final bool selected; final VoidCallback onTap;
-  const _FilterChip(this.label, this.selected, this.onTap);
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? AppTheme.primary.withValues(alpha: .1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: selected ? AppTheme.primary.withValues(alpha: .3) : Theme.of(context).colorScheme.onSurface.withValues(alpha: .15)),
-        ),
-        child: Text(label, style: TextStyle(fontSize: 12,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? AppTheme.primary : null)),
-      ),
-    );
-  }
-}
 
 class _ActivationRow extends StatelessWidget {
   final Map<String, dynamic> record;
@@ -343,6 +367,16 @@ class _ActivationRow extends StatelessWidget {
         ),
       ]),
     );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .6)));
   }
 }
 

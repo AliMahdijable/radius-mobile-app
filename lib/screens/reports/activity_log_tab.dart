@@ -24,6 +24,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
   late String _dateFrom;
   late String _dateTo;
   String _managerId = 'all';
+  String _activityType = 'all';
   int _page = 1;
   int _perPage = 10;
 
@@ -56,6 +57,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         'limit': '500',
       };
       if (_search.isNotEmpty) params['search'] = _search;
+      if (_activityType != 'all') params['activity_type'] = _activityType;
       if (_managerId != 'all') {
         params['user_ids'] = _managerId;
       } else if (adminId != null) {
@@ -175,18 +177,30 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
           ]),
         ),
 
-        // Manager filter
-        if (managers.isNotEmpty)
+        // Active filters indicator
+        if (_managerId != 'all' || _activityType != 'all')
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: ManagerFilter(
-              managers: managers,
-              selectedId: _managerId,
-              onChanged: (v) {
-                setState(() => _managerId = v);
-                _fetchActivities();
-              },
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            child: Wrap(spacing: 6, children: [
+              if (_managerId != 'all')
+                Chip(
+                  label: Text(managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name,
+                      style: const TextStyle(fontSize: 10)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: () { setState(() => _managerId = 'all'); _fetchActivities(); },
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              if (_activityType != 'all')
+                Chip(
+                  label: Text(_activityTypeOptions.firstWhere((o) => o['value'] == _activityType, orElse: () => {'label': _activityType})['label']!,
+                      style: const TextStyle(fontSize: 10)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: () { setState(() => _activityType = 'all'); _fetchActivities(); },
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+            ]),
           ),
 
         // Pagination
@@ -226,13 +240,25 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
     );
   }
 
+  static const _activityTypeOptions = [
+    {'value': 'all', 'label': 'الكل'},
+    {'value': 'users', 'label': 'حركات المشتركين'},
+    {'value': 'managers', 'label': 'حركات المدراء'},
+    {'value': 'payments', 'label': 'الحركات المالية'},
+    {'value': 'system', 'label': 'حركات النظام'},
+  ];
+
   void _showDateFilter() {
+    final managers = ref.read(reportsProvider).managers;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
+        String mgr = _managerId;
+        String aType = _activityType;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
@@ -244,18 +270,73 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                   Center(child: Container(width: 40, height: 4,
                       decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 16),
-                  Text('فلتر التاريخ', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 16),
+                  Text('الفلاتر', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 14),
+
+                  // Quick date
+                  _SectionLabel('فترة سريعة'),
+                  const SizedBox(height: 6),
                   Wrap(spacing: 8, children: [
                     _qc('اليوم', () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); }),
                     _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
                     _qc('آخر 30 يوم', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                   ]),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
+                  // Activity type
+                  _SectionLabel('نوع الحركة'),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 6, children: _activityTypeOptions.map((opt) {
+                    final sel = aType == opt['value'];
+                    return FilterChip(
+                      label: Text(opt['label']!, style: const TextStyle(fontSize: 11)),
+                      selected: sel,
+                      onSelected: (_) => setSheet(() => aType = opt['value']!),
+                      selectedColor: AppTheme.primary.withValues(alpha: .15),
+                      checkmarkColor: AppTheme.primary,
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList()),
+                  const SizedBox(height: 14),
+
+                  // Manager
+                  if (managers.isNotEmpty) ...[
+                    _SectionLabel('المدير'),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Theme.of(ctx).colorScheme.outline.withValues(alpha: .2)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: mgr,
+                          isExpanded: true,
+                          isDense: true,
+                          style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('جميع المدراء')),
+                            ...managers.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis))),
+                          ],
+                          onChanged: (v) { if (v != null) setSheet(() => mgr = v); },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
                   SizedBox(height: 48, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      setState(() { _dateFrom = from; _dateTo = to; });
+                      setState(() {
+                        _dateFrom = from;
+                        _dateTo = to;
+                        _managerId = mgr;
+                        _activityType = aType;
+                        _page = 1;
+                      });
                       _fetchActivities();
                     },
                     child: const Text('تطبيق'),
@@ -335,6 +416,16 @@ class _ActionStyle {
   final IconData icon;
   final Color color;
   const _ActionStyle(this.label, this.icon, this.color);
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .6)));
+  }
 }
 
 class _SmallBtn extends StatelessWidget {

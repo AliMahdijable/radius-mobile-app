@@ -21,8 +21,18 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   late String _dateTo;
   bool _loaded = false;
   String _managerId = 'all';
+  String _userManagerId = 'all';
+  final Set<String> _selectedActionTypes = {};
   int _logsPage = 1;
   int _logsPerPage = 10;
+
+  static const _actionTypeOptions = [
+    {'value': 'BALANCE_DEDUCT', 'label': 'تسديد دين'},
+    {'value': 'SUBSCRIBER_ACTIVATE_CASH', 'label': 'تفعيل نقدي'},
+    {'value': 'SUBSCRIBER_ACTIVATE_NON_CASH', 'label': 'تفعيل غير نقدي'},
+    {'value': 'BALANCE_ADD', 'label': 'إضافة دين'},
+    {'value': 'SUBSCRIBER_EXTEND', 'label': 'تمديد اشتراك'},
+  ];
 
   @override
   bool get wantKeepAlive => true;
@@ -44,6 +54,8 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     await ref.read(reportsProvider.notifier).fetchFinancialReport(
           _dateFrom, _dateTo,
           managerId: _managerId,
+          actionTypes: _selectedActionTypes.isNotEmpty ? _selectedActionTypes.toList() : null,
+          userManager: _userManagerId != 'all' ? _userManagerId : null,
         );
     if (mounted) setState(() => _loaded = true);
   }
@@ -143,18 +155,29 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           ]),
           const SizedBox(height: 8),
 
-          // Manager filter
-          if (state.managers.isNotEmpty)
+          // Active filter chips
+          if (_managerId != 'all' || _userManagerId != 'all' || _selectedActionTypes.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: ManagerFilter(
-                managers: state.managers,
-                selectedId: _managerId,
-                onChanged: (v) {
-                  setState(() => _managerId = v);
-                  _load();
-                },
-              ),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(spacing: 6, runSpacing: 4, children: [
+                if (_managerId != 'all')
+                  _RemovableChip(
+                    label: 'مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
+                    onRemove: () { setState(() => _managerId = 'all'); _load(); },
+                  ),
+                if (_userManagerId != 'all')
+                  _RemovableChip(
+                    label: 'مدير المستخدم: $_userManagerId',
+                    onRemove: () { setState(() => _userManagerId = 'all'); _load(); },
+                  ),
+                ..._selectedActionTypes.map((t) {
+                  final lbl = _actionTypeOptions.firstWhere((o) => o['value'] == t, orElse: () => {'label': t})['label']!;
+                  return _RemovableChip(
+                    label: lbl,
+                    onRemove: () { setState(() => _selectedActionTypes.remove(t)); _load(); },
+                  );
+                }),
+              ]),
             ),
 
           // KPI cards
@@ -227,14 +250,19 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   }
 
   void _showDateFilter() {
+    final managers = ref.read(reportsProvider).managers;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
+        String mgr = _managerId;
+        String userMgr = _userManagerId;
+        final types = Set<String>.from(_selectedActionTypes);
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
@@ -246,19 +274,71 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   Center(child: Container(width: 40, height: 4,
                       decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 16),
-                  Text('فلتر التاريخ', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 16),
+                  Text('الفلاتر', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 14),
+
+                  _SectionLabel('فترة سريعة'),
+                  const SizedBox(height: 6),
                   Wrap(spacing: 8, children: [
                     _qc('اليوم', () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); }),
                     _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
                     _qc('آخر 30 يوم', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                     _qc('3 أشهر', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 90))); }); }),
                   ]),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
+                  _SectionLabel('نوع الحركة'),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 6, children: _actionTypeOptions.map((opt) {
+                    final v = opt['value']!;
+                    final active = types.contains(v);
+                    return FilterChip(
+                      label: Text(opt['label']!, style: const TextStyle(fontSize: 11)),
+                      selected: active,
+                      onSelected: (sel) => setSheet(() { sel ? types.add(v) : types.remove(v); }),
+                      selectedColor: AppTheme.primary.withValues(alpha: .15),
+                      checkmarkColor: AppTheme.primary,
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList()),
+                  const SizedBox(height: 14),
+
+                  if (managers.isNotEmpty) ...[
+                    _SectionLabel('مدير الحركة'),
+                    const SizedBox(height: 6),
+                    _FilterDropdown(
+                      value: mgr,
+                      items: [
+                        const DropdownMenuItem(value: 'all', child: Text('الكل (المدير + الفرعيين)')),
+                        ...managers.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis))),
+                      ],
+                      onChanged: (v) => setSheet(() => mgr = v),
+                    ),
+                    const SizedBox(height: 10),
+                    _SectionLabel('مدير المستخدم'),
+                    const SizedBox(height: 6),
+                    _FilterDropdown(
+                      value: userMgr,
+                      items: [
+                        const DropdownMenuItem(value: 'all', child: Text('الكل')),
+                        ...managers.map((m) => DropdownMenuItem(value: m.name, child: Text(m.name, overflow: TextOverflow.ellipsis))),
+                      ],
+                      onChanged: (v) => setSheet(() => userMgr = v),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
                   SizedBox(height: 48, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      setState(() { _dateFrom = from; _dateTo = to; _logsPage = 1; });
+                      setState(() {
+                        _dateFrom = from;
+                        _dateTo = to;
+                        _managerId = mgr;
+                        _userManagerId = userMgr;
+                        _selectedActionTypes..clear()..addAll(types);
+                        _logsPage = 1;
+                      });
                       _load();
                     },
                     child: const Text('تطبيق'),
@@ -460,6 +540,60 @@ class _LogRow extends StatelessWidget {
     final match = RegExp(r'-?\d[\d,]*').firstMatch(desc);
     if (match != null) return double.tryParse(match.group(0)!.replaceAll(',', ''))?.abs() ?? 0;
     return 0;
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .6)));
+  }
+}
+
+class _FilterDropdown extends StatelessWidget {
+  final String value;
+  final List<DropdownMenuItem<String>> items;
+  final ValueChanged<String> onChanged;
+  const _FilterDropdown({required this.value, required this.items, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: .2)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface),
+          items: items,
+          onChanged: (v) { if (v != null) onChanged(v); },
+        ),
+      ),
+    );
+  }
+}
+
+class _RemovableChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onRemove;
+  const _RemovableChip({required this.label, required this.onRemove});
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      label: Text(label, style: const TextStyle(fontSize: 10)),
+      deleteIcon: const Icon(Icons.close, size: 14),
+      onDeleted: onRemove,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
   }
 }
 
