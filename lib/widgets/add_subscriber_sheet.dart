@@ -22,6 +22,22 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   final _phoneCtrl = TextEditingController();
   int? _selectedPackageId;
   bool _isLoading = false;
+  bool _loadingPackages = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ensurePackagesLoaded();
+  }
+
+  Future<void> _ensurePackagesLoaded() async {
+    final pkgs = ref.read(subscribersProvider).packages;
+    if (pkgs.isEmpty) {
+      setState(() => _loadingPackages = true);
+      await ref.read(subscribersProvider.notifier).loadPackages();
+      if (mounted) setState(() => _loadingPackages = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -77,154 +93,226 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     final packages = ref.watch(subscribersProvider).packages;
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom,
-        left: 20, right: 20, top: 16,
-      ),
-      child: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final seen = <int>{};
+    final uniquePkgs = packages.where((p) {
+      if (p.idx <= 0 || seen.contains(p.idx)) return false;
+      seen.add(p.idx);
+      return true;
+    }).toList();
+
+    return Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurface.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.teal600, AppTheme.teal900]),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 22),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.person_add_alt_1, color: AppTheme.primary, size: 22),
-                  ),
-                  const SizedBox(width: 10),
-                  Text('إضافة مشترك جديد',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _firstnameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'الاسم الأول',
-                        prefixIcon: Icon(Icons.person_outline, size: 20),
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _lastnameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'الاسم الأخير',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _usernameCtrl,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                decoration: const InputDecoration(
-                  labelText: 'اسم المستخدم',
-                  prefixIcon: Icon(Icons.alternate_email, size: 20),
-                  hintText: 'user@domain',
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _passwordCtrl,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                decoration: const InputDecoration(
-                  labelText: 'كلمة المرور',
-                  prefixIcon: Icon(Icons.lock_outline, size: 20),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _phoneCtrl,
-                keyboardType: TextInputType.phone,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                decoration: const InputDecoration(
-                  labelText: 'رقم الهاتف',
-                  prefixIcon: Icon(Icons.phone_outlined, size: 20),
-                  hintText: '07xxxxxxxxx',
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              Builder(builder: (_) {
-                final seen = <int>{};
-                final uniquePkgs = packages.where((p) {
-                  if (p.idx <= 0 || seen.contains(p.idx)) return false;
-                  seen.add(p.idx);
-                  return true;
-                }).toList();
-                final hasMatch = _selectedPackageId != null &&
-                    _selectedPackageId! > 0 &&
-                    uniquePkgs.any((p) => p.idx == _selectedPackageId);
-                return DropdownButtonFormField<int>(
-                  value: hasMatch ? _selectedPackageId : null,
-                  decoration: const InputDecoration(
-                    labelText: 'الباقة',
-                    prefixIcon: Icon(Icons.sell_rounded, size: 20),
-                  ),
-                  items: uniquePkgs.map((pkg) {
-                    return DropdownMenuItem(
-                      value: pkg.idx,
-                      child: Text(
-                        '${pkg.name} — ${AppHelpers.formatMoney(pkg.price)}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (v) => setState(() => _selectedPackageId = v),
-                  validator: (v) => v == null ? 'اختر الباقة' : null,
-                );
-              }),
-              const SizedBox(height: 24),
-
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _submit,
-                  icon: _isLoading
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.add),
-                  label: Text(_isLoading ? 'جاري الإنشاء...' : 'إنشاء المشترك'),
-                ),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(width: 12),
+              Text('إضافة مشترك جديد',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             ],
           ),
-        ),
+          const SizedBox(height: 24),
+
+          Text('معلومات المشترك', style: TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.5))),
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _firstnameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'الاسم الأول',
+                    prefixIcon: Icon(Icons.person_outline, size: 20),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _lastnameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'الاسم الأخير',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _phoneCtrl,
+            keyboardType: TextInputType.phone,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            decoration: const InputDecoration(
+              labelText: 'رقم الهاتف',
+              prefixIcon: Icon(Icons.phone_outlined, size: 20),
+              hintText: '07xxxxxxxxx',
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          Text('بيانات الدخول', style: TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.5))),
+          const SizedBox(height: 10),
+
+          TextFormField(
+            controller: _usernameCtrl,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            decoration: const InputDecoration(
+              labelText: 'اسم المستخدم',
+              prefixIcon: Icon(Icons.alternate_email, size: 20),
+              hintText: 'user@domain',
+            ),
+            validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+          ),
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _passwordCtrl,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            decoration: const InputDecoration(
+              labelText: 'كلمة المرور',
+              prefixIcon: Icon(Icons.lock_outline, size: 20),
+            ),
+            validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+          ),
+          const SizedBox(height: 20),
+
+          Text('الباقة', style: TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.5))),
+          const SizedBox(height: 10),
+
+          if (_loadingPackages)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 10),
+                  Text('جاري تحميل الباقات...', style: TextStyle(fontSize: 13)),
+                ],
+              ),
+            )
+          else if (uniquePkgs.isEmpty)
+            GestureDetector(
+              onTap: _ensurePackagesLoaded,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.refresh, size: 18, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('لا توجد باقات — اضغط لإعادة التحميل',
+                        style: TextStyle(fontSize: 13, color: Colors.orange)),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            ...uniquePkgs.map((pkg) {
+              final isSelected = _selectedPackageId == pkg.idx;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedPackageId = pkg.idx),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.successColor.withOpacity(0.08)
+                          : theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.successColor.withOpacity(0.4)
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSelected ? Icons.check_circle : Icons.circle_outlined,
+                          size: 20,
+                          color: isSelected ? AppTheme.successColor : Colors.grey,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(pkg.name, style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600,
+                                color: isSelected ? AppTheme.successColor : null,
+                              )),
+                              if (pkg.rateLimit != null)
+                                Text(pkg.rateLimit!, style: TextStyle(fontSize: 11,
+                                    color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                            ],
+                          ),
+                        ),
+                        Text(AppHelpers.formatMoney(pkg.price),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                              color: isSelected ? AppTheme.successColor : AppTheme.teal600)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+          const SizedBox(height: 24),
+
+          SizedBox(
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _submit,
+              icon: _isLoading
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.add),
+              label: Text(_isLoading ? 'جاري الإنشاء...' : 'إنشاء المشترك'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.successColor,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }

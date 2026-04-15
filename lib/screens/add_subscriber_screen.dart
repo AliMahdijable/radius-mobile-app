@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/add_subscriber_sheet.dart';
-import '../providers/subscribers_provider.dart';
-import '../core/theme/app_theme.dart';
 
 class AddSubscriberScreen extends ConsumerWidget {
   const AddSubscriberScreen({super.key});
@@ -10,10 +8,15 @@ class AddSubscriberScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      body: Center(
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: AddSubscriberSheet(),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: const AddSubscriberSheet(),
         ),
       ),
     );
