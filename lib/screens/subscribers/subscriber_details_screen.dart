@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/templates_provider.dart';
+import '../../widgets/app_snackbar.dart';
 
 class SubscriberDetailsScreen extends ConsumerStatefulWidget {
   final SubscriberModel subscriber;
@@ -33,13 +34,13 @@ class _SubscriberDetailsScreenState
     super.dispose();
   }
 
-  void _showSnack(String msg, {bool success = true}) {
+  void _showSnack(String msg, {bool success = true, String? detail}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: success ? Colors.green : Colors.red,
-      behavior: SnackBarBehavior.floating,
-    ));
+    if (success) {
+      AppSnackBar.success(context, msg, detail: detail);
+    } else {
+      AppSnackBar.error(context, msg, detail: detail);
+    }
   }
 
   // ── WhatsApp ──────────────────────────────────────────────────────────
@@ -83,17 +84,19 @@ class _SubscriberDetailsScreenState
             ElevatedButton.icon(
               onPressed: () async {
                 if (_messageController.text.trim().isEmpty) return;
-                final success =
+                final result =
                     await ref.read(whatsappProvider.notifier).sendMessage(
                           widget.subscriber.displayPhone,
                           _messageController.text.trim(),
                         );
                 if (mounted) {
                   Navigator.pop(ctx);
-                  _showSnack(
-                    success ? 'تم الإرسال بنجاح' : 'فشل الإرسال',
-                    success: success,
-                  );
+                  if (result.success) {
+                    AppSnackBar.whatsapp(context, 'تم الإرسال بنجاح');
+                  } else {
+                    AppSnackBar.whatsappError(context, 'فشل الإرسال',
+                        detail: result.error);
+                  }
                   _messageController.clear();
                 }
               },
@@ -1120,7 +1123,10 @@ class _SubscriberDetailsScreenState
     Map<String, String>? extraVars,
   }) async {
     final phone = widget.subscriber.displayPhone;
-    if (phone.isEmpty) return;
+    if (phone.isEmpty) {
+      if (mounted) AppSnackBar.warning(context, 'لا يوجد رقم هاتف للمشترك');
+      return;
+    }
 
     try {
       final templates = ref.read(templatesProvider).templates;
@@ -1160,8 +1166,21 @@ class _SubscriberDetailsScreenState
       };
       vars.forEach((k, v) => msg = msg.replaceAll(k, v));
 
-      await ref.read(whatsappProvider.notifier).sendMessage(phone, msg);
-    } catch (_) {}
+      final result =
+          await ref.read(whatsappProvider.notifier).sendMessage(phone, msg);
+      if (!mounted) return;
+      if (result.success) {
+        AppSnackBar.whatsapp(context, 'تم إرسال الرسالة بنجاح');
+      } else {
+        AppSnackBar.whatsappError(context, 'فشل إرسال الرسالة',
+            detail: result.error);
+      }
+    } catch (_) {
+      if (mounted) {
+        AppSnackBar.whatsappError(context, 'فشل إرسال الرسالة',
+            detail: 'خطأ غير متوقع');
+      }
+    }
   }
 
   // ── Pay Debt (تسديد دين) ──────────────────────────────────────────────

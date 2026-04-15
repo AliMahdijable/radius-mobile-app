@@ -4,6 +4,7 @@ import '../providers/templates_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/template_model.dart';
 import '../core/theme/app_theme.dart';
+import '../widgets/app_snackbar.dart';
 
 class TemplatesScreen extends ConsumerStatefulWidget {
   const TemplatesScreen({super.key});
@@ -145,8 +146,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                 SizedBox(height: 46, child: ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isEmpty || contentController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('يرجى ملء جميع الحقول')));
+                      AppSnackBar.warning(context, 'يرجى ملء جميع الحقول');
                       return;
                     }
                     final newTemplate = TemplateModel(
@@ -161,8 +161,11 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                         .saveTemplate(newTemplate);
                     if (ctx.mounted) {
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(ok ? 'تم حفظ القالب' : 'فشل حفظ القالب')));
+                      if (ok) {
+                        AppSnackBar.success(context, 'تم حفظ القالب');
+                      } else {
+                        AppSnackBar.error(context, 'فشل حفظ القالب');
+                      }
                     }
                   },
                   child: const Text('حفظ القالب'),

@@ -5,6 +5,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/helpers.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/loading_overlay.dart';
+import '../../widgets/app_snackbar.dart';
 
 class MessageLogsScreen extends ConsumerStatefulWidget {
   const MessageLogsScreen({super.key});
@@ -308,12 +309,11 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                                                   .notifier)
                                               .retryMessage(msg.id);
                                           if (mounted) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(SnackBar(
-                                              content: Text(ok
-                                                  ? 'تمت إعادة المحاولة'
-                                                  : 'فشلت إعادة المحاولة'),
-                                            ));
+                                            if (ok) {
+                                              AppSnackBar.success(context, 'تمت إعادة المحاولة');
+                                            } else {
+                                              AppSnackBar.error(context, 'فشلت إعادة المحاولة');
+                                            }
                                           }
                                         },
                                       )
