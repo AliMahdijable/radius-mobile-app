@@ -572,7 +572,7 @@ class _FilterDropdown extends StatelessWidget {
           value: value,
           isExpanded: true,
           isDense: true,
-          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface),
+          style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: Theme.of(context).colorScheme.onSurface),
           items: items,
           onChanged: (v) { if (v != null) onChanged(v); },
         ),

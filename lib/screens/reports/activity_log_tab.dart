@@ -315,7 +315,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                           value: mgr,
                           isExpanded: true,
                           isDense: true,
-                          style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface),
+                          style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: Theme.of(ctx).colorScheme.onSurface),
                           items: [
                             const DropdownMenuItem(value: 'all', child: Text('جميع المدراء')),
                             ...managers.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis))),
