@@ -2072,8 +2072,7 @@ class _SubscriberDetailsScreenState
           'شكراً لك 🙏';
 
       final sendResult = await ref.read(whatsappProvider.notifier).sendMessage(
-        phone: phone,
-        message: message,
+        phone, message,
       );
 
       if (!mounted) return;
