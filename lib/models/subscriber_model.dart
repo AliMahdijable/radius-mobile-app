@@ -56,9 +56,12 @@ class SubscriberModel {
   String get displayPhone => phone ?? mobile ?? '';
 
   double get debtAmount {
-    if (debt != null) return debt!;
-    if (notes == null || notes!.isEmpty) return 0;
-    return double.tryParse(notes!) ?? 0;
+    if (notes != null && notes!.isNotEmpty) {
+      final v = double.tryParse(notes!);
+      if (v != null) return v;
+    }
+    if (debt != null && debt != 0) return debt!;
+    return 0;
   }
 
   bool get hasDebt {
