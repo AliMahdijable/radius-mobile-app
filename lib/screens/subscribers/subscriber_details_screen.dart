@@ -187,7 +187,7 @@ class _SubscriberDetailsScreenState
             final packages = ref.read(subscribersProvider).packages;
             final seen = <int>{};
             final uniquePkgs = packages.where((p) {
-              if (p.idx <= 0 || seen.contains(p.idx)) return false;
+              if (p.idx <= 0 || seen.contains(p.idx) || !p.isMonthly) return false;
               seen.add(p.idx);
               return true;
             }).toList();
@@ -439,18 +439,6 @@ class _SubscriberDetailsScreenState
                       borderRadius: BorderRadius.circular(4)),
                     child: const Text('الحالية',
                       style: TextStyle(fontSize: 9, color: Colors.blue,
-                          fontWeight: FontWeight.w600)),
-                  ),
-                ],
-                if (pkg.isExtension) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4)),
-                    child: Text(pkg.typeLabel,
-                      style: const TextStyle(fontSize: 9, color: Colors.orange,
                           fontWeight: FontWeight.w600)),
                   ),
                 ],
