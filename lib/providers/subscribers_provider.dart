@@ -621,44 +621,106 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         if (adminId != null) await _loadPriceList(adminId);
       }
 
-      dev.log('Loading packages from SAS4...', name: 'SUBS');
-      final payload = EncryptionService.encrypt({
-        'page': 1,
-        'count': 100,
-        'columns': [
-          'idx', 'id', 'name', 'name_en', 'rate_limit', 'rate_limit_dl',
-          'monthly_fee', 'price', 'profile_price', 'type', 'expiration_amount',
-        ],
-      });
+      List<PackageModel> packages = [];
 
-      final response = await _sas4Dio.post(
-        ApiConstants.sas4Profiles,
-        data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
-      );
+      // Method 1: POST /index/profile (requires prm_profiles_create permission)
+      try {
+        dev.log('Trying POST /index/profile...', name: 'SUBS');
+        final payload = EncryptionService.encrypt({
+          'page': 1,
+          'count': 100,
+          'sortBy': null,
+          'direction': 'asc',
+          'search': '',
+          'columns': [
+            'name', 'price', 'pool', 'downrate', 'uprate',
+            'type', 'expiration_amount', 'users_count', 'online_users_count',
+          ],
+        });
 
-      var resData = response.data;
-      if (resData is String) {
-        resData = EncryptionService.decrypt(resData);
+        final response = await _sas4Dio.post(
+          ApiConstants.sas4Profiles,
+          data: {'payload': payload},
+          options: Options(contentType: 'application/x-www-form-urlencoded'),
+        );
+
+        var resData = response.data;
+        if (resData is String) {
+          resData = EncryptionService.decrypt(resData);
+        }
+
+        final data = (resData is Map ? resData['data'] : null) as List? ?? [];
+        packages = data
+            .map((e) => e is Map<String, dynamic> ? PackageModel.fromJson(e) : null)
+            .whereType<PackageModel>()
+            .where((p) => p.idx > 0)
+            .toList();
+        dev.log('POST /index/profile returned ${packages.length} packages', name: 'SUBS');
+      } catch (e) {
+        dev.log('POST /index/profile failed: $e', name: 'SUBS');
       }
 
-      final data = (resData is Map ? resData['data'] : null) as List? ?? [];
-      var packages = data
-          .map((e) => e is Map<String, dynamic> ? PackageModel.fromJson(e) : null)
-          .whereType<PackageModel>()
-          .where((p) => p.idx > 0)
-          .toList();
+      // Method 2: fallback GET /list/profile/5 (no permission needed)
+      if (packages.isEmpty) {
+        try {
+          dev.log('Trying GET /list/profile/5...', name: 'SUBS');
+          final response = await _sas4Dio.get(ApiConstants.sas4ListProfile);
 
-      packages = packages.map((p) {
-        final pi = _priceMap[p.idx];
-        if (pi != null) {
-          final up = pi['user_price']?.toString();
-          if (up != null) return p.copyWithUserPrice(up);
+          var resData = response.data;
+          if (resData is String) {
+            resData = EncryptionService.decrypt(resData);
+          }
+
+          List<dynamic> items = [];
+          if (resData is Map && resData['data'] is List) {
+            items = resData['data'];
+          } else if (resData is List) {
+            items = resData;
+          }
+
+          packages = items
+              .map((e) => e is Map<String, dynamic> ? PackageModel.fromJson(e) : null)
+              .whereType<PackageModel>()
+              .where((p) => p.idx > 0)
+              .toList();
+          dev.log('GET /list/profile/5 returned ${packages.length} packages', name: 'SUBS');
+        } catch (e) {
+          dev.log('GET /list/profile/5 failed: $e', name: 'SUBS');
         }
-        return p;
-      }).toList();
+      }
 
-      dev.log('Loaded ${packages.length} packages (priceMap: ${_priceMap.length})', name: 'SUBS');
+      // Method 3: build from priceList if both profile APIs failed
+      if (packages.isEmpty && _priceMap.isNotEmpty) {
+        dev.log('Building packages from priceList (${_priceMap.length} items)...', name: 'SUBS');
+        packages = _priceMap.entries
+            .where((e) => e.key > 0)
+            .map((e) {
+              final item = e.value;
+              final name = (item['name'] ?? item['profile_name'] ?? '').toString();
+              if (name.isEmpty) return null;
+              return PackageModel(
+                idx: e.key,
+                name: name,
+                price: (item['price'] ?? item['profile_price'])?.toString(),
+                userPrice: item['user_price']?.toString(),
+              );
+            })
+            .whereType<PackageModel>()
+            .toList();
+        dev.log('Built ${packages.length} packages from priceList', name: 'SUBS');
+      } else {
+        // Merge user_price from priceList
+        packages = packages.map((p) {
+          final pi = _priceMap[p.idx];
+          if (pi != null) {
+            final up = pi['user_price']?.toString();
+            if (up != null) return p.copyWithUserPrice(up);
+          }
+          return p;
+        }).toList();
+      }
+
+      dev.log('Final: ${packages.length} packages (priceMap: ${_priceMap.length})', name: 'SUBS');
       state = state.copyWith(packages: packages);
     } catch (e, st) {
       dev.log('loadPackages error: $e\n$st', name: 'SUBS');
