@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
+import '../../widgets/app_snackbar.dart';
 
 class FinancialTab extends ConsumerStatefulWidget {
   const FinancialTab({super.key});
@@ -44,6 +46,31 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     return 0;
   }
 
+  Future<void> _exportCsv() async {
+    final logs = ref.read(reportsProvider).recentLogs;
+    if (logs.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات للتصدير');
+      return;
+    }
+    try {
+      await CsvExport.exportAndShare(
+        fileName: 'financial-report-$_dateFrom-$_dateTo.csv',
+        headers: ['الاسم', 'اسم المستخدم', 'نوع الحركة', 'المبلغ', 'التاريخ', 'الوصف', 'المدير'],
+        rows: logs.map((log) => [
+          log['user_firstname']?.toString() ?? '',
+          log['user_username']?.toString() ?? log['target_name']?.toString() ?? '',
+          log['action_type_ar']?.toString() ?? log['action_type']?.toString() ?? '',
+          (log['amount'] ?? 0).toString(),
+          log['created_at']?.toString() ?? '',
+          log['action_description']?.toString() ?? '',
+          log['admin_username']?.toString() ?? '',
+        ]).toList(),
+      );
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل تصدير التقرير');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -70,32 +97,37 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Date filter
-          GestureDetector(
-            onTap: _showDateFilter,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: .3),
-                borderRadius: BorderRadius.circular(10),
+          // Action bar: date filter + export + refresh
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: _showDateFilter,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.date_range, size: 14, color: theme.colorScheme.primary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text('$_dateFrom — $_dateTo',
+                          style: const TextStyle(fontSize: 11),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    Icon(Icons.tune, size: 14,
+                        color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                  ]),
+                ),
               ),
-              child: Row(children: [
-                Icon(Icons.date_range,
-                    size: 16, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Text('$_dateFrom  —  $_dateTo',
-                    style: const TextStyle(fontSize: 12)),
-                const Spacer(),
-                Icon(Icons.tune,
-                    size: 16,
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: .4)),
-              ]),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(width: 6),
+            _ActionBtn(Icons.download_rounded, 'تصدير', _exportCsv),
+            const SizedBox(width: 4),
+            _ActionBtn(Icons.refresh_rounded, 'تحديث', _load),
+          ]),
+          const SizedBox(height: 14),
 
           // KPI cards
           Row(children: [
@@ -474,5 +506,31 @@ class _LogRow extends StatelessWidget {
       return double.tryParse(match.group(0)!.replaceAll(',', ''))?.abs() ?? 0;
     }
     return 0;
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _ActionBtn(this.icon, this.tooltip, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -4,7 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/csv_export.dart';
+import '../../core/constants/api_constants.dart';
+import '../../core/network/dio_client.dart';
+import '../../core/services/storage_service.dart';
 import '../../providers/reports_provider.dart';
+import '../../providers/whatsapp_provider.dart';
+import '../../widgets/app_snackbar.dart';
 
 class AccountStatementTab extends ConsumerStatefulWidget {
   const AccountStatementTab({super.key});
@@ -19,11 +25,19 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   bool _searchLoading = false;
+  bool _whatsappLoading = false;
   Map<String, dynamic>? _selectedSub;
   Timer? _debounce;
 
   late String _dateFrom;
   late String _dateTo;
+
+  final Set<String> _selectedActionTypes = {
+    'SUBSCRIBER_ACTIVATE',
+    'SUBSCRIBER_EXTEND',
+    'BALANCE_DEDUCT',
+    'BALANCE_ADD',
+  };
 
   @override
   bool get wantKeepAlive => true;
@@ -73,13 +87,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
       _searchResults = [];
       _searchCtrl.text = sub['username']?.toString() ?? '';
     });
-
-    await ref.read(reportsProvider.notifier).fetchAccountStatement(
-          username: sub['username']?.toString() ?? '',
-          userId: (sub['id'] ?? sub['idx'] ?? '').toString(),
-          dateFrom: _dateFrom,
-          dateTo: _dateTo,
-        );
+    await _reload();
   }
 
   Future<void> _reload() async {
@@ -90,6 +98,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               (_selectedSub!['id'] ?? _selectedSub!['idx'] ?? '').toString(),
           dateFrom: _dateFrom,
           dateTo: _dateTo,
+          actionTypes: _selectedActionTypes.toList(),
         );
   }
 
@@ -99,39 +108,209 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
     return 0;
   }
 
+  // ── Print (share as text) ──────────────────────────────────────────
+  Future<void> _handlePrint() async {
+    final state = ref.read(reportsProvider);
+    if (state.transactions.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات للطباعة');
+      return;
+    }
+    try {
+      final sub = state.subscriberInfo ?? _selectedSub ?? {};
+      final username = sub['username']?.toString() ?? '';
+      final phone = sub['phone']?.toString() ?? '';
+      final profileName = sub['profile_name']?.toString() ?? '';
+      final summary = state.statementSummary;
+
+      final lines = <String>[];
+      lines.add('═══ كشف حساب المشترك ═══');
+      lines.add('الفترة: $_dateFrom — $_dateTo');
+      lines.add('');
+      lines.add('المشترك: $username');
+      if (phone.isNotEmpty) lines.add('الهاتف: $phone');
+      if (profileName.isNotEmpty) lines.add('الباقة: $profileName');
+      lines.add('');
+      lines.add('─── العمليات ───');
+
+      for (final t in state.transactions) {
+        final time = t['created_at']?.toString() ?? '';
+        final dt = DateTime.tryParse(time);
+        final fTime = dt != null
+            ? intl.DateFormat('MM/dd HH:mm').format(dt.toLocal())
+            : time;
+        final typeLabel = _typeLabel(
+            (t['action_type'] ?? '').toString().toUpperCase());
+        final amount = (t['amount'] is num)
+            ? (t['amount'] as num).toDouble().abs()
+            : double.tryParse(t['amount']?.toString() ?? '')?.abs() ?? 0;
+        lines.add('$fTime | $typeLabel | ${AppHelpers.formatMoney(amount)}');
+      }
+
+      lines.add('');
+      lines.add('─── الملخص ───');
+      lines.add('إجمالي الحركات: ${_num(summary['totalTransactions']).toInt()}');
+      lines.add('مجموع الدين: ${AppHelpers.formatMoney(_num(summary['totalDebt']))}');
+      lines.add('');
+      lines.add('نظام إدارة المشتركين');
+
+      await CsvExport.exportAndShare(
+        fileName: 'account-statement-$username.csv',
+        headers: ['التاريخ', 'النوع', 'التفاصيل', 'المبلغ', 'المنفذ'],
+        rows: state.transactions.map((t) {
+          final amount = (t['amount'] is num)
+              ? (t['amount'] as num).toDouble().abs()
+              : double.tryParse(t['amount']?.toString() ?? '')?.abs() ?? 0;
+          return [
+            t['created_at']?.toString() ?? '',
+            _typeLabel((t['action_type'] ?? '').toString().toUpperCase()),
+            t['description']?.toString() ?? t['action_description']?.toString() ?? '',
+            amount.toString(),
+            t['admin_name']?.toString() ?? '',
+          ];
+        }).toList(),
+      );
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل الطباعة');
+    }
+  }
+
+  // ── WhatsApp send ──────────────────────────────────────────────────
+  Future<void> _handleSendWhatsApp() async {
+    final state = ref.read(reportsProvider);
+    if (_selectedSub == null || state.transactions.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات للإرسال');
+      return;
+    }
+
+    final waState = ref.read(whatsappProvider);
+    if (!waState.status.connected) {
+      if (mounted) {
+        AppSnackBar.whatsappError(context, 'واتساب غير متصل',
+            detail: 'يرجى الاتصال بواتساب أولاً');
+      }
+      return;
+    }
+
+    final phone = state.subscriberInfo?['phone']?.toString() ??
+        _selectedSub!['phone']?.toString() ??
+        '';
+    if (phone.isEmpty) {
+      AppSnackBar.error(context, 'لا يوجد رقم هاتف للمشترك');
+      return;
+    }
+
+    setState(() => _whatsappLoading = true);
+    try {
+      final dio = ref.read(backendDioProvider);
+      final storage = ref.read(storageServiceProvider);
+      final adminId = await storage.getAdminId();
+
+      final mergedInfo = {
+        'username': _selectedSub!['username'] ?? state.subscriberInfo?['username'] ?? '',
+        'firstname': _selectedSub!['firstname'] ?? state.subscriberInfo?['firstname'] ?? '',
+        'phone': phone,
+        'profile_name': _selectedSub!['profile_name'] ?? state.subscriberInfo?['profile_name'] ?? '',
+        'selling_price': _selectedSub!['selling_price'] ?? state.subscriberInfo?['selling_price'] ?? 0,
+      };
+
+      final response = await dio.post(
+        ApiConstants.accountStatement.replaceAll(
+            RegExp(r'\?.*'), '/send-whatsapp'),
+        data: {
+          'adminId': adminId,
+          'phone': phone,
+          'username': _selectedSub!['username'] ?? '',
+          'dateFrom': _dateFrom,
+          'dateTo': _dateTo,
+          'actionTypes': _selectedActionTypes.toList(),
+          'transactions': state.transactions,
+          'subscriberInfo': mergedInfo,
+          'summary': state.statementSummary,
+        },
+      );
+
+      if (!mounted) return;
+      if (response.data?['success'] == true) {
+        AppSnackBar.whatsapp(context, 'تم إرسال كشف الحساب عبر الواتساب');
+      } else {
+        AppSnackBar.whatsappError(context, 'فشل إرسال الواتساب',
+            detail: response.data?['message']?.toString());
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackBar.whatsappError(context, 'فشل إرسال كشف الحساب',
+            detail: e.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _whatsappLoading = false);
+    }
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'SUBSCRIBER_ACTIVATE':
+        return 'تفعيل';
+      case 'SUBSCRIBER_EXTEND':
+        return 'تمديد';
+      case 'BALANCE_DEDUCT':
+        return 'تسديد دين';
+      case 'BALANCE_ADD':
+        return 'إضافة دين';
+      default:
+        return type;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final state = ref.watch(reportsProvider);
     final theme = Theme.of(context);
+    final hasData = _selectedSub != null && state.transactions.isNotEmpty;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Search subscriber
-        TextField(
-          controller: _searchCtrl,
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.left,
-          onChanged: _onSearchChanged,
-          decoration: InputDecoration(
-            hintText: 'بحث عن مشترك (اسم مستخدم / هاتف)...',
-            prefixIcon: const Icon(Icons.person_search_rounded),
-            suffixIcon: _selectedSub != null
-                ? IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () {
-                      _searchCtrl.clear();
-                      ref.read(reportsProvider.notifier).clearStatement();
-                      setState(() {
-                        _selectedSub = null;
-                        _searchResults = [];
-                      });
-                    },
-                  )
-                : null,
+        // Action buttons
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: _searchCtrl,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'بحث عن مشترك...',
+                prefixIcon: const Icon(Icons.person_search_rounded, size: 20),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                suffixIcon: _selectedSub != null
+                    ? IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          ref.read(reportsProvider.notifier).clearStatement();
+                          setState(() {
+                            _selectedSub = null;
+                            _searchResults = [];
+                          });
+                        },
+                      )
+                    : null,
+              ),
+            ),
           ),
-        ),
+          const SizedBox(width: 6),
+          _SmallBtn(
+            Icons.print_rounded,
+            hasData ? _handlePrint : null,
+          ),
+          const SizedBox(width: 4),
+          _WaBtn(
+            loading: _whatsappLoading,
+            onTap: hasData ? _handleSendWhatsApp : null,
+          ),
+        ]),
 
         // Search dropdown
         if (_searchLoading)
@@ -193,9 +372,9 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
         if (_selectedSub != null) ...[
           const SizedBox(height: 12),
 
-          // Date filter
+          // Date + action type filter
           GestureDetector(
-            onTap: _showDateFilter,
+            onTap: _showFilterSheet,
             child: Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -206,13 +385,15 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               ),
               child: Row(children: [
                 Icon(Icons.date_range,
-                    size: 16, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Text('$_dateFrom  —  $_dateTo',
-                    style: const TextStyle(fontSize: 12)),
-                const Spacer(),
-                Icon(Icons.tune,
-                    size: 16,
+                    size: 14, color: theme.colorScheme.primary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text('$_dateFrom — $_dateTo',
+                      style: const TextStyle(fontSize: 11),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                Icon(Icons.filter_list_rounded,
+                    size: 14,
                     color: theme.colorScheme.onSurface
                         .withValues(alpha: .4)),
               ]),
@@ -287,15 +468,18 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
     );
   }
 
-  void _showDateFilter() {
+  void _showFilterSheet() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
+        final types = Set<String>.from(_selectedActionTypes);
+
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
@@ -306,54 +490,64 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                 children: [
                   Center(
                       child: Container(
-                          width: 40,
-                          height: 4,
+                          width: 40, height: 4,
                           decoration: BoxDecoration(
                               color: Colors.grey.shade300,
                               borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 16),
-                  Text('فلتر التاريخ',
+                  Text('الفلاتر',
                       style: Theme.of(ctx)
                           .textTheme
                           .titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+
+                  // Quick date ranges
+                  Text('فترة سريعة',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                          color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: .6))),
+                  const SizedBox(height: 6),
                   Wrap(spacing: 8, children: [
-                    ActionChip(
-                        label: const Text('آخر 7 أيام',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 7)));
-                          });
-                        }),
-                    ActionChip(
-                        label: const Text('آخر 30 يوم',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 30)));
-                          });
-                        }),
-                    ActionChip(
-                        label: const Text('آخر 3 أشهر',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 90)));
-                          });
-                        }),
+                    _QuickChip('آخر 7 أيام', () {
+                      final now = DateTime.now();
+                      setSheet(() {
+                        to = intl.DateFormat('yyyy-MM-dd').format(now);
+                        from = intl.DateFormat('yyyy-MM-dd').format(
+                            now.subtract(const Duration(days: 7)));
+                      });
+                    }),
+                    _QuickChip('آخر 30 يوم', () {
+                      final now = DateTime.now();
+                      setSheet(() {
+                        to = intl.DateFormat('yyyy-MM-dd').format(now);
+                        from = intl.DateFormat('yyyy-MM-dd').format(
+                            now.subtract(const Duration(days: 30)));
+                      });
+                    }),
+                    _QuickChip('آخر 3 أشهر', () {
+                      final now = DateTime.now();
+                      setSheet(() {
+                        to = intl.DateFormat('yyyy-MM-dd').format(now);
+                        from = intl.DateFormat('yyyy-MM-dd').format(
+                            now.subtract(const Duration(days: 90)));
+                      });
+                    }),
+                  ]),
+                  const SizedBox(height: 14),
+
+                  // Action type filter
+                  Text('نوع الحركة',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                          color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: .6))),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    _TypeChip('تفعيل', 'SUBSCRIBER_ACTIVATE', types, setSheet),
+                    _TypeChip('تمديد', 'SUBSCRIBER_EXTEND', types, setSheet),
+                    _TypeChip('تسديد دين', 'BALANCE_DEDUCT', types, setSheet),
+                    _TypeChip('إضافة دين', 'BALANCE_ADD', types, setSheet),
                   ]),
                   const SizedBox(height: 16),
+
                   SizedBox(
                       height: 48,
                       child: ElevatedButton(
@@ -362,6 +556,9 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                           setState(() {
                             _dateFrom = from;
                             _dateTo = to;
+                            _selectedActionTypes
+                              ..clear()
+                              ..addAll(types);
                           });
                           _reload();
                         },
@@ -373,6 +570,50 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           );
         });
       },
+    );
+  }
+}
+
+class _QuickChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _QuickChip(this.label, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _TypeChip extends StatelessWidget {
+  final String label;
+  final String type;
+  final Set<String> selected;
+  final StateSetter setSheet;
+  const _TypeChip(this.label, this.type, this.selected, this.setSheet);
+
+  @override
+  Widget build(BuildContext context) {
+    final active = selected.contains(type);
+    return FilterChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      selected: active,
+      onSelected: (v) {
+        setSheet(() {
+          if (v) {
+            selected.add(type);
+          } else {
+            selected.remove(type);
+          }
+        });
+      },
+      visualDensity: VisualDensity.compact,
+      selectedColor: AppTheme.primary.withValues(alpha: .15),
+      checkmarkColor: AppTheme.primary,
     );
   }
 }
@@ -427,7 +668,6 @@ class _TransactionRow extends StatelessWidget {
     final desc = txn['description']?.toString() ??
         txn['action_description']?.toString() ??
         '';
-    final notes = txn['notes']?.toString() ?? '';
     final admin = txn['admin_name']?.toString() ?? '';
     final time = txn['created_at']?.toString() ?? '';
     final amount = (txn['amount'] is num)
@@ -444,7 +684,7 @@ class _TransactionRow extends StatelessWidget {
       formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
     }
 
-    String typeLabel = _typeLabel(type);
+    String typeLabel = _typeLabelStatic(type);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -517,7 +757,7 @@ class _TransactionRow extends StatelessWidget {
     );
   }
 
-  String _typeLabel(String type) {
+  static String _typeLabelStatic(String type) {
     switch (type) {
       case 'SUBSCRIBER_ACTIVATE':
         return 'تفعيل';
@@ -530,5 +770,64 @@ class _TransactionRow extends StatelessWidget {
       default:
         return type;
     }
+  }
+}
+
+class _SmallBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _SmallBtn(this.icon, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest
+          .withValues(alpha: enabled ? .3 : .15),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 18,
+              color: enabled
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurface.withValues(alpha: .2)),
+        ),
+      ),
+    );
+  }
+}
+
+class _WaBtn extends StatelessWidget {
+  final bool loading;
+  final VoidCallback? onTap;
+  const _WaBtn({required this.loading, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null && !loading;
+    return Material(
+      color: AppTheme.whatsappGreen.withValues(alpha: enabled ? .15 : .05),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: loading
+              ? SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.whatsappGreen.withValues(alpha: .6)))
+              : Icon(Icons.send_rounded, size: 18,
+                  color: enabled
+                      ? AppTheme.whatsappGreen
+                      : AppTheme.whatsappGreen.withValues(alpha: .3)),
+        ),
+      ),
+    );
   }
 }

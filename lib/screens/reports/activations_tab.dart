@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
+import '../../widgets/app_snackbar.dart';
 
 class ActivationsTab extends ConsumerStatefulWidget {
   const ActivationsTab({super.key});
@@ -48,6 +50,29 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
     }).toList();
   }
 
+  Future<void> _exportCsv() async {
+    final items = _filtered;
+    if (items.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات للتصدير');
+      return;
+    }
+    try {
+      await CsvExport.exportAndShare(
+        fileName: 'activations-$_dateFrom-$_dateTo.csv',
+        headers: ['المشترك', 'نوع الحركة', 'الوقت', 'الوصف', 'المدير'],
+        rows: items.map((a) => [
+          a['target_name']?.toString() ?? '',
+          (a['action_type'] ?? '').toString().toUpperCase() == 'SUBSCRIBER_EXTEND' ? 'تمديد' : 'تفعيل',
+          a['created_at']?.toString() ?? '',
+          a['action_description']?.toString() ?? '',
+          a['admin_username']?.toString() ?? '',
+        ]).toList(),
+      );
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل تصدير البيانات');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -72,29 +97,36 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Date info
-          GestureDetector(
-            onTap: _showDateFilter,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: .3),
-                borderRadius: BorderRadius.circular(10),
+          // Action bar
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: _showDateFilter,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.date_range, size: 14, color: theme.colorScheme.primary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text('$_dateFrom — $_dateTo',
+                          style: const TextStyle(fontSize: 11),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    Icon(Icons.tune, size: 14,
+                        color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                  ]),
+                ),
               ),
-              child: Row(children: [
-                Icon(Icons.date_range,
-                    size: 16, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Text('$_dateFrom  —  $_dateTo',
-                    style: const TextStyle(fontSize: 12)),
-                const Spacer(),
-                Icon(Icons.tune,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withValues(alpha: .4)),
-              ]),
             ),
-          ),
+            const SizedBox(width: 6),
+            _SmallBtn(Icons.download_rounded, _exportCsv),
+            const SizedBox(width: 4),
+            _SmallBtn(Icons.refresh_rounded, _load),
+          ]),
           const SizedBox(height: 12),
 
           // Stats
@@ -394,6 +426,28 @@ class _ActivationRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SmallBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _SmallBtn(this.icon, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        ),
       ),
     );
   }
