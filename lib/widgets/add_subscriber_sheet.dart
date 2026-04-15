@@ -88,48 +88,6 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     }
   }
 
-  List<Widget> _buildPackageGroups(List<PackageModel> pkgs, ThemeData theme) {
-    final monthly = pkgs.where((p) => p.isMonthly).toList();
-    final others = pkgs.where((p) => p.isExtension).toList();
-
-    final widgets = <Widget>[];
-
-    if (monthly.isNotEmpty) {
-      widgets.add(_sectionHeader('الباقات الشهرية', Icons.calendar_month, theme));
-      widgets.add(const SizedBox(height: 8));
-      for (final pkg in monthly) {
-        widgets.add(_buildPackageCard(pkg, theme));
-      }
-    }
-
-    if (others.isNotEmpty) {
-      widgets.add(const SizedBox(height: 16));
-      widgets.add(_sectionHeader('باقات التمديد / أخرى', Icons.extension, theme));
-      widgets.add(const SizedBox(height: 8));
-      for (final pkg in others) {
-        widgets.add(_buildPackageCard(pkg, theme));
-      }
-    }
-
-    if (monthly.isEmpty && others.isEmpty) {
-      for (final pkg in pkgs) {
-        widgets.add(_buildPackageCard(pkg, theme));
-      }
-    }
-
-    return widgets;
-  }
-
-  Widget _sectionHeader(String title, IconData icon, ThemeData theme) {
-    return Row(children: [
-      Icon(icon, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
-      const SizedBox(width: 6),
-      Text(title, style: TextStyle(fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: theme.colorScheme.onSurface.withOpacity(0.5))),
-    ]);
-  }
-
   Widget _buildPackageCard(PackageModel pkg, ThemeData theme) {
     final isSelected = _selectedPackageId == pkg.idx;
     return Padding(
@@ -160,27 +118,12 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(pkg.name, style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600,
-                      color: isSelected ? AppTheme.successColor : null,
-                    )),
-                    Row(children: [
-                      if (pkg.rateLimit != null) ...[
-                        Text(pkg.rateLimit!, style: TextStyle(fontSize: 11,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                        const SizedBox(width: 6),
-                      ],
-                      if (pkg.durationLabel.isNotEmpty)
-                        Text(pkg.durationLabel, style: TextStyle(fontSize: 11,
-                            color: theme.colorScheme.onSurface.withOpacity(0.4))),
-                    ]),
-                  ],
-                ),
+                child: Text(pkg.name, style: TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w600,
+                  color: isSelected ? AppTheme.successColor : null,
+                )),
               ),
-              Text(AppHelpers.formatMoney(pkg.price),
+              Text(AppHelpers.formatMoney(pkg.displayPrice),
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                     color: isSelected ? AppTheme.successColor : AppTheme.teal600)),
             ],
@@ -197,7 +140,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
 
     final seen = <int>{};
     final uniquePkgs = packages.where((p) {
-      if (p.idx <= 0 || seen.contains(p.idx)) return false;
+      if (p.idx <= 0 || seen.contains(p.idx) || !p.isMonthly) return false;
       seen.add(p.idx);
       return true;
     }).toList();
@@ -337,7 +280,13 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 ),
               ),
             )
-          else ..._buildPackageGroups(uniquePkgs, theme),
+          else ...[
+            Text('الباقة', style: TextStyle(fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.5))),
+            const SizedBox(height: 8),
+            ...uniquePkgs.map((pkg) => _buildPackageCard(pkg, theme)),
+          ],
           const SizedBox(height: 24),
 
           SizedBox(

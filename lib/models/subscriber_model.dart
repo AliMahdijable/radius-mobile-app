@@ -163,6 +163,7 @@ class PackageModel {
   final String? rateLimit;
   final String? monthlyFee;
   final String? price;
+  final String? userPrice;
   final String? type;
   final int? expirationAmount;
 
@@ -173,9 +174,12 @@ class PackageModel {
     this.rateLimit,
     this.monthlyFee,
     this.price,
+    this.userPrice,
     this.type,
     this.expirationAmount,
   });
+
+  String? get displayPrice => userPrice ?? price;
 
   bool get isMonthly =>
       type == null || type == 'monthly' || type!.isEmpty;
@@ -200,12 +204,11 @@ class PackageModel {
     }
   }
 
-  String get durationLabel {
-    if (expirationAmount == null) return '';
-    if (isMonthly) return '';
-    if (type == 'hourly') return '$expirationAmount ساعة';
-    return '$expirationAmount يوم';
-  }
+  PackageModel copyWithUserPrice(String? newUserPrice) => PackageModel(
+    idx: idx, name: name, nameEn: nameEn, rateLimit: rateLimit,
+    monthlyFee: monthlyFee, price: price, userPrice: newUserPrice,
+    type: type, expirationAmount: expirationAmount,
+  );
 
   factory PackageModel.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'] ?? json['idx'];
@@ -218,6 +221,7 @@ class PackageModel {
       rateLimit: json['rate_limit']?.toString(),
       monthlyFee: (json['monthly_fee'] ?? json['price'])?.toString(),
       price: (json['price'] ?? json['profile_price'])?.toString(),
+      userPrice: json['user_price']?.toString(),
       type: json['type']?.toString(),
       expirationAmount: json['expiration_amount'] is int
           ? json['expiration_amount']
