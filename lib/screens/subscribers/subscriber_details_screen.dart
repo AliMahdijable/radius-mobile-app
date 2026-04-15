@@ -956,10 +956,7 @@ class _SubscriberDetailsScreenState
           );
         });
       },
-    ).then((_) {
-      partialCtrl.dispose();
-      partialFocus.dispose();
-    });
+    );
   }
 
   List<double> _buildPartialQuickAmounts(double price) {
@@ -1324,11 +1321,7 @@ class _SubscriberDetailsScreenState
           );
         });
       },
-    ).then((_) {
-      amountCtrl.dispose();
-      notesCtrl.dispose();
-      amountFocusPay.dispose();
-    });
+    );
   }
 
   List<double> _buildPayDebtQuickAmounts(double debt) {
@@ -1594,11 +1587,7 @@ class _SubscriberDetailsScreenState
           );
         });
       },
-    ).then((_) {
-      amountCtrl.dispose();
-      commentCtrl.dispose();
-      amountFocusAdd.dispose();
-    });
+    );
   }
 
   // ── Toggle Enable/Disable ─────────────────────────────────────────────
