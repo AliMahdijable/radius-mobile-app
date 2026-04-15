@@ -649,6 +649,7 @@ class _SubscriberDetailsScreenState
     final currentBalance = _toDouble(userData?['notes']);
 
     final partialCtrl = TextEditingController();
+    final partialFocus = FocusNode();
 
     if (!mounted) return;
 
@@ -661,24 +662,10 @@ class _SubscriberDetailsScreenState
       builder: (ctx) {
         bool isCash = false;
         bool isPartialCash = false;
+
         bool submitting = false;
 
         return StatefulBuilder(builder: (ctx, setSheet) {
-          final partialAmount = double.tryParse(partialCtrl.text) ?? 0;
-
-          double paidCash = 0;
-          double newDebtPreview = currentBalance;
-          if (isCash && !isPartialCash) {
-            paidCash = userPrice;
-            newDebtPreview = currentBalance;
-          } else if (isCash && isPartialCash) {
-            paidCash = partialAmount;
-            final remaining = userPrice - partialAmount;
-            newDebtPreview = currentBalance - remaining;
-          } else {
-            newDebtPreview = currentBalance - userPrice;
-          }
-
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
@@ -810,34 +797,38 @@ class _SubscriberDetailsScreenState
 
                 if (isCash && isPartialCash) ...[
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: partialCtrl,
-                    keyboardType: TextInputType.number,
-                    textDirection: TextDirection.ltr,
-                    onChanged: (_) => setSheet(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'المبلغ المدفوع نقداً',
-                      suffixText: 'IQD',
-                      prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
-                      suffixIcon: partialCtrl.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () {
-                                partialCtrl.clear();
-                                FocusScope.of(ctx).unfocus();
-                                setSheet(() {});
-                              },
-                            )
-                          : null,
-                    ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: partialCtrl,
+                    builder: (ctx2, val, _) {
+                      return TextField(
+                        controller: partialCtrl,
+                        focusNode: partialFocus,
+                        keyboardType: TextInputType.number,
+                        textDirection: TextDirection.ltr,
+                        decoration: InputDecoration(
+                          labelText: 'المبلغ المدفوع نقداً',
+                          suffixText: 'IQD',
+                          prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                          suffixIcon: val.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    partialCtrl.clear();
+                                    partialFocus.unfocus();
+                                  },
+                                )
+                              : null,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   _QuickAmountChips(
                     amounts: _buildPartialQuickAmounts(userPrice),
-                    selectedAmount: partialAmount,
+                    selectedAmount: double.tryParse(partialCtrl.text) ?? 0,
                     enabled: true,
                     onSelected: (v) {
-                      FocusScope.of(ctx).unfocus();
+                      partialFocus.unfocus();
                       partialCtrl.text = v.toStringAsFixed(0);
                       setSheet(() {});
                     },
@@ -845,72 +836,88 @@ class _SubscriberDetailsScreenState
                 ],
                 const SizedBox(height: 14),
 
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('ملخص العملية', style: TextStyle(fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                      const SizedBox(height: 10),
-                      _SummaryRow(label: 'سعر الباقة', value: AppHelpers.formatMoney(userPrice)),
-                      if (currentBalance != 0)
-                        _SummaryRow(
-                          label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
-                          value: currentBalance < 0
-                              ? '-${AppHelpers.formatMoney(currentBalance.abs())}'
-                              : '+${AppHelpers.formatMoney(currentBalance)}',
-                          valueColor: currentBalance < 0 ? Colors.red : Colors.green,
-                        ),
-                      if (isCash && !isPartialCash)
-                        _SummaryRow(label: 'الدفع', value: 'نقدي كامل',
-                            valueColor: Colors.green),
-                      if (isCash && isPartialCash && partialAmount > 0) ...[
-                        _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(partialAmount),
-                            valueColor: Colors.green),
-                        _SummaryRow(label: 'المتبقي كدين', value: AppHelpers.formatMoney(userPrice - partialAmount),
-                            valueColor: Colors.orange),
-                      ],
-                      if (!isCash)
-                        _SummaryRow(label: 'الدفع', value: 'آجل (يضاف كدين)',
-                            valueColor: Colors.orange),
-                      const Divider(height: 16),
-                      Row(children: [
-                        Text('بعد التفعيل:', style: TextStyle(fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: (newDebtPreview < 0 ? Colors.red : Colors.green).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            newDebtPreview < 0
-                                ? 'دين ${AppHelpers.formatMoney(newDebtPreview.abs())}'
-                                : newDebtPreview > 0
-                                    ? 'رصيد ${AppHelpers.formatMoney(newDebtPreview)}'
-                                    : 'بدون دين أو رصيد',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                                color: newDebtPreview < 0 ? Colors.red
-                                    : newDebtPreview > 0 ? Colors.green
-                                    : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
-                          ),
-                        ),
-                      ]),
-                    ],
-                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: partialCtrl,
+                  builder: (ctx3, partialVal, _) {
+                    final livePartial = double.tryParse(partialVal.text) ?? 0;
+                    double liveDebtPreview = currentBalance;
+                    if (isCash && !isPartialCash) {
+                      liveDebtPreview = currentBalance;
+                    } else if (isCash && isPartialCash) {
+                      liveDebtPreview = currentBalance - (userPrice - livePartial);
+                    } else {
+                      liveDebtPreview = currentBalance - userPrice;
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ملخص العملية', style: TextStyle(fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                          const SizedBox(height: 10),
+                          _SummaryRow(label: 'سعر الباقة', value: AppHelpers.formatMoney(userPrice)),
+                          if (currentBalance != 0)
+                            _SummaryRow(
+                              label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
+                              value: currentBalance < 0
+                                  ? '-${AppHelpers.formatMoney(currentBalance.abs())}'
+                                  : '+${AppHelpers.formatMoney(currentBalance)}',
+                              valueColor: currentBalance < 0 ? Colors.red : Colors.green,
+                            ),
+                          if (isCash && !isPartialCash)
+                            _SummaryRow(label: 'الدفع', value: 'نقدي كامل',
+                                valueColor: Colors.green),
+                          if (isCash && isPartialCash && livePartial > 0) ...[
+                            _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(livePartial),
+                                valueColor: Colors.green),
+                            _SummaryRow(label: 'المتبقي كدين', value: AppHelpers.formatMoney(userPrice - livePartial),
+                                valueColor: Colors.orange),
+                          ],
+                          if (!isCash)
+                            _SummaryRow(label: 'الدفع', value: 'آجل (يضاف كدين)',
+                                valueColor: Colors.orange),
+                          const Divider(height: 16),
+                          Row(children: [
+                            Text('بعد التفعيل:', style: TextStyle(fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: (liveDebtPreview < 0 ? Colors.red : Colors.green).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                liveDebtPreview < 0
+                                    ? 'دين ${AppHelpers.formatMoney(liveDebtPreview.abs())}'
+                                    : liveDebtPreview > 0
+                                        ? 'رصيد ${AppHelpers.formatMoney(liveDebtPreview)}'
+                                        : 'بدون دين أو رصيد',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                    color: liveDebtPreview < 0 ? Colors.red
+                                        : liveDebtPreview > 0 ? Colors.green
+                                        : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
+                              ),
+                            ),
+                          ]),
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 18),
 
                 SizedBox(height: 50, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
+                    final cashAmount = double.tryParse(partialCtrl.text) ?? 0;
                     setSheet(() => submitting = true);
                     final notifier = ref.read(subscribersProvider.notifier);
                     final success = await notifier.activateSubscriber(
@@ -920,7 +927,7 @@ class _SubscriberDetailsScreenState
                       currentNotes: currentBalance.toString(),
                       isCash: isCash,
                       isPartialCash: isPartialCash,
-                      partialCashAmount: partialAmount,
+                      partialCashAmount: cashAmount,
                     );
                     if (mounted) {
                       Navigator.pop(ctx);
@@ -955,7 +962,10 @@ class _SubscriberDetailsScreenState
           );
         });
       },
-    );
+    ).then((_) {
+      partialCtrl.dispose();
+      partialFocus.dispose();
+    });
   }
 
   List<double> _buildPartialQuickAmounts(double price) {
@@ -1046,6 +1056,7 @@ class _SubscriberDetailsScreenState
 
     final amountCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
+    final amountFocusPay = FocusNode();
 
     showModalBottomSheet(
       context: context,
@@ -1058,12 +1069,6 @@ class _SubscriberDetailsScreenState
         bool submitting = false;
 
         return StatefulBuilder(builder: (ctx, setSheet) {
-          final amount = double.tryParse(amountCtrl.text) ?? 0;
-          final preview = currentNotes + (payAll ? currentDebt : amount);
-          final effectiveAmount = payAll ? currentDebt : amount;
-          final payRatio = currentDebt > 0
-              ? (effectiveAmount / currentDebt).clamp(0.0, 1.0)
-              : 0.0;
 
           return Padding(
             padding: EdgeInsets.only(
@@ -1099,71 +1104,88 @@ class _SubscriberDetailsScreenState
                 ]),
                 const SizedBox(height: 16),
 
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.red.withOpacity(0.12)),
-                  ),
-                  child: Column(
-                    children: [
-                      Text('الدين الحالي',
-                          style: TextStyle(fontSize: 12,
-                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                      const SizedBox(height: 4),
-                      Text(AppHelpers.formatMoney(currentDebt),
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                            color: Colors.red)),
-                      if (effectiveAmount > 0) ...[
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: payRatio,
-                            minHeight: 6,
-                            backgroundColor: Colors.red.withOpacity(0.15),
-                            valueColor: const AlwaysStoppedAnimation(Colors.green),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${(payRatio * 100).toStringAsFixed(0)}% من الدين',
-                          style: TextStyle(fontSize: 11,
-                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
-                        ),
-                      ],
-                    ],
-                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    final effectiveAmount = payAll ? currentDebt : (double.tryParse(val.text) ?? 0);
+                    final payRatio = currentDebt > 0
+                        ? (effectiveAmount / currentDebt).clamp(0.0, 1.0)
+                        : 0.0;
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.red.withOpacity(0.12)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text('الدين الحالي',
+                              style: TextStyle(fontSize: 12,
+                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                          const SizedBox(height: 4),
+                          Text(AppHelpers.formatMoney(currentDebt),
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                                color: Colors.red)),
+                          if (effectiveAmount > 0) ...[
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: payRatio,
+                                minHeight: 6,
+                                backgroundColor: Colors.red.withOpacity(0.15),
+                                valueColor: const AlwaysStoppedAnimation(Colors.green),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${(payRatio * 100).toStringAsFixed(0)}% من الدين',
+                              style: TextStyle(fontSize: 11,
+                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
 
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  textDirection: TextDirection.ltr,
-                  enabled: !payAll,
-                  onChanged: (_) => setSheet(() {}),
-                  decoration: InputDecoration(
-                    labelText: 'المبلغ المسدد',
-                    suffixText: 'IQD',
-                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
-                    suffixIcon: amountCtrl.text.isNotEmpty && !payAll
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () => setSheet(() => amountCtrl.clear()),
-                          )
-                        : null,
-                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    return TextField(
+                      controller: amountCtrl,
+                      focusNode: amountFocusPay,
+                      keyboardType: TextInputType.number,
+                      textDirection: TextDirection.ltr,
+                      enabled: !payAll,
+                      decoration: InputDecoration(
+                        labelText: 'المبلغ المسدد',
+                        suffixText: 'IQD',
+                        prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                        suffixIcon: val.text.isNotEmpty && !payAll
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  amountCtrl.clear();
+                                  amountFocusPay.unfocus();
+                                },
+                              )
+                            : null,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
 
                 _QuickAmountChips(
                   amounts: _buildPayDebtQuickAmounts(currentDebt),
-                  selectedAmount: effectiveAmount,
+                  selectedAmount: payAll ? currentDebt : (double.tryParse(amountCtrl.text) ?? 0),
                   enabled: !payAll,
                   onSelected: (v) {
-                    FocusScope.of(ctx).unfocus();
+                    amountFocusPay.unfocus();
                     amountCtrl.text = v.toStringAsFixed(0);
                     setSheet(() {});
                   },
@@ -1214,92 +1236,111 @@ class _SubscriberDetailsScreenState
                   ),
                 ),
 
-                if (effectiveAmount > 0) ...[
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: preview >= 0 ? Colors.green.withOpacity(0.06) : Colors.orange.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: preview >= 0 ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15)),
-                    ),
-                    child: Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    final liveAmount = double.tryParse(val.text) ?? 0;
+                    final liveEffective = payAll ? currentDebt : liveAmount;
+                    final livePreview = currentNotes + liveEffective;
+                    if (liveEffective <= 0) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: (preview >= 0 ? Colors.green : Colors.orange).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8)),
-                        child: Icon(preview >= 0 ? Icons.check_circle_rounded : Icons.timelapse_rounded,
-                            size: 18, color: preview >= 0 ? Colors.green : Colors.orange),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(preview >= 0 ? 'بعد التسديد' : 'الدين المتبقي',
-                              style: TextStyle(fontSize: 11,
-                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                          const SizedBox(height: 2),
-                          Text(
-                            preview >= 0
-                                ? 'رصيد ${AppHelpers.formatMoney(preview)}'
-                                : AppHelpers.formatMoney(preview.abs()),
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
-                                color: preview >= 0 ? Colors.green : Colors.orange),
+                          color: livePreview >= 0 ? Colors.green.withOpacity(0.06) : Colors.orange.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: livePreview >= 0 ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15)),
+                        ),
+                        child: Row(children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: (livePreview >= 0 ? Colors.green : Colors.orange).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8)),
+                            child: Icon(livePreview >= 0 ? Icons.check_circle_rounded : Icons.timelapse_rounded,
+                                size: 18, color: livePreview >= 0 ? Colors.green : Colors.orange),
                           ),
-                        ],
-                      )),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 18),
-                SizedBox(height: 50, child: ElevatedButton.icon(
-                  onPressed: submitting || (!payAll && effectiveAmount <= 0) ? null : () async {
-                    setSheet(() => submitting = true);
-                    final payAmount = payAll ? currentDebt : amount;
-                    final success = await notifier.payDebt(
-                      userId: id,
-                      username: widget.subscriber.username,
-                      amount: payAmount,
-                      paymentNotes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                          const SizedBox(width: 10),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(livePreview >= 0 ? 'بعد التسديد' : 'الدين المتبقي',
+                                  style: TextStyle(fontSize: 11,
+                                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                              const SizedBox(height: 2),
+                              Text(
+                                livePreview >= 0
+                                    ? 'رصيد ${AppHelpers.formatMoney(livePreview)}'
+                                    : AppHelpers.formatMoney(livePreview.abs()),
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                                    color: livePreview >= 0 ? Colors.green : Colors.orange),
+                              ),
+                            ],
+                          )),
+                        ]),
+                      ),
                     );
-                    if (mounted) {
-                      Navigator.pop(ctx);
-                      _showSnack(success ? 'تم التسديد بنجاح' : 'فشل التسديد', success: success);
-                      if (success) {
-                        await notifier.loadSubscribers();
-                        final fresh = await notifier.getSubscriberDetails(id);
-                        final newDebt = _toDouble(fresh?['notes']);
-                        _sendWhatsAppFromTemplate('payment_confirmation',
-                          extraVars: {
-                            '{paid_amount}': payAmount.toStringAsFixed(0),
-                            '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                            '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
-                            '{expiry_date}': fresh?['expiration']?.toString() ?? '',
-                            '{expiration_date}': fresh?['expiration']?.toString() ?? '',
-                          });
-                        if (mounted) context.pop();
-                      }
-                    }
                   },
-                  icon: submitting
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.payments_rounded),
-                  label: Text(submitting ? 'جاري التسديد...' : 'تسديد'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                )),
+                ),
+                const SizedBox(height: 18),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    final btnAmount = double.tryParse(val.text) ?? 0;
+                    return SizedBox(height: 50, child: ElevatedButton.icon(
+                      onPressed: submitting || (!payAll && btnAmount <= 0) ? null : () async {
+                        final payAmount = payAll ? currentDebt : btnAmount;
+                        setSheet(() => submitting = true);
+                        final success = await notifier.payDebt(
+                          userId: id,
+                          username: widget.subscriber.username,
+                          amount: payAmount,
+                          paymentNotes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                        );
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          _showSnack(success ? 'تم التسديد بنجاح' : 'فشل التسديد', success: success);
+                          if (success) {
+                            await notifier.loadSubscribers();
+                            final fresh = await notifier.getSubscriberDetails(id);
+                            final newDebt = _toDouble(fresh?['notes']);
+                            _sendWhatsAppFromTemplate('payment_confirmation',
+                              extraVars: {
+                                '{paid_amount}': payAmount.toStringAsFixed(0),
+                                '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
+                                '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                                '{expiry_date}': fresh?['expiration']?.toString() ?? '',
+                                '{expiration_date}': fresh?['expiration']?.toString() ?? '',
+                              });
+                            if (mounted) context.pop();
+                          }
+                        }
+                      },
+                      icon: submitting
+                          ? const SizedBox(width: 20, height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.payments_rounded),
+                      label: Text(submitting ? 'جاري التسديد...' : 'تسديد'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ));
+                  },
+                ),
                 const SizedBox(height: 20),
               ],
             )),
           );
         });
       },
-    );
+    ).then((_) {
+      amountCtrl.dispose();
+      notesCtrl.dispose();
+      amountFocusPay.dispose();
+    });
   }
 
   List<double> _buildPayDebtQuickAmounts(double debt) {
@@ -1330,6 +1371,7 @@ class _SubscriberDetailsScreenState
 
     final amountCtrl = TextEditingController();
     final commentCtrl = TextEditingController();
+    final amountFocusAdd = FocusNode();
 
     showModalBottomSheet(
       context: context,
@@ -1341,8 +1383,6 @@ class _SubscriberDetailsScreenState
         bool submitting = false;
 
         return StatefulBuilder(builder: (ctx, setSheet) {
-          final amount = double.tryParse(amountCtrl.text) ?? 0;
-          final preview = currentNotes - amount;
 
           return Padding(
             padding: EdgeInsets.only(
@@ -1405,31 +1445,39 @@ class _SubscriberDetailsScreenState
                 ]),
                 const SizedBox(height: 16),
 
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  textDirection: TextDirection.ltr,
-                  onChanged: (_) => setSheet(() {}),
-                  decoration: InputDecoration(
-                    labelText: 'قيمة الدين المضاف',
-                    suffixText: 'IQD',
-                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
-                    suffixIcon: amountCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () => setSheet(() => amountCtrl.clear()),
-                          )
-                        : null,
-                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    return TextField(
+                      controller: amountCtrl,
+                      focusNode: amountFocusAdd,
+                      keyboardType: TextInputType.number,
+                      textDirection: TextDirection.ltr,
+                      decoration: InputDecoration(
+                        labelText: 'قيمة الدين المضاف',
+                        suffixText: 'IQD',
+                        prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                        suffixIcon: val.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  amountCtrl.clear();
+                                  amountFocusAdd.unfocus();
+                                },
+                              )
+                            : null,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
 
                 _QuickAmountChips(
                   amounts: const [5000.0, 10000.0, 15000.0, 25000.0, 35000.0, 50000.0],
-                  selectedAmount: amount,
+                  selectedAmount: double.tryParse(amountCtrl.text) ?? 0,
                   enabled: true,
                   onSelected: (v) {
-                    FocusScope.of(ctx).unfocus();
+                    amountFocusAdd.unfocus();
                     amountCtrl.text = v.toStringAsFixed(0);
                     setSheet(() {});
                   },
@@ -1447,109 +1495,128 @@ class _SubscriberDetailsScreenState
                   ),
                 ),
 
-                if (amount > 0) ...[
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.withOpacity(0.15)),
-                    ),
-                    child: Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    final liveAmount = double.tryParse(val.text) ?? 0;
+                    final livePreview = currentNotes - liveAmount;
+                    if (liveAmount <= 0) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.warning_amber_rounded,
-                            size: 18, color: Colors.red),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('الدين بعد الإضافة',
-                              style: TextStyle(fontSize: 11,
-                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                          const SizedBox(height: 2),
-                          Row(children: [
-                            Text(AppHelpers.formatMoney(currentDebt),
-                                style: TextStyle(fontSize: 12,
-                                  color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.4),
-                                  decoration: TextDecoration.lineThrough)),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 6),
-                              child: Icon(Icons.arrow_forward, size: 14, color: Colors.red)),
-                            Text(AppHelpers.formatMoney(preview.abs()),
-                                style: const TextStyle(fontSize: 14,
-                                  fontWeight: FontWeight.w700, color: Colors.red)),
-                          ]),
-                        ],
-                      )),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 18),
-                SizedBox(height: 50, child: ElevatedButton.icon(
-                  onPressed: submitting || amount <= 0 ? null : () async {
-                    final confirmed = await showDialog<bool>(
-                      context: ctx,
-                      builder: (dlgCtx) => AlertDialog(
-                        title: const Text('تأكيد إضافة الدين',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                        content: Text(
-                          'سيتم إضافة ${AppHelpers.formatMoney(amount)} كدين على "${widget.subscriber.fullName}".\n'
-                          'الدين الجديد: ${AppHelpers.formatMoney(preview.abs())}',
+                          color: Colors.red.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withOpacity(0.15)),
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dlgCtx, false),
-                            child: const Text('إلغاء'),
+                        child: Row(children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.warning_amber_rounded,
+                                size: 18, color: Colors.red),
                           ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(dlgCtx, true),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warningColor),
-                            child: const Text('تأكيد'),
-                          ),
-                        ],
+                          const SizedBox(width: 10),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('الدين بعد الإضافة',
+                                  style: TextStyle(fontSize: 11,
+                                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                              const SizedBox(height: 2),
+                              Row(children: [
+                                Text(AppHelpers.formatMoney(currentDebt),
+                                    style: TextStyle(fontSize: 12,
+                                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.4),
+                                      decoration: TextDecoration.lineThrough)),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 6),
+                                  child: Icon(Icons.arrow_forward, size: 14, color: Colors.red)),
+                                Text(AppHelpers.formatMoney(livePreview.abs()),
+                                    style: const TextStyle(fontSize: 14,
+                                      fontWeight: FontWeight.w700, color: Colors.red)),
+                              ]),
+                            ],
+                          )),
+                        ]),
                       ),
                     );
-                    if (confirmed != true) return;
-
-                    setSheet(() => submitting = true);
-                    final success = await notifier.addDebt(
-                      userId: id,
-                      username: widget.subscriber.username,
-                      amount: amount,
-                      comment: commentCtrl.text.trim().isEmpty ? null : commentCtrl.text.trim(),
-                    );
-                    if (mounted) {
-                      Navigator.pop(ctx);
-                      _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
-                      if (success) {
-                        await notifier.loadSubscribers();
-                        if (mounted) context.pop();
-                      }
-                    }
                   },
-                  icon: submitting
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.add_card_rounded),
-                  label: Text(submitting ? 'جاري الإضافة...' : 'إضافة دين'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warningColor,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                )),
+                ),
+                const SizedBox(height: 18),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: amountCtrl,
+                  builder: (ctx2, val, _) {
+                    final btnAmount = double.tryParse(val.text) ?? 0;
+                    return SizedBox(height: 50, child: ElevatedButton.icon(
+                      onPressed: submitting || btnAmount <= 0 ? null : () async {
+                        final addPreview = currentNotes - btnAmount;
+                        final confirmed = await showDialog<bool>(
+                          context: ctx,
+                          builder: (dlgCtx) => AlertDialog(
+                            title: const Text('تأكيد إضافة الدين',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            content: Text(
+                              'سيتم إضافة ${AppHelpers.formatMoney(btnAmount)} كدين على "${widget.subscriber.fullName}".\n'
+                              'الدين الجديد: ${AppHelpers.formatMoney(addPreview.abs())}',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dlgCtx, false),
+                                child: const Text('إلغاء'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(dlgCtx, true),
+                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warningColor),
+                                child: const Text('تأكيد'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+
+                        setSheet(() => submitting = true);
+                        final success = await notifier.addDebt(
+                          userId: id,
+                          username: widget.subscriber.username,
+                          amount: btnAmount,
+                          comment: commentCtrl.text.trim().isEmpty ? null : commentCtrl.text.trim(),
+                        );
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
+                          if (success) {
+                            await notifier.loadSubscribers();
+                            if (mounted) context.pop();
+                          }
+                        }
+                      },
+                      icon: submitting
+                          ? const SizedBox(width: 20, height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.add_card_rounded),
+                      label: Text(submitting ? 'جاري الإضافة...' : 'إضافة دين'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.warningColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ));
+                  },
+                ),
                 const SizedBox(height: 20),
               ],
             )),
           );
         });
       },
-    );
+    ).then((_) {
+      amountCtrl.dispose();
+      commentCtrl.dispose();
+      amountFocusAdd.dispose();
+    });
   }
 
   // ── Toggle Enable/Disable ─────────────────────────────────────────────
