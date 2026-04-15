@@ -649,121 +649,318 @@ class _SubscriberDetailsScreenState
     final currentBalance = _toDouble(userData?['notes']);
 
     final partialCtrl = TextEditingController();
-    showDialog(
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         bool isCash = false;
         bool isPartialCash = false;
         bool submitting = false;
 
-        return StatefulBuilder(builder: (ctx, setDlg) {
-          final summaryText = isCash
-              ? (isPartialCash
-                  ? 'نقدي جزئي'
-                  : 'نقدي كامل: ${AppHelpers.formatMoney(userPrice)}')
-              : 'آجل: ${AppHelpers.formatMoney(userPrice)} يضاف كدين';
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          final partialAmount = double.tryParse(partialCtrl.text) ?? 0;
 
-          return AlertDialog(
-            title: const Text('تفعيل المشترك', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            content: SingleChildScrollView(child: Column(
+          double paidCash = 0;
+          double newDebtPreview = currentBalance;
+          if (isCash && !isPartialCash) {
+            paidCash = userPrice;
+            newDebtPreview = currentBalance;
+          } else if (isCash && isPartialCash) {
+            paidCash = partialAmount;
+            final remaining = userPrice - partialAmount;
+            newDebtPreview = currentBalance - remaining;
+          } else {
+            newDebtPreview = currentBalance - userPrice;
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              left: 20, right: 20, top: 16,
+            ),
+            child: SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _InfoChip(label: 'المشترك', value: widget.subscriber.fullName),
-                _InfoChip(label: 'الباقة', value: profileName),
-                _InfoChip(label: 'المدة', value: profileDuration),
-                _InfoChip(label: 'السعر', value: AppHelpers.formatMoney(userPrice)),
-                if (currentBalance != 0)
-                  _InfoChip(
-                    label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
-                    value: AppHelpers.formatMoney(currentBalance.abs()),
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+
+                Row(children: [
+                  Container(padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('تفعيل المشترك', style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(widget.subscriber.fullName,
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    ],
+                  )),
+                ]),
+                const SizedBox(height: 18),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.teal700.withOpacity(0.08), AppTheme.teal900.withOpacity(0.04)]),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.teal600.withOpacity(0.15)),
                   ),
-                const SizedBox(height: 12),
-                const Text('نوع الدفع:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
+                  child: Column(children: [
+                    Row(children: [
+                      Expanded(child: _ActivationInfoTile(
+                        icon: Icons.wifi_rounded,
+                        label: 'الباقة',
+                        value: profileName,
+                        color: AppTheme.teal600,
+                      )),
+                      Container(width: 1, height: 40, color: AppTheme.teal600.withOpacity(0.1)),
+                      Expanded(child: _ActivationInfoTile(
+                        icon: Icons.schedule_rounded,
+                        label: 'المدة',
+                        value: profileDuration,
+                        color: AppTheme.infoColor,
+                      )),
+                    ]),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.successColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.sell_rounded, size: 18, color: AppTheme.successColor),
+                          const SizedBox(width: 8),
+                          Text('السعر: ', style: TextStyle(fontSize: 13,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                          Text(AppHelpers.formatMoney(userPrice),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+                                color: AppTheme.successColor)),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+
+                if (currentBalance != 0) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: (currentBalance < 0 ? Colors.red : Colors.green).withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: (currentBalance < 0 ? Colors.red : Colors.green).withOpacity(0.12)),
+                    ),
+                    child: Row(children: [
+                      Icon(
+                        currentBalance < 0 ? Icons.warning_amber_rounded : Icons.account_balance_wallet_rounded,
+                        size: 18, color: currentBalance < 0 ? Colors.red : Colors.green),
+                      const SizedBox(width: 8),
+                      Text(currentBalance < 0 ? 'دين سابق: ' : 'رصيد سابق: ',
+                          style: TextStyle(fontSize: 12,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                      Text(AppHelpers.formatMoney(currentBalance.abs()),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                            color: currentBalance < 0 ? Colors.red : Colors.green)),
+                    ]),
+                  ),
+                ],
+                const SizedBox(height: 16),
+
+                Text('نوع الدفع', style: TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                const SizedBox(height: 8),
                 Row(children: [
                   Expanded(child: _MethodBtn(icon: Icons.money_rounded, label: 'نقدي',
                     selected: isCash && !isPartialCash,
-                    onTap: () => setDlg(() { isCash = true; isPartialCash = false; partialCtrl.clear(); }),
+                    onTap: () => setSheet(() { isCash = true; isPartialCash = false; partialCtrl.clear(); }),
                   )),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Expanded(child: _MethodBtn(icon: Icons.tune_rounded, label: 'جزئي',
                     selected: isCash && isPartialCash,
-                    onTap: () => setDlg(() { isCash = true; isPartialCash = true; }),
+                    onTap: () => setSheet(() { isCash = true; isPartialCash = true; }),
                   )),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Expanded(child: _MethodBtn(icon: Icons.schedule_rounded, label: 'آجل',
                     selected: !isCash,
-                    onTap: () => setDlg(() { isCash = false; isPartialCash = false; partialCtrl.clear(); }),
+                    onTap: () => setSheet(() { isCash = false; isPartialCash = false; partialCtrl.clear(); }),
                   )),
                 ]),
+
                 if (isCash && isPartialCash) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: partialCtrl,
                     keyboardType: TextInputType.number,
                     textDirection: TextDirection.ltr,
-                    decoration: const InputDecoration(
+                    onChanged: (_) => setSheet(() {}),
+                    decoration: InputDecoration(
                       labelText: 'المبلغ المدفوع نقداً',
                       suffixText: 'IQD',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+                      prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                      suffixIcon: partialCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () => setSheet(() => partialCtrl.clear()),
+                            )
+                          : null,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  _QuickAmountChips(
+                    amounts: _buildPartialQuickAmounts(userPrice),
+                    selectedAmount: partialAmount,
+                    enabled: true,
+                    onSelected: (v) => setSheet(() {
+                      partialCtrl.text = v.toStringAsFixed(0);
+                    }),
+                  ),
                 ],
-                const SizedBox(height: 8),
-                Text(summaryText, style: TextStyle(fontSize: 11,
-                    color: Theme.of(ctx).colorScheme.primary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 14),
+
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('ملخص العملية', style: TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                      const SizedBox(height: 10),
+                      _SummaryRow(label: 'سعر الباقة', value: AppHelpers.formatMoney(userPrice)),
+                      if (currentBalance != 0)
+                        _SummaryRow(
+                          label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
+                          value: currentBalance < 0
+                              ? '-${AppHelpers.formatMoney(currentBalance.abs())}'
+                              : '+${AppHelpers.formatMoney(currentBalance)}',
+                          valueColor: currentBalance < 0 ? Colors.red : Colors.green,
+                        ),
+                      if (isCash && !isPartialCash)
+                        _SummaryRow(label: 'الدفع', value: 'نقدي كامل',
+                            valueColor: Colors.green),
+                      if (isCash && isPartialCash && partialAmount > 0) ...[
+                        _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(partialAmount),
+                            valueColor: Colors.green),
+                        _SummaryRow(label: 'المتبقي كدين', value: AppHelpers.formatMoney(userPrice - partialAmount),
+                            valueColor: Colors.orange),
+                      ],
+                      if (!isCash)
+                        _SummaryRow(label: 'الدفع', value: 'آجل (يضاف كدين)',
+                            valueColor: Colors.orange),
+                      const Divider(height: 16),
+                      Row(children: [
+                        Text('بعد التفعيل:', style: TextStyle(fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: (newDebtPreview < 0 ? Colors.red : Colors.green).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            newDebtPreview < 0
+                                ? 'دين ${AppHelpers.formatMoney(newDebtPreview.abs())}'
+                                : newDebtPreview > 0
+                                    ? 'رصيد ${AppHelpers.formatMoney(newDebtPreview)}'
+                                    : 'بدون دين أو رصيد',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                color: newDebtPreview < 0 ? Colors.red
+                                    : newDebtPreview > 0 ? Colors.green
+                                    : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5)),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                SizedBox(height: 50, child: ElevatedButton.icon(
+                  onPressed: submitting ? null : () async {
+                    setSheet(() => submitting = true);
+                    final notifier = ref.read(subscribersProvider.notifier);
+                    final success = await notifier.activateSubscriber(
+                      userId: id,
+                      userPrice: userPrice,
+                      activationUnits: units,
+                      currentNotes: currentBalance.toString(),
+                      isCash: isCash,
+                      isPartialCash: isPartialCash,
+                      partialCashAmount: partialAmount,
+                    );
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
+                      if (success) {
+                        await notifier.loadSubscribers();
+                        final fresh = await notifier.getSubscriberDetails(id);
+                        final newDebt = _toDouble(fresh?['notes']);
+                        _sendWhatsAppFromTemplate('activation_notice', extraVars: {
+                          '{package_name}': profileName,
+                          '{package_price}': userPrice.toStringAsFixed(0),
+                          '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
+                          '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                        });
+                        if (mounted) context.pop();
+                      }
+                    }
+                  },
+                  icon: submitting
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.bolt_rounded),
+                  label: Text(submitting ? 'جاري التفعيل...' : 'تفعيل الآن'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.successColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                )),
+                const SizedBox(height: 20),
               ],
             )),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton.icon(
-                onPressed: submitting ? null : () async {
-                  setDlg(() => submitting = true);
-                  final notifier = ref.read(subscribersProvider.notifier);
-                  final success = await notifier.activateSubscriber(
-                    userId: id,
-                    userPrice: userPrice,
-                    activationUnits: units,
-                    currentNotes: currentBalance.toString(),
-                    isCash: isCash,
-                    isPartialCash: isPartialCash,
-                    partialCashAmount: double.tryParse(partialCtrl.text) ?? 0,
-                  );
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
-                    if (success) {
-                      await notifier.loadSubscribers();
-                      final fresh = await notifier.getSubscriberDetails(id);
-                      final newDebt = _toDouble(fresh?['notes']);
-                      _sendWhatsAppFromTemplate('activation_notice', extraVars: {
-                        '{package_name}': profileName,
-                        '{package_price}': userPrice.toStringAsFixed(0),
-                        '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                        '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
-                      });
-                      if (mounted) context.pop();
-                    }
-                  }
-                },
-                icon: submitting
-                    ? const SizedBox(width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.bolt, size: 18),
-                label: Text(submitting ? 'جاري...' : 'تفعيل'),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor),
-              ),
-            ],
           );
         });
       },
     );
+  }
+
+  List<double> _buildPartialQuickAmounts(double price) {
+    final amounts = <double>[];
+    final quarter = (price * 0.25).roundToDouble();
+    final half = (price * 0.5).roundToDouble();
+    final threeQ = (price * 0.75).roundToDouble();
+    for (final v in [quarter, half, threeQ]) {
+      if (v > 0 && v < price) amounts.add(v);
+    }
+    return amounts;
   }
 
   double _toDouble(dynamic v) {
@@ -1916,6 +2113,65 @@ class _DebtInfoCard extends StatelessWidget {
           Text(value, style: TextStyle(fontSize: 14,
             fontWeight: FontWeight.w700, color: color),
             textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivationInfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _ActivationInfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 6),
+        Text(label, style: TextStyle(fontSize: 10,
+          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45))),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(fontSize: 13,
+          fontWeight: FontWeight.w700, color: color),
+          textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ],
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+          const Spacer(),
+          Text(value, style: TextStyle(fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: valueColor ?? Theme.of(context).colorScheme.onSurface)),
         ],
       ),
     );
