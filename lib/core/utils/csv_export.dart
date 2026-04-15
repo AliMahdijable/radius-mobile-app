@@ -18,9 +18,8 @@ class CsvExport {
     final file = File('${dir.path}/$fileName');
     await file.writeAsString(csv, flush: true);
 
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)]),
-    );
+    // ignore: deprecated_member_use
+    await Share.shareXFiles([XFile(file.path)]);
   }
 
   static String _escape(String v) {
