@@ -622,7 +622,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         'page': 1,
         'count': 100,
         'columns': [
-          'idx', 'name', 'name_en', 'rate_limit', 'rate_limit_dl',
+          'idx', 'id', 'name', 'name_en', 'rate_limit', 'rate_limit_dl',
           'monthly_fee', 'price', 'profile_price',
         ],
       });
@@ -633,12 +633,21 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
-      final data = response.data['data'] as List? ?? [];
-      final packages = data.map((e) => PackageModel.fromJson(e)).toList();
+      var resData = response.data;
+      if (resData is String) {
+        resData = EncryptionService.decrypt(resData);
+      }
+
+      final data = (resData is Map ? resData['data'] : null) as List? ?? [];
+      final packages = data
+          .map((e) => e is Map<String, dynamic> ? PackageModel.fromJson(e) : null)
+          .whereType<PackageModel>()
+          .where((p) => p.idx > 0)
+          .toList();
       dev.log('Loaded ${packages.length} packages', name: 'SUBS');
       state = state.copyWith(packages: packages);
-    } catch (e) {
-      dev.log('loadPackages error: $e', name: 'SUBS');
+    } catch (e, st) {
+      dev.log('loadPackages error: $e\n$st', name: 'SUBS');
     }
   }
 

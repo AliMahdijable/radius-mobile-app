@@ -174,10 +174,11 @@ class PackageModel {
   });
 
   factory PackageModel.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'] ?? json['idx'];
     return PackageModel(
-      idx: json['idx'] is int
-          ? json['idx']
-          : int.tryParse(json['idx']?.toString() ?? '0') ?? 0,
+      idx: rawId is int
+          ? rawId
+          : int.tryParse(rawId?.toString() ?? '0') ?? 0,
       name: (json['name'] ?? '').toString(),
       nameEn: json['name_en']?.toString(),
       rateLimit: json['rate_limit']?.toString(),
