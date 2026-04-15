@@ -425,13 +425,15 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         padding: const EdgeInsets.only(bottom: 100),
                         itemCount: displayList.length,
                         itemBuilder: (context, index) {
+                          final sub = displayList[index];
                           return SubscriberCard(
-                            subscriber: displayList[index],
+                            subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
+                            lastPayment: state.lastPayments[sub.username],
                             onTap: () {
                               context.push(
-                                '/subscriber/${displayList[index].username}',
-                                extra: displayList[index],
+                                '/subscriber/${sub.username}',
+                                extra: sub,
                               );
                             },
                           );

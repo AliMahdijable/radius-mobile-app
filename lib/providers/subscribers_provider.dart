@@ -18,6 +18,7 @@ class SubscribersState {
   final String filter;
   final String sortBy;
   final String sortDirection;
+  final Map<String, Map<String, dynamic>> lastPayments;
 
   const SubscribersState({
     this.subscribers = const [],
@@ -30,6 +31,7 @@ class SubscribersState {
     this.filter = 'all',
     this.sortBy = 'username',
     this.sortDirection = 'asc',
+    this.lastPayments = const {},
   });
 
   List<SubscriberModel> get filteredSubscribers {
@@ -111,6 +113,7 @@ class SubscribersState {
     String? filter,
     String? sortBy,
     String? sortDirection,
+    Map<String, Map<String, dynamic>>? lastPayments,
   }) {
     return SubscribersState(
       subscribers: subscribers ?? this.subscribers,
@@ -123,6 +126,7 @@ class SubscribersState {
       filter: filter ?? this.filter,
       sortBy: sortBy ?? this.sortBy,
       sortDirection: sortDirection ?? this.sortDirection,
+      lastPayments: lastPayments ?? this.lastPayments,
     );
   }
 }
@@ -283,9 +287,32 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         isLoading: false,
         totalRecords: enriched.length,
       );
+
+      loadLastPayments();
     } catch (e) {
       dev.log('loadSubscribers error: $e', name: 'SUBS');
       state = state.copyWith(isLoading: false, error: 'خطأ في تحميل البيانات');
+    }
+  }
+
+  Future<void> loadLastPayments() async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return;
+    try {
+      final res = await _backendDio.get('${ApiConstants.lastPayments}/$adminId');
+      if (res.data is Map && res.data['success'] == true) {
+        final payments = res.data['payments'] as List? ?? [];
+        final map = <String, Map<String, dynamic>>{};
+        for (final p in payments) {
+          if (p is Map<String, dynamic>) {
+            final username = p['subscriber_username']?.toString() ?? '';
+            if (username.isNotEmpty) map[username] = p;
+          }
+        }
+        state = state.copyWith(lastPayments: map);
+      }
+    } catch (e) {
+      dev.log('loadLastPayments error: $e', name: 'SUBS');
     }
   }
 

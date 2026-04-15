@@ -1756,6 +1756,26 @@ class _SubscriberDetailsScreenState
                         value: AppHelpers.formatMoney(sub.balanceAmount),
                         valueColor: AppTheme.teal600,
                       ),
+                    Builder(builder: (_) {
+                      final lp = ref.watch(subscribersProvider).lastPayments[sub.username];
+                      if (lp == null) return const SizedBox.shrink();
+                      final createdAt = lp['created_at']?.toString();
+                      if (createdAt == null) return const SizedBox.shrink();
+                      final date = DateTime.tryParse(createdAt);
+                      if (date == null) return const SizedBox.shrink();
+                      final daysAgo = DateTime.now().difference(date).inDays;
+                      if (daysAgo > 30) return const SizedBox.shrink();
+                      final timeLabel = daysAgo == 0 ? 'اليوم' : 'منذ $daysAgo يوم';
+                      final desc = lp['action_description']?.toString() ?? '';
+                      final amountMatch = RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc);
+                      final amountText = amountMatch?.group(0) ?? '';
+                      return _DetailRow(
+                        icon: Icons.monetization_on_rounded,
+                        label: 'آخر تسديد',
+                        value: '$timeLabel${amountText.isNotEmpty ? ' — $amountText' : ''}',
+                        valueColor: AppTheme.teal600,
+                      );
+                    }),
                   ],
                 ),
 

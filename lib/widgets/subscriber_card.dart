@@ -9,12 +9,14 @@ class SubscriberCard extends StatelessWidget {
   final SubscriberModel subscriber;
   final VoidCallback? onTap;
   final bool showOnlineDetails;
+  final Map<String, dynamic>? lastPayment;
 
   const SubscriberCard({
     super.key,
     required this.subscriber,
     this.onTap,
     this.showOnlineDetails = false,
+    this.lastPayment,
   });
 
   static String formatBytes(int? bytes) {
@@ -274,7 +276,10 @@ class SubscriberCard extends StatelessWidget {
                 ),
               ),
 
-            // Row 4: Online details
+            // Row 4: Last payment
+            if (lastPayment != null) _LastPaymentRow(data: lastPayment!),
+
+            // Row 5: Online details
             if (showOnlineDetails && isOnline && subscriber.ipAddress != null)
               _OnlineRow(subscriber: subscriber),
           ],
@@ -361,6 +366,51 @@ class _OnlineRow extends StatelessWidget {
               ],
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LastPaymentRow extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _LastPaymentRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final createdAt = data['created_at']?.toString();
+    if (createdAt == null) return const SizedBox.shrink();
+
+    final date = DateTime.tryParse(createdAt);
+    if (date == null) return const SizedBox.shrink();
+
+    final daysAgo = DateTime.now().difference(date).inDays;
+    if (daysAgo > 30) return const SizedBox.shrink();
+
+    final timeLabel = daysAgo == 0 ? 'اليوم' : 'منذ $daysAgo يوم';
+
+    final desc = data['action_description']?.toString() ?? '';
+    final amountMatch = RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc);
+    final amountText = amountMatch != null ? '${amountMatch.group(0)}' : '';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 3, right: 46),
+      child: Row(
+        children: [
+          Icon(Icons.monetization_on_rounded, size: 10,
+              color: AppTheme.teal600.withOpacity(0.7)),
+          const SizedBox(width: 3),
+          Text(
+            '💰 $timeLabel',
+            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
+              color: AppTheme.teal600),
+          ),
+          if (amountText.isNotEmpty) ...[
+            Text(' | ', style: TextStyle(fontSize: 9,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3))),
+            Text(amountText, style: TextStyle(fontSize: 9,
+              fontWeight: FontWeight.w600, color: AppTheme.teal600)),
+          ],
         ],
       ),
     );
