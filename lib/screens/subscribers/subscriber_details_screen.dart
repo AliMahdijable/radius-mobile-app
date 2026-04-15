@@ -1129,6 +1129,15 @@ class _SubscriberDetailsScreenState
     }
 
     try {
+      final waState = ref.read(whatsappProvider);
+      if (!waState.status.connected) {
+        if (mounted) {
+          AppSnackBar.whatsappError(context, 'واتساب غير متصل',
+              detail: 'يرجى الاتصال بواتساب أولاً من الإعدادات');
+        }
+        return;
+      }
+
       final templates = ref.read(templatesProvider).templates;
       if (templates.isEmpty) {
         await ref.read(templatesProvider.notifier).loadTemplates();
@@ -1137,7 +1146,13 @@ class _SubscriberDetailsScreenState
       final match = allTemplates.where(
         (t) => t.templateType == templateType && t.isActive,
       );
-      if (match.isEmpty) return;
+      if (match.isEmpty) {
+        if (mounted) {
+          AppSnackBar.warning(context, 'القالب غير متوفر أو معطل',
+              detail: 'لا يوجد قالب "$templateType" مفعّل');
+        }
+        return;
+      }
 
       final sub = widget.subscriber;
       final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
