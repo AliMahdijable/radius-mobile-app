@@ -61,8 +61,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
 
     setState(() => _isLoading = true);
 
-    final expDate = DateTime.now().add(const Duration(days: 30));
-    final expStr = intl.DateFormat('yyyy-MM-dd').format(expDate);
+    final expStr = intl.DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
     final success = await ref.read(subscribersProvider.notifier).createSubscriber(
       username: _usernameCtrl.text.trim(),
