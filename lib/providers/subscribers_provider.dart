@@ -639,11 +639,23 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       }
 
       final data = (resData is Map ? resData['data'] : null) as List? ?? [];
-      final packages = data
+      var packages = data
           .map((e) => e is Map<String, dynamic> ? PackageModel.fromJson(e) : null)
           .whereType<PackageModel>()
           .where((p) => p.idx > 0)
           .toList();
+
+      if (_priceMap.isNotEmpty) {
+        packages = packages.map((p) {
+          final pi = _priceMap[p.idx];
+          if (pi != null) {
+            final up = (pi['user_price'] ?? pi['sale_price'] ?? pi['sell_price'])?.toString();
+            if (up != null) return p.copyWithUserPrice(up);
+          }
+          return p;
+        }).toList();
+      }
+
       dev.log('Loaded ${packages.length} packages', name: 'SUBS');
       state = state.copyWith(packages: packages);
     } catch (e, st) {
