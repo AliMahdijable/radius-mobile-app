@@ -76,12 +76,12 @@ class SubscriberModel {
     return b;
   }
 
-  bool get isExpired => (remainingDays ?? 0) < 0;
+  bool get isExpired => (remainingDays ?? 0) <= 0;
 
   bool get isActive => !isExpired;
 
   bool get isNearExpiry =>
-      remainingDays != null && remainingDays! >= 0 && remainingDays! <= 3;
+      remainingDays != null && remainingDays! > 0 && remainingDays! <= 3;
 
   bool get isEnabled => enabled == null || enabled == 1;
 
