@@ -585,10 +585,10 @@ class _SubscriberDetailsScreenState
                         final remDays = fresh?['remaining_days']?.toString() ?? '';
                         _sendWhatsAppFromTemplate('renewal',
                           extraVars: {
-                            '{package_price}': pkgPrice ?? '',
-                            '{paid_amount}': pkgPrice ?? '',
-                            '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                            '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                            '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
+                            '{paid_amount}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
+                            '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                            '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                             '{expiry_date}': expDate,
                             '{expiration_date}': expDate,
                             '{days_remaining}': remDays,
@@ -932,9 +932,9 @@ class _SubscriberDetailsScreenState
                         final newDebt = _toDouble(fresh?['notes']);
                         _sendWhatsAppFromTemplate('activation_notice', extraVars: {
                           '{package_name}': profileName,
-                          '{package_price}': userPrice.toStringAsFixed(0),
-                          '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                          '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                          '{package_price}': _formatNumber(userPrice),
+                          '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                          '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                         });
                         if (mounted) context.pop();
                       }
@@ -994,8 +994,9 @@ class _SubscriberDetailsScreenState
       if (match.isEmpty) return;
 
       final sub = widget.subscriber;
-      final debtVal = sub.hasDebt ? sub.debtAmount.abs().toStringAsFixed(0) : '0';
-      final creditVal = sub.debtAmount > 0 ? sub.debtAmount.toStringAsFixed(0) : '0';
+      final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
+      final creditVal = sub.debtAmount > 0 ? _formatNumber(sub.debtAmount) : '0';
+      final pkgPriceFormatted = _formatNumber(double.tryParse(sub.price ?? '0') ?? 0);
 
       String msg = match.first.messageContent;
       final vars = {
@@ -1008,11 +1009,11 @@ class _SubscriberDetailsScreenState
         '{expiration_date}': sub.expiration ?? '',
         '{expiry_date}': sub.expiration ?? '',
         '{package_name}': sub.profileName ?? '',
-        '{package_price}': sub.price ?? '0',
+        '{package_price}': pkgPriceFormatted,
         '{debt_amount}': debtVal,
         '{credit_amount}': creditVal,
         '{discount_amount}': '0',
-        '{discounted_price}': sub.price ?? '0',
+        '{discounted_price}': pkgPriceFormatted,
         '{paid_amount}': '0',
         '{username}': sub.username,
         ...?extraVars,
@@ -1292,9 +1293,9 @@ class _SubscriberDetailsScreenState
                             final newDebt = _toDouble(fresh?['notes']);
                             _sendWhatsAppFromTemplate('payment_confirmation',
                               extraVars: {
-                                '{paid_amount}': payAmount.toStringAsFixed(0),
-                                '{debt_amount}': newDebt < 0 ? newDebt.abs().toStringAsFixed(0) : '0',
-                                '{credit_amount}': newDebt > 0 ? newDebt.toStringAsFixed(0) : '0',
+                                '{paid_amount}': _formatNumber(payAmount),
+                                '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                                '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                                 '{expiry_date}': fresh?['expiration']?.toString() ?? '',
                                 '{expiration_date}': fresh?['expiration']?.toString() ?? '',
                               });
