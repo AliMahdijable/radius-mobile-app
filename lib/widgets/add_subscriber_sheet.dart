@@ -31,9 +31,10 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   }
 
   Future<void> _ensurePackagesLoaded() async {
+    if (!mounted) return;
     final pkgs = ref.read(subscribersProvider).packages;
     if (pkgs.isEmpty) {
-      setState(() => _loadingPackages = true);
+      if (mounted) setState(() => _loadingPackages = true);
       await ref.read(subscribersProvider.notifier).loadPackages();
       if (mounted) setState(() => _loadingPackages = false);
     }
@@ -77,10 +78,18 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     setState(() => _isLoading = false);
 
     if (success) {
-      Navigator.pop(context, true);
+      _usernameCtrl.clear();
+      _passwordCtrl.clear();
+      _firstnameCtrl.clear();
+      _lastnameCtrl.clear();
+      _phoneCtrl.clear();
+      setState(() => _selectedPackageId = null);
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم إنشاء المشترك بنجاح'), backgroundColor: Colors.green),
       );
+      await ref.read(subscribersProvider.notifier).loadSubscribers();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('فشل إنشاء المشترك'), backgroundColor: Colors.red),
