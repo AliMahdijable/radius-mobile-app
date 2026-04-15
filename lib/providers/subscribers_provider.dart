@@ -147,13 +147,12 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
     state = state.copyWith(isLoading: true, error: null);
     try {
-      if (state.packages.isEmpty) {
-        await loadPackages();
-      }
-
-      // Load priceList from SAS4 (simple GET, no encryption)
       if (_priceMap.isEmpty) {
         await _loadPriceList(adminId);
+      }
+
+      if (state.packages.isEmpty) {
+        await loadPackages();
       }
 
       // Backend: active subscribers with phones
@@ -617,6 +616,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   Future<void> loadPackages() async {
     try {
+      if (_priceMap.isEmpty) {
+        final adminId = await _storage.getAdminId();
+        if (adminId != null) await _loadPriceList(adminId);
+      }
+
       dev.log('Loading packages from SAS4...', name: 'SUBS');
       final payload = EncryptionService.encrypt({
         'page': 1,
@@ -645,18 +649,16 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           .where((p) => p.idx > 0)
           .toList();
 
-      if (_priceMap.isNotEmpty) {
-        packages = packages.map((p) {
-          final pi = _priceMap[p.idx];
-          if (pi != null) {
-            final up = (pi['user_price'] ?? pi['sale_price'] ?? pi['sell_price'])?.toString();
-            if (up != null) return p.copyWithUserPrice(up);
-          }
-          return p;
-        }).toList();
-      }
+      packages = packages.map((p) {
+        final pi = _priceMap[p.idx];
+        if (pi != null) {
+          final up = pi['user_price']?.toString();
+          if (up != null) return p.copyWithUserPrice(up);
+        }
+        return p;
+      }).toList();
 
-      dev.log('Loaded ${packages.length} packages', name: 'SUBS');
+      dev.log('Loaded ${packages.length} packages (priceMap: ${_priceMap.length})', name: 'SUBS');
       state = state.copyWith(packages: packages);
     } catch (e, st) {
       dev.log('loadPackages error: $e\n$st', name: 'SUBS');
