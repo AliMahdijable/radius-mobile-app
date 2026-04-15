@@ -797,30 +797,24 @@ class _SubscriberDetailsScreenState
 
                 if (isCash && isPartialCash) ...[
                   const SizedBox(height: 12),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: partialCtrl,
-                    builder: (ctx2, val, _) {
-                      return TextField(
-                        controller: partialCtrl,
-                        focusNode: partialFocus,
-                        keyboardType: TextInputType.number,
-                        textDirection: TextDirection.ltr,
-                        decoration: InputDecoration(
-                          labelText: 'المبلغ المدفوع نقداً',
-                          suffixText: 'IQD',
-                          prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
-                          suffixIcon: val.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: () {
-                                    partialCtrl.clear();
-                                    partialFocus.unfocus();
-                                  },
-                                )
-                              : null,
-                        ),
-                      );
-                    },
+                  TextField(
+                    controller: partialCtrl,
+                    focusNode: partialFocus,
+                    keyboardType: TextInputType.number,
+                    textDirection: TextDirection.ltr,
+                    decoration: InputDecoration(
+                      labelText: 'المبلغ المدفوع نقداً',
+                      suffixText: 'IQD',
+                      prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          partialCtrl.clear();
+                          partialFocus.unfocus();
+                          setSheet(() {});
+                        },
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _QuickAmountChips(
@@ -1152,31 +1146,25 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 16),
 
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: amountCtrl,
-                  builder: (ctx2, val, _) {
-                    return TextField(
-                      controller: amountCtrl,
-                      focusNode: amountFocusPay,
-                      keyboardType: TextInputType.number,
-                      textDirection: TextDirection.ltr,
-                      enabled: !payAll,
-                      decoration: InputDecoration(
-                        labelText: 'المبلغ المسدد',
-                        suffixText: 'IQD',
-                        prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
-                        suffixIcon: val.text.isNotEmpty && !payAll
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  amountCtrl.clear();
-                                  amountFocusPay.unfocus();
-                                },
-                              )
-                            : null,
-                      ),
-                    );
-                  },
+                TextField(
+                  controller: amountCtrl,
+                  focusNode: amountFocusPay,
+                  keyboardType: TextInputType.number,
+                  textDirection: TextDirection.ltr,
+                  enabled: !payAll,
+                  decoration: InputDecoration(
+                    labelText: 'المبلغ المسدد',
+                    suffixText: 'IQD',
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                    suffixIcon: !payAll ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        amountCtrl.clear();
+                        amountFocusPay.unfocus();
+                        setSheet(() {});
+                      },
+                    ) : null,
+                  ),
                 ),
                 const SizedBox(height: 10),
 
@@ -1445,30 +1433,24 @@ class _SubscriberDetailsScreenState
                 ]),
                 const SizedBox(height: 16),
 
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: amountCtrl,
-                  builder: (ctx2, val, _) {
-                    return TextField(
-                      controller: amountCtrl,
-                      focusNode: amountFocusAdd,
-                      keyboardType: TextInputType.number,
-                      textDirection: TextDirection.ltr,
-                      decoration: InputDecoration(
-                        labelText: 'قيمة الدين المضاف',
-                        suffixText: 'IQD',
-                        prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
-                        suffixIcon: val.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  amountCtrl.clear();
-                                  amountFocusAdd.unfocus();
-                                },
-                              )
-                            : null,
-                      ),
-                    );
-                  },
+                TextField(
+                  controller: amountCtrl,
+                  focusNode: amountFocusAdd,
+                  keyboardType: TextInputType.number,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(
+                    labelText: 'قيمة الدين المضاف',
+                    suffixText: 'IQD',
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        amountCtrl.clear();
+                        amountFocusAdd.unfocus();
+                        setSheet(() {});
+                      },
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 10),
 
