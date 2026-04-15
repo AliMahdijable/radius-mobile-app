@@ -187,7 +187,7 @@ class _SubscriberDetailsScreenState
             final packages = ref.read(subscribersProvider).packages;
             final seen = <int>{};
             final uniquePkgs = packages.where((p) {
-              if (p.idx <= 0 || seen.contains(p.idx) || !p.isMonthly) return false;
+              if (p.idx <= 0 || seen.contains(p.idx)) return false;
               seen.add(p.idx);
               return true;
             }).toList();

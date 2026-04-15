@@ -622,18 +622,35 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   Future<void> loadPackages() async {
     try {
       final adminId = await _storage.getAdminId();
-
-      // 1) Load priceList for user_price lookup (like web's getUserPrice)
-      if (_priceMap.isEmpty && adminId != null) {
-        await _loadPriceList(adminId);
+      if (adminId == null) {
+        dev.log('No adminId — cannot load packages', name: 'PKG');
+        return;
       }
 
-      List<Map<String, dynamic>> rawPackages = [];
+      // Step 1: ALWAYS load priceList (guaranteed to work)
+      await _loadPriceList(adminId);
+      dev.log('priceMap has ${_priceMap.length} entries', name: 'PKG');
 
-      // 2) PRIMARY: POST /index/profile (same as web fetchAddPackages)
-      //    This endpoint returns only regular profiles, NOT extensions
+      // Step 2: Build packages from priceList
+      final packages = <PackageModel>[];
+      for (final entry in _priceMap.entries) {
+        if (entry.key <= 0) continue;
+        final item = entry.value;
+        final name = (item['name'] ?? item['profile_name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        packages.add(PackageModel(
+          idx: entry.key,
+          name: name,
+          price: (item['price'] ?? item['profile_price'])?.toString(),
+          userPrice: item['user_price']?.toString(),
+        ));
+      }
+      dev.log('Built ${packages.length} packages from priceList', name: 'PKG');
+
+      // Step 3: Try profile API to get type info (for extension filtering)
+      //         /index/profile returns type field which tells us monthly vs extension
+      Set<int> profileApiIds = {};
       try {
-        dev.log('POST /index/profile ...', name: 'PKG');
         final payload = EncryptionService.encrypt({
           'page': 1,
           'count': 10,
@@ -653,100 +670,36 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         );
 
         var resData = response.data;
-        dev.log('POST response type: ${resData.runtimeType}', name: 'PKG');
-        if (resData is String) {
-          dev.log('POST response is String, decrypting...', name: 'PKG');
-          resData = EncryptionService.decrypt(resData);
-          dev.log('Decrypted type: ${resData.runtimeType}', name: 'PKG');
-        }
+        if (resData is String) resData = EncryptionService.decrypt(resData);
 
+        List<dynamic> items = [];
         if (resData is Map && resData['data'] is List) {
-          rawPackages = (resData['data'] as List)
-              .whereType<Map<String, dynamic>>().toList();
-          dev.log('POST parsed ${rawPackages.length} from data[]', name: 'PKG');
+          items = resData['data'];
         } else if (resData is List) {
-          rawPackages = resData.whereType<Map<String, dynamic>>().toList();
-          dev.log('POST parsed ${rawPackages.length} from root[]', name: 'PKG');
-        } else {
-          dev.log('POST unexpected response: $resData', name: 'PKG');
+          items = resData;
         }
-      } catch (e) {
-        dev.log('POST /index/profile FAILED: $e', name: 'PKG');
-      }
 
-      // 3) FALLBACK 1: GET /list/profile/5 (no permission needed)
-      if (rawPackages.isEmpty) {
-        try {
-          dev.log('GET /list/profile/5 ...', name: 'PKG');
-          final response = await _sas4Dio.get(ApiConstants.sas4ListProfile);
-
-          var resData = response.data;
-          dev.log('GET response type: ${resData.runtimeType}', name: 'PKG');
-          if (resData is String) {
-            resData = EncryptionService.decrypt(resData);
-          }
-
-          if (resData is Map && resData['data'] is List) {
-            rawPackages = (resData['data'] as List)
-                .whereType<Map<String, dynamic>>().toList();
-          } else if (resData is List) {
-            rawPackages = resData.whereType<Map<String, dynamic>>().toList();
-          }
-          dev.log('GET parsed ${rawPackages.length} packages', name: 'PKG');
-        } catch (e) {
-          dev.log('GET /list/profile/5 FAILED: $e', name: 'PKG');
-        }
-      }
-
-      // 4) Build PackageModel list + merge user_price from priceList
-      final packages = <PackageModel>[];
-      if (rawPackages.isNotEmpty) {
-        for (final raw in rawPackages) {
+        for (final raw in items) {
+          if (raw is! Map<String, dynamic>) continue;
           final pkgId = raw['id'] ?? raw['idx'];
           final id = pkgId is int ? pkgId : int.tryParse(pkgId?.toString() ?? '') ?? 0;
-          if (id <= 0) continue;
-          final name = (raw['name'] ?? '').toString();
-          if (name.isEmpty) continue;
-
-          final pi = _priceMap[id];
-          final userPrice = pi?['user_price']?.toString()
-              ?? raw['user_price']?.toString();
-
-          packages.add(PackageModel(
-            idx: id,
-            name: name,
-            price: (raw['price'] ?? raw['profile_price'])?.toString(),
-            userPrice: userPrice,
-            type: raw['type']?.toString(),
-            expirationAmount: raw['expiration_amount'] is int
-                ? raw['expiration_amount']
-                : int.tryParse(raw['expiration_amount']?.toString() ?? ''),
-          ));
+          if (id > 0) profileApiIds.add(id);
         }
-        dev.log('Built ${packages.length} from profile API', name: 'PKG');
+        dev.log('Profile API returned ${profileApiIds.length} IDs: $profileApiIds', name: 'PKG');
+      } catch (e) {
+        dev.log('Profile API failed (OK, will show all): $e', name: 'PKG');
       }
 
-      // 5) FALLBACK 2: build from priceList if ALL profile APIs failed
-      if (packages.isEmpty && _priceMap.isNotEmpty) {
-        dev.log('APIs failed, building from priceList (${_priceMap.length})...', name: 'PKG');
-        for (final entry in _priceMap.entries) {
-          if (entry.key <= 0) continue;
-          final item = entry.value;
-          final name = (item['name'] ?? item['profile_name'] ?? '').toString();
-          if (name.isEmpty) continue;
-          packages.add(PackageModel(
-            idx: entry.key,
-            name: name,
-            price: (item['price'] ?? item['profile_price'])?.toString(),
-            userPrice: item['user_price']?.toString(),
-          ));
-        }
-        dev.log('Built ${packages.length} from priceList fallback', name: 'PKG');
+      // Step 4: If profile API gave us IDs, filter packages to only those IDs
+      //         (profile API only returns regular/monthly packages, NOT extensions)
+      if (profileApiIds.isNotEmpty) {
+        packages.removeWhere((p) => !profileApiIds.contains(p.idx));
+        dev.log('Filtered to ${packages.length} packages (profile API IDs)', name: 'PKG');
       }
 
       dev.log('=== FINAL: ${packages.length} packages ===', name: 'PKG');
       for (final p in packages) {
-        dev.log('  [${p.idx}] ${p.name} price=${p.displayPrice} type=${p.type}', name: 'PKG');
+        dev.log('  [${p.idx}] ${p.name} price=${p.displayPrice}', name: 'PKG');
       }
       state = state.copyWith(packages: packages);
     } catch (e, st) {
