@@ -61,17 +61,60 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Manager filter
-          if (state.managers.isNotEmpty)
+          // Filter + refresh row
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: _showFilterSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.filter_list_rounded, size: 14, color: theme.colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text('الفلاتر', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: .7))),
+                    if (_managerId != 'all') ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(color: theme.colorScheme.primary.withValues(alpha: .1), borderRadius: BorderRadius.circular(4)),
+                        child: Text('1', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: theme.colorScheme.primary)),
+                      ),
+                    ],
+                    const Spacer(),
+                    Icon(Icons.tune, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Material(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: _load,
+                child: Padding(padding: const EdgeInsets.all(8),
+                    child: Icon(Icons.refresh_rounded, size: 18, color: theme.colorScheme.primary)),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+
+          // Active filters
+          if (_managerId != 'all')
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: ManagerFilter(
-                managers: state.managers,
-                selectedId: _managerId,
-                onChanged: (v) {
-                  setState(() => _managerId = v);
-                  _load();
-                },
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Chip(
+                label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
+                    style: const TextStyle(fontSize: 10)),
+                deleteIcon: const Icon(Icons.close, size: 14),
+                onDeleted: () { setState(() => _managerId = 'all'); _load(); },
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
 
@@ -102,6 +145,71 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
             ...paged.map((r) => _ActivationRow(record: r)),
         ],
       ),
+    );
+  }
+
+  void _showFilterSheet() {
+    final managers = ref.read(reportsProvider).managers;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        String mgr = _managerId;
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(child: Container(width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 16),
+                  Text('الفلاتر', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 14),
+
+                  if (managers.isNotEmpty) ...[
+                    Text('المدير', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                        color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: .6))),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Theme.of(ctx).colorScheme.outline.withValues(alpha: .2)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: mgr, isExpanded: true, isDense: true,
+                          style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('جميع المدراء')),
+                            ...managers.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis))),
+                          ],
+                          onChanged: (v) { if (v != null) setSheet(() => mgr = v); },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  SizedBox(height: 48, child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() { _managerId = mgr; _page = 1; });
+                      _load();
+                    },
+                    child: const Text('تطبيق'),
+                  )),
+                ],
+              ),
+            ),
+          );
+        });
+      },
     );
   }
 }

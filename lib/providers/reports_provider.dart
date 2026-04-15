@@ -146,6 +146,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   Future<void> fetchFinancialReport(String dateFrom, String dateTo, {
     String? managerId,
     List<String>? actionTypes,
+    String? userManager,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -163,6 +164,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       }
       if (actionTypes != null && actionTypes.isNotEmpty) {
         params['action_types'] = actionTypes.join(',');
+      }
+      if (userManager != null && userManager.isNotEmpty) {
+        params['user_manager'] = userManager;
       }
 
       final res = await _dio.get(
