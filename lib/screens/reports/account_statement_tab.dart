@@ -217,8 +217,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
       };
 
       final response = await dio.post(
-        ApiConstants.accountStatement.replaceAll(
-            RegExp(r'\?.*'), '/send-whatsapp'),
+        '${ApiConstants.accountStatement}/send-whatsapp',
         data: {
           'adminId': adminId,
           'phone': phone,

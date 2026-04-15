@@ -66,6 +66,9 @@ class ApiConstants {
   static const String financeReport = '/api/reports/finance';
   static const String accountStatement = '/api/reports/account-statement';
 
+  // User Info Link
+  static const String generateUserLink = '/api/generate-user-link';
+
   // Settings
   static const String settingsTheme = '/api/settings/theme';
   static const String settingsDashboard = '/api/settings/dashboard';
