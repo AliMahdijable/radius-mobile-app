@@ -44,7 +44,7 @@ class PaginationBar extends StatelessWidget {
               child: DropdownButton<int>(
                 value: rowsPerPage,
                 isDense: true,
-                style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface),
+                style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: theme.colorScheme.onSurface),
                 items: const [
                   DropdownMenuItem(value: 10, child: Text('10')),
                   DropdownMenuItem(value: 25, child: Text('25')),
@@ -110,7 +110,7 @@ class ManagerFilter extends StatelessWidget {
           value: selectedId,
           isDense: true,
           isExpanded: true,
-          style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface),
+          style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: theme.colorScheme.onSurface),
           icon: Icon(Icons.person_outline, size: 14, color: theme.colorScheme.primary),
           items: [
             const DropdownMenuItem(value: 'all', child: Text('جميع المدراء')),
