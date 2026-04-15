@@ -1,0 +1,80 @@
+class MessageLogModel {
+  final int id;
+  final String adminId;
+  final String? recipientUsername;
+  final String? recipientPhone;
+  final String? messageContent;
+  final String messageType;
+  final String status;
+  final String? errorMessage;
+  final int retryCount;
+  final int? maxRetries;
+  final String? createdAt;
+  final String? processedAt;
+
+  const MessageLogModel({
+    required this.id,
+    required this.adminId,
+    this.recipientUsername,
+    this.recipientPhone,
+    this.messageContent,
+    required this.messageType,
+    required this.status,
+    this.errorMessage,
+    this.retryCount = 0,
+    this.maxRetries,
+    this.createdAt,
+    this.processedAt,
+  });
+
+  bool get canRetry =>
+      status == 'failed' && (maxRetries == null || retryCount < maxRetries!);
+
+  factory MessageLogModel.fromJson(Map<String, dynamic> json) {
+    return MessageLogModel(
+      id: json['id'] is int
+          ? json['id']
+          : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
+      adminId: (json['admin_id'] ?? '').toString(),
+      recipientUsername: json['recipient_username']?.toString(),
+      recipientPhone: json['recipient_phone']?.toString(),
+      messageContent: json['message_content']?.toString(),
+      messageType: (json['message_type'] ?? 'manual').toString(),
+      status: (json['status'] ?? 'pending').toString(),
+      errorMessage: json['error_message']?.toString(),
+      retryCount: json['retry_count'] is int
+          ? json['retry_count']
+          : int.tryParse(json['retry_count']?.toString() ?? '0') ?? 0,
+      maxRetries: json['max_retries'] is int
+          ? json['max_retries']
+          : int.tryParse(json['max_retries']?.toString() ?? ''),
+      createdAt: json['created_at']?.toString(),
+      processedAt: json['processed_at']?.toString(),
+    );
+  }
+}
+
+class MessageStats {
+  final int sent;
+  final int failed;
+  final int pending;
+  final int cancelled;
+
+  const MessageStats({
+    this.sent = 0,
+    this.failed = 0,
+    this.pending = 0,
+    this.cancelled = 0,
+  });
+
+  int get total => sent + failed + pending + cancelled;
+
+  factory MessageStats.fromJson(Map<String, dynamic> json) {
+    return MessageStats(
+      sent: json['sent'] is int ? json['sent'] : 0,
+      failed: json['failed'] is int ? json['failed'] : 0,
+      pending: json['pending'] is int ? json['pending'] : 0,
+      cancelled: json['cancelled'] is int ? json['cancelled'] : 0,
+    );
+  }
+}
