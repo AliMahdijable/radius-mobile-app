@@ -4,6 +4,8 @@ import 'package:intl/intl.dart' as intl;
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/storage_service.dart';
+import '../../core/utils/csv_export.dart';
+import '../../widgets/app_snackbar.dart';
 
 class ActivityLogTab extends ConsumerStatefulWidget {
   const ActivityLogTab({super.key});
@@ -109,6 +111,31 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
     }
   }
 
+  Future<void> _exportCsv() async {
+    if (_activities.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات للتصدير');
+      return;
+    }
+    try {
+      await CsvExport.exportAndShare(
+        fileName: 'activity-log-$_dateFrom-$_dateTo.csv',
+        headers: ['الوقت', 'نوع الحركة', 'المدير', 'الهدف', 'التفاصيل'],
+        rows: _activities.map((a) {
+          final style = _getActionStyle(a);
+          return [
+            a['created_at']?.toString() ?? '',
+            style.label,
+            a['admin_username']?.toString() ?? '',
+            a['target_name']?.toString() ?? '',
+            a['action_description']?.toString() ?? '',
+          ];
+        }).toList(),
+      );
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل تصدير البيانات');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -117,19 +144,29 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: TextField(
-            onChanged: (v) => _search = v,
-            onSubmitted: (_) => _fetchActivities(),
-            decoration: InputDecoration(
-              hintText: 'بحث في الحركات...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.filter_list_rounded),
-                onPressed: _showDateFilter,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(children: [
+            Expanded(
+              child: TextField(
+                onChanged: (v) => _search = v,
+                onSubmitted: (_) => _fetchActivities(),
+                decoration: InputDecoration(
+                  hintText: 'بحث في الحركات...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.filter_list_rounded, size: 20),
+                    onPressed: _showDateFilter,
+                  ),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 6),
+            _SmallBtn(Icons.download_rounded, _exportCsv),
+            const SizedBox(width: 4),
+            _SmallBtn(Icons.refresh_rounded, _fetchActivities),
+          ]),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -469,6 +506,28 @@ class _QuickChip extends StatelessWidget {
       label: Text(label, style: const TextStyle(fontSize: 11)),
       onPressed: onTap,
       visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _SmallBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _SmallBtn(this.icon, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        ),
+      ),
     );
   }
 }

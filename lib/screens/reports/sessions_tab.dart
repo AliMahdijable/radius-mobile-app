@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
+import '../../widgets/app_snackbar.dart';
 
 class SessionsTab extends ConsumerStatefulWidget {
   const SessionsTab({super.key});
@@ -17,6 +19,12 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   bool _loaded = false;
   int _page = 1;
   static const _pageSize = 50;
+
+  String _advIp = '';
+  String _advUsername = '';
+  String _advMac = '';
+  String _advFromDate = '';
+  String _advToDate = '';
 
   @override
   bool get wantKeepAlive => true;
@@ -38,6 +46,8 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
           page: page,
           count: _pageSize,
           search: _searchCtrl.text.trim(),
+          fromDate: _advFromDate.isNotEmpty ? _advFromDate : null,
+          toDate: _advToDate.isNotEmpty ? _advToDate : null,
         );
     if (mounted) {
       setState(() {
@@ -48,7 +58,9 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   }
 
   String _formatBytes(dynamic octets) {
-    final bytes = (octets is num) ? octets.toDouble() : (double.tryParse(octets?.toString() ?? '') ?? 0);
+    final bytes = (octets is num)
+        ? octets.toDouble()
+        : (double.tryParse(octets?.toString() ?? '') ?? 0);
     if (bytes <= 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     int i = 0;
@@ -67,6 +79,199 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
     return intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
   }
 
+  Future<void> _exportCsv() async {
+    final sessions = ref.read(reportsProvider).sessions;
+    if (sessions.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات للتصدير');
+      return;
+    }
+    try {
+      await CsvExport.exportAndShare(
+        fileName: 'sessions-report-${intl.DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv',
+        headers: [
+          'اسم المستخدم', 'وقت البدء', 'وقت الإيقاف', 'عنوان IP',
+          'عنوان NAS', 'البيانات الواردة', 'البيانات الصادرة', 'سبب الإنهاء',
+        ],
+        rows: sessions.map((s) => [
+          s['username']?.toString() ?? '',
+          _formatSessionTime(s['acctstarttime']),
+          _formatSessionTime(s['acctstoptime']),
+          s['framedipaddress']?.toString() ?? '',
+          s['nasipaddress']?.toString() ?? '',
+          _formatBytes(s['acctinputoctets']),
+          _formatBytes(s['acctoutputoctets']),
+          s['acctterminatecause']?.toString() ?? '',
+        ]).toList(),
+      );
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل تصدير البيانات');
+    }
+  }
+
+  void _showAdvancedSearch() {
+    String ip = _advIp;
+    String username = _advUsername;
+    String mac = _advMac;
+    String fromDate = _advFromDate;
+    String toDate = _advToDate;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 20, right: 20, top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                      child: Container(
+                          width: 40, height: 4,
+                          decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 16),
+                  Text('البحث المتقدم',
+                      style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'عنوان IP',
+                      prefixIcon: Icon(Icons.language, size: 18),
+                      isDense: true,
+                    ),
+                    textDirection: TextDirection.ltr,
+                    controller: TextEditingController(text: ip),
+                    onChanged: (v) => ip = v,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المستخدم',
+                      prefixIcon: Icon(Icons.person, size: 18),
+                      isDense: true,
+                    ),
+                    textDirection: TextDirection.ltr,
+                    controller: TextEditingController(text: username),
+                    onChanged: (v) => username = v,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'عنوان MAC',
+                      prefixIcon: Icon(Icons.router, size: 18),
+                      isDense: true,
+                    ),
+                    textDirection: TextDirection.ltr,
+                    controller: TextEditingController(text: mac),
+                    onChanged: (v) => mac = v,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final d = await showDatePicker(
+                            context: ctx,
+                            initialDate: DateTime.tryParse(fromDate) ?? DateTime.now().subtract(const Duration(days: 7)),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 1)),
+                          );
+                          if (d != null) {
+                            setSheet(() => fromDate = intl.DateFormat('yyyy-MM-dd').format(d));
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'من تاريخ',
+                            prefixIcon: Icon(Icons.calendar_today, size: 16),
+                            isDense: true,
+                          ),
+                          child: Text(fromDate.isEmpty ? '—' : fromDate,
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final d = await showDatePicker(
+                            context: ctx,
+                            initialDate: DateTime.tryParse(toDate) ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 1)),
+                          );
+                          if (d != null) {
+                            setSheet(() => toDate = intl.DateFormat('yyyy-MM-dd').format(d));
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'إلى تاريخ',
+                            prefixIcon: Icon(Icons.calendar_today, size: 16),
+                            isDense: true,
+                          ),
+                          child: Text(toDate.isEmpty ? '—' : toDate,
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+                  Row(children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          setSheet(() {
+                            ip = '';
+                            username = '';
+                            mac = '';
+                            fromDate = '';
+                            toDate = '';
+                          });
+                        },
+                        child: const Text('مسح'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            _advIp = ip;
+                            _advUsername = username;
+                            _advMac = mac;
+                            _advFromDate = fromDate;
+                            _advToDate = toDate;
+                            _searchCtrl.text = username.isNotEmpty ? username : ip;
+                          });
+                          _load(page: 1);
+                        },
+                        child: const Text('بحث'),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -81,23 +286,34 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
 
     return Column(
       children: [
-        // Search
+        // Search + action buttons
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: TextField(
-            controller: _searchCtrl,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-            onSubmitted: (_) => _load(page: 1),
-            decoration: InputDecoration(
-              hintText: 'بحث باسم المستخدم أو IP...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.send_rounded, size: 20),
-                onPressed: () => _load(page: 1),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _searchCtrl,
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
+                onSubmitted: (_) => _load(page: 1),
+                decoration: InputDecoration(
+                  hintText: 'بحث...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.manage_search_rounded, size: 20),
+                    onPressed: _showAdvancedSearch,
+                    tooltip: 'بحث متقدم',
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 6),
+            _SmallBtn(Icons.download_rounded, _exportCsv),
+            const SizedBox(width: 4),
+            _SmallBtn(Icons.refresh_rounded, () => _load(page: _page)),
+          ]),
         ),
 
         // Pagination
@@ -274,6 +490,28 @@ class _InfoChip extends StatelessWidget {
                     .onSurface
                     .withValues(alpha: .5))),
       ],
+    );
+  }
+}
+
+class _SmallBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _SmallBtn(this.icon, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .3),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        ),
+      ),
     );
   }
 }
