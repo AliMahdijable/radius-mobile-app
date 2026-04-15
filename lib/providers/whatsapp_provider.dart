@@ -93,8 +93,10 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
         '${ApiConstants.waConnectionStatus}/$adminId?live=true',
       );
       if (response.data['success'] == true) {
+        final s = WhatsAppStatusModel.fromJson(response.data);
         state = state.copyWith(
-          status: WhatsAppStatusModel.fromJson(response.data),
+          status: s,
+          qrCode: s.connected ? null : state.qrCode,
         );
       }
     } catch (_) {}
