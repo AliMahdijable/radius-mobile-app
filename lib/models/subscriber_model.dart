@@ -202,8 +202,8 @@ class PackageModel {
 
   String get durationLabel {
     if (expirationAmount == null) return '';
+    if (isMonthly) return '';
     if (type == 'hourly') return '$expirationAmount ساعة';
-    if (type == 'daily') return '$expirationAmount يوم';
     return '$expirationAmount يوم';
   }
 
