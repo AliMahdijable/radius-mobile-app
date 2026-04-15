@@ -663,14 +663,14 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setSheet) {
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -952,9 +952,9 @@ class _SubscriberDetailsScreenState
                 )),
                 const SizedBox(height: 20),
               ],
-            )),
-          );
-        });
+            ));
+          }),
+        );
       },
     );
   }
@@ -1057,15 +1057,14 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setSheet) {
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1317,9 +1316,9 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 20),
               ],
-            )),
-          );
-        });
+            ));
+          }),
+        );
       },
     );
   }
@@ -1361,15 +1360,14 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setSheet) {
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1583,9 +1581,9 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 20),
               ],
-            )),
-          );
-        });
+            ));
+          }),
+        );
       },
     );
   }
