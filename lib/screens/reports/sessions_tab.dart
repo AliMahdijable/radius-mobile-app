@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/report_controls.dart';
 
 class SessionsTab extends ConsumerStatefulWidget {
   const SessionsTab({super.key});
@@ -18,7 +19,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   final _searchCtrl = TextEditingController();
   bool _loaded = false;
   int _page = 1;
-  static const _pageSize = 50;
+  int _pageSize = 10;
 
   String _advIp = '';
   String _advUsername = '';
@@ -317,33 +318,16 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
         ),
 
         // Pagination
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            children: [
-              Text('${state.sessionsTotal} جلسة',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: .5))),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.chevron_right, size: 20),
-                onPressed: _page > 1 ? () => _load(page: _page - 1) : null,
-                visualDensity: VisualDensity.compact,
-              ),
-              Text('$_page / ${totalPages > 0 ? totalPages : 1}',
-                  style: const TextStyle(fontSize: 11)),
-              IconButton(
-                icon: const Icon(Icons.chevron_left, size: 20),
-                onPressed: _page < totalPages
-                    ? () => _load(page: _page + 1)
-                    : null,
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
+        PaginationBar(
+          totalItems: state.sessionsTotal,
+          currentPage: _page,
+          rowsPerPage: _pageSize,
+          itemLabel: 'جلسة',
+          onPageChanged: (p) => _load(page: p),
+          onRowsPerPageChanged: (r) {
+            setState(() => _pageSize = r);
+            _load(page: 1);
+          },
         ),
 
         // Sessions list

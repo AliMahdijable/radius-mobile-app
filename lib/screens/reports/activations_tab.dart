@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/report_controls.dart';
 
 class ActivationsTab extends ConsumerStatefulWidget {
   const ActivationsTab({super.key});
@@ -17,8 +18,11 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
     with AutomaticKeepAliveClientMixin {
   late String _dateFrom;
   late String _dateTo;
-  String _filter = 'all'; // all | activate | extend
+  String _filter = 'all';
+  String _managerId = 'all';
   bool _loaded = false;
+  int _page = 1;
+  int _perPage = 10;
 
   @override
   bool get wantKeepAlive => true;
@@ -28,16 +32,19 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
     super.initState();
     final now = DateTime.now();
     _dateTo = intl.DateFormat('yyyy-MM-dd').format(now);
-    _dateFrom =
-        intl.DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 30)));
-    Future.microtask(() => _load());
+    _dateFrom = intl.DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 30)));
+    Future.microtask(() async {
+      await ref.read(reportsProvider.notifier).fetchManagers();
+      _load();
+    });
   }
 
   Future<void> _load() async {
-    await ref
-        .read(reportsProvider.notifier)
-        .fetchActivationsReport(_dateFrom, _dateTo);
-    if (mounted) setState(() => _loaded = true);
+    await ref.read(reportsProvider.notifier).fetchActivationsReport(
+          _dateFrom, _dateTo,
+          managerId: _managerId,
+        );
+    if (mounted) setState(() { _loaded = true; _page = 1; });
   }
 
   List<Map<String, dynamic>> get _filtered {
@@ -84,13 +91,14 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
     }
 
     final all = state.activations;
-    final activateCount = all
-        .where((a) =>
-            (a['action_type'] ?? '').toString().toUpperCase() ==
-            'SUBSCRIBER_ACTIVATE')
-        .length;
+    final activateCount = all.where((a) =>
+        (a['action_type'] ?? '').toString().toUpperCase() == 'SUBSCRIBER_ACTIVATE').length;
     final extendCount = all.length - activateCount;
     final items = _filtered;
+
+    final totalPages = (items.length / _perPage).ceil();
+    if (_page > totalPages && totalPages > 0) _page = totalPages;
+    final paged = items.skip((_page - 1) * _perPage).take(_perPage).toList();
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -111,13 +119,9 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
                   child: Row(children: [
                     Icon(Icons.date_range, size: 14, color: theme.colorScheme.primary),
                     const SizedBox(width: 4),
-                    Expanded(
-                      child: Text('$_dateFrom — $_dateTo',
-                          style: const TextStyle(fontSize: 11),
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    Icon(Icons.tune, size: 14,
-                        color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                    Expanded(child: Text('$_dateFrom — $_dateTo',
+                        style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+                    Icon(Icons.tune, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
                   ]),
                 ),
               ),
@@ -127,7 +131,21 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
             const SizedBox(width: 4),
             _SmallBtn(Icons.refresh_rounded, _load),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+
+          // Manager filter
+          if (state.managers.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ManagerFilter(
+                managers: state.managers,
+                selectedId: _managerId,
+                onChanged: (v) {
+                  setState(() => _managerId = v);
+                  _load();
+                },
+              ),
+            ),
 
           // Stats
           Row(children: [
@@ -137,25 +155,33 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
             const SizedBox(width: 6),
             _StatChip('تمديد', '$extendCount', AppTheme.warningColor),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
           // Filter chips
           Row(children: [
-            _FilterChip('الكل', _filter == 'all',
-                () => setState(() => _filter = 'all')),
+            _FilterChip('الكل', _filter == 'all', () => setState(() { _filter = 'all'; _page = 1; })),
             const SizedBox(width: 6),
-            _FilterChip('تفعيل', _filter == 'activate',
-                () => setState(() => _filter = 'activate')),
+            _FilterChip('تفعيل', _filter == 'activate', () => setState(() { _filter = 'activate'; _page = 1; })),
             const SizedBox(width: 6),
-            _FilterChip('تمديد', _filter == 'extend',
-                () => setState(() => _filter = 'extend')),
+            _FilterChip('تمديد', _filter == 'extend', () => setState(() { _filter = 'extend'; _page = 1; })),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
-          if (items.isEmpty)
+          // Pagination
+          PaginationBar(
+            totalItems: items.length,
+            currentPage: _page,
+            rowsPerPage: _perPage,
+            itemLabel: 'تفعيل',
+            onPageChanged: (p) => setState(() => _page = p),
+            onRowsPerPageChanged: (r) => setState(() { _perPage = r; _page = 1; }),
+          ),
+          const SizedBox(height: 4),
+
+          if (paged.isEmpty)
             _emptyWidget(theme)
           else
-            ...items.map((a) => _ActivationRow(record: a)),
+            ...paged.map((a) => _ActivationRow(record: a)),
         ],
       ),
     );
@@ -165,13 +191,9 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 60),
       child: Column(children: [
-        Icon(Icons.inbox_rounded,
-            size: 48,
-            color: theme.colorScheme.onSurface.withValues(alpha: .2)),
+        Icon(Icons.inbox_rounded, size: 48, color: theme.colorScheme.onSurface.withValues(alpha: .2)),
         const SizedBox(height: 8),
-        Text('لا توجد تفعيلات',
-            style: TextStyle(
-                color: theme.colorScheme.onSurface.withValues(alpha: .4))),
+        Text('لا توجد تفعيلات', style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: .4))),
       ]),
     );
   }
@@ -179,9 +201,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
   void _showDateFilter() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
@@ -193,69 +213,25 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                      child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(2)))),
+                  Center(child: Container(width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 16),
-                  Text('فلتر التاريخ',
-                      style: Theme.of(ctx)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('فلتر التاريخ', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 16),
                   Wrap(spacing: 8, children: [
-                    ActionChip(
-                        label: const Text('اليوم',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final today = intl.DateFormat('yyyy-MM-dd')
-                              .format(DateTime.now());
-                          setSheet(() {
-                            from = today;
-                            to = today;
-                          });
-                        }),
-                    ActionChip(
-                        label: const Text('آخر 7 أيام',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 7)));
-                          });
-                        }),
-                    ActionChip(
-                        label: const Text('آخر 30 يوم',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 30)));
-                          });
-                        }),
+                    _qc('اليوم', () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); }),
+                    _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
+                    _qc('شهر', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                   ]),
                   const SizedBox(height: 16),
-                  SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() {
-                            _dateFrom = from;
-                            _dateTo = to;
-                          });
-                          _load();
-                        },
-                        child: const Text('تطبيق'),
-                      )),
+                  SizedBox(height: 48, child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() { _dateFrom = from; _dateTo = to; });
+                      _load();
+                    },
+                    child: const Text('تطبيق'),
+                  )),
                 ],
               ),
             ),
@@ -264,14 +240,14 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
       },
     );
   }
+
+  Widget _qc(String label, VoidCallback onTap) =>
+      ActionChip(label: Text(label, style: const TextStyle(fontSize: 11)), onPressed: onTap, visualDensity: VisualDensity.compact);
 }
 
 class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
+  final String label; final String value; final Color color;
   const _StatChip(this.label, this.value, this.color);
-
   @override
   Widget build(BuildContext context) {
     return Expanded(
@@ -283,12 +259,8 @@ class _StatChip extends StatelessWidget {
           border: Border.all(color: color.withValues(alpha: .2)),
         ),
         child: Column(children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 10, color: color.withValues(alpha: .7))),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+          Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: .7))),
         ]),
       ),
     );
@@ -296,11 +268,8 @@ class _StatChip extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final String label; final bool selected; final VoidCallback onTap;
   const _FilterChip(this.label, this.selected, this.onTap);
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -308,23 +277,13 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.primary.withValues(alpha: .1)
-              : Colors.transparent,
+          color: selected ? AppTheme.primary.withValues(alpha: .1) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: selected
-                  ? AppTheme.primary.withValues(alpha: .3)
-                  : Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: .15)),
+          border: Border.all(color: selected ? AppTheme.primary.withValues(alpha: .3) : Theme.of(context).colorScheme.onSurface.withValues(alpha: .15)),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? AppTheme.primary : null)),
+        child: Text(label, style: TextStyle(fontSize: 12,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? AppTheme.primary : null)),
       ),
     );
   }
@@ -333,7 +292,6 @@ class _FilterChip extends StatelessWidget {
 class _ActivationRow extends StatelessWidget {
   final Map<String, dynamic> record;
   const _ActivationRow({required this.record});
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -341,19 +299,14 @@ class _ActivationRow extends StatelessWidget {
     final isExtend = type == 'SUBSCRIBER_EXTEND';
     final label = isExtend ? 'تمديد' : 'تفعيل';
     final color = isExtend ? AppTheme.warningColor : AppTheme.successColor;
-    final icon =
-        isExtend ? Icons.schedule_rounded : Icons.check_circle_rounded;
+    final icon = isExtend ? Icons.schedule_rounded : Icons.check_circle_rounded;
     final target = record['target_name']?.toString() ?? '';
     final desc = record['action_description']?.toString() ?? '';
     final admin = record['admin_username']?.toString() ?? '';
     final time = record['created_at']?.toString() ?? '';
-
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
-    if (dt != null) {
-      formattedTime =
-          intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
-    }
+    if (dt != null) formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -361,93 +314,50 @@ class _ActivationRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: .06)),
+        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .06)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: .1),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(icon, size: 17, color: color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: color)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                      child: Text(target,
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: .8)),
-                          overflow: TextOverflow.ellipsis)),
-                  Text(formattedTime,
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: .4))),
-                ]),
-                if (desc.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(desc,
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: .4)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                if (admin.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text('المدير: $admin',
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: theme.colorScheme.primary
-                                .withValues(alpha: .5))),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(color: color.withValues(alpha: .1), borderRadius: BorderRadius.circular(9)),
+          child: Icon(icon, size: 17, color: color),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+              const SizedBox(width: 6),
+              Expanded(child: Text(target, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: .8)), overflow: TextOverflow.ellipsis)),
+              Text(formattedTime, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4))),
+            ]),
+            if (desc.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(top: 2),
+                  child: Text(desc, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                      maxLines: 1, overflow: TextOverflow.ellipsis)),
+            if (admin.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(top: 1),
+                  child: Text('المدير: $admin', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary.withValues(alpha: .5)))),
+          ]),
+        ),
+      ]),
     );
   }
 }
 
 class _SmallBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
+  final IconData icon; final VoidCallback onTap;
   const _SmallBtn(this.icon, this.onTap);
-
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .3),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-        ),
+        borderRadius: BorderRadius.circular(10), onTap: onTap,
+        child: Padding(padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary)),
       ),
     );
   }

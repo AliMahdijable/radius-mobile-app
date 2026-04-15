@@ -6,6 +6,7 @@ import '../../core/utils/helpers.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/report_controls.dart';
 
 class FinancialTab extends ConsumerStatefulWidget {
   const FinancialTab({super.key});
@@ -19,6 +20,9 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   late String _dateFrom;
   late String _dateTo;
   bool _loaded = false;
+  String _managerId = 'all';
+  int _logsPage = 1;
+  int _logsPerPage = 10;
 
   @override
   bool get wantKeepAlive => true;
@@ -30,13 +34,17 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     _dateTo = intl.DateFormat('yyyy-MM-dd').format(now);
     _dateFrom =
         intl.DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 30)));
-    Future.microtask(() => _load());
+    Future.microtask(() async {
+      await ref.read(reportsProvider.notifier).fetchManagers();
+      _load();
+    });
   }
 
   Future<void> _load() async {
-    await ref
-        .read(reportsProvider.notifier)
-        .fetchFinancialReport(_dateFrom, _dateTo);
+    await ref.read(reportsProvider.notifier).fetchFinancialReport(
+          _dateFrom, _dateTo,
+          managerId: _managerId,
+        );
     if (mounted) setState(() => _loaded = true);
   }
 
@@ -92,12 +100,18 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     final activationsTotal =
         _num(kpis['activations_count']) + _num(kpis['extend_count']);
 
+    final allLogs = state.recentLogs;
+    final logsTotal = allLogs.length;
+    final totalLogPages = (logsTotal / _logsPerPage).ceil();
+    if (_logsPage > totalLogPages && totalLogPages > 0) _logsPage = totalLogPages;
+    final pagedLogs = allLogs.skip((_logsPage - 1) * _logsPerPage).take(_logsPerPage).toList();
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Action bar: date filter + export + refresh
+          // Action bar
           Row(children: [
             Expanded(
               child: GestureDetector(
@@ -127,7 +141,21 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
             const SizedBox(width: 4),
             _ActionBtn(Icons.refresh_rounded, 'تحديث', _load),
           ]),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
+
+          // Manager filter
+          if (state.managers.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ManagerFilter(
+                managers: state.managers,
+                selectedId: _managerId,
+                onChanged: (v) {
+                  setState(() => _managerId = v);
+                  _load();
+                },
+              ),
+            ),
 
           // KPI cards
           Row(children: [
@@ -173,13 +201,25 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
             const SizedBox(height: 20),
           ],
 
-          // Recent logs
-          if (state.recentLogs.isNotEmpty) ...[
+          // Recent logs with pagination
+          if (allLogs.isNotEmpty) ...[
             Text('آخر العمليات',
                 style: theme.textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            ...state.recentLogs.take(50).map((log) => _LogRow(log: log)),
+            const SizedBox(height: 4),
+            PaginationBar(
+              totalItems: logsTotal,
+              currentPage: _logsPage,
+              rowsPerPage: _logsPerPage,
+              itemLabel: 'عملية',
+              onPageChanged: (p) => setState(() => _logsPage = p),
+              onRowsPerPageChanged: (r) => setState(() {
+                _logsPerPage = r;
+                _logsPage = 1;
+              }),
+            ),
+            const SizedBox(height: 4),
+            ...pagedLogs.map((log) => _LogRow(log: log)),
           ],
         ],
       ),
@@ -203,69 +243,26 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                      child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(2)))),
+                  Center(child: Container(width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 16),
-                  Text('فلتر التاريخ',
-                      style: Theme.of(ctx)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('فلتر التاريخ', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 16),
                   Wrap(spacing: 8, children: [
-                    ActionChip(
-                        label: const Text('اليوم',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final today = intl.DateFormat('yyyy-MM-dd')
-                              .format(DateTime.now());
-                          setSheet(() {
-                            from = today;
-                            to = today;
-                          });
-                        }),
-                    ActionChip(
-                        label: const Text('آخر 7 أيام',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 7)));
-                          });
-                        }),
-                    ActionChip(
-                        label: const Text('آخر 30 يوم',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed: () {
-                          final now = DateTime.now();
-                          setSheet(() {
-                            to = intl.DateFormat('yyyy-MM-dd').format(now);
-                            from = intl.DateFormat('yyyy-MM-dd').format(
-                                now.subtract(const Duration(days: 30)));
-                          });
-                        }),
+                    _qc('اليوم', () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); }),
+                    _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
+                    _qc('آخر 30 يوم', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
+                    _qc('3 أشهر', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 90))); }); }),
                   ]),
                   const SizedBox(height: 16),
-                  SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() {
-                            _dateFrom = from;
-                            _dateTo = to;
-                          });
-                          _load();
-                        },
-                        child: const Text('تطبيق'),
-                      )),
+                  SizedBox(height: 48, child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() { _dateFrom = from; _dateTo = to; _logsPage = 1; });
+                      _load();
+                    },
+                    child: const Text('تطبيق'),
+                  )),
                 ],
               ),
             ),
@@ -274,6 +271,9 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
       },
     );
   }
+
+  Widget _qc(String label, VoidCallback onTap) =>
+      ActionChip(label: Text(label, style: const TextStyle(fontSize: 11)), onPressed: onTap, visualDensity: VisualDensity.compact);
 }
 
 class _KpiCard extends StatelessWidget {
@@ -282,12 +282,7 @@ class _KpiCard extends StatelessWidget {
   final IconData icon;
   final List<Color> colors;
 
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.colors,
-  });
+  const _KpiCard({required this.label, required this.value, required this.icon, required this.colors});
 
   @override
   Widget build(BuildContext context) {
@@ -295,10 +290,7 @@ class _KpiCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-              colors: colors,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
+          gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -307,22 +299,13 @@ class _KpiCard extends StatelessWidget {
             Row(children: [
               Icon(icon, size: 18, color: Colors.white70),
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.white70),
-                    overflow: TextOverflow.ellipsis),
-              ),
+              Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70), overflow: TextOverflow.ellipsis)),
             ]),
             const SizedBox(height: 8),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: AlignmentDirectional.centerStart,
-              child: Text(value,
-                  style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white)),
+              child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
             ),
           ],
         ),
@@ -351,23 +334,26 @@ class _AdminRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: .06)),
+        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(name,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w700)),
+          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Row(children: [
+            _MiniStat('إيرادات', AppHelpers.formatMoney(revenue), Colors.green),
+            const SizedBox(width: 4),
+            _MiniStat('ديون', AppHelpers.formatMoney(debt), Colors.red),
+            const SizedBox(width: 4),
+            _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
+          ]),
           const SizedBox(height: 6),
           Row(children: [
-            _MiniStat('إيرادات', AppHelpers.formatMoney(revenue),
-                Colors.green),
-            _MiniStat('ديون', AppHelpers.formatMoney(debt), Colors.red),
-            _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
             _MiniStat('تفعيل', '$activations', AppTheme.successColor),
+            const SizedBox(width: 4),
             _MiniStat('تمديد', '$extends_', AppTheme.warningColor),
+            const Spacer(flex: 3),
           ]),
         ],
       ),
@@ -397,19 +383,24 @@ class _MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Column(children: [
-        Text(value,
-            style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700, color: color),
-            overflow: TextOverflow.ellipsis),
-        Text(label,
-            style: TextStyle(
-                fontSize: 9,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: .4))),
-      ]),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .06),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          ),
+          const SizedBox(height: 1),
+          Text(label,
+              style: TextStyle(fontSize: 9,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .4))),
+        ]),
+      ),
     );
   }
 }
@@ -421,76 +412,41 @@ class _LogRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final type = (log['action_type'] ?? log['action_type_ar'] ?? '')
-        .toString()
-        .toUpperCase();
-    final target =
-        log['user_username']?.toString() ?? log['target_name']?.toString() ?? '';
+    final type = (log['action_type'] ?? log['action_type_ar'] ?? '').toString().toUpperCase();
+    final target = log['user_username']?.toString() ?? log['target_name']?.toString() ?? '';
     final desc = log['action_description']?.toString() ?? '';
-    final admin = log['admin_username']?.toString() ?? '';
     final amount = _parseAmount(log);
     final time = log['created_at']?.toString() ?? '';
-    final isDebt = type == 'BALANCE_ADD' ||
-        (type == 'SUBSCRIBER_ACTIVATE' &&
-            (desc.toLowerCase().contains('غير نقدي')));
+    final isDebt = type == 'BALANCE_ADD' || (type == 'SUBSCRIBER_ACTIVATE' && (desc.toLowerCase().contains('غير نقدي')));
 
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
-    if (dt != null) {
-      formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
-    }
+    if (dt != null) formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        border: Border(
-            bottom: BorderSide(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: .05))),
+        border: Border(bottom: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: .05))),
       ),
       child: Row(
         children: [
           Expanded(
             flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(target,
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
-                if (desc.isNotEmpty)
-                  Text(desc,
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: .4)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(target, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+              if (desc.isNotEmpty)
+                Text(desc, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+            ]),
           ),
           Expanded(
             flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${isDebt ? "-" : "+"}${AppHelpers.formatMoney(amount)}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isDebt ? Colors.red : Colors.green,
-                  ),
-                ),
-                Text(formattedTime,
-                    style: TextStyle(
-                        fontSize: 9,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: .4))),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${isDebt ? "-" : "+"}${AppHelpers.formatMoney(amount)}',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isDebt ? Colors.red : Colors.green)),
+              Text(formattedTime, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: .4))),
+            ]),
           ),
         ],
       ),
@@ -502,9 +458,7 @@ class _LogRow extends StatelessWidget {
     if (raw is num && raw != 0) return raw.toDouble().abs();
     final desc = (log['action_description'] ?? '').toString();
     final match = RegExp(r'-?\d[\d,]*').firstMatch(desc);
-    if (match != null) {
-      return double.tryParse(match.group(0)!.replaceAll(',', ''))?.abs() ?? 0;
-    }
+    if (match != null) return double.tryParse(match.group(0)!.replaceAll(',', ''))?.abs() ?? 0;
     return 0;
   }
 }
@@ -525,10 +479,8 @@ class _ActionBtn extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-          ),
+          child: Padding(padding: const EdgeInsets.all(8),
+              child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary)),
         ),
       ),
     );
