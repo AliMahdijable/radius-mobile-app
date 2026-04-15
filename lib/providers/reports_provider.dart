@@ -6,9 +6,18 @@ import '../core/network/dio_client.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/encryption_service.dart';
 
+class ManagerOption {
+  final String id;
+  final String name;
+  const ManagerOption({required this.id, required this.name});
+}
+
 class ReportsState {
   final bool loading;
   final String? error;
+
+  // Managers
+  final List<ManagerOption> managers;
 
   // Financial
   final Map<String, dynamic> kpis;
@@ -35,6 +44,7 @@ class ReportsState {
   const ReportsState({
     this.loading = false,
     this.error,
+    this.managers = const [],
     this.kpis = const {},
     this.perAdmin = const [],
     this.recentLogs = const [],
@@ -52,6 +62,7 @@ class ReportsState {
   ReportsState copyWith({
     bool? loading,
     String? error,
+    List<ManagerOption>? managers,
     Map<String, dynamic>? kpis,
     List<Map<String, dynamic>>? perAdmin,
     List<Map<String, dynamic>>? recentLogs,
@@ -68,6 +79,7 @@ class ReportsState {
     return ReportsState(
       loading: loading ?? this.loading,
       error: error,
+      managers: managers ?? this.managers,
       kpis: kpis ?? this.kpis,
       perAdmin: perAdmin ?? this.perAdmin,
       recentLogs: recentLogs ?? this.recentLogs,
@@ -94,8 +106,47 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
 
   Future<String?> _getAdminId() => _storage.getAdminId();
 
+  // ── Managers Tree ─────────────────────────────────────────────────
+  Future<void> fetchManagers() async {
+    if (state.managers.isNotEmpty) return;
+    try {
+      final res = await _sas4Dio.get(ApiConstants.sas4ManagerTree);
+      final data = res.data;
+      final flat = <ManagerOption>[];
+      void flatten(dynamic node) {
+        if (node is Map) {
+          final id = (node['id'] ?? node['idx'] ?? '').toString();
+          final name = (node['username'] ?? node['name'] ?? '').toString();
+          if (id.isNotEmpty && name.isNotEmpty) {
+            flat.add(ManagerOption(id: id, name: name));
+          }
+          if (node['children'] is List) {
+            for (final c in node['children']) {
+              flatten(c);
+            }
+          }
+        } else if (node is List) {
+          for (final c in node) {
+            flatten(c);
+          }
+        }
+      }
+      if (data is Map && data['data'] != null) {
+        flatten(data['data']);
+      } else {
+        flatten(data);
+      }
+      state = state.copyWith(managers: flat);
+    } catch (e) {
+      dev.log('fetchManagers error: $e', name: 'REPORTS');
+    }
+  }
+
   // ── Financial Report ──────────────────────────────────────────────
-  Future<void> fetchFinancialReport(String dateFrom, String dateTo) async {
+  Future<void> fetchFinancialReport(String dateFrom, String dateTo, {
+    String? managerId,
+    List<String>? actionTypes,
+  }) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final adminId = await _getAdminId();
@@ -104,7 +155,15 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
         'date_to': '$dateTo 23:59:59',
         'limit_logs': '500',
       };
-      if (adminId != null) params['user_ids'] = adminId;
+      if (managerId != null && managerId != 'all') {
+        params['user_ids'] = managerId;
+      } else if (adminId != null) {
+        final allIds = [adminId, ...state.managers.map((m) => m.id)];
+        params['user_ids'] = allIds.toSet().join(',');
+      }
+      if (actionTypes != null && actionTypes.isNotEmpty) {
+        params['action_types'] = actionTypes.join(',');
+      }
 
       final res = await _dio.get(
         ApiConstants.financeReport,
@@ -133,12 +192,16 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   }
 
   // ── Daily Activations ─────────────────────────────────────────────
-  Future<void> fetchDailyActivations() async {
+  Future<void> fetchDailyActivations({String? managerId}) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final adminId = await _getAdminId();
       final params = <String, dynamic>{};
-      if (adminId != null) params['admin_id'] = adminId;
+      if (managerId != null && managerId != 'all') {
+        params['admin_id'] = managerId;
+      } else if (adminId != null) {
+        params['admin_id'] = adminId;
+      }
 
       final res = await _dio.get(
         ApiConstants.dailyActivations,
@@ -170,7 +233,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   }
 
   // ── Activations Report ────────────────────────────────────────────
-  Future<void> fetchActivationsReport(String dateFrom, String dateTo) async {
+  Future<void> fetchActivationsReport(String dateFrom, String dateTo, {
+    String? managerId,
+  }) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final adminId = await _getAdminId();
@@ -179,7 +244,12 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
         'date_to': '$dateTo 23:59:59',
         'limit': '1000',
       };
-      if (adminId != null) params['user_ids'] = adminId;
+      if (managerId != null && managerId != 'all') {
+        params['user_ids'] = managerId;
+      } else if (adminId != null) {
+        final allIds = [adminId, ...state.managers.map((m) => m.id)];
+        params['user_ids'] = allIds.toSet().join(',');
+      }
 
       final res = await _dio.get(
         ApiConstants.activities,
