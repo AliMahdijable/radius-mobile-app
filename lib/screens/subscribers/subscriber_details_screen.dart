@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../models/subscriber_model.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/constants/api_constants.dart';
+import '../../core/network/dio_client.dart';
+import '../../core/services/storage_service.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/templates_provider.dart';
@@ -2012,6 +2015,81 @@ class _SubscriberDetailsScreenState
     );
   }
 
+  // ── Generate Info Link ───────────────────────────────────────────────
+  Future<void> _generateInfoLink() async {
+    final sub = widget.subscriber;
+    final phone = sub.phone;
+
+    final waState = ref.read(whatsappProvider);
+    if (!waState.status.connected) {
+      _showSnack('واتساب غير متصل', success: false, detail: 'يرجى الاتصال بواتساب أولاً');
+      return;
+    }
+
+    if (phone == null || phone.isEmpty) {
+      _showSnack('لا يوجد رقم هاتف للمشترك', success: false);
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    try {
+      final dio = ref.read(backendDioProvider);
+      final storage = ref.read(storageServiceProvider);
+      final adminId = await storage.getAdminId();
+      final adminToken = await storage.getToken();
+
+      final linkResponse = await dio.post(
+        ApiConstants.generateUserLink,
+        data: {
+          'userId': sub.idx ?? '',
+          'username': sub.username,
+          'adminId': adminId ?? 'unknown',
+          'adminToken': adminToken ?? '',
+          'price': sub.notes ?? sub.price ?? '0',
+          'notes': sub.notes ?? '',
+          'profileName': sub.profileName ?? '',
+          'profileId': (sub.profileId ?? '').toString(),
+        },
+      );
+
+      if (linkResponse.data?['success'] != true || linkResponse.data?['token'] == null) {
+        if (mounted) _showSnack('فشل توليد الرابط', success: false,
+            detail: linkResponse.data?['message']?.toString());
+        return;
+      }
+
+      final token = linkResponse.data['token'];
+      final linkUrl = '${ApiConstants.backendUrl}/user-info/$token';
+
+      final subscriberName = '${sub.firstname ?? ''} ${sub.lastname ?? ''}'.trim();
+      final displayName = subscriberName.isNotEmpty ? subscriberName : sub.username;
+      final message =
+          'مرحباً $displayName 👋\n\n'
+          'يمكنك الاطلاع على معلومات اشتراكك من خلال الرابط التالي:\n\n'
+          '$linkUrl\n\n'
+          '⚠️ ملاحظة: هذا الرابط صالح لمدة ساعة واحدة فقط.\n'
+          'في حال تجديد الاشتراك أو تسديد الدين، يرجى طلب رابط جديد للبيانات المحدثة.\n\n'
+          'شكراً لك 🙏';
+
+      final sendResult = await ref.read(whatsappProvider.notifier).sendMessage(
+        phone: phone,
+        message: message,
+      );
+
+      if (!mounted) return;
+      if (sendResult.success) {
+        AppSnackBar.whatsapp(context, 'تم إرسال رابط معلومات المشترك');
+      } else {
+        AppSnackBar.whatsappError(context, 'فشل إرسال الرابط',
+            detail: sendResult.error);
+      }
+    } catch (e) {
+      if (mounted) _showSnack('خطأ في توليد الرابط', success: false, detail: e.toString());
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
   void _showActionsSheet(bool isEnabled) {
     final sub = widget.subscriber;
     final actions = [
@@ -2022,6 +2100,7 @@ class _SubscriberDetailsScreenState
       if (sub.hasDebt)
         _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
       _FabAction(Icons.chat_outlined, 'واتساب', AppTheme.whatsappGreen, _showSendMessageSheet),
+      _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
       _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
       _FabAction(
         isEnabled ? Icons.block : Icons.check_circle_outline,
