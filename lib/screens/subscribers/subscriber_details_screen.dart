@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/subscriber_model.dart';
@@ -662,14 +663,14 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setSheet) {
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -800,6 +801,7 @@ class _SubscriberDetailsScreenState
                     focusNode: partialFocus,
                     keyboardType: TextInputType.number,
                     textDirection: TextDirection.ltr,
+                    inputFormatters: [_ThousandsFormatter()],
                     decoration: InputDecoration(
                       labelText: 'المبلغ المدفوع نقداً',
                       suffixText: 'IQD',
@@ -817,11 +819,11 @@ class _SubscriberDetailsScreenState
                   const SizedBox(height: 8),
                   _QuickAmountChips(
                     amounts: _buildPartialQuickAmounts(userPrice),
-                    selectedAmount: double.tryParse(partialCtrl.text) ?? 0,
+                    selectedAmount: _parseMoney(partialCtrl.text),
                     enabled: true,
                     onSelected: (v) {
                       partialFocus.unfocus();
-                      partialCtrl.text = v.toStringAsFixed(0);
+                      partialCtrl.text = _formatNumber(v);
                       setSheet(() {});
                     },
                   ),
@@ -831,7 +833,7 @@ class _SubscriberDetailsScreenState
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: partialCtrl,
                   builder: (ctx3, partialVal, _) {
-                    final livePartial = double.tryParse(partialVal.text) ?? 0;
+                    final livePartial = _parseMoney(partialVal.text);
                     double liveDebtPreview = currentBalance;
                     if (isCash && !isPartialCash) {
                       liveDebtPreview = currentBalance;
@@ -909,7 +911,7 @@ class _SubscriberDetailsScreenState
 
                 SizedBox(height: 50, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
-                    final cashAmount = double.tryParse(partialCtrl.text) ?? 0;
+                    final cashAmount = _parseMoney(partialCtrl.text);
                     setSheet(() => submitting = true);
                     final notifier = ref.read(subscribersProvider.notifier);
                     final success = await notifier.activateSubscriber(
@@ -950,14 +952,11 @@ class _SubscriberDetailsScreenState
                 )),
                 const SizedBox(height: 20),
               ],
-            )),
-          );
-        });
+            ));
+          }),
+        );
       },
-    ).then((_) {
-      partialCtrl.dispose();
-      partialFocus.dispose();
-    });
+    );
   }
 
   List<double> _buildPartialQuickAmounts(double price) {
@@ -1058,15 +1057,14 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setSheet) {
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1098,7 +1096,7 @@ class _SubscriberDetailsScreenState
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
-                    final effectiveAmount = payAll ? currentDebt : (double.tryParse(val.text) ?? 0);
+                    final effectiveAmount = payAll ? currentDebt : _parseMoney(val.text);
                     final payRatio = currentDebt > 0
                         ? (effectiveAmount / currentDebt).clamp(0.0, 1.0)
                         : 0.0;
@@ -1149,6 +1147,7 @@ class _SubscriberDetailsScreenState
                   keyboardType: TextInputType.number,
                   textDirection: TextDirection.ltr,
                   enabled: !payAll,
+                  inputFormatters: [_ThousandsFormatter()],
                   decoration: InputDecoration(
                     labelText: 'المبلغ المسدد',
                     suffixText: 'IQD',
@@ -1167,11 +1166,11 @@ class _SubscriberDetailsScreenState
 
                 _QuickAmountChips(
                   amounts: _buildPayDebtQuickAmounts(currentDebt),
-                  selectedAmount: payAll ? currentDebt : (double.tryParse(amountCtrl.text) ?? 0),
+                  selectedAmount: payAll ? currentDebt : _parseMoney(amountCtrl.text),
                   enabled: !payAll,
                   onSelected: (v) {
                     amountFocusPay.unfocus();
-                    amountCtrl.text = v.toStringAsFixed(0);
+                    amountCtrl.text = _formatNumber(v);
                     setSheet(() {});
                   },
                 ),
@@ -1181,7 +1180,7 @@ class _SubscriberDetailsScreenState
                   onTap: () => setSheet(() {
                     payAll = !payAll;
                     if (payAll) {
-                      amountCtrl.text = currentDebt.toStringAsFixed(0);
+                      amountCtrl.text = _formatNumber(currentDebt);
                     } else {
                       amountCtrl.clear();
                     }
@@ -1224,7 +1223,7 @@ class _SubscriberDetailsScreenState
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
-                    final liveAmount = double.tryParse(val.text) ?? 0;
+                    final liveAmount = _parseMoney(val.text);
                     final liveEffective = payAll ? currentDebt : liveAmount;
                     final livePreview = currentNotes + liveEffective;
                     if (liveEffective <= 0) return const SizedBox.shrink();
@@ -1273,7 +1272,7 @@ class _SubscriberDetailsScreenState
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
-                    final btnAmount = double.tryParse(val.text) ?? 0;
+                    final btnAmount = _parseMoney(val.text);
                     return SizedBox(height: 50, child: ElevatedButton.icon(
                       onPressed: submitting || (!payAll && btnAmount <= 0) ? null : () async {
                         final payAmount = payAll ? currentDebt : btnAmount;
@@ -1317,15 +1316,11 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 20),
               ],
-            )),
-          );
-        });
+            ));
+          }),
+        );
       },
-    ).then((_) {
-      amountCtrl.dispose();
-      notesCtrl.dispose();
-      amountFocusPay.dispose();
-    });
+    );
   }
 
   List<double> _buildPayDebtQuickAmounts(double debt) {
@@ -1365,15 +1360,14 @@ class _SubscriberDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setSheet) {
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: SingleChildScrollView(child: Column(
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1434,6 +1428,7 @@ class _SubscriberDetailsScreenState
                   focusNode: amountFocusAdd,
                   keyboardType: TextInputType.number,
                   textDirection: TextDirection.ltr,
+                  inputFormatters: [_ThousandsFormatter()],
                   decoration: InputDecoration(
                     labelText: 'قيمة الدين المضاف',
                     suffixText: 'IQD',
@@ -1452,11 +1447,11 @@ class _SubscriberDetailsScreenState
 
                 _QuickAmountChips(
                   amounts: const [5000.0, 10000.0, 15000.0, 25000.0, 35000.0, 50000.0],
-                  selectedAmount: double.tryParse(amountCtrl.text) ?? 0,
+                  selectedAmount: _parseMoney(amountCtrl.text),
                   enabled: true,
                   onSelected: (v) {
                     amountFocusAdd.unfocus();
-                    amountCtrl.text = v.toStringAsFixed(0);
+                    amountCtrl.text = _formatNumber(v);
                     setSheet(() {});
                   },
                 ),
@@ -1476,7 +1471,7 @@ class _SubscriberDetailsScreenState
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
-                    final liveAmount = double.tryParse(val.text) ?? 0;
+                    final liveAmount = _parseMoney(val.text);
                     final livePreview = currentNotes - liveAmount;
                     if (liveAmount <= 0) return const SizedBox.shrink();
                     return Padding(
@@ -1528,7 +1523,7 @@ class _SubscriberDetailsScreenState
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
-                    final btnAmount = double.tryParse(val.text) ?? 0;
+                    final btnAmount = _parseMoney(val.text);
                     return SizedBox(height: 50, child: ElevatedButton.icon(
                       onPressed: submitting || btnAmount <= 0 ? null : () async {
                         final addPreview = currentNotes - btnAmount;
@@ -1586,15 +1581,11 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 20),
               ],
-            )),
-          );
-        });
+            ));
+          }),
+        );
       },
-    ).then((_) {
-      amountCtrl.dispose();
-      commentCtrl.dispose();
-      amountFocusAdd.dispose();
-    });
+    );
   }
 
   // ── Toggle Enable/Disable ─────────────────────────────────────────────
@@ -2296,4 +2287,35 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ThousandsFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final digitsOnly = newValue.text.replaceAll(',', '');
+    if (digitsOnly.isEmpty) return newValue.copyWith(text: '');
+    if (int.tryParse(digitsOnly) == null) return oldValue;
+
+    final formatted = _formatNumber(int.parse(digitsOnly).toDouble());
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+double _parseMoney(String text) =>
+    double.tryParse(text.replaceAll(',', '')) ?? 0;
+
+String _formatNumber(double value) {
+  final intStr = value.toStringAsFixed(0);
+  final buf = StringBuffer();
+  final start = intStr.startsWith('-') ? 1 : 0;
+  if (start == 1) buf.write('-');
+  for (int i = start; i < intStr.length; i++) {
+    if (i > start && (intStr.length - i) % 3 == 0) buf.write(',');
+    buf.write(intStr[i]);
+  }
+  return buf.toString();
 }

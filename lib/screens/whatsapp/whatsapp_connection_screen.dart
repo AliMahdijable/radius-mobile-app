@@ -105,7 +105,7 @@ class _WhatsAppConnectionScreenState
             const SizedBox(height: 24),
 
             // QR Code
-            if (wa.qrCode != null) ...[
+            if (wa.qrCode != null && !wa.status.connected) ...[
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
