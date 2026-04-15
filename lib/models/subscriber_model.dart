@@ -163,6 +163,8 @@ class PackageModel {
   final String? rateLimit;
   final String? monthlyFee;
   final String? price;
+  final String? type;
+  final int? expirationAmount;
 
   const PackageModel({
     required this.idx,
@@ -171,7 +173,39 @@ class PackageModel {
     this.rateLimit,
     this.monthlyFee,
     this.price,
+    this.type,
+    this.expirationAmount,
   });
+
+  bool get isMonthly =>
+      type == null || type == 'monthly' || type!.isEmpty;
+
+  bool get isExtension =>
+      type != null && type != 'monthly' && type!.isNotEmpty;
+
+  String get typeLabel {
+    switch (type) {
+      case 'monthly':
+      case null:
+      case '':
+        return 'شهرية';
+      case 'daily':
+        return 'يومية';
+      case 'hourly':
+        return 'ساعات';
+      case 'extension':
+        return 'تمديد';
+      default:
+        return type ?? 'شهرية';
+    }
+  }
+
+  String get durationLabel {
+    if (expirationAmount == null) return '';
+    if (type == 'hourly') return '$expirationAmount ساعة';
+    if (type == 'daily') return '$expirationAmount يوم';
+    return '$expirationAmount يوم';
+  }
 
   factory PackageModel.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'] ?? json['idx'];
@@ -184,6 +218,10 @@ class PackageModel {
       rateLimit: json['rate_limit']?.toString(),
       monthlyFee: (json['monthly_fee'] ?? json['price'])?.toString(),
       price: (json['price'] ?? json['profile_price'])?.toString(),
+      type: json['type']?.toString(),
+      expirationAmount: json['expiration_amount'] is int
+          ? json['expiration_amount']
+          : int.tryParse(json['expiration_amount']?.toString() ?? ''),
     );
   }
 }

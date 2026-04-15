@@ -623,7 +623,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         'count': 100,
         'columns': [
           'idx', 'id', 'name', 'name_en', 'rate_limit', 'rate_limit_dl',
-          'monthly_fee', 'price', 'profile_price',
+          'monthly_fee', 'price', 'profile_price', 'type', 'expiration_amount',
         ],
       });
 

@@ -88,6 +88,108 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     }
   }
 
+  List<Widget> _buildPackageGroups(List<PackageModel> pkgs, ThemeData theme) {
+    final monthly = pkgs.where((p) => p.isMonthly).toList();
+    final others = pkgs.where((p) => p.isExtension).toList();
+
+    final widgets = <Widget>[];
+
+    if (monthly.isNotEmpty) {
+      widgets.add(_sectionHeader('الباقات الشهرية', Icons.calendar_month, theme));
+      widgets.add(const SizedBox(height: 8));
+      for (final pkg in monthly) {
+        widgets.add(_buildPackageCard(pkg, theme));
+      }
+    }
+
+    if (others.isNotEmpty) {
+      widgets.add(const SizedBox(height: 16));
+      widgets.add(_sectionHeader('باقات التمديد / أخرى', Icons.extension, theme));
+      widgets.add(const SizedBox(height: 8));
+      for (final pkg in others) {
+        widgets.add(_buildPackageCard(pkg, theme));
+      }
+    }
+
+    if (monthly.isEmpty && others.isEmpty) {
+      for (final pkg in pkgs) {
+        widgets.add(_buildPackageCard(pkg, theme));
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _sectionHeader(String title, IconData icon, ThemeData theme) {
+    return Row(children: [
+      Icon(icon, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+      const SizedBox(width: 6),
+      Text(title, style: TextStyle(fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.onSurface.withOpacity(0.5))),
+    ]);
+  }
+
+  Widget _buildPackageCard(PackageModel pkg, ThemeData theme) {
+    final isSelected = _selectedPackageId == pkg.idx;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedPackageId = pkg.idx),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.successColor.withOpacity(0.08)
+                : theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.successColor.withOpacity(0.4)
+                  : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isSelected ? Icons.check_circle : Icons.circle_outlined,
+                size: 20,
+                color: isSelected ? AppTheme.successColor : Colors.grey,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(pkg.name, style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600,
+                      color: isSelected ? AppTheme.successColor : null,
+                    )),
+                    Row(children: [
+                      if (pkg.rateLimit != null) ...[
+                        Text(pkg.rateLimit!, style: TextStyle(fontSize: 11,
+                            color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                        const SizedBox(width: 6),
+                      ],
+                      if (pkg.durationLabel.isNotEmpty)
+                        Text(pkg.durationLabel, style: TextStyle(fontSize: 11,
+                            color: theme.colorScheme.onSurface.withOpacity(0.4))),
+                    ]),
+                  ],
+                ),
+              ),
+              Text(AppHelpers.formatMoney(pkg.price),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                    color: isSelected ? AppTheme.successColor : AppTheme.teal600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final packages = ref.watch(subscribersProvider).packages;
@@ -197,11 +299,6 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           ),
           const SizedBox(height: 20),
 
-          Text('الباقة', style: TextStyle(fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withOpacity(0.5))),
-          const SizedBox(height: 10),
-
           if (_loadingPackages)
             Container(
               padding: const EdgeInsets.all(16),
@@ -240,60 +337,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 ),
               ),
             )
-          else ...[
-            ...uniquePkgs.map((pkg) {
-              final isSelected = _selectedPackageId == pkg.idx;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: GestureDetector(
-                  onTap: () => setState(() => _selectedPackageId = pkg.idx),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppTheme.successColor.withOpacity(0.08)
-                          : theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppTheme.successColor.withOpacity(0.4)
-                            : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isSelected ? Icons.check_circle : Icons.circle_outlined,
-                          size: 20,
-                          color: isSelected ? AppTheme.successColor : Colors.grey,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(pkg.name, style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600,
-                                color: isSelected ? AppTheme.successColor : null,
-                              )),
-                              if (pkg.rateLimit != null)
-                                Text(pkg.rateLimit!, style: TextStyle(fontSize: 11,
-                                    color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                            ],
-                          ),
-                        ),
-                        Text(AppHelpers.formatMoney(pkg.price),
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                              color: isSelected ? AppTheme.successColor : AppTheme.teal600)),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ],
+          else ..._buildPackageGroups(uniquePkgs, theme),
           const SizedBox(height: 24),
 
           SizedBox(

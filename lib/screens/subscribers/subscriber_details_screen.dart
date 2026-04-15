@@ -290,25 +290,6 @@ class _SubscriberDetailsScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  Row(children: [
-                    Text('الباقة', style: TextStyle(fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                    const Spacer(),
-                    if (currentPkg != null || currentPkgName != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(6)),
-                        child: Text(
-                          'الحالية: ${currentPkg?.name ?? currentPkgName ?? '—'}',
-                          style: const TextStyle(fontSize: 11, color: AppTheme.primary),
-                        ),
-                      ),
-                  ]),
-                  const SizedBox(height: 10),
-
                   if (uniquePkgs.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(14),
@@ -334,83 +315,13 @@ class _SubscriberDetailsScreenState
                         ],
                       ),
                     )
-                  else ...[
-                    ...displayPkgs.map((pkg) {
-                      final isSelected = selectedProfileId == pkg.idx;
-                      final isCurrentPkg = (originalProfileId is int && pkg.idx == originalProfileId) ||
-                          pkg.idx == int.tryParse(originalProfileId?.toString() ?? '');
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: GestureDetector(
-                          onTap: () => setSheet(() => selectedProfileId = pkg.idx),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppTheme.primary.withOpacity(0.08)
-                                  : Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppTheme.primary.withOpacity(0.4)
-                                    : Colors.transparent,
-                                width: 1.5),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                  size: 18,
-                                  color: isSelected ? AppTheme.primary : Colors.grey),
-                                const SizedBox(width: 10),
-                                Expanded(child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(children: [
-                                      Flexible(child: Text(pkg.name,
-                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                                          color: isSelected ? AppTheme.primary : null),
-                                        overflow: TextOverflow.ellipsis)),
-                                      if (isCurrentPkg) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(4)),
-                                          child: const Text('الحالية',
-                                            style: TextStyle(fontSize: 9, color: Colors.blue,
-                                                fontWeight: FontWeight.w600)),
-                                        ),
-                                      ],
-                                    ]),
-                                    if (pkg.rateLimit != null)
-                                      Text(pkg.rateLimit!,
-                                        style: TextStyle(fontSize: 10,
-                                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                                  ],
-                                )),
-                                Text(AppHelpers.formatMoney(pkg.price),
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                                    color: isSelected ? AppTheme.primary : AppTheme.teal600)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                    if (uniquePkgs.length > 5)
-                      TextButton(
-                        onPressed: () => setSheet(() => showAllPackages = !showAllPackages),
-                        child: Text(
-                          showAllPackages
-                              ? 'عرض أقل'
-                              : 'عرض الكل (${uniquePkgs.length} باقة)',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                  ],
+                  else ..._buildEditPackageGroups(
+                    uniquePkgs, selectedProfileId, originalProfileId,
+                    currentPkgName, showAllPackages,
+                    (v) => setSheet(() => selectedProfileId = v),
+                    () => setSheet(() => showAllPackages = !showAllPackages),
+                    Theme.of(ctx),
+                  ),
                   const SizedBox(height: 24),
 
                   SizedBox(height: 50, child: ElevatedButton.icon(
@@ -472,6 +383,158 @@ class _SubscriberDetailsScreenState
         );
       },
     );
+  }
+
+  // ── Edit Package Groups ────────────────────────────────────────────────
+  List<Widget> _buildEditPackageGroups(
+    List<PackageModel> allPkgs,
+    int? selectedProfileId,
+    dynamic originalProfileId,
+    String? currentPkgName,
+    bool showAll,
+    void Function(int) onSelect,
+    VoidCallback onToggleShowAll,
+    ThemeData theme,
+  ) {
+    final monthly = allPkgs.where((p) => p.isMonthly).toList();
+    final others = allPkgs.where((p) => p.isExtension).toList();
+    final opId = originalProfileId is int
+        ? originalProfileId
+        : int.tryParse(originalProfileId?.toString() ?? '');
+
+    Widget buildCard(PackageModel pkg) {
+      final isSelected = selectedProfileId == pkg.idx;
+      final isCurrentPkg = pkg.idx == opId;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: GestureDetector(
+          onTap: () => onSelect(pkg.idx),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppTheme.primary.withOpacity(0.08)
+                  : theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected ? AppTheme.primary.withOpacity(0.4) : Colors.transparent,
+                width: 1.5),
+            ),
+            child: Row(children: [
+              Icon(isSelected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 18, color: isSelected ? AppTheme.primary : Colors.grey),
+              const SizedBox(width: 10),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Flexible(child: Text(pkg.name,
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: isSelected ? AppTheme.primary : null),
+                      overflow: TextOverflow.ellipsis)),
+                    if (isCurrentPkg) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4)),
+                        child: const Text('الحالية',
+                          style: TextStyle(fontSize: 9, color: Colors.blue,
+                              fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ]),
+                  Row(children: [
+                    if (pkg.rateLimit != null) ...[
+                      Text(pkg.rateLimit!,
+                        style: TextStyle(fontSize: 10,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                      const SizedBox(width: 6),
+                    ],
+                    if (pkg.durationLabel.isNotEmpty)
+                      Text(pkg.durationLabel, style: TextStyle(fontSize: 10,
+                          color: theme.colorScheme.onSurface.withOpacity(0.4))),
+                  ]),
+                ],
+              )),
+              Text(AppHelpers.formatMoney(pkg.price),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                  color: isSelected ? AppTheme.primary : AppTheme.teal600)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    Widget sectionHeader(String title, IconData icon) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Icon(icon, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+          const SizedBox(width: 6),
+          Text(title, style: TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.5))),
+          const Spacer(),
+          if (currentPkgName != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(6)),
+              child: Text('الحالية: $currentPkgName',
+                style: const TextStyle(fontSize: 10, color: AppTheme.primary)),
+            ),
+        ]),
+      );
+    }
+
+    final widgets = <Widget>[];
+
+    if (monthly.isNotEmpty) {
+      widgets.add(sectionHeader('الباقات الشهرية', Icons.calendar_month));
+      final displayMonthly = showAll ? monthly : monthly.take(5).toList();
+      for (final pkg in displayMonthly) {
+        widgets.add(buildCard(pkg));
+      }
+    }
+
+    if (others.isNotEmpty) {
+      widgets.add(const SizedBox(height: 12));
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Icon(Icons.extension, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+          const SizedBox(width: 6),
+          Text('باقات التمديد / أخرى', style: TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.5))),
+        ]),
+      ));
+      final displayOthers = showAll ? others : others.take(3).toList();
+      for (final pkg in displayOthers) {
+        widgets.add(buildCard(pkg));
+      }
+    }
+
+    if (monthly.isEmpty && others.isEmpty) {
+      widgets.add(sectionHeader('الباقات', Icons.sell_rounded));
+      for (final pkg in (showAll ? allPkgs : allPkgs.take(5).toList())) {
+        widgets.add(buildCard(pkg));
+      }
+    }
+
+    if (allPkgs.length > 5) {
+      widgets.add(TextButton(
+        onPressed: onToggleShowAll,
+        child: Text(showAll ? 'عرض أقل' : 'عرض الكل (${allPkgs.length} باقة)',
+            style: const TextStyle(fontSize: 12)),
+      ));
+    }
+
+    return widgets;
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────
