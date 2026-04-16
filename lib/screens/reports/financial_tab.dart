@@ -22,6 +22,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   bool _loaded = false;
   String _managerId = 'all';
   String _userManagerId = 'all';
+  String _searchQuery = '';
   final Set<String> _selectedActionTypes = {};
   int _logsPage = 1;
   int _logsPerPage = 10;
@@ -112,7 +113,17 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     final activationsTotal =
         _num(kpis['activations_count']) + _num(kpis['extend_count']);
 
-    final allLogs = state.recentLogs;
+    final rawLogs = state.recentLogs;
+    final allLogs = _searchQuery.isEmpty
+        ? rawLogs
+        : rawLogs.where((log) {
+            final q = _searchQuery.toLowerCase();
+            final target = (log['user_username'] ?? log['target_name'] ?? '').toString().toLowerCase();
+            final name = (log['user_firstname'] ?? '').toString().toLowerCase();
+            final desc = (log['action_description'] ?? '').toString().toLowerCase();
+            final admin = (log['admin_username'] ?? '').toString().toLowerCase();
+            return target.contains(q) || name.contains(q) || desc.contains(q) || admin.contains(q);
+          }).toList();
     final logsTotal = allLogs.length;
     final totalLogPages = (logsTotal / _logsPerPage).ceil();
     if (_logsPage > totalLogPages && totalLogPages > 0) _logsPage = totalLogPages;
@@ -123,6 +134,26 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Search bar
+          TextField(
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            onChanged: (v) => setState(() { _searchQuery = v; _logsPage = 1; }),
+            decoration: InputDecoration(
+              hintText: 'بحث باسم المشترك أو المدير...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() { _searchQuery = ''; _logsPage = 1; }),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // Action bar
           Row(children: [
             Expanded(

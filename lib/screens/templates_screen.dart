@@ -84,6 +84,8 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                 TextField(
                   controller: nameController,
                   style: const TextStyle(fontSize: 14),
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
                   decoration: const InputDecoration(
                     labelText: 'اسم القالب',
                     prefixIcon: Icon(Icons.label_outline, size: 20),
@@ -98,6 +100,8 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                     maxLines: null,
                     expands: true,
                     textAlignVertical: TextAlignVertical.top,
+                    textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.left,
                     style: const TextStyle(fontSize: 14, height: 1.6),
                     decoration: const InputDecoration(
                       labelText: 'محتوى الرسالة',

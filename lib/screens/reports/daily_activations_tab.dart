@@ -17,6 +17,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
     with AutomaticKeepAliveClientMixin {
   bool _loaded = false;
   String _managerId = 'all';
+  String _searchQuery = '';
   int _page = 1;
   int _perPage = 10;
 
@@ -50,7 +51,15 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
     }
 
     final counts = state.dailyCounts;
-    final records = state.dailyRecords;
+    final allRecords = state.dailyRecords;
+    final records = _searchQuery.isEmpty
+        ? allRecords
+        : allRecords.where((r) {
+            final target = (r['target_name'] ?? '').toString().toLowerCase();
+            final desc = (r['action_description'] ?? '').toString().toLowerCase();
+            final q = _searchQuery.toLowerCase();
+            return target.contains(q) || desc.contains(q);
+          }).toList();
 
     final totalPages = (records.length / _perPage).ceil();
     if (_page > totalPages && totalPages > 0) _page = totalPages;
@@ -61,6 +70,26 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Search bar
+          TextField(
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            onChanged: (v) => setState(() { _searchQuery = v; _page = 1; }),
+            decoration: InputDecoration(
+              hintText: 'بحث باسم المشترك...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() { _searchQuery = ''; _page = 1; }),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // Filter + refresh row
           Row(children: [
             Expanded(

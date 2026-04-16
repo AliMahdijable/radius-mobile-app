@@ -12,6 +12,8 @@ import '../../core/services/storage_service.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/templates_provider.dart';
+import '../../providers/print_templates_provider.dart';
+import '../../core/utils/receipt_printer.dart';
 import '../../widgets/app_snackbar.dart';
 
 class SubscriberDetailsScreen extends ConsumerStatefulWidget {
@@ -47,6 +49,45 @@ class _SubscriberDetailsScreenState
     }
   }
 
+  Future<void> _offerPrintReceipt(ReceiptData data) async {
+    if (!mounted) return;
+    final shouldPrint = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('طباعة وصل', style: TextStyle(fontFamily: 'Cairo')),
+        content: const Text('هل تريد طباعة وصل لهذه العملية؟',
+            style: TextStyle(fontFamily: 'Cairo')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('لا'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.print_rounded, size: 18),
+            label: const Text('طباعة'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+          ),
+        ],
+      ),
+    );
+    if (shouldPrint != true || !mounted) return;
+
+    try {
+      final ptState = ref.read(printTemplatesProvider);
+      if (ptState.templates.isEmpty) {
+        await ref.read(printTemplatesProvider.notifier).loadTemplates();
+      }
+      final activeTemplate = ref.read(printTemplatesProvider).activeTemplate;
+      await ReceiptPrinter.printReceipt(
+        data: data,
+        htmlTemplate: activeTemplate?.content,
+      );
+    } catch (e) {
+      if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
+    }
+  }
+
   // ── WhatsApp ──────────────────────────────────────────────────────────
   void _showSendMessageSheet() {
     showModalBottomSheet(
@@ -79,6 +120,8 @@ class _SubscriberDetailsScreenState
             TextField(
               controller: _messageController,
               maxLines: 4,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 hintText: 'اكتب رسالتك هنا...',
                 border: OutlineInputBorder(),
@@ -244,6 +287,8 @@ class _SubscriberDetailsScreenState
                   Row(children: [
                     Expanded(child: TextField(
                       controller: fnCtrl,
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.left,
                       decoration: const InputDecoration(
                         labelText: 'الاسم الأول',
                         prefixIcon: Icon(Icons.person_outline, size: 20)),
@@ -251,6 +296,8 @@ class _SubscriberDetailsScreenState
                     const SizedBox(width: 10),
                     Expanded(child: TextField(
                       controller: lnCtrl,
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.left,
                       decoration: const InputDecoration(labelText: 'الاسم الأخير'),
                     )),
                   ]),
@@ -741,6 +788,18 @@ class _SubscriberDetailsScreenState
                             '{days_remaining}': remDays,
                             '{remaining_days}': remDays,
                           });
+                        final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
+                        await _offerPrintReceipt(ReceiptData(
+                          subscriberName: widget.subscriber.displayName,
+                          phoneNumber: widget.subscriber.displayPhone,
+                          packageName: widget.subscriber.profileName ?? '',
+                          packagePrice: extPrice,
+                          paidAmount: method == 'credit' ? extPrice : 0,
+                          debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                          remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                          expiryDate: expDate,
+                          operationType: 'activation',
+                        ));
                         if (mounted) context.pop();
                       }
                     }
@@ -762,6 +821,19 @@ class _SubscriberDetailsScreenState
   }
 
   // ── Activate ───────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> _fetchSubscriberDiscount(String username) async {
+    try {
+      final dio = ref.read(backendDioProvider);
+      final response = await dio.get('${ApiConstants.discounts}/$username');
+      if (response.data is Map &&
+          response.data['success'] == true &&
+          response.data['data'] != null) {
+        return Map<String, dynamic>.from(response.data['data']);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _activateSubscriber() async {
     final id = _subscriberId;
     if (id == null) {
@@ -775,19 +847,28 @@ class _SubscriberDetailsScreenState
     final results = await Future.wait([
       notifier.getActivationData(id),
       notifier.getSubscriberDetails(id),
+      _fetchSubscriberDiscount(widget.subscriber.username),
     ]);
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
     final activationData = results[0] as Map<String, dynamic>?;
     final userData = results[1] as Map<String, dynamic>?;
+    final discountData = results[2] as Map<String, dynamic>?;
 
     if (activationData == null) {
       _showSnack('فشل جلب بيانات التفعيل', success: false);
       return;
     }
 
-    final userPrice = _toDouble(activationData['user_price']);
+    final originalPrice = _toDouble(activationData['user_price']);
+    final discountAmount = discountData != null
+        ? _toDouble(discountData['discount_amount'])
+        : 0.0;
+    final hasDiscount = discountAmount > 0;
+    final userPrice = hasDiscount
+        ? (originalPrice - discountAmount).clamp(0.0, double.infinity)
+        : originalPrice;
     final units = activationData['units'];
     final profileName = activationData['profile_name']?.toString() ?? '—';
     final profileDuration = activationData['profile_duration']?.toString() ?? '—';
@@ -795,6 +876,15 @@ class _SubscriberDetailsScreenState
     final managerBalance = activationData['manager_balance']?.toString() ?? '—';
     final rewardPoints = activationData['reward_points']?.toString() ?? '0';
     final currentBalance = _toDouble(userData?['notes']);
+
+    if (hasDiscount && mounted) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          AppSnackBar.info(context,
+              'هذا المشترك لديه خصم ${AppHelpers.formatMoney(discountAmount)}');
+        }
+      });
+    }
 
     final partialCtrl = TextEditingController();
     final partialFocus = FocusNode();
@@ -885,12 +975,40 @@ class _SubscriberDetailsScreenState
                           const SizedBox(width: 8),
                           Text('السعر: ', style: TextStyle(fontSize: 13,
                               color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                          if (hasDiscount) ...[
+                            Text(AppHelpers.formatMoney(originalPrice),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade500,
+                                  decoration: TextDecoration.lineThrough,
+                                  decorationColor: Colors.grey.shade500)),
+                            const SizedBox(width: 8),
+                          ],
                           Text(AppHelpers.formatMoney(userPrice),
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
                                 color: AppTheme.successColor)),
                         ],
                       ),
                     ),
+                    if (hasDiscount) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.redeem_rounded, size: 18, color: AppTheme.secondary),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(
+                            'خصم خاص: ${AppHelpers.formatMoney(discountAmount)}',
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                                fontWeight: FontWeight.w700, color: AppTheme.secondary),
+                          )),
+                        ]),
+                      ),
+                    ],
                   ]),
                 ),
 
@@ -1004,6 +1122,12 @@ class _SubscriberDetailsScreenState
                               color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
                           const SizedBox(height: 10),
                           _SummaryRow(label: 'سعر الباقة', value: AppHelpers.formatMoney(userPrice)),
+                          if (hasDiscount)
+                            _SummaryRow(
+                              label: 'خصم',
+                              value: '-${AppHelpers.formatMoney(discountAmount)}',
+                              valueColor: AppTheme.secondary,
+                            ),
                           if (currentBalance != 0)
                             _SummaryRow(
                               label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
@@ -1083,6 +1207,17 @@ class _SubscriberDetailsScreenState
                           '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
                           '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                         });
+                        await _offerPrintReceipt(ReceiptData(
+                          subscriberName: widget.subscriber.displayName,
+                          phoneNumber: widget.subscriber.displayPhone,
+                          packageName: profileName,
+                          packagePrice: userPrice,
+                          paidAmount: isCash ? userPrice : 0,
+                          debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                          remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                          expiryDate: fresh?['expiration']?.toString() ?? '',
+                          operationType: 'activation',
+                        ));
                         if (mounted) context.pop();
                       }
                     }
@@ -1391,6 +1526,8 @@ class _SubscriberDetailsScreenState
                 TextField(
                   controller: notesCtrl,
                   maxLines: 2,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
@@ -1477,6 +1614,17 @@ class _SubscriberDetailsScreenState
                                 '{expiry_date}': fresh?['expiration']?.toString() ?? '',
                                 '{expiration_date}': fresh?['expiration']?.toString() ?? '',
                               });
+                            await _offerPrintReceipt(ReceiptData(
+                              subscriberName: widget.subscriber.displayName,
+                              phoneNumber: widget.subscriber.displayPhone,
+                              packageName: widget.subscriber.profileName ?? '',
+                              packagePrice: 0,
+                              paidAmount: payAmount,
+                              debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                              remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                              expiryDate: fresh?['expiration']?.toString() ?? '',
+                              operationType: 'debt_payment',
+                            ));
                             if (mounted) context.pop();
                           }
                         }
@@ -1639,6 +1787,8 @@ class _SubscriberDetailsScreenState
                 TextField(
                   controller: commentCtrl,
                   maxLines: 2,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
@@ -1742,6 +1892,14 @@ class _SubscriberDetailsScreenState
                           _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
                           if (success) {
                             await notifier.loadSubscribers();
+                            await _offerPrintReceipt(ReceiptData(
+                              subscriberName: widget.subscriber.displayName,
+                              phoneNumber: widget.subscriber.displayPhone,
+                              packageName: widget.subscriber.profileName ?? '',
+                              debtAmount: btnAmount,
+                              remainingAmount: btnAmount,
+                              operationType: 'debt_add',
+                            ));
                             if (mounted) context.pop();
                           }
                         }

@@ -14,6 +14,8 @@ import '../../screens/templates_screen.dart';
 import '../../screens/discounts_screen.dart';
 import '../../screens/debt_export_screen.dart';
 import '../../screens/debt_import_screen.dart';
+import '../../screens/packages_screen.dart';
+import '../../screens/print_templates_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
@@ -80,6 +82,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/debt-import',
         builder: (context, state) => const DebtImportScreen(),
+      ),
+      GoRoute(
+        path: '/packages',
+        builder: (context, state) => const PackagesScreen(),
+      ),
+      GoRoute(
+        path: '/print-templates',
+        builder: (context, state) => const PrintTemplatesScreen(),
       ),
     ],
   );

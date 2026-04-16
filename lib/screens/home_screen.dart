@@ -10,8 +10,10 @@ import '../providers/whatsapp_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/subscribers_provider.dart';
+import '../providers/messages_provider.dart';
 import '../core/services/storage_service.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/app_snackbar.dart';
 import '../core/theme/app_theme.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -25,6 +27,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
   bool _alertsEnabled = true;
   bool _alertsDismissed = false;
+  String? _lastBroadcastEvent;
 
   final _titles = const [
     'لوحة المعلومات',
@@ -309,7 +312,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final wa = ref.watch(whatsappProvider);
     final authState = ref.watch(authProvider);
     final dash = ref.watch(dashboardProvider);
+    final msgState = ref.watch(messagesProvider);
     final theme = Theme.of(context);
+
+    final broadcast = msgState.broadcast;
+    if (broadcast != null && broadcast.event.isNotEmpty && broadcast.event != _lastBroadcastEvent) {
+      _lastBroadcastEvent = broadcast.event;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        switch (broadcast.event) {
+          case 'start':
+            AppSnackBar.info(context, 'بدأ البث',
+                detail: 'إرسال إلى ${broadcast.total} مشترك');
+            break;
+          case 'complete':
+            AppSnackBar.success(context, 'اكتمل البث',
+                detail: 'مرسلة: ${broadcast.sent} | فاشلة: ${broadcast.failed}');
+            break;
+        }
+      });
+    }
 
     final managerName = authState.user?.username ?? '';
     final showAlertBadge =

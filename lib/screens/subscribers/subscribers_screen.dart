@@ -261,6 +261,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               Expanded(
                 child: TextField(
                   controller: _searchController,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
                   onChanged: (v) {
                     setState(() {
                       _isSearchMode = v.isNotEmpty;
