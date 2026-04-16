@@ -36,7 +36,17 @@ class ScheduleModel {
 
   factory ScheduleModel.fromJson(Map<String, dynamic> json) {
     List<int> parseDays(dynamic days) {
-      if (days is List) return days.cast<int>();
+      if (days is List) {
+        try {
+          return days.map((e) {
+            if (e is int) return e;
+            if (e is num) return e.toInt();
+            return int.tryParse(e.toString().trim()) ?? 0;
+          }).toList();
+        } catch (_) {
+          return [0, 1, 2, 3, 4, 5, 6];
+        }
+      }
       if (days is String) {
         try {
           final parsed = List<int>.from(
@@ -71,14 +81,23 @@ class ScheduleModel {
     );
   }
 
-  Map<String, dynamic> toSaveJson() => {
-        'adminId': adminId,
-        'scheduleType': scheduleType,
-        'scheduleData': {
-          'scheduled_time': scheduledTime,
-          'active_days': activeDays,
-          'is_enabled': isEnabled,
-          if (daysBefore != null) 'days_before': daysBefore,
-        },
-      };
+  /// Payload for POST `/api/whatsapp/save-schedule` — must match web + [db.saveWhatsAppSchedule] (camelCase).
+  Map<String, dynamic> toSaveJson() {
+    final parts = scheduledTime.split(':');
+    final hh = parts.isNotEmpty ? parts[0].padLeft(2, '0') : '10';
+    final mm = parts.length > 1 ? parts[1].padLeft(2, '0') : '00';
+    // Web sends HH:mm; DB accepts both; keep compact like WhatsAppSettings.js
+    final scheduledTimeOut = '$hh:$mm';
+
+    return {
+      'adminId': adminId,
+      'scheduleType': scheduleType,
+      'scheduleData': {
+        'isEnabled': isEnabled,
+        'scheduledTime': scheduledTimeOut,
+        'activeDays': activeDays,
+        if (daysBefore != null) 'daysBefore': daysBefore,
+      },
+    };
+  }
 }
