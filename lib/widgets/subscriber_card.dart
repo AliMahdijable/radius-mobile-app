@@ -220,20 +220,6 @@ class SubscriberCard extends StatelessWidget {
                         color: Colors.red,
                       ),
                     ),
-                    if (subscriber.balanceAmount > 0) ...[
-                      const SizedBox(width: 10),
-                      Icon(Icons.account_balance_wallet, size: 11,
-                          color: AppTheme.teal600.withOpacity(0.6)),
-                      const SizedBox(width: 3),
-                      Text(
-                        'رصيد: ${AppHelpers.formatMoney(subscriber.balanceAmount)}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.teal600,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               )
@@ -251,25 +237,6 @@ class SubscriberCard extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else if (subscriber.balanceAmount > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 4, right: 46),
-                child: Row(
-                  children: [
-                    Icon(Icons.account_balance_wallet, size: 11,
-                        color: AppTheme.teal600.withOpacity(0.6)),
-                    const SizedBox(width: 3),
-                    Text(
-                      'رصيد: ${AppHelpers.formatMoney(subscriber.balanceAmount)}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.teal600,
                       ),
                     ),
                   ],

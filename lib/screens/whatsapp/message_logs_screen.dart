@@ -555,7 +555,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
               textDirection: TextDirection.ltr,
               textAlign: TextAlign.left,
               decoration: InputDecoration(
-                hintText: 'بحث باسم المستخدم أو الهاتف...',
+                hintText: 'بحث بالاسم أو الرقم أو نص الرسالة...',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
