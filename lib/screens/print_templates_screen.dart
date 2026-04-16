@@ -758,6 +758,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
     final isEditing = widget.template?.id != null;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(
           isEditing ? 'تعديل التصميم' : 'تصميم فاتورة جديدة',
@@ -778,7 +779,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
             IconButton(onPressed: _save, icon: const Icon(Icons.save_rounded), tooltip: 'حفظ'),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: const Size.fromHeight(86),
           child: Column(children: [
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               _LayoutToggle(label: 'A4', icon: Icons.description_rounded,
@@ -793,6 +794,41 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
               Tab(text: 'المعاينة'),
             ]),
           ]),
+        ),
+      ),
+      bottomNavigationBar: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_rounded, size: 20),
+                label: Text(
+                  _saving ? 'جاري الحفظ...' : 'حفظ التصميم',
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
       body: Column(children: [
@@ -811,19 +847,6 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
             _buildElementsTab(theme),
             _buildPreviewTab(theme),
           ]),
-        ),
-        // Save button
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: SizedBox(width: double.infinity, height: 54, child: ElevatedButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.save_rounded, size: 20),
-            label: Text(_saving ? 'جاري الحفظ...' : 'حفظ التصميم',
-                style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
-          )),
         ),
       ]),
     );
@@ -941,7 +964,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
   Widget _buildPreviewTab(ThemeData theme) {
     final html = _previewHTML();
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       child: Column(children: [
         Container(
           width: double.infinity,
