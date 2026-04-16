@@ -379,7 +379,7 @@ class _StatLabel extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           '$count $label',
-          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
+          style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: color, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -498,7 +498,7 @@ class _ImportRowCard extends StatelessWidget {
                 onPressed: onApply,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
                 ),
                 child: const Text('إضافة دين'),
               ),

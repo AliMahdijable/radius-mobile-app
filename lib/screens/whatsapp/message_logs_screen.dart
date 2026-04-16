@@ -341,6 +341,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                         Text(
                           msg.recipientUsername ?? '—',
                           style: const TextStyle(
+                            fontFamily: 'Cairo',
                             fontWeight: FontWeight.w700,
                             fontSize: 16,
                           ),
@@ -417,6 +418,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                         child: Text(
                           _friendlyError(msg.errorMessage!),
                           style: const TextStyle(
+                            fontFamily: 'Cairo',
                             color: AppTheme.dangerColor,
                             fontSize: 13,
                           ),
@@ -664,6 +666,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                                 title: Text(
                                   msg.recipientUsername ?? '—',
                                   style: const TextStyle(
+                                    fontFamily: 'Cairo',
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,
                                   ),
@@ -838,7 +841,7 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
         ],

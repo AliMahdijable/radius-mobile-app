@@ -272,7 +272,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             icon: const Icon(Icons.logout, color: Colors.red),
             label: const Text(
               'تسجيل الخروج',
-              style: TextStyle(color: Colors.red),
+              style: TextStyle(fontFamily: 'Cairo', color: Colors.red),
             ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.red),
@@ -335,9 +335,9 @@ class _SettingTile extends StatelessWidget {
           child: Icon(icon, color: themeColor, size: 20),
         ),
         title: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: subtitle != null
-            ? Text(subtitle!, style: const TextStyle(fontSize: 12))
+            ? Text(subtitle!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12))
             : null,
         trailing: trailing ??
             (onTap != null
@@ -388,8 +388,8 @@ class _FeatureToggle extends StatelessWidget {
           child: Icon(icon, color: AppTheme.whatsappGreen, size: 20),
         ),
         title: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(subtitle, style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
         value: value,
         activeColor: AppTheme.whatsappGreen,
         onChanged: onChanged,

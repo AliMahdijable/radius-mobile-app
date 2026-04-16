@@ -33,6 +33,10 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
     super.initState();
     Future.microtask(() {
       ref.read(discountsProvider.notifier).loadDiscounts();
+      final subs = ref.read(subscribersProvider).subscribers;
+      if (subs.isEmpty) {
+        ref.read(subscribersProvider.notifier).loadSubscribers();
+      }
     });
   }
 
@@ -206,35 +210,32 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('إدارة الخصومات'),
-          actions: [
-            IconButton(
-              onPressed: () {
-                ref.read(discountsProvider.notifier).loadDiscounts();
-              },
-              icon: const Icon(Icons.refresh_rounded),
-              tooltip: 'تحديث',
-            ),
-          ],
-        ),
-        body: discountsState.isLoading && discountsState.discounts.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: () => ref.read(discountsProvider.notifier).loadDiscounts(),
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildAddSection(theme, isDark, subscribersState),
-                    const SizedBox(height: 24),
-                    _buildCurrentDiscountsSection(theme, isDark, discountsState),
-                  ],
-                ),
-              ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إدارة الخصومات'),
+        actions: [
+          IconButton(
+            onPressed: () {
+              ref.read(discountsProvider.notifier).loadDiscounts();
+            },
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'تحديث',
+          ),
+        ],
       ),
+      body: discountsState.isLoading && discountsState.discounts.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: () => ref.read(discountsProvider.notifier).loadDiscounts(),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _buildAddSection(theme, isDark, subscribersState),
+                  const SizedBox(height: 24),
+                  _buildCurrentDiscountsSection(theme, isDark, discountsState),
+                ],
+              ),
+            ),
     );
   }
 
@@ -304,6 +305,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                 selected: _isCustomAmount,
                 selectedColor: AppTheme.light,
                 labelStyle: TextStyle(
+                  fontFamily: 'Cairo',
                   fontWeight: FontWeight.w600,
                   color: _isCustomAmount ? AppTheme.primary : null,
                 ),
@@ -379,7 +381,8 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
       children: [
         Text(
           '${_selectedSubscribers.length} محدد',
-          style: TextStyle(
+          style: const TextStyle(
+            fontFamily: 'Cairo',
             color: AppTheme.primary,
             fontWeight: FontWeight.w600,
             fontSize: 13,
@@ -398,7 +401,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
           label: const Text('تحديد الكل'),
           style: TextButton.styleFrom(
             foregroundColor: AppTheme.primary,
-            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(width: 4),
@@ -408,7 +411,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
           label: const Text('إلغاء التحديد'),
           style: TextButton.styleFrom(
             foregroundColor: Colors.grey,
-            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -564,7 +567,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.dangerColor,
                     textStyle:
-                        const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
             ],
@@ -657,6 +660,7 @@ class _AmountChip extends StatelessWidget {
       selected: isSelected,
       selectedColor: AppTheme.light,
       labelStyle: TextStyle(
+        fontFamily: 'Cairo',
         fontWeight: FontWeight.w600,
         fontSize: 13,
         color: isSelected ? AppTheme.primary : null,
@@ -716,6 +720,7 @@ class _SubscriberSelectCard extends StatelessWidget {
                     child: Text(
                       username,
                       style: const TextStyle(
+                        fontFamily: 'Cairo',
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                       ),
@@ -762,6 +767,7 @@ class _SubscriberSelectCard extends StatelessWidget {
                   child: const Text(
                     'خصم موجود',
                     style: TextStyle(
+                      fontFamily: 'Cairo',
                       fontSize: 10,
                       color: AppTheme.warningColor,
                       fontWeight: FontWeight.w600,
@@ -826,6 +832,7 @@ class _DiscountCard extends StatelessWidget {
                     Text(
                       discount.subscriberUsername,
                       style: const TextStyle(
+                        fontFamily: 'Cairo',
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
