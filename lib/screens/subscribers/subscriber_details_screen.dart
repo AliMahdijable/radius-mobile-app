@@ -1281,13 +1281,19 @@ class _SubscriberDetailsScreenState
     }
 
     try {
-      final waState = ref.read(whatsappProvider);
+      var waState = ref.read(whatsappProvider);
       if (!waState.status.connected) {
-        if (mounted) {
-          AppSnackBar.whatsappError(context, 'واتساب غير متصل',
-              detail: 'يرجى الاتصال بواتساب أولاً من الإعدادات');
+        await ref.read(whatsappProvider.notifier).reconnect();
+        await Future.delayed(const Duration(seconds: 3));
+        await ref.read(whatsappProvider.notifier).fetchStatus();
+        waState = ref.read(whatsappProvider);
+        if (!waState.status.connected) {
+          if (mounted) {
+            AppSnackBar.whatsappError(context, 'واتساب غير متصل',
+                detail: 'يرجى الاتصال بواتساب أولاً من الإعدادات');
+          }
+          return;
         }
-        return;
       }
 
       final templates = ref.read(templatesProvider).templates;

@@ -731,6 +731,20 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
+  Future<bool> disconnectUser(String sessionId) async {
+    try {
+      final response = await _sas4Dio.get(
+        '${ApiConstants.sas4DisconnectUser}/$sessionId',
+      );
+      dev.log('Disconnect user $sessionId: ${response.statusCode}', name: 'SUBS');
+      await loadOnlineUsers();
+      return true;
+    } catch (e) {
+      dev.log('disconnectUser error: $e', name: 'SUBS');
+      return false;
+    }
+  }
+
   void setSort(String field, String direction) {
     state = state.copyWith(sortBy: field, sortDirection: direction);
   }

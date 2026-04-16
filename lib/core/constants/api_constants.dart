@@ -100,6 +100,7 @@ class ApiConstants {
   static const String sas4ExtensionData = '/user/extensionData';
   static const String sas4ActivationData = '/user/activationData';
   static const String sas4OnlineUsers = '/index/online';
+  static const String sas4DisconnectUser = '/user/disconnect/acctid';
   static const String sas4Profiles = '/index/profile';
   static const String sas4Managers = '/index/manager';
   static const String sas4ManagerTree = '/manager/tree';

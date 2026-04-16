@@ -438,6 +438,34 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                                 extra: sub,
                               );
                             },
+                            onDisconnect: isOnlineFilter && sub.idx != null
+                                ? () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('فصل المستخدم'),
+                                        content: Text('هل تريد فصل ${sub.fullName.isNotEmpty ? sub.fullName : sub.username}؟'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.pop(ctx, true),
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                            child: const Text('فصل'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      final ok = await ref.read(subscribersProvider.notifier).disconnectUser(sub.idx!);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                          content: Text(ok ? 'تم فصل ${sub.username}' : 'فشل فصل المستخدم'),
+                                          backgroundColor: ok ? Colors.green : Colors.red,
+                                        ));
+                                      }
+                                    }
+                                  }
+                                : null,
                           );
                         },
                       ),

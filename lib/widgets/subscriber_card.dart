@@ -10,6 +10,7 @@ class SubscriberCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showOnlineDetails;
   final Map<String, dynamic>? lastPayment;
+  final VoidCallback? onDisconnect;
 
   const SubscriberCard({
     super.key,
@@ -17,6 +18,7 @@ class SubscriberCard extends StatelessWidget {
     this.onTap,
     this.showOnlineDetails = false,
     this.lastPayment,
+    this.onDisconnect,
   });
 
   static String formatBytes(int? bytes) {
@@ -246,9 +248,13 @@ class SubscriberCard extends StatelessWidget {
             // Row 4: Last payment
             if (lastPayment != null) _LastPaymentRow(data: lastPayment!),
 
-            // Row 5: Online details
+            // Row 5: Online details + action buttons
             if (showOnlineDetails && isOnline)
-              _OnlineRow(subscriber: subscriber),
+              _OnlineRow(
+                subscriber: subscriber,
+                onDisconnect: onDisconnect,
+                onView: onTap,
+              ),
           ],
         ),
       ),
@@ -297,7 +303,9 @@ class SubscriberCard extends StatelessWidget {
 
 class _OnlineRow extends StatelessWidget {
   final SubscriberModel subscriber;
-  const _OnlineRow({required this.subscriber});
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onView;
+  const _OnlineRow({required this.subscriber, this.onDisconnect, this.onView});
 
   void _openInBrowser(String ip) {
     final uri = Uri.parse('http://$ip');
@@ -340,7 +348,7 @@ class _OnlineRow extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          // Download + Upload + MAC + Device
+          // Download + Upload + Device
           Row(
             children: [
               const Icon(Icons.download_rounded, size: 11, color: AppTheme.teal600),
@@ -360,7 +368,68 @@ class _OnlineRow extends StatelessWidget {
               ],
             ],
           ),
+          // Action buttons: معاينة + فصل
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              if (onView != null)
+                _ActionBtn(
+                  icon: Icons.visibility_rounded,
+                  label: 'معاينة',
+                  color: AppTheme.teal600,
+                  onTap: onView!,
+                ),
+              if (onView != null && onDisconnect != null)
+                const SizedBox(width: 8),
+              if (onDisconnect != null)
+                _ActionBtn(
+                  icon: Icons.power_settings_new_rounded,
+                  label: 'فصل',
+                  color: Colors.red,
+                  onTap: onDisconnect!,
+                ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w700, color: color,
+            )),
+          ],
+        ),
       ),
     );
   }
