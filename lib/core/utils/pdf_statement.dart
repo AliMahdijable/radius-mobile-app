@@ -257,18 +257,18 @@ class PdfStatement {
       pw.TextStyle baseStyle, pw.TextStyle boldStyle) {
     return pw.Expanded(
       child: pw.Container(
-        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 6),
         decoration: pw.BoxDecoration(
-          color: PdfColor(color.red, color.green, color.blue, 0.08),
-          borderRadius: pw.BorderRadius.circular(4),
-          border: pw.Border.all(color: PdfColor(color.red, color.green, color.blue, 0.3)),
+          color: color,
+          borderRadius: pw.BorderRadius.circular(6),
         ),
         child: pw.Column(children: [
-          pw.Text(value, style: pw.TextStyle(font: _cairoBold, fontSize: 10,
-              color: color, fontWeight: pw.FontWeight.bold),
+          pw.Text(value, style: pw.TextStyle(font: _cairoBold, fontSize: 11,
+              color: PdfColors.white, fontWeight: pw.FontWeight.bold),
               textDirection: pw.TextDirection.rtl),
-          pw.SizedBox(height: 1),
-          pw.Text(label, style: pw.TextStyle(font: _cairoFont, fontSize: 7, color: PdfColors.grey600),
+          pw.SizedBox(height: 2),
+          pw.Text(label, style: pw.TextStyle(font: _cairoFont, fontSize: 8,
+              color: PdfColor(1, 1, 1, 0.85)),
               textDirection: pw.TextDirection.rtl),
         ]),
       ),

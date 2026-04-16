@@ -167,9 +167,10 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
           response.data['error']?.toString();
       return (success: false, error: msg ?? 'فشل إرسال الرسالة');
     } on DioException catch (e) {
-      final msg = e.response?.data?['message']?.toString() ??
-          e.response?.data?['error']?.toString();
-      return (success: false, error: msg ?? 'خطأ في الاتصال بالخادم');
+      final serverMsg = e.response?.data?['message']?.toString();
+      final serverErr = e.response?.data?['error']?.toString();
+      final detail = [serverMsg, serverErr].where((s) => s != null && s.isNotEmpty).join(' - ');
+      return (success: false, error: detail.isNotEmpty ? detail : 'خطأ في الاتصال بالخادم');
     } catch (_) {
       return (success: false, error: 'خطأ غير متوقع');
     }
