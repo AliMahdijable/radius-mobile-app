@@ -11,6 +11,7 @@ class DashboardState {
   final int expiredSubscribers;
   final int nearExpiryCount;
   final int expiredTodayCount;
+  final int expiredOverdueCount;
   final int debtors;
   final double totalDebt;
   final int onlineCount;
@@ -22,6 +23,7 @@ class DashboardState {
   final List<Map<String, dynamic>> recentActivities;
   final List<Map<String, dynamic>> nearExpiryList;
   final List<Map<String, dynamic>> expiredTodayList;
+  final List<Map<String, dynamic>> expiredOverdueList;
   final bool isLoading;
   final String? error;
 
@@ -31,6 +33,7 @@ class DashboardState {
     this.expiredSubscribers = 0,
     this.nearExpiryCount = 0,
     this.expiredTodayCount = 0,
+    this.expiredOverdueCount = 0,
     this.debtors = 0,
     this.totalDebt = 0,
     this.onlineCount = 0,
@@ -42,12 +45,13 @@ class DashboardState {
     this.recentActivities = const [],
     this.nearExpiryList = const [],
     this.expiredTodayList = const [],
+    this.expiredOverdueList = const [],
     this.isLoading = false,
     this.error,
   });
 
-  /// Bell badge + sheet: subscription expiry only (near expiry + ends today).
-  int get totalAlerts => nearExpiryCount + expiredTodayCount;
+  int get totalAlerts =>
+      nearExpiryCount + expiredTodayCount + expiredOverdueCount;
 
   DashboardState copyWith({
     int? totalSubscribers,
@@ -55,6 +59,7 @@ class DashboardState {
     int? expiredSubscribers,
     int? nearExpiryCount,
     int? expiredTodayCount,
+    int? expiredOverdueCount,
     int? debtors,
     double? totalDebt,
     int? onlineCount,
@@ -66,6 +71,7 @@ class DashboardState {
     List<Map<String, dynamic>>? recentActivities,
     List<Map<String, dynamic>>? nearExpiryList,
     List<Map<String, dynamic>>? expiredTodayList,
+    List<Map<String, dynamic>>? expiredOverdueList,
     bool? isLoading,
     String? error,
   }) {
@@ -75,6 +81,7 @@ class DashboardState {
       expiredSubscribers: expiredSubscribers ?? this.expiredSubscribers,
       nearExpiryCount: nearExpiryCount ?? this.nearExpiryCount,
       expiredTodayCount: expiredTodayCount ?? this.expiredTodayCount,
+      expiredOverdueCount: expiredOverdueCount ?? this.expiredOverdueCount,
       debtors: debtors ?? this.debtors,
       totalDebt: totalDebt ?? this.totalDebt,
       onlineCount: onlineCount ?? this.onlineCount,
@@ -86,6 +93,7 @@ class DashboardState {
       recentActivities: recentActivities ?? this.recentActivities,
       nearExpiryList: nearExpiryList ?? this.nearExpiryList,
       expiredTodayList: expiredTodayList ?? this.expiredTodayList,
+      expiredOverdueList: expiredOverdueList ?? this.expiredOverdueList,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -169,9 +177,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       // 2) Backend: subscribers with phones (debt for dashboard stats; bell uses near-expiry + expired-today only)
       int debtors = 0;
       double totalDebt = 0;
-      int nearExpiry = 0, expiredToday = 0;
+      int nearExpiry = 0, expiredToday = 0, expiredOverdue = 0;
       List<Map<String, dynamic>> nearExpiryList = [];
       List<Map<String, dynamic>> expiredTodayList = [];
+      List<Map<String, dynamic>> expiredOverdueList = [];
 
       try {
         final subsResponse = await backendDio.get(
@@ -183,19 +192,19 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           for (final sub in data) {
             final daysInt = _remainingDaysInt(sub['remaining_days']);
 
-            // Bell / alerts: "قريب الانتهاء" = 1–3 days left (not same-day expiry).
             if (daysInt != null && daysInt >= 1 && daysInt <= 3) {
               nearExpiry++;
               nearExpiryList.add(Map<String, dynamic>.from(sub));
             }
-            // "انتهى اليوم" = subscription ends today (remaining_days == 0 only).
             if (daysInt == 0) {
               expiredToday++;
               expiredTodayList.add(Map<String, dynamic>.from(sub));
             }
+            if (daysInt != null && daysInt < 0) {
+              expiredOverdue++;
+              expiredOverdueList.add(Map<String, dynamic>.from(sub));
+            }
 
-            // Prefer signed value from notes/comments. /with-phones historically omitted
-            // notes; server now sends notes + debt/hasDebt derived from notes as fallback.
             final notesRaw = (sub['notes'] ?? sub['comments'])?.toString() ?? '';
             var notesVal =
                 double.tryParse(notesRaw.replaceAll(',', '').trim()) ?? 0;
@@ -233,8 +242,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         }
       } catch (_) {}
 
-      // Fetch actual offline count via SAS4 encrypted call (same as React Dashboard)
+      // Fetch actual offline + expired counts via SAS4 encrypted calls (same as React Dashboard)
       int offline = active - online;
+      int expiredActual = expired;
+
       try {
         final offlinePayload = EncryptionService.encrypt({
           'page': 1,
@@ -250,38 +261,72 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           'mac': '',
           'columns': ['idx'],
         });
-        final offlineResp = await _sas4Dio.post(
-          ApiConstants.sas4ListUsers,
-          data: {'payload': offlinePayload},
-          options: Options(contentType: 'application/x-www-form-urlencoded'),
-        );
-        dynamic offlineParsed = offlineResp.data;
-        if (offlineParsed is String) {
-          offlineParsed = EncryptionService.decrypt(offlineParsed);
-        }
-        if (offlineParsed is Map) {
-          final tc = offlineParsed['totalCount'] ??
-              offlineParsed['total'] ??
-              offlineParsed['count'];
-          if (tc != null) {
-            offline = tc is int ? tc : (int.tryParse(tc.toString()) ?? offline);
+        final expiredPayload = EncryptionService.encrypt({
+          'page': 1,
+          'count': 1,
+          'sortBy': 'username',
+          'direction': 'asc',
+          'search': '',
+          'status': 2,
+          'connection': -1,
+          'profile_id': -1,
+          'parent_id': -1,
+          'group_id': -1,
+          'site_id': -1,
+          'sub_users': 1,
+          'mac': '',
+          'columns': ['idx'],
+        });
+
+        final results = await Future.wait([
+          _sas4Dio.post(
+            ApiConstants.sas4ListUsers,
+            data: {'payload': offlinePayload},
+            options: Options(contentType: 'application/x-www-form-urlencoded'),
+          ).catchError((_) => Response(requestOptions: RequestOptions())),
+          _sas4Dio.post(
+            ApiConstants.sas4ListUsers,
+            data: {'payload': expiredPayload},
+            options: Options(contentType: 'application/x-www-form-urlencoded'),
+          ).catchError((_) => Response(requestOptions: RequestOptions())),
+        ]);
+
+        for (int i = 0; i < results.length; i++) {
+          dynamic parsed = results[i].data;
+          if (parsed is String) {
+            parsed = EncryptionService.decrypt(parsed);
+          }
+          if (parsed is Map) {
+            final tc = parsed['totalCount'] ?? parsed['total'] ?? parsed['count'];
+            if (tc != null) {
+              final val = tc is int ? tc : (int.tryParse(tc.toString()) ?? 0);
+              if (i == 0) offline = val;
+              if (i == 1) expiredActual = val;
+            }
           }
         }
       } catch (e) {
-        dev.log('Offline count fetch error: $e', name: 'DASH');
+        dev.log('SAS4 offline/expired count fetch error: $e', name: 'DASH');
       }
       if (offline < 0) offline = 0;
+
+      expiredOverdueList.sort((a, b) {
+        final da = _remainingDaysInt(a['remaining_days']) ?? 0;
+        final db = _remainingDaysInt(b['remaining_days']) ?? 0;
+        return da.compareTo(db);
+      });
 
       state = state.copyWith(
         totalSubscribers: total,
         activeSubscribers: active,
-        expiredSubscribers: expired,
+        expiredSubscribers: expiredActual,
         onlineCount: online,
         offlineCount: offline < 0 ? 0 : offline,
         managerBalance: balance,
         managerPoints: points,
         nearExpiryCount: nearExpiry,
         expiredTodayCount: expiredToday,
+        expiredOverdueCount: expiredOverdue,
         debtors: debtors,
         totalDebt: totalDebt,
         todayActivations: todayAct,
@@ -289,6 +334,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         recentActivities: activities,
         nearExpiryList: nearExpiryList,
         expiredTodayList: expiredTodayList,
+        expiredOverdueList: expiredOverdueList,
         isLoading: false,
       );
     } on DioException catch (e) {

@@ -12,6 +12,16 @@ class AppConstants {
   static const String storageSavedUsername = 'savedUsername';
   static const String storageSavedPassword = 'savedPassword';
   static const String storageAlertsEnabled = 'alertsEnabled';
+  /// OS push-style alerts for near-expiry (1–3 days) & expired today; max once per category per calendar day.
+  static const String storagePushExpiryOutsideEnabled =
+      'pushExpiryOutsideEnabled';
+  static const String storagePushLastNearNotifDay = 'pushLastNearNotifDay';
+  static const String storagePushLastExpiredNotifDay =
+      'pushLastExpiredNotifDay';
+  static const String storagePushLastOverdueNotifDay =
+      'pushLastOverdueNotifDay';
+  static const String storagePushLastFetchMs = 'pushLastFetchMs';
+  static const String storageFcmEnabled = 'fcmEnabled';
 
   static const String baghdadTimezone = 'Asia/Baghdad';
   static const int baghdadUtcOffset = 3;

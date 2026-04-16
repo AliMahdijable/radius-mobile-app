@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/socket_service.dart';
+import '../core/services/expiry_push_service.dart';
 import '../models/user_model.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
@@ -74,6 +75,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user: user,
         error: null,
       );
+      Future.microtask(() => ExpiryPushService.onLoggedIn(_storage));
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -113,6 +115,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
 
         _socket.connect(user.id);
+        await ExpiryPushService.onLoggedIn(_storage);
 
         state = AuthState(
           status: AuthStatus.authenticated,
@@ -127,19 +130,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     } on DioException catch (e) {
       String message;
-      switch (e.type) {
-        case DioExceptionType.connectionTimeout:
-          message = 'انتهت مهلة الاتصال - تحقق من الإنترنت';
-          break;
-        case DioExceptionType.connectionError:
-          message = 'فشل الاتصال بالخادم - تحقق من الإنترنت';
-          break;
-        default:
-          if (e.response?.statusCode == 401) {
-            message = 'اسم المستخدم أو كلمة المرور غير صحيحة';
-          } else {
-            message = 'خطأ في الاتصال';
-          }
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        message = 'انتهت مهلة الاتصال - تحقق من الإنترنت';
+      } else if (e.type == DioExceptionType.connectionError) {
+        message = 'فشل الاتصال بالخادم - تحقق من الإنترنت';
+      } else if (e.response != null) {
+        final statusCode = e.response?.statusCode;
+        final serverMsg = e.response?.data is Map
+            ? e.response?.data['message']?.toString()
+            : null;
+        if (statusCode == 401) {
+          message = serverMsg ?? 'اسم المستخدم أو كلمة المرور غير صحيحة';
+        } else if (serverMsg != null && serverMsg.isNotEmpty) {
+          message = serverMsg;
+        } else {
+          message = 'خطأ في الخادم ($statusCode)';
+        }
+      } else {
+        message = 'خطأ في الاتصال - تحقق من الإنترنت';
       }
       state = state.copyWith(status: AuthStatus.unauthenticated, error: message);
       return false;
@@ -156,6 +166,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     _socket.disconnect();
+    await ExpiryPushService.onLoggedOut();
     await _storage.clearAll();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }

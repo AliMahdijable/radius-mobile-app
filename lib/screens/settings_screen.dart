@@ -6,6 +6,8 @@ import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
+import '../core/services/storage_service.dart';
+import '../core/services/expiry_push_service.dart';
 import '../widgets/app_snackbar.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -16,12 +18,76 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _pushExpiryOutside = false;
+  bool _pushExpiryLoaded = false;
+  bool _fcmEnabled = false;
+  bool _fcmLoaded = false;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    Future.microtask(() async {
       ref.read(settingsProvider.notifier).loadFeatures();
+      final storage = ref.read(storageServiceProvider);
+      final on = await storage.getPushExpiryOutsideEnabled();
+      final fcm = await storage.getFcmEnabled();
+      if (mounted) {
+        setState(() {
+          _pushExpiryOutside = on;
+          _pushExpiryLoaded = true;
+          _fcmEnabled = fcm;
+          _fcmLoaded = true;
+        });
+      }
     });
+  }
+
+  Future<void> _onPushExpiryOutsideChanged(bool value) async {
+    final storage = ref.read(storageServiceProvider);
+    if (value) {
+      final ok = await ExpiryPushService.requestOsPermission();
+      if (!ok && mounted) {
+        AppSnackBar.error(context,
+            'لم يُمنح إذن الإشعارات. يمكنك تفعيله من إعدادات الجهاز.');
+        return;
+      }
+    }
+    await ExpiryPushService.setEnabled(storage, value);
+    if (mounted) {
+      setState(() => _pushExpiryOutside = value);
+      AppSnackBar.success(
+        context,
+        value
+            ? 'تم تفعيل إشعارات الجهاز (قرب الانتهاء / انتهى اليوم)'
+            : 'تم إيقاف إشعارات الجهاز',
+      );
+    }
+  }
+
+  Future<void> _onFcmChanged(bool value) async {
+    final storage = ref.read(storageServiceProvider);
+    if (value) {
+      final ok = await ExpiryPushService.requestOsPermission();
+      if (!ok && mounted) {
+        AppSnackBar.error(context,
+            'لم يُمنح إذن الإشعارات. يمكنك تفعيله من إعدادات الجهاز.');
+        return;
+      }
+      await ExpiryPushService.init();
+      await ExpiryPushService.registerPeriodicTask();
+    } else {
+      await ExpiryPushService.cancelPeriodicTask();
+    }
+    await storage.setFcmEnabled(value);
+    if (mounted) {
+      setState(() => _fcmEnabled = value);
+      AppSnackBar.success(
+        context,
+        value
+            ? 'تم تفعيل إشعارات FCM للتطبيق'
+            : 'تم إيقاف إشعارات FCM',
+      );
+    }
   }
 
   void _showFeaturesModal() {
@@ -165,6 +231,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
             activeColor: theme.colorScheme.primary,
           ),
+        ),
+        _SettingTile(
+          icon: Icons.notifications_active_outlined,
+          title: 'إشعارات خارج التطبيق',
+          subtitle:
+              'تنبيه يومي بحد أقصى مرة لكل نوع: مشتركون ضمن 3 أيام من الانتهاء، أو انتهى اشتراكهم اليوم. يتطلب تسجيل الدخول.',
+          trailing: !_pushExpiryLoaded
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Switch.adaptive(
+                  value: _pushExpiryOutside,
+                  onChanged: ref.watch(authProvider).status ==
+                          AuthStatus.authenticated
+                      ? _onPushExpiryOutsideChanged
+                      : null,
+                  activeColor: theme.colorScheme.primary,
+                ),
+        ),
+        _SettingTile(
+          icon: Icons.cloud_outlined,
+          title: 'إشعارات FCM',
+          subtitle:
+              'تفعيل إشعارات Firebase Cloud Messaging لاستقبال التنبيهات الفورية حتى عند إغلاق التطبيق.',
+          iconColor: const Color(0xFFFF9800),
+          trailing: !_fcmLoaded
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Switch.adaptive(
+                  value: _fcmEnabled,
+                  onChanged: ref.watch(authProvider).status ==
+                          AuthStatus.authenticated
+                      ? _onFcmChanged
+                      : null,
+                  activeColor: const Color(0xFFFF9800),
+                ),
         ),
 
         const SizedBox(height: 8),

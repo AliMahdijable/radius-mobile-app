@@ -115,9 +115,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           _isLoading = false;
           _errorMessage = msg;
         });
-        if (mounted) {
-          AppSnackBar.error(context, msg);
-        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -126,7 +123,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         _isLoading = false;
         _errorMessage = msg;
       });
-      AppSnackBar.error(context, msg);
     }
   }
 

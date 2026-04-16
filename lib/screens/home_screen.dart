@@ -106,12 +106,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     size: 22),
                               ),
                               const SizedBox(width: 10),
-                              Text(
-                                'التنبيهات (${dash.totalAlerts})',
-                                style: theme.textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'تنبيهات الاشتراك (${dash.totalAlerts})',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(fontWeight: FontWeight.w700),
+                                    ),
+                                    Text(
+                                      'قريب الانتهاء · انتهى اليوم · المنتهية',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              const Spacer(),
+                              const SizedBox(width: 8),
                               IconButton(
                                 icon: const Icon(Icons.close, size: 20),
                                 onPressed: () => Navigator.pop(ctx),
@@ -194,7 +208,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             )),
                                     const SizedBox(height: 4),
                                     Text(
-                                        'فعّل التنبيهات لمتابعة الاشتراكات',
+                                        'تنبيهات قرب انتهاء الاشتراك وانتهائه اليوم',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               color: theme
@@ -267,6 +281,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                           ? Colors.red
                                           : Colors.orange,
                                       icon: Icons.schedule,
+                                    );
+                                  }),
+                                  const SizedBox(height: 12),
+                                ],
+                                if (dash
+                                    .expiredOverdueList.isNotEmpty) ...[
+                                  _AlertSectionHeader(
+                                    title: 'منتهي الاشتراك',
+                                    count: dash.expiredOverdueCount,
+                                    color: const Color(0xFF7B1FA2),
+                                    icon: Icons.event_busy_rounded,
+                                  ),
+                                  ...dash.expiredOverdueList.map((sub) {
+                                    final days = sub['remaining_days'];
+                                    final daysInt = days is int
+                                        ? days
+                                        : int.tryParse(
+                                                days?.toString() ?? '') ??
+                                            0;
+                                    final overdueDays = daysInt.abs();
+                                    return _AlertItem(
+                                      name:
+                                          '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
+                                              .trim(),
+                                      username:
+                                          sub['username']?.toString() ?? '',
+                                      detail: overdueDays == 1
+                                          ? 'منتهي منذ يوم واحد'
+                                          : 'منتهي منذ $overdueDays يوم',
+                                      color: const Color(0xFF7B1FA2),
+                                      icon: Icons.event_busy_rounded,
                                     );
                                   }),
                                 ],

@@ -954,7 +954,7 @@ class _AlertsSummaryCard extends StatelessWidget {
                     color: Colors.orange, size: 20),
               ),
               const SizedBox(width: 10),
-              Text('تنبيهات',
+              Text('تنبيهات الاشتراك',
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w700)),
               const Spacer(),

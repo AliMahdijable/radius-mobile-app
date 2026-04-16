@@ -105,4 +105,16 @@ class StorageService {
 
   Future<bool> getAlertsEnabled() async =>
       (await _sp).getBool(AppConstants.storageAlertsEnabled) ?? true;
+
+  Future<void> setPushExpiryOutsideEnabled(bool enabled) async =>
+      (await _sp).setBool(AppConstants.storagePushExpiryOutsideEnabled, enabled);
+
+  Future<bool> getPushExpiryOutsideEnabled() async =>
+      (await _sp).getBool(AppConstants.storagePushExpiryOutsideEnabled) ?? false;
+
+  Future<void> setFcmEnabled(bool enabled) async =>
+      (await _sp).setBool(AppConstants.storageFcmEnabled, enabled);
+
+  Future<bool> getFcmEnabled() async =>
+      (await _sp).getBool(AppConstants.storageFcmEnabled) ?? false;
 }
