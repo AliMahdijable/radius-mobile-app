@@ -98,7 +98,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
         if (cols.length <= usernameCol || cols.length <= balanceCol) continue;
         final username = cols[usernameCol].trim();
         if (username.isEmpty) continue;
-        final balance = double.tryParse(cols[balanceCol].trim()) ?? 0;
+        final balance = double.tryParse(cols[balanceCol].trim().replaceAll(',', '')) ?? 0;
         if (balance == 0) continue;
         final name = nameCol >= 0 && cols.length > nameCol
             ? cols[nameCol].trim()

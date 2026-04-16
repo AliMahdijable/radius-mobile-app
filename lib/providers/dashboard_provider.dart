@@ -186,7 +186,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
               expiredTodayList.add(Map<String, dynamic>.from(sub));
             }
 
-            final notes = sub['notes']?.toString() ?? '0';
+            final notes = (sub['notes'] ?? sub['comments'])?.toString() ?? '0';
             final debtField = sub['debt'];
             final hasDebtFlag = sub['hasDebt'] == true;
 
@@ -194,7 +194,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
             if (debtField is num && debtField != 0) {
               debtAmount = debtField.toDouble().abs();
             } else {
-              final notesVal = double.tryParse(notes) ?? 0;
+              final notesVal = double.tryParse(notes.replaceAll(',', '').trim()) ?? 0;
               if (notesVal < 0) debtAmount = notesVal.abs();
             }
 

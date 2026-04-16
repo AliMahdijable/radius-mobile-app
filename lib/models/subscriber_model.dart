@@ -55,10 +55,16 @@ class SubscriberModel {
 
   String get displayPhone => phone ?? mobile ?? '';
 
+  static double _cleanParseDouble(String? raw) {
+    if (raw == null || raw.isEmpty) return 0;
+    final cleaned = raw.replaceAll(',', '').trim();
+    return double.tryParse(cleaned) ?? 0;
+  }
+
   double get debtAmount {
     if (notes != null && notes!.isNotEmpty) {
-      final v = double.tryParse(notes!);
-      if (v != null) return v;
+      final v = _cleanParseDouble(notes);
+      if (v != 0) return v;
     }
     if (debt != null && debt != 0) return debt!;
     return 0;
@@ -72,8 +78,7 @@ class SubscriberModel {
   bool get hasCredit => debtAmount > 0;
 
   double get balanceAmount {
-    final b = double.tryParse(balance ?? '') ?? 0;
-    return b;
+    return _cleanParseDouble(balance);
   }
 
   bool get isExpired => (remainingDays ?? 0) <= 0;
@@ -109,7 +114,7 @@ class SubscriberModel {
       remainingDays: json['remaining_days'] is int
           ? json['remaining_days']
           : int.tryParse(json['remaining_days']?.toString() ?? ''),
-      notes: json['notes']?.toString(),
+      notes: (json['notes'] ?? json['comments'])?.toString(),
       debt: json['debt'] is num
           ? (json['debt'] as num).toDouble()
           : double.tryParse(json['debt']?.toString() ?? ''),
