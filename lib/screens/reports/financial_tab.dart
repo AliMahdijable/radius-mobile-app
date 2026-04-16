@@ -359,7 +359,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     const SizedBox(height: 14),
                   ],
 
-                  SizedBox(height: 48, child: ElevatedButton(
+                  SizedBox(height: 54, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
                       setState(() {

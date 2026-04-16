@@ -178,7 +178,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
               padding: const EdgeInsets.all(16),
               child: SizedBox(
                 width: double.infinity,
-                height: 52,
+                height: 54,
                 child: ElevatedButton.icon(
                   onPressed: _loadDebtors,
                   icon: const Icon(Icons.download_rounded),

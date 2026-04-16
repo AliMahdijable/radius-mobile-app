@@ -595,7 +595,7 @@ class _TemplateEditorPageState extends ConsumerState<_TemplateEditorPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: SizedBox(
               width: double.infinity,
-              height: 50,
+              height: 54,
               child: ElevatedButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: _saving

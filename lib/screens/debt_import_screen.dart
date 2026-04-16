@@ -297,7 +297,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 54,
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _pickFile,
                 icon: const Icon(Icons.file_upload_rounded),
@@ -493,7 +493,7 @@ class _ImportRowCard extends StatelessWidget {
             const Icon(Icons.error, color: AppTheme.dangerColor, size: 28)
           else if (canApply)
             SizedBox(
-              height: 36,
+              height: 42,
               child: ElevatedButton(
                 onPressed: onApply,
                 style: ElevatedButton.styleFrom(

@@ -378,7 +378,7 @@ class _SubscriberDetailsScreenState
                   ),
                   const SizedBox(height: 24),
 
-                  SizedBox(height: 50, child: ElevatedButton.icon(
+                  SizedBox(height: 54, child: ElevatedButton.icon(
                     onPressed: saving ? null : () async {
                       setSheet(() => saving = true);
                       try {
@@ -762,7 +762,7 @@ class _SubscriberDetailsScreenState
                   _InfoChip(label: 'تكلفة التمديد', value: AppHelpers.formatMoney(pkgPrice)),
                 ],
                 const SizedBox(height: 20),
-                SizedBox(height: 50, child: ElevatedButton.icon(
+                SizedBox(height: 54, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     setSheet(() => submitting = true);
                     final success = await notifier.extendSubscription(
@@ -1180,7 +1180,7 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 18),
 
-                SizedBox(height: 50, child: ElevatedButton.icon(
+                SizedBox(height: 54, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     final cashAmount = _parseMoney(partialCtrl.text);
                     setSheet(() => submitting = true);
@@ -1589,7 +1589,7 @@ class _SubscriberDetailsScreenState
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
                     final btnAmount = _parseMoney(val.text);
-                    return SizedBox(height: 50, child: ElevatedButton.icon(
+                    return SizedBox(height: 54, child: ElevatedButton.icon(
                       onPressed: submitting || (!payAll && btnAmount <= 0) ? null : () async {
                         final payAmount = payAll ? currentDebt : btnAmount;
                         setSheet(() => submitting = true);
@@ -1853,7 +1853,7 @@ class _SubscriberDetailsScreenState
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
                     final btnAmount = _parseMoney(val.text);
-                    return SizedBox(height: 50, child: ElevatedButton.icon(
+                    return SizedBox(height: 54, child: ElevatedButton.icon(
                       onPressed: submitting || btnAmount <= 0 ? null : () async {
                         final addPreview = currentNotes - btnAmount;
                         final confirmed = await showDialog<bool>(
