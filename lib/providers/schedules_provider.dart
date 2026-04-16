@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -36,6 +38,18 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
   SchedulesNotifier(this._dio, this._storage)
       : super(const SchedulesState());
 
+  dynamic _decodeResponseData(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) {
+      try {
+        return jsonDecode(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+    return raw;
+  }
+
   Future<void> loadSchedules() async {
     final _adminId = await _storage.getAdminId();
     if (_adminId == null) return;
@@ -44,16 +58,25 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
       final response =
           await _dio.get('${ApiConstants.waSchedules}/$_adminId');
 
+      final decoded = _decodeResponseData(response.data);
       List<dynamic> data;
-      if (response.data is List) {
-        data = response.data;
-      } else if (response.data['schedules'] is List) {
-        data = response.data['schedules'];
+      if (decoded is List) {
+        data = decoded;
+      } else if (decoded is Map && decoded['schedules'] is List) {
+        data = decoded['schedules'] as List<dynamic>;
       } else {
         data = [];
       }
 
-      final list = data.map((e) => ScheduleModel.fromJson(e)).toList();
+      final list = <ScheduleModel>[];
+      for (final e in data) {
+        if (e is! Map) continue;
+        try {
+          list.add(ScheduleModel.fromJson(Map<String, dynamic>.from(e)));
+        } catch (_) {
+          // تخطّي صف تالف بدل إسقاط كامل القائمة
+        }
+      }
       state = state.copyWith(schedules: list, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'فشل تحميل الجداول');
@@ -73,7 +96,7 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
         ApiConstants.waSaveSchedule,
         data: schedule.toSaveJson(),
       );
-      final body = _asJsonMap(response.data);
+      final body = _asJsonMap(_decodeResponseData(response.data));
       if (body == null) {
         return 'استجابة غير متوقعة من الخادم';
       }
@@ -82,7 +105,10 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
           body['success'] == '1' ||
           body['success'] == 'true';
       if (ok) {
-        await loadSchedules();
+        // الحفظ نجح حتى لو إعادة التحميل فشلت (لا نعرض «فشل حفظ» بسبب fromJson/شبكة).
+        try {
+          await loadSchedules();
+        } catch (_) {}
         return null;
       }
       return body['message']?.toString() ??
