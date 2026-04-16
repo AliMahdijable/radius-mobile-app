@@ -5,7 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../constants/api_constants.dart';
@@ -110,10 +110,13 @@ class FcmService {
 
   /// تسجيل التوكن في السيرفر
   static Future<bool> registerToken(String fcmToken) async {
-    const secure = FlutterSecureStorage();
-    final token = await secure.read(key: AppConstants.storageToken);
-    final adminId = await secure.read(key: AppConstants.storageAdminId);
-    if (token == null || adminId == null) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(AppConstants.storageToken);
+    final adminId = prefs.getString(AppConstants.storageAdminId);
+    if (token == null || adminId == null) {
+      debugPrint('FCM register: no auth token or adminId in storage');
+      return false;
+    }
 
     final dio = Dio(BaseOptions(
       baseUrl: ApiConstants.backendUrl,
@@ -132,6 +135,7 @@ class FcmService {
         'token': fcmToken,
         'deviceInfo': Platform.isAndroid ? 'Android' : 'iOS',
       });
+      debugPrint('FCM register response: ${res.data}');
       return res.data?['success'] == true;
     } catch (e) {
       debugPrint('FCM register error: $e');
@@ -143,9 +147,9 @@ class FcmService {
 
   /// حذف التوكن من السيرفر
   static Future<void> unregisterToken() async {
-    const secure = FlutterSecureStorage();
-    final token = await secure.read(key: AppConstants.storageToken);
-    final adminId = await secure.read(key: AppConstants.storageAdminId);
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(AppConstants.storageToken);
+    final adminId = prefs.getString(AppConstants.storageAdminId);
     if (token == null || adminId == null) return;
 
     String? fcmToken;
