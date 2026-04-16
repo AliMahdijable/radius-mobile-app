@@ -60,19 +60,40 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
     }
   }
 
-  Future<bool> saveSchedule(ScheduleModel schedule) async {
+  /// Returns `null` on success, or an Arabic error message on failure.
+  Map<String, dynamic>? _asJsonMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return null;
+  }
+
+  Future<String?> saveSchedule(ScheduleModel schedule) async {
     try {
       final response = await _dio.post(
         ApiConstants.waSaveSchedule,
         data: schedule.toSaveJson(),
       );
-      if (response.data['success'] == true) {
-        await loadSchedules();
-        return true;
+      final body = _asJsonMap(response.data);
+      if (body == null) {
+        return 'استجابة غير متوقعة من الخادم';
       }
-      return false;
+      if (body['success'] == true) {
+        await loadSchedules();
+        return null;
+      }
+      return body['message']?.toString() ?? 'فشل في حفظ الجدولة';
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final map = _asJsonMap(data);
+      if (map != null && map['message'] != null) {
+        return map['message'].toString();
+      }
+      if (data is String && data.isNotEmpty) {
+        return data.length > 200 ? '${data.substring(0, 200)}…' : data;
+      }
+      return e.message ?? 'فشل في حفظ الجدولة';
     } catch (_) {
-      return false;
+      return 'فشل في حفظ الجدولة';
     }
   }
 
