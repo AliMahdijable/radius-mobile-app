@@ -247,7 +247,7 @@ class SubscriberCard extends StatelessWidget {
             if (lastPayment != null) _LastPaymentRow(data: lastPayment!),
 
             // Row 5: Online details
-            if (showOnlineDetails && isOnline && subscriber.ipAddress != null)
+            if (showOnlineDetails && isOnline)
               _OnlineRow(subscriber: subscriber),
           ],
         ),

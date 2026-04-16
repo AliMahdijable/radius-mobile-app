@@ -10,6 +10,7 @@ import '../models/subscriber_model.dart';
 class SubscribersState {
   final List<SubscriberModel> subscribers;
   final List<SubscriberModel> searchResults;
+  final List<SubscriberModel> onlineUsers;
   final List<PackageModel> packages;
   final bool isLoading;
   final bool isSearching;
@@ -23,6 +24,7 @@ class SubscribersState {
   const SubscribersState({
     this.subscribers = const [],
     this.searchResults = const [],
+    this.onlineUsers = const [],
     this.packages = const [],
     this.isLoading = false,
     this.isSearching = false,
@@ -44,7 +46,9 @@ class SubscribersState {
         list = subscribers.where((s) => s.isExpired).toList();
         break;
       case 'online':
-        list = subscribers.where((s) => s.isOnline).toList();
+        list = onlineUsers.isNotEmpty
+            ? List.of(onlineUsers)
+            : subscribers.where((s) => s.isOnline).toList();
         break;
       case 'offline':
         list = subscribers.where((s) => s.isOffline).toList();
@@ -113,6 +117,7 @@ class SubscribersState {
   SubscribersState copyWith({
     List<SubscriberModel>? subscribers,
     List<SubscriberModel>? searchResults,
+    List<SubscriberModel>? onlineUsers,
     List<PackageModel>? packages,
     bool? isLoading,
     bool? isSearching,
@@ -126,6 +131,7 @@ class SubscribersState {
     return SubscribersState(
       subscribers: subscribers ?? this.subscribers,
       searchResults: searchResults ?? this.searchResults,
+      onlineUsers: onlineUsers ?? this.onlineUsers,
       packages: packages ?? this.packages,
       isLoading: isLoading ?? this.isLoading,
       isSearching: isSearching ?? this.isSearching,
@@ -641,6 +647,88 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   void setFilter(String filter) {
     state = state.copyWith(filter: filter);
+    if (filter == 'online' && state.onlineUsers.isEmpty) {
+      loadOnlineUsers();
+    }
+  }
+
+  Future<void> loadOnlineUsers() async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return;
+
+    try {
+      final payload = EncryptionService.encrypt({
+        'page': 1,
+        'count': 500,
+        'sortBy': 'username',
+        'direction': 'asc',
+        'search': '',
+        'parent_id': -1,
+        'columns': [
+          'id', 'username', 'firstname', 'lastname',
+          'acctoutputoctets', 'acctinputoctets',
+          'user_profile_name', 'parent_username',
+          'framedipaddress', 'callingstationid',
+          'acctsessiontime', 'oui', 'profile_details',
+          'expiration', 'remaining_days', 'notes', 'phone', 'mobile',
+        ],
+      });
+
+      final response = await _sas4Dio.post(
+        ApiConstants.sas4OnlineUsers,
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+
+      dynamic parsed = response.data;
+      if (parsed is String) {
+        parsed = EncryptionService.decrypt(parsed);
+      }
+
+      if (parsed is Map && parsed['data'] is List) {
+        final list = (parsed['data'] as List).map((e) {
+          final m = Map<String, dynamic>.from(e);
+          return SubscriberModel(
+            idx: m['id']?.toString(),
+            username: (m['username'] ?? '').toString(),
+            firstname: (m['firstname'] ?? '').toString(),
+            lastname: (m['lastname'] ?? '').toString(),
+            phone: m['phone']?.toString(),
+            mobile: m['mobile']?.toString(),
+            expiration: m['expiration']?.toString(),
+            remainingDays: m['remaining_days'] is int
+                ? m['remaining_days']
+                : int.tryParse(m['remaining_days']?.toString() ?? ''),
+            notes: (m['notes'] ?? m['comments'])?.toString(),
+            profileName: m['user_profile_name']?.toString() ??
+                (m['profile_details'] is Map ? m['profile_details']['name'] : null)?.toString(),
+            profileId: m['profile_details'] is Map
+                ? int.tryParse(m['profile_details']['id']?.toString() ?? '')
+                : null,
+            parentUsername: m['parent_username']?.toString(),
+            isOnlineFlag: true,
+            enabled: 1,
+            ipAddress: (m['framedipaddress'] ?? m['framed_ip_address'])?.toString(),
+            macAddress: m['callingstationid']?.toString(),
+            sessionTime: m['acctsessiontime'] is int
+                ? m['acctsessiontime']
+                : int.tryParse(m['acctsessiontime']?.toString() ?? ''),
+            downloadBytes: m['acctoutputoctets'] is int
+                ? m['acctoutputoctets']
+                : int.tryParse(m['acctoutputoctets']?.toString() ?? ''),
+            uploadBytes: m['acctinputoctets'] is int
+                ? m['acctinputoctets']
+                : int.tryParse(m['acctinputoctets']?.toString() ?? ''),
+            deviceVendor: m['oui']?.toString(),
+          );
+        }).toList();
+
+        dev.log('Online users loaded: ${list.length}', name: 'SUBS');
+        state = state.copyWith(onlineUsers: list);
+      }
+    } catch (e) {
+      dev.log('loadOnlineUsers error: $e', name: 'SUBS');
+    }
   }
 
   void setSort(String field, String direction) {
