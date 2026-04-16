@@ -41,7 +41,19 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
   List<_ImportRow> _rows = [];
   bool _isLoading = false;
   bool _isMatchLoading = false;
+  bool _isBulkApplying = false;
   String? _fileName;
+
+  /// CSV may start with a BOM; trim() does not remove it.
+  static String _normalizeCell(String s) {
+    return s.replaceAll('\uFEFF', '').trim();
+  }
+
+  static int? _parseSasUserId(Map<String, dynamic> u) {
+    final raw = u['idx'] ?? u['id'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString().replaceAll(',', '').trim() ?? '');
+  }
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -74,10 +86,15 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
       int nameCol = -1;
 
       for (int i = 0; i < header.length; i++) {
-        final h = header[i].trim().toLowerCase();
-        if (h.contains('username') || h.contains('المستخدم')) {
+        final h = _normalizeCell(header[i]).toLowerCase();
+        if (h.contains('username') ||
+            h.contains('المستخدم') ||
+            h.contains('user name')) {
           usernameCol = i;
-        } else if (h.contains('balance') || h.contains('الرصيد')) {
+        } else if (h.contains('balance') ||
+            h.contains('الرصيد') ||
+            h.contains('notes') ||
+            h.contains('دين')) {
           balanceCol = i;
         } else if (h.contains('الاسم') || h.contains('arabic') || h.contains('firstname')) {
           nameCol = i;
@@ -96,12 +113,13 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
       for (int i = 1; i < lines.length; i++) {
         final cols = _parseCsvLine(lines[i]);
         if (cols.length <= usernameCol || cols.length <= balanceCol) continue;
-        final username = cols[usernameCol].trim();
+        final username = _normalizeCell(cols[usernameCol]);
         if (username.isEmpty) continue;
-        final balance = double.tryParse(cols[balanceCol].trim().replaceAll(',', '')) ?? 0;
+        final balance =
+            double.tryParse(_normalizeCell(cols[balanceCol]).replaceAll(',', '')) ?? 0;
         if (balance == 0) continue;
         final name = nameCol >= 0 && cols.length > nameCol
-            ? cols[nameCol].trim()
+            ? _normalizeCell(cols[nameCol])
             : null;
         rows.add(_ImportRow(
           username: username,
@@ -209,11 +227,12 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
         final key = row.username.toLowerCase();
         final match = userMap[key] ?? userMap[key.split('@').first];
         if (match != null) {
-          row.matchedId = match['idx'] is int
-              ? match['idx']
-              : int.tryParse(match['idx']?.toString() ?? '');
+          row.matchedId = _parseSasUserId(match);
           row.matchedName =
               '${match['firstname'] ?? ''} ${match['lastname'] ?? ''}'.trim();
+          if (row.matchedId == null) {
+            row.status = 'not_found';
+          }
         } else {
           row.status = 'not_found';
         }
@@ -233,7 +252,8 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
     setState(() => row.status = 'loading');
 
     try {
-      final getResp = await dio.get('${ApiConstants.sas4GetUser}/${row.matchedId}');
+      final getResp =
+          await dio.get('${ApiConstants.sas4GetUser}/${row.matchedId}');
       final userData = getResp.data is Map
           ? Map<String, dynamic>.from(getResp.data['data'] ?? getResp.data)
           : <String, dynamic>{};
@@ -254,6 +274,32 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
       setState(() => row.status = ok ? 'success' : 'failed');
     } catch (e) {
       setState(() => row.status = 'failed');
+    }
+  }
+
+  int get _pendingMatchedCount =>
+      _rows.where((r) => r.matchedId != null && r.status == 'pending').length;
+
+  Future<void> _applyAllMatched() async {
+    final targets = _rows.where((r) => r.matchedId != null && r.status == 'pending').toList();
+    if (targets.isEmpty) return;
+    setState(() => _isBulkApplying = true);
+    for (final r in targets) {
+      await _applyDebt(r);
+    }
+    if (mounted) {
+      setState(() => _isBulkApplying = false);
+      final ok = targets.where((r) => r.status == 'success').length;
+      final bad = targets.length - ok;
+      if (bad == 0) {
+        AppSnackBar.success(context, 'تم استيراد $ok مشترك');
+      } else {
+        AppSnackBar.warning(
+          context,
+          'اكتمل جزئياً',
+          detail: 'نجح $ok • فشل أو لم يكتمل $bad',
+        );
+      }
     }
   }
 
@@ -340,7 +386,12 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
             ),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  16 + MediaQuery.of(context).padding.bottom + 72,
+                ),
                 itemCount: _rows.length,
                 itemBuilder: (ctx, i) => _ImportRowCard(
                   row: _rows[i],
@@ -348,6 +399,42 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
                 ),
               ),
             ),
+            if (_pendingMatchedCount > 0)
+              Material(
+                elevation: 8,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton.icon(
+                        onPressed: _isBulkApplying ? null : _applyAllMatched,
+                        icon: _isBulkApplying
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.playlist_add_check_rounded),
+                        label: Text(
+                          _isBulkApplying
+                              ? 'جاري التطبيق...'
+                              : 'تطبيق الاستيراد ($_pendingMatchedCount)',
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ],
       ),
