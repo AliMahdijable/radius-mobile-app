@@ -71,7 +71,10 @@ class SubscriberModel {
   /// Does not use SAS `balance`, `debt`, or `hasDebt`.
   double get debtAmount {
     if (notes == null || notes!.trim().isEmpty) return 0;
-    return _cleanParseDouble(notes);
+    final val = _cleanParseDouble(notes);
+    // تجاهل -0 والقيم القريبة من الصفر
+    if (val.abs() < 1) return 0;
+    return val;
   }
 
   bool get hasDebt => debtAmount < 0;
