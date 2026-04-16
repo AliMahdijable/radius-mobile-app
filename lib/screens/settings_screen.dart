@@ -173,6 +173,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'إدارة خصومات المشتركين',
           onTap: () => context.push('/discounts'),
         ),
+        _SettingTile(
+          icon: Icons.price_change_rounded,
+          title: 'تسعير الباقات',
+          subtitle: 'إدارة أسعار الباقات للمدراء',
+          onTap: () => context.push('/packages'),
+        ),
 
         const SizedBox(height: 20),
 
