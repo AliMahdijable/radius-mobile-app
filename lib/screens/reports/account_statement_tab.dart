@@ -4,13 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
-import '../../core/utils/csv_export.dart';
 import '../../core/utils/pdf_statement.dart';
-import '../../core/constants/api_constants.dart';
-import '../../core/network/dio_client.dart';
-import '../../core/services/storage_service.dart';
 import '../../providers/reports_provider.dart';
-import '../../providers/whatsapp_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/report_controls.dart';
 
@@ -27,7 +22,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   bool _searchLoading = false;
-  bool _whatsappLoading = false;
   Map<String, dynamic>? _selectedSub;
   Timer? _debounce;
 
@@ -158,7 +152,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
     }
   }
 
-  // ── WhatsApp send ──────────────────────────────────────────────────
+  // ── WhatsApp send (PDF) ──────────────────────────────────────────
   Future<void> _handleSendWhatsApp() async {
     final state = ref.read(reportsProvider);
     if (_selectedSub == null || state.transactions.isEmpty) {
@@ -166,66 +160,23 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
       return;
     }
 
-    final waState = ref.read(whatsappProvider);
-    if (!waState.status.connected) {
-      if (mounted) {
-        AppSnackBar.whatsappError(context, 'واتساب غير متصل',
-            detail: 'يرجى الاتصال بواتساب أولاً');
-      }
-      return;
-    }
-
-    final phone = state.subscriberInfo?['phone']?.toString() ??
-        _selectedSub!['phone']?.toString() ??
-        '';
-    if (phone.isEmpty) {
-      AppSnackBar.error(context, 'لا يوجد رقم هاتف للمشترك');
-      return;
-    }
-
-    setState(() => _whatsappLoading = true);
     try {
-      final dio = ref.read(backendDioProvider);
-      final storage = ref.read(storageServiceProvider);
-      final adminId = await storage.getAdminId();
+      final sub = state.subscriberInfo ?? _selectedSub ?? {};
+      final username = sub['username']?.toString() ?? '';
+      final phone = sub['phone']?.toString() ?? _selectedSub!['phone']?.toString() ?? '';
+      final profileName = sub['profile_name']?.toString() ?? '';
 
-      final mergedInfo = {
-        'username': _selectedSub!['username'] ?? state.subscriberInfo?['username'] ?? '',
-        'firstname': _selectedSub!['firstname'] ?? state.subscriberInfo?['firstname'] ?? '',
-        'phone': phone,
-        'profile_name': _selectedSub!['profile_name'] ?? state.subscriberInfo?['profile_name'] ?? '',
-        'selling_price': _selectedSub!['selling_price'] ?? state.subscriberInfo?['selling_price'] ?? 0,
-      };
-
-      final response = await dio.post(
-        '${ApiConstants.accountStatement}/send-whatsapp',
-        data: {
-          'adminId': adminId,
-          'phone': phone,
-          'username': _selectedSub!['username'] ?? '',
-          'dateFrom': _dateFrom,
-          'dateTo': _dateTo,
-          'actionTypes': _selectedActionTypes.toList(),
-          'transactions': state.transactions,
-          'subscriberInfo': mergedInfo,
-          'summary': state.statementSummary,
-        },
+      await PdfStatement.generateAndShare(
+        username: username,
+        phone: phone,
+        profileName: profileName,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+        transactions: state.transactions,
+        summary: state.statementSummary,
       );
-
-      if (!mounted) return;
-      if (response.data?['success'] == true) {
-        AppSnackBar.whatsapp(context, 'تم إرسال كشف الحساب عبر الواتساب');
-      } else {
-        AppSnackBar.whatsappError(context, 'فشل إرسال الواتساب',
-            detail: response.data?['message']?.toString());
-      }
-    } catch (e) {
-      if (mounted) {
-        AppSnackBar.whatsappError(context, 'فشل إرسال كشف الحساب',
-            detail: e.toString());
-      }
-    } finally {
-      if (mounted) setState(() => _whatsappLoading = false);
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل إنشاء ملف PDF');
     }
   }
 
@@ -294,9 +245,9 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
             hasData ? _handlePrint : null,
           ),
           const SizedBox(width: 4),
-          _WaBtn(
-            loading: _whatsappLoading,
-            onTap: hasData ? _handleSendWhatsApp : null,
+          _SmallBtn(
+            Icons.share_rounded,
+            hasData ? _handleSendWhatsApp : null,
           ),
         ]),
 
@@ -801,34 +752,3 @@ class _SmallBtn extends StatelessWidget {
   }
 }
 
-class _WaBtn extends StatelessWidget {
-  final bool loading;
-  final VoidCallback? onTap;
-  const _WaBtn({required this.loading, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null && !loading;
-    return Material(
-      color: AppTheme.whatsappGreen.withValues(alpha: enabled ? .15 : .05),
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: enabled ? onTap : null,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: loading
-              ? SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.whatsappGreen.withValues(alpha: .6)))
-              : Icon(Icons.send_rounded, size: 18,
-                  color: enabled
-                      ? AppTheme.whatsappGreen
-                      : AppTheme.whatsappGreen.withValues(alpha: .3)),
-        ),
-      ),
-    );
-  }
-}
