@@ -144,29 +144,31 @@ class SubscriberCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: daysColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    isDisabled
-                        ? 'معطّل'
-                        : subscriber.isExpired
-                            ? 'منتهي'
-                            : _formatRemaining(subscriber),
-                    style: TextStyle(
-                      color: daysColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                if (!showOnlineDetails) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: daysColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isDisabled
+                          ? 'معطّل'
+                          : subscriber.isExpired
+                              ? 'منتهي'
+                              : _formatRemaining(subscriber),
+                      style: TextStyle(
+                        color: daysColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_left, size: 14,
-                    color: theme.colorScheme.onSurface.withOpacity(0.15)),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_left, size: 14,
+                      color: theme.colorScheme.onSurface.withOpacity(0.15)),
+                ],
               ],
             ),
 
@@ -318,80 +320,80 @@ class _OnlineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final muted = Theme.of(context).colorScheme.onSurface.withOpacity(0.4);
     return Padding(
-      padding: const EdgeInsets.only(top: 6, right: 46),
-      child: Column(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // IP + Duration
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  final ip = subscriber.ipAddress;
-                  if (ip != null && ip.isNotEmpty) _openInBrowser(ip);
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+          // Info section (right side in RTL)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // IP + Duration
+                Row(
                   children: [
-                    const Icon(Icons.lan_rounded, size: 11, color: AppTheme.teal600),
+                    GestureDetector(
+                      onTap: () {
+                        final ip = subscriber.ipAddress;
+                        if (ip != null && ip.isNotEmpty) _openInBrowser(ip);
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lan_rounded, size: 12, color: AppTheme.teal600),
+                          const SizedBox(width: 4),
+                          Text(subscriber.ipAddress ?? '—',
+                              style: const TextStyle(fontSize: 11,
+                                  color: AppTheme.teal600, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 3),
+                          const Icon(Icons.open_in_new_rounded, size: 9, color: AppTheme.teal400),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Icon(Icons.timer_outlined, size: 12, color: muted),
                     const SizedBox(width: 3),
-                    Text(subscriber.ipAddress ?? '—',
-                        style: const TextStyle(fontSize: 10,
-                            color: AppTheme.teal600, fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 2),
-                    const Icon(Icons.open_in_new_rounded, size: 8, color: AppTheme.teal400),
+                    Text(SubscriberCard.formatDuration(subscriber.sessionTime),
+                        style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w600)),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.timer_outlined, size: 11, color: muted),
-              const SizedBox(width: 2),
-              Text(SubscriberCard.formatDuration(subscriber.sessionTime),
-                  style: TextStyle(fontSize: 10, color: muted, fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // Download + Upload + Device
-          Row(
-            children: [
-              const Icon(Icons.download_rounded, size: 11, color: AppTheme.teal600),
-              const SizedBox(width: 2),
-              Text(SubscriberCard.formatBytes(subscriber.downloadBytes),
-                  style: const TextStyle(fontSize: 10, color: AppTheme.teal600, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 10),
-              Icon(Icons.upload_rounded, size: 11, color: AppTheme.infoColor),
-              const SizedBox(width: 2),
-              Text(SubscriberCard.formatBytes(subscriber.uploadBytes),
-                  style: TextStyle(fontSize: 10, color: AppTheme.infoColor, fontWeight: FontWeight.w600)),
-              if (subscriber.deviceVendor != null &&
-                  subscriber.deviceVendor != 'unknown') ...[
-                const Spacer(),
-                Text(subscriber.deviceVendor!,
-                    style: TextStyle(fontSize: 9, color: muted, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 5),
+                // Download + Upload
+                Row(
+                  children: [
+                    const Icon(Icons.download_rounded, size: 12, color: AppTheme.teal600),
+                    const SizedBox(width: 3),
+                    Text(SubscriberCard.formatBytes(subscriber.downloadBytes),
+                        style: const TextStyle(fontSize: 11, color: AppTheme.teal600, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 14),
+                    Icon(Icons.upload_rounded, size: 12, color: AppTheme.infoColor),
+                    const SizedBox(width: 3),
+                    Text(SubscriberCard.formatBytes(subscriber.uploadBytes),
+                        style: TextStyle(fontSize: 11, color: AppTheme.infoColor, fontWeight: FontWeight.w600)),
+                    if (subscriber.deviceVendor != null &&
+                        subscriber.deviceVendor != 'unknown') ...[
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(subscriber.deviceVendor!,
+                            style: TextStyle(fontSize: 9, color: muted),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ],
+                ),
               ],
-            ],
+            ),
           ),
-          // Action buttons: معاينة + فصل
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              if (onPreview != null)
-                _ActionBtn(
-                  icon: Icons.visibility_rounded,
-                  label: 'معاينة',
-                  color: AppTheme.teal600,
-                  onTap: onPreview!,
-                ),
-              if (onPreview != null && onDisconnect != null)
-                const SizedBox(width: 8),
-              if (onDisconnect != null)
-                _ActionBtn(
-                  icon: Icons.power_settings_new_rounded,
-                  label: 'فصل',
-                  color: Colors.red,
-                  onTap: onDisconnect!,
-                ),
-            ],
-          ),
+          // Disconnect button (left side in RTL)
+          if (onDisconnect != null) ...[
+            const SizedBox(width: 10),
+            _ActionBtn(
+              icon: Icons.power_settings_new_rounded,
+              label: 'فصل',
+              color: Colors.red,
+              onTap: onDisconnect!,
+            ),
+          ],
         ],
       ),
     );

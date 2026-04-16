@@ -23,6 +23,31 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
+String _formatRemaining(String? expiration) {
+  if (expiration == null || expiration.isEmpty) return 'ينتهي قريباً';
+  try {
+    final s = expiration.trim();
+    DateTime? exp;
+    if (s.contains('T') || s.contains('+')) {
+      exp = DateTime.tryParse(s);
+    } else {
+      exp = DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
+    }
+    if (exp == null) return 'ينتهي قريباً';
+    final diff = exp.difference(DateTime.now());
+    if (diff.isNegative) return 'انتهى';
+    final days = diff.inDays;
+    final hours = diff.inHours % 24;
+    final minutes = diff.inMinutes % 60;
+    if (days > 0) return 'متبقي $days يوم ${hours > 0 ? 'و $hours ساعة' : ''}';
+    if (hours > 0) return 'متبقي $hours ساعة ${minutes > 0 ? 'و $minutes دقيقة' : ''}';
+    if (minutes > 0) return 'متبقي $minutes دقيقة';
+    return 'ينتهي الآن';
+  } catch (_) {
+    return 'ينتهي قريباً';
+  }
+}
+
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
   bool _alertsEnabled = true;
@@ -116,7 +141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                           ?.copyWith(fontWeight: FontWeight.w700),
                                     ),
                                     Text(
-                                      'قريب الانتهاء · انتهى اليوم · المنتهية',
+                                      'قريب الانتهاء · انتهى اليوم',
                                       style: theme.textTheme.bodySmall?.copyWith(
                                         color: theme.colorScheme.onSurface
                                             .withValues(alpha: 0.5),
@@ -258,14 +283,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     icon: Icons.warning_amber_rounded,
                                   ),
                                   ...dash.nearExpiryList.map((sub) {
-                                    final days =
-                                        sub['remaining_days'];
-                                    final daysInt = days is int
-                                        ? days
-                                        : int.tryParse(
-                                                days?.toString() ??
-                                                    '') ??
-                                            0;
+                                    final detail = _formatRemaining(
+                                        sub['expiration']?.toString());
                                     return _AlertItem(
                                       name:
                                           '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
@@ -274,46 +293,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                           sub['username']
                                                   ?.toString() ??
                                               '',
-                                      detail: daysInt == 0
-                                          ? 'ينتهي اليوم'
-                                          : 'متبقي $daysInt يوم',
-                                      color: daysInt == 0
-                                          ? Colors.red
-                                          : Colors.orange,
+                                      detail: detail,
+                                      color: Colors.orange,
                                       icon: Icons.schedule,
                                     );
                                   }),
                                   const SizedBox(height: 12),
-                                ],
-                                if (dash
-                                    .expiredOverdueList.isNotEmpty) ...[
-                                  _AlertSectionHeader(
-                                    title: 'منتهي الاشتراك',
-                                    count: dash.expiredOverdueCount,
-                                    color: const Color(0xFF7B1FA2),
-                                    icon: Icons.event_busy_rounded,
-                                  ),
-                                  ...dash.expiredOverdueList.map((sub) {
-                                    final days = sub['remaining_days'];
-                                    final daysInt = days is int
-                                        ? days
-                                        : int.tryParse(
-                                                days?.toString() ?? '') ??
-                                            0;
-                                    final overdueDays = daysInt.abs();
-                                    return _AlertItem(
-                                      name:
-                                          '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
-                                              .trim(),
-                                      username:
-                                          sub['username']?.toString() ?? '',
-                                      detail: overdueDays == 1
-                                          ? 'منتهي منذ يوم واحد'
-                                          : 'منتهي منذ $overdueDays يوم',
-                                      color: const Color(0xFF7B1FA2),
-                                      icon: Icons.event_busy_rounded,
-                                    );
-                                  }),
                                 ],
                                 if (dash.totalAlerts == 0)
                                   Padding(

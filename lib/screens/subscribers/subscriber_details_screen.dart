@@ -2134,14 +2134,6 @@ class _SubscriberDetailsScreenState
                       value: sub.expiration ?? '—',
                     ),
                     _DetailRow(
-                      icon: Icons.timelapse,
-                      label: 'الأيام المتبقية',
-                      value: sub.isExpired
-                          ? 'منتهي (${sub.remainingDays} يوم)'
-                          : '${sub.remainingDays ?? 0} يوم',
-                      valueColor: daysColor,
-                    ),
-                    _DetailRow(
                       icon: Icons.credit_card,
                       label: 'الدين / الرصيد',
                       value: sub.hasDebt

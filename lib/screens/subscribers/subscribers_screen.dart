@@ -606,7 +606,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
 
     String _getCount(_FilterDef f) {
       switch (f.key) {
-        case 'all': return '${state.subscribers.length}';
+        case 'all': return '${state.allCount}';
         case 'active': return '${state.activeCount}';
         case 'online': return '${state.onlineCount}';
         case 'offline': return '${state.offlineCount}';
@@ -672,7 +672,63 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ),
 
-        if (!_isSearchMode)
+        if (!_isSearchMode) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                Icon(Icons.admin_panel_settings_rounded, size: 16,
+                    color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Container(
+                    height: 32,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: state.managerFilter != null
+                          ? AppTheme.primary.withOpacity(0.08)
+                          : theme.colorScheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: state.managerFilter != null
+                            ? AppTheme.primary.withOpacity(0.3)
+                            : theme.colorScheme.onSurface.withOpacity(0.1),
+                      ),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: state.managerFilter,
+                        hint: Text('كل المدراء',
+                            style: TextStyle(fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                        isExpanded: true,
+                        icon: Icon(Icons.keyboard_arrow_down, size: 18,
+                            color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                            fontFamily: 'Cairo'),
+                        items: [
+                          DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('كل المدراء', style: TextStyle(fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                          ),
+                          ...state.availableManagers.map((m) =>
+                            DropdownMenuItem(value: m,
+                              child: Text(m, style: const TextStyle(fontSize: 12))),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          ref.read(subscribersProvider.notifier).setManagerFilter(v);
+                          setState(() => _currentPage = 0);
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -695,6 +751,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               }).toList(),
             ),
           ),
+        ],
 
         const SizedBox(height: 6),
 
@@ -803,15 +860,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
                             lastPayment: state.lastPayments[sub.username],
-                            onTap: () {
+                            onTap: isOnlineFilter ? null : () {
                               context.push(
                                 '/subscriber/${sub.username}',
                                 extra: sub,
                               );
                             },
-                            onPreview: isOnlineFilter && sub.isOnline
-                                ? () => _showOnlineUserSheet(context, sub)
-                                : null,
                             onDisconnect: isOnlineFilter && sub.idx != null
                                 ? () async {
                                     final confirm = await showDialog<bool>(

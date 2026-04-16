@@ -133,57 +133,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final msg = response.data['message']?.toString() ?? 'فشل تسجيل الدخول';
       state = state.copyWith(status: AuthStatus.unauthenticated, error: msg);
       return false;
-    } on DioException catch (e) {
-      String message;
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        message = 'انتهت مهلة الاتصال - تأكد من اتصالك بالإنترنت';
-      } else if (e.type == DioExceptionType.connectionError) {
-        message = 'تعذّر الاتصال بالخادم - تأكد من اتصالك بالإنترنت';
-      } else if (e.response != null) {
-        final statusCode = e.response?.statusCode;
-        message = _arabicErrorForStatus(statusCode, e.response?.data);
-      } else {
-        message = 'حدث خطأ في الاتصال - حاول مرة أخرى';
-      }
-      state = state.copyWith(status: AuthStatus.unauthenticated, error: message);
-      return false;
-    } catch (e) {
+    } on DioException catch (_) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'حدث خطأ غير متوقع - حاول مرة أخرى',
+        error: 'خطأ في المعلومات المدخلة',
+      );
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        error: 'خطأ في المعلومات المدخلة',
       );
       return false;
     } finally {
       dio.close();
-    }
-  }
-
-  String _arabicErrorForStatus(int? statusCode, dynamic data) {
-    switch (statusCode) {
-      case 400:
-        return 'بيانات الدخول غير مكتملة - تأكد من تعبئة جميع الحقول';
-      case 401:
-        return 'اسم المستخدم أو كلمة المرور غير صحيحة';
-      case 403:
-        return 'ليس لديك صلاحية الدخول - تواصل مع المسؤول';
-      case 404:
-        return 'خدمة تسجيل الدخول غير متوفرة حالياً';
-      case 408:
-        return 'انتهت مهلة الطلب - حاول مرة أخرى';
-      case 429:
-        return 'محاولات دخول كثيرة - انتظر قليلاً ثم حاول مجدداً';
-      case 500:
-        return 'خطأ في الخادم - حاول مرة أخرى لاحقاً';
-      case 502:
-        return 'الخادم غير متاح حالياً - حاول لاحقاً';
-      case 503:
-        return 'الخدمة متوقفة مؤقتاً للصيانة - حاول لاحقاً';
-      case 504:
-        return 'انتهت مهلة استجابة الخادم - حاول مرة أخرى';
-      default:
-        return 'حدث خطأ غير متوقع (رمز: $statusCode)';
     }
   }
 

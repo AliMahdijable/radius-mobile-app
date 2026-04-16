@@ -50,8 +50,7 @@ class DashboardState {
     this.error,
   });
 
-  int get totalAlerts =>
-      nearExpiryCount + expiredTodayCount + expiredOverdueCount;
+  int get totalAlerts => nearExpiryCount + expiredTodayCount;
 
   DashboardState copyWith({
     int? totalSubscribers,
@@ -110,6 +109,32 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     if (days is int) return days;
     if (days is double) return days.round();
     return int.tryParse(days.toString().trim());
+  }
+
+  static DateTime? _parseExpDate(String? expiration) {
+    if (expiration == null || expiration.isEmpty) return null;
+    final s = expiration.trim();
+    if (s.contains('T') || s.contains('+')) return DateTime.tryParse(s);
+    return DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
+  }
+
+  static bool _isExpiredTodayExact(String? expiration) {
+    final expDate = _parseExpDate(expiration);
+    if (expDate == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final expDay = DateTime(expDate.year, expDate.month, expDate.day);
+    return expDay == today && expDate.isBefore(now);
+  }
+
+  static bool _isNearExpiryExact(String? expiration) {
+    final expDate = _parseExpDate(expiration);
+    if (expDate == null) return false;
+    final now = DateTime.now();
+    if (expDate.isBefore(now)) return false;
+    final diff = expDate.difference(now);
+    return diff.inDays <= 3;
   }
 
   int _parseWidgetInt(dynamic data) {
@@ -197,16 +222,21 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       if (subsData is Map && subsData['success'] == true) {
         final data = subsData['data'] as List? ?? [];
         for (final sub in data) {
-          final daysInt = _remainingDaysInt(sub['remaining_days']);
-          if (daysInt != null && daysInt >= 1 && daysInt <= 3) {
+          final expStr = sub['expiration']?.toString();
+          if (_isNearExpiryExact(expStr)) {
             nearExpiry++;
             nearExpiryList.add(Map<String, dynamic>.from(sub));
           }
-          if (daysInt == 0) {
+          if (_isExpiredTodayExact(expStr)) {
             expiredToday++;
             expiredTodayList.add(Map<String, dynamic>.from(sub));
           }
-          if (daysInt != null && daysInt < 0) {
+          final daysInt = _remainingDaysInt(sub['remaining_days']);
+          final expDate = _parseExpDate(expStr);
+          final isOldExpired = expDate != null
+              ? expDate.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day))
+              : (daysInt != null && daysInt < 0);
+          if (isOldExpired) {
             expiredOverdue++;
             expiredOverdueList.add(Map<String, dynamic>.from(sub));
           }

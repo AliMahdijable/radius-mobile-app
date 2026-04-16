@@ -88,38 +88,54 @@ class SubscriberModel {
     return 0;
   }
 
-  bool get isExpired {
-    // أولاً: تحقق من تاريخ الانتهاء الفعلي (أدق من remaining_days)
-    if (expiration != null && expiration!.isNotEmpty) {
-      try {
-        final expStr = expiration!.trim();
-        DateTime? expDate;
-        if (expStr.contains('T') || expStr.contains('+')) {
-          expDate = DateTime.tryParse(expStr);
-        } else {
-          // تاريخ بدون timezone → نعتبره بتوقيت بغداد (+03:00)
-          expDate = DateTime.tryParse('${expStr.replaceAll(' ', 'T')}+03:00');
-        }
-        if (expDate != null) {
-          return expDate.isBefore(DateTime.now());
-        }
-      } catch (_) {}
+  DateTime? get _parsedExpiration {
+    if (expiration == null || expiration!.isEmpty) return null;
+    try {
+      final expStr = expiration!.trim();
+      if (expStr.contains('T') || expStr.contains('+')) {
+        return DateTime.tryParse(expStr);
+      }
+      return DateTime.tryParse('${expStr.replaceAll(' ', 'T')}+03:00');
+    } catch (_) {
+      return null;
     }
-    // fallback على remaining_days
+  }
+
+  bool get isExpired {
+    final expDate = _parsedExpiration;
+    if (expDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final expDay = DateTime(expDate.year, expDate.month, expDate.day);
+      return expDay.isBefore(today);
+    }
     return (remainingDays ?? 0) < 0;
+  }
+
+  bool get isExpiredToday {
+    if (expiration == null || expiration!.isEmpty) return false;
+    try {
+      final match = RegExp(r'(\d{4}-\d{2}-\d{2})').firstMatch(expiration!);
+      if (match != null) {
+        final now = DateTime.now();
+        final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        return match.group(1) == todayStr;
+      }
+    } catch (_) {}
+    return false;
   }
 
   bool get isActive => !isExpired;
 
   bool get isNearExpiry {
-    if (remainingDays != null && remainingDays! >= 1 && remainingDays! <= 3) {
-      return true;
+    final exp = _parsedExpiration;
+    if (exp == null) {
+      return remainingDays != null && remainingDays! >= 1 && remainingDays! <= 3;
     }
-    // remaining_days = 0 لكن التاريخ بالمستقبل = ينتهي اليوم (ساعات/دقائق)
-    if (remainingDays == 0 && !isExpired) {
-      return true;
-    }
-    return false;
+    final now = DateTime.now();
+    if (exp.isBefore(now)) return false;
+    final diff = exp.difference(now);
+    return diff.inDays <= 3;
   }
 
   bool get isEnabled => enabled == null || enabled == 1;

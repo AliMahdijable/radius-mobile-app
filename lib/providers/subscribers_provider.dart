@@ -21,6 +21,8 @@ class SubscribersState {
   final String sortDirection;
   final Map<String, Map<String, dynamic>> lastPayments;
 
+  final String? managerFilter;
+
   const SubscribersState({
     this.subscribers = const [],
     this.searchResults = const [],
@@ -34,41 +36,59 @@ class SubscribersState {
     this.sortBy = 'username',
     this.sortDirection = 'asc',
     this.lastPayments = const {},
+    this.managerFilter,
   });
 
+  List<String> get availableManagers {
+    final set = <String>{};
+    for (final s in subscribers) {
+      if (s.parentUsername != null && s.parentUsername!.isNotEmpty) {
+        set.add(s.parentUsername!);
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
   List<SubscriberModel> get filteredSubscribers {
+    List<SubscriberModel> source = managerFilter != null
+        ? subscribers.where((s) => s.parentUsername == managerFilter).toList()
+        : List.of(subscribers);
+
     List<SubscriberModel> list;
     switch (filter) {
       case 'active':
-        list = subscribers.where((s) => s.isActive).toList();
+        list = source.where((s) => s.isActive).toList();
         break;
       case 'expired':
-        list = subscribers.where((s) => s.isExpired).toList();
+        list = source.where((s) => s.isExpiredToday).toList();
         break;
       case 'online':
-        list = onlineUsers.isNotEmpty
-            ? List.of(onlineUsers)
-            : subscribers.where((s) => s.isOnline).toList();
+        if (managerFilter != null) {
+          list = source.where((s) => s.isOnline).toList();
+        } else {
+          list = onlineUsers.isNotEmpty
+              ? List.of(onlineUsers)
+              : source.where((s) => s.isOnline).toList();
+        }
         break;
       case 'offline':
-        list = subscribers.where((s) => s.isOffline).toList();
+        list = source.where((s) => s.isOffline).toList();
         break;
       case 'debtors':
-        list = subscribers.where((s) => s.hasDebt).toList();
+        list = source.where((s) => s.hasDebt).toList();
         break;
       case 'nearExpiry':
-        list = subscribers.where((s) => s.isNearExpiry).toList();
-        // ترتيب تلقائي من الأقل أيام للأعلى
+        list = source.where((s) => s.isNearExpiry).toList();
         list.sort((a, b) {
           final da = a.remainingDays ?? 0;
           final db = b.remainingDays ?? 0;
           if (da != db) return da.compareTo(db);
-          // نفس الأيام → رتب بتاريخ الانتهاء (الأقرب أولاً)
           return (a.expiration ?? '').compareTo(b.expiration ?? '');
         });
         return list;
       default:
-        list = List.of(subscribers);
+        list = source;
     }
     return _applySorting(list);
   }
@@ -107,12 +127,17 @@ class SubscribersState {
     return list;
   }
 
-  int get activeCount => subscribers.where((s) => s.isActive).length;
-  int get expiredCount => subscribers.where((s) => s.isExpired).length;
-  int get onlineCount => subscribers.where((s) => s.isOnline).length;
-  int get offlineCount => subscribers.where((s) => s.isOffline).length;
-  int get debtorsCount => subscribers.where((s) => s.hasDebt).length;
-  int get nearExpiryCount => subscribers.where((s) => s.isNearExpiry).length;
+  List<SubscriberModel> get _managerScoped => managerFilter != null
+      ? subscribers.where((s) => s.parentUsername == managerFilter).toList()
+      : subscribers;
+
+  int get allCount => _managerScoped.length;
+  int get activeCount => _managerScoped.where((s) => s.isActive).length;
+  int get expiredCount => _managerScoped.where((s) => s.isExpiredToday).length;
+  int get onlineCount => _managerScoped.where((s) => s.isOnline).length;
+  int get offlineCount => _managerScoped.where((s) => s.isOffline).length;
+  int get debtorsCount => _managerScoped.where((s) => s.hasDebt).length;
+  int get nearExpiryCount => _managerScoped.where((s) => s.isNearExpiry).length;
 
   SubscribersState copyWith({
     List<SubscriberModel>? subscribers,
@@ -127,6 +152,8 @@ class SubscribersState {
     String? sortBy,
     String? sortDirection,
     Map<String, Map<String, dynamic>>? lastPayments,
+    String? managerFilter,
+    bool clearManager = false,
   }) {
     return SubscribersState(
       subscribers: subscribers ?? this.subscribers,
@@ -141,6 +168,7 @@ class SubscribersState {
       sortBy: sortBy ?? this.sortBy,
       sortDirection: sortDirection ?? this.sortDirection,
       lastPayments: lastPayments ?? this.lastPayments,
+      managerFilter: clearManager ? null : (managerFilter ?? this.managerFilter),
     );
   }
 }
@@ -649,6 +677,14 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     state = state.copyWith(filter: filter);
     if (filter == 'online' && state.onlineUsers.isEmpty) {
       loadOnlineUsers();
+    }
+  }
+
+  void setManagerFilter(String? manager) {
+    if (manager == null) {
+      state = state.copyWith(clearManager: true);
+    } else {
+      state = state.copyWith(managerFilter: manager);
     }
   }
 
