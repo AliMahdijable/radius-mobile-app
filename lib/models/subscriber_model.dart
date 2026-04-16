@@ -108,8 +108,16 @@ class SubscriberModel {
 
   bool get isActive => !isExpired;
 
-  bool get isNearExpiry =>
-      remainingDays != null && remainingDays! > 0 && remainingDays! <= 3;
+  bool get isNearExpiry {
+    if (remainingDays != null && remainingDays! >= 1 && remainingDays! <= 3) {
+      return true;
+    }
+    // remaining_days = 0 لكن التاريخ بالمستقبل = ينتهي اليوم (ساعات/دقائق)
+    if (remainingDays == 0 && !isExpired) {
+      return true;
+    }
+    return false;
+  }
 
   bool get isEnabled => enabled == null || enabled == 1;
 

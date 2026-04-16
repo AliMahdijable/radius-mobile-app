@@ -152,7 +152,7 @@ class SubscriberCard extends StatelessWidget {
                         ? 'معطّل'
                         : subscriber.isExpired
                             ? 'منتهي'
-                            : '${subscriber.remainingDays ?? 0} يوم',
+                            : _formatRemaining(subscriber),
                     style: TextStyle(
                       color: daysColor,
                       fontSize: 10,
@@ -254,6 +254,33 @@ class SubscriberCard extends StatelessWidget {
       ),
     ),
     );
+  }
+
+  static String _formatRemaining(SubscriberModel sub) {
+    final days = sub.remainingDays ?? 0;
+    if (days > 0) return '$days يوم';
+    // remaining_days = 0 → نحسب الساعات/الدقائق من تاريخ الانتهاء
+    if (sub.expiration != null && sub.expiration!.isNotEmpty) {
+      try {
+        final expStr = sub.expiration!.trim();
+        DateTime? expDate;
+        if (expStr.contains('T') || expStr.contains('+')) {
+          expDate = DateTime.tryParse(expStr);
+        } else {
+          expDate = DateTime.tryParse('${expStr.replaceAll(' ', 'T')}+03:00');
+        }
+        if (expDate != null) {
+          final diff = expDate.difference(DateTime.now());
+          if (diff.isNegative) return 'منتهي';
+          final hours = diff.inHours;
+          final minutes = diff.inMinutes % 60;
+          if (hours > 0) return '$hours س $minutes د';
+          if (minutes > 0) return '$minutes دقيقة';
+          return 'ينتهي الآن';
+        }
+      } catch (_) {}
+    }
+    return '0 يوم';
   }
 
   static Widget _dot(ThemeData theme) {

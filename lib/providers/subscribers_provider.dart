@@ -54,7 +54,15 @@ class SubscribersState {
         break;
       case 'nearExpiry':
         list = subscribers.where((s) => s.isNearExpiry).toList();
-        break;
+        // ترتيب تلقائي من الأقل أيام للأعلى
+        list.sort((a, b) {
+          final da = a.remainingDays ?? 0;
+          final db = b.remainingDays ?? 0;
+          if (da != db) return da.compareTo(db);
+          // نفس الأيام → رتب بتاريخ الانتهاء (الأقرب أولاً)
+          return (a.expiration ?? '').compareTo(b.expiration ?? '');
+        });
+        return list;
       default:
         list = List.of(subscribers);
     }
