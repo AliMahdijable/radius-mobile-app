@@ -9,3 +9,6 @@
 ## Firebase
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
+
+## Google Play Core (deferred components)
+-dontwarn com.google.android.play.core.**
