@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../core/theme/app_theme.dart';
+import '../core/router/app_router.dart';
 import '../core/services/storage_service.dart';
+import '../widgets/app_snackbar.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -97,20 +99,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         } else {
           await storage.clearCredentials();
         }
+        if (!mounted) return;
+        setState(() => _isLoading = false);
         context.go('/');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = appNavigatorKey.currentContext;
+          if (ctx != null) {
+            AppSnackBar.success(ctx, 'تم تسجيل الدخول بنجاح');
+          }
+        });
       } else {
         final authState = ref.read(authProvider);
+        final msg = authState.error ?? 'فشل تسجيل الدخول';
         setState(() {
           _isLoading = false;
-          _errorMessage = authState.error ?? 'فشل تسجيل الدخول';
+          _errorMessage = msg;
         });
+        if (mounted) {
+          AppSnackBar.error(context, msg);
+        }
       }
     } catch (e) {
       if (!mounted) return;
+      const msg = 'خطأ غير متوقع';
       setState(() {
         _isLoading = false;
-        _errorMessage = 'خطأ غير متوقع';
+        _errorMessage = msg;
       });
+      AppSnackBar.error(context, msg);
     }
   }
 
@@ -374,7 +390,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               const SizedBox(height: 22),
 
                               SizedBox(
-                                height: 54,
+                                height: AppTheme.actionButtonHeight,
                                 child: ElevatedButton(
                                   onPressed: _isLoading ? null : _login,
                                   style: ElevatedButton.styleFrom(

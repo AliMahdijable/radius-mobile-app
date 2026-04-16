@@ -18,11 +18,16 @@ class AuthState {
     this.error,
   });
 
-  AuthState copyWith({AuthStatus? status, UserModel? user, String? error}) {
+  AuthState copyWith({
+    AuthStatus? status,
+    UserModel? user,
+    String? error,
+    bool clearError = false,
+  }) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
-      error: error,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -37,7 +42,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final isLoggedIn = await _storage.isLoggedIn();
       if (!isLoggedIn) {
-        state = state.copyWith(status: AuthStatus.unauthenticated);
+        state = state.copyWith(
+          status: AuthStatus.unauthenticated,
+          clearError: true,
+        );
         return;
       }
       final token = await _storage.getToken();
@@ -46,7 +54,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final expiry = await _storage.getTokenExpiry();
 
       if (token == null || adminId == null) {
-        state = state.copyWith(status: AuthStatus.unauthenticated);
+        state = state.copyWith(
+          status: AuthStatus.unauthenticated,
+          clearError: true,
+        );
         return;
       }
 
@@ -58,9 +69,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         expiresAt: expiry ?? '',
       );
       _socket.connect(adminId);
-      state = state.copyWith(status: AuthStatus.authenticated, user: user);
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        user: user,
+        error: null,
+      );
     } catch (e) {
-      state = state.copyWith(status: AuthStatus.unauthenticated);
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        clearError: true,
+      );
     }
   }
 
@@ -75,6 +93,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'Accept': 'application/json',
       },
     ));
+
+    state = state.copyWith(clearError: true);
 
     try {
       final response = await dio.post(
@@ -94,9 +114,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
         _socket.connect(user.id);
 
-        state = state.copyWith(
+        state = AuthState(
           status: AuthStatus.authenticated,
           user: user,
+          error: null,
         );
         return true;
       }

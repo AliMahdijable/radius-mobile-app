@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/router/app_router.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/theme_provider.dart';
@@ -253,7 +254,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 20),
 
         SizedBox(
-          height: 52,
+          height: AppTheme.actionButtonHeight,
           child: OutlinedButton.icon(
             onPressed: () async {
               final confirm = await showDialog<bool>(
@@ -278,7 +279,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               );
               if (confirm == true && mounted) {
                 await ref.read(authProvider.notifier).logout();
-                if (mounted) context.go('/login');
+                if (!mounted) return;
+                context.go('/login');
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final ctx = appNavigatorKey.currentContext;
+                  if (ctx != null) {
+                    AppSnackBar.info(ctx, 'تم تسجيل الخروج');
+                  }
+                });
               }
             },
             icon: const Icon(Icons.logout, color: Colors.red),

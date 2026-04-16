@@ -10,7 +10,11 @@ import '../core/services/storage_service.dart';
 import '../core/services/encryption_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
+import '../providers/auth_provider.dart';
+import '../providers/dashboard_provider.dart';
+import '../providers/subscribers_provider.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/loading_overlay.dart';
 
 class _ImportRow {
   final String username;
@@ -134,7 +138,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
       });
 
       if (rows.isNotEmpty) {
-        _matchSubscribers();
+        await _matchSubscribers();
       }
     } catch (e) {
       setState(() => _isLoading = false);
@@ -245,7 +249,21 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
     }
   }
 
-  Future<void> _applyDebt(_ImportRow row) async {
+  Future<void> _refreshCachesAfterImport() async {
+    try {
+      await ref.read(subscribersProvider.notifier).loadSubscribers();
+    } catch (_) {}
+    final user = ref.read(authProvider).user;
+    if (user != null) {
+      try {
+        await ref.read(dashboardProvider.notifier).loadDashboard(
+              adminId: user.id, token: user.token);
+      } catch (_) {}
+    }
+  }
+
+  /// [batch]: when true, skip per-row global refresh (caller refreshes once at the end).
+  Future<void> _applyDebt(_ImportRow row, {bool batch = false}) async {
     if (row.matchedId == null) return;
     final dio = ref.read(sas4DioProvider);
 
@@ -271,9 +289,16 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
       );
 
       final ok = putResp.statusCode == 200 || putResp.statusCode == 201;
+      if (!mounted) return;
       setState(() => row.status = ok ? 'success' : 'failed');
+      if (ok && !batch) {
+        await _refreshCachesAfterImport();
+        if (mounted) {
+          AppSnackBar.success(context, 'تم تحديث دين ${row.username}');
+        }
+      }
     } catch (e) {
-      setState(() => row.status = 'failed');
+      if (mounted) setState(() => row.status = 'failed');
     }
   }
 
@@ -281,25 +306,34 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
       _rows.where((r) => r.matchedId != null && r.status == 'pending').length;
 
   Future<void> _applyAllMatched() async {
-    final targets = _rows.where((r) => r.matchedId != null && r.status == 'pending').toList();
+    final targets =
+        _rows.where((r) => r.matchedId != null && r.status == 'pending').toList();
     if (targets.isEmpty) return;
     setState(() => _isBulkApplying = true);
-    for (final r in targets) {
-      await _applyDebt(r);
-    }
-    if (mounted) {
-      setState(() => _isBulkApplying = false);
+    try {
+      for (final r in targets) {
+        await _applyDebt(r, batch: true);
+      }
+      if (!mounted) return;
       final ok = targets.where((r) => r.status == 'success').length;
       final bad = targets.length - ok;
-      if (bad == 0) {
-        AppSnackBar.success(context, 'تم استيراد $ok مشترك');
-      } else {
+      if (ok > 0) {
+        await _refreshCachesAfterImport();
+      }
+      if (!mounted) return;
+      if (bad == 0 && ok > 0) {
+        AppSnackBar.success(context, 'تم إضافة الديون لـ $ok مشترك وتحديث القوائم');
+      } else if (ok > 0) {
         AppSnackBar.warning(
           context,
           'اكتمل جزئياً',
-          detail: 'نجح $ok • فشل أو لم يكتمل $bad',
+          detail: 'نجح $ok • فشل $bad • تم تحديث القوائم',
         );
+      } else if (bad > 0) {
+        AppSnackBar.error(context, 'لم تنجح أي عملية');
       }
+    } finally {
+      if (mounted) setState(() => _isBulkApplying = false);
     }
   }
 
@@ -307,7 +341,12 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
+    return LoadingOverlay(
+      isLoading: _isBulkApplying,
+      message: _isBulkApplying
+          ? 'جاري إضافة الديون لجميع المطابقين...\nانتظر حتى يكتمل التحديث'
+          : null,
+      child: Scaffold(
       appBar: AppBar(title: const Text('استيراد ديون المشتركين')),
       body: Column(
         children: [
@@ -343,9 +382,9 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SizedBox(
               width: double.infinity,
-              height: 54,
+              height: AppTheme.actionButtonHeight,
               child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _pickFile,
+                onPressed: (_isLoading || _isBulkApplying) ? null : _pickFile,
                 icon: const Icon(Icons.file_upload_rounded),
                 label: Text(_fileName ?? 'اختر ملف CSV'),
               ),
@@ -395,6 +434,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
                 itemCount: _rows.length,
                 itemBuilder: (ctx, i) => _ImportRowCard(
                   row: _rows[i],
+                  enabled: !_isBulkApplying,
                   onApply: () => _applyDebt(_rows[i]),
                 ),
               ),
@@ -408,23 +448,14 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     child: SizedBox(
                       width: double.infinity,
-                      height: 54,
+                      height: AppTheme.actionButtonHeight,
                       child: ElevatedButton.icon(
                         onPressed: _isBulkApplying ? null : _applyAllMatched,
-                        icon: _isBulkApplying
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.playlist_add_check_rounded),
+                        icon: const Icon(Icons.done_all_rounded),
                         label: Text(
                           _isBulkApplying
-                              ? 'جاري التطبيق...'
-                              : 'تطبيق الاستيراد ($_pendingMatchedCount)',
+                              ? 'جاري الإضافة...'
+                              : 'إضافة الكل ($_pendingMatchedCount)',
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.w700,
@@ -438,6 +469,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
           ],
         ],
       ),
+    ),
     );
   }
 }
@@ -476,10 +508,12 @@ class _StatLabel extends StatelessWidget {
 class _ImportRowCard extends StatelessWidget {
   final _ImportRow row;
   final VoidCallback onApply;
+  final bool enabled;
 
   const _ImportRowCard({
     required this.row,
     required this.onApply,
+    this.enabled = true,
   });
 
   @override
@@ -489,7 +523,8 @@ class _ImportRowCard extends StatelessWidget {
     final isSuccess = row.status == 'success';
     final isFailed = row.status == 'failed';
     final isLoadingRow = row.status == 'loading';
-    final canApply = row.matchedId != null && row.status == 'pending';
+    final canApply =
+        enabled && row.matchedId != null && row.status == 'pending';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

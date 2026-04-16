@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../core/router/app_router.dart';
 import '../core/theme/app_theme.dart';
 
 enum _SnackType { success, error, warning, info, whatsapp, whatsappError }
@@ -37,6 +38,42 @@ class AppSnackBar {
     _currentEntry = null;
   }
 
+  static void _showSnackBarMessenger(
+    BuildContext context,
+    String message,
+    _SnackType type, {
+    String? detail,
+    required Color accent,
+    required Duration duration,
+  }) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.clearSnackBars();
+    final buf = StringBuffer(message);
+    if (detail != null && detail.isNotEmpty) {
+      buf.write('\n');
+      buf.write(detail);
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          buf.toString(),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            height: 1.35,
+          ),
+        ),
+        backgroundColor: accent,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: duration,
+      ),
+    );
+  }
+
   static void _show(
     BuildContext context,
     String message,
@@ -44,9 +81,6 @@ class AppSnackBar {
     String? detail,
   }) {
     dismiss();
-
-    final overlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (overlay == null) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -89,6 +123,22 @@ class AppSnackBar {
         ? const Duration(seconds: 4)
         : const Duration(seconds: 3);
 
+    OverlayState? overlay = Overlay.maybeOf(context, rootOverlay: true);
+    overlay ??= Navigator.maybeOf(context, rootNavigator: true)?.overlay;
+    overlay ??= appNavigatorKey.currentState?.overlay;
+
+    if (overlay == null) {
+      _showSnackBarMessenger(
+        context,
+        message,
+        type,
+        detail: detail,
+        accent: accent,
+        duration: duration,
+      );
+      return;
+    }
+
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => _TopNotification(
@@ -114,7 +164,20 @@ class AppSnackBar {
     );
 
     _currentEntry = entry;
-    overlay.insert(entry);
+    try {
+      overlay.insert(entry);
+    } catch (_) {
+      _currentEntry = null;
+      _showSnackBarMessenger(
+        context,
+        message,
+        type,
+        detail: detail,
+        accent: accent,
+        duration: duration,
+      );
+      return;
+    }
 
     _dismissTimer = Timer(duration + const Duration(milliseconds: 400), () {
       if (_currentEntry == entry) {

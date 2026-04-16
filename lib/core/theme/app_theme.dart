@@ -4,6 +4,9 @@ class AppTheme {
   static const String fontFamily = 'Cairo';
   static const String _fontFamily = fontFamily;
 
+  /// Full-width primary actions (compact, ~Material action sizing).
+  static const double actionButtonHeight = 46;
+
   // Teal palette
   static const Color primary = Color(0xFF387478);
   static const Color secondary = Color(0xFF629584);
@@ -104,17 +107,19 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          minimumSize: const Size(64, actionButtonHeight),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
           ),
           foregroundColor: Colors.white,
           backgroundColor: primary,
           textStyle: const TextStyle(
             fontFamily: _fontFamily,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            height: 1.4,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
           ),
         ),
       ),
@@ -130,17 +135,19 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          minimumSize: const Size(64, actionButtonHeight),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
           ),
           side: const BorderSide(color: primary),
           foregroundColor: primary,
           textStyle: const TextStyle(
             fontFamily: _fontFamily,
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
-            height: 1.4,
+            height: 1.35,
           ),
         ),
       ),
@@ -265,17 +272,19 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          minimumSize: const Size(64, actionButtonHeight),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
           ),
           foregroundColor: Colors.white,
           backgroundColor: teal600,
           textStyle: const TextStyle(
             fontFamily: _fontFamily,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            height: 1.4,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
           ),
         ),
       ),
@@ -291,17 +300,19 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          minimumSize: const Size(64, actionButtonHeight),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
           ),
           side: const BorderSide(color: teal500),
           foregroundColor: teal400,
           textStyle: const TextStyle(
             fontFamily: _fontFamily,
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
-            height: 1.4,
+            height: 1.35,
           ),
         ),
       ),
