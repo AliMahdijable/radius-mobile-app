@@ -637,7 +637,9 @@ class _SubscriberDetailsScreenState
 
     final requiredPoints = extData['required_points']?.toString() ?? '0';
     final availablePoints = extData['reward_points_balance']?.toString() ?? '0';
-    final balance = extData['balance']?.toString() ?? '0';
+    final notesSigned = _toDouble(
+      extData['notes'] ?? extData['comments'] ?? widget.subscriber.notes,
+    );
 
     if (!mounted) return;
 
@@ -683,7 +685,18 @@ class _SubscriberDetailsScreenState
                 _InfoChip(label: 'المشترك', value: widget.subscriber.fullName),
                 _InfoChip(label: 'النقاط المطلوبة', value: '$requiredPoints نقطة'),
                 _InfoChip(label: 'النقاط المتاحة', value: '$availablePoints نقطة'),
-                _InfoChip(label: 'الرصيد المتاح', value: balance),
+                if (notesSigned > 0)
+                  _InfoChip(
+                    label: 'الرصيد (من الملاحظات)',
+                    value: AppHelpers.formatMoney(notesSigned),
+                  )
+                else if (notesSigned < 0)
+                  _InfoChip(
+                    label: 'الدين (من الملاحظات)',
+                    value: AppHelpers.formatMoney(notesSigned.abs()),
+                  )
+                else
+                  const _InfoChip(label: 'دين/رصيد الملاحظات', value: 'لا يوجد'),
                 const SizedBox(height: 12),
                 if (allowedPkgs.isNotEmpty) ...[
                   Text('الباقة', style: TextStyle(fontSize: 13,
@@ -2132,13 +2145,6 @@ class _SubscriberDetailsScreenState
                               : 'لا يوجد',
                       valueColor: sub.hasDebt ? Colors.red : sub.hasCredit ? Colors.green : null,
                     ),
-                    if (sub.balanceAmount > 0)
-                      _DetailRow(
-                        icon: Icons.account_balance_wallet_outlined,
-                        label: 'الرصيد (Balance)',
-                        value: AppHelpers.formatMoney(sub.balanceAmount),
-                        valueColor: AppTheme.teal600,
-                      ),
                     Builder(builder: (_) {
                       final lp = ref.watch(subscribersProvider).lastPayments[sub.username];
                       if (lp == null) return const SizedBox.shrink();

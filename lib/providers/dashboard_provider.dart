@@ -46,6 +46,7 @@ class DashboardState {
     this.error,
   });
 
+  /// Bell badge + sheet: subscription expiry only (near expiry + ends today).
   int get totalAlerts => nearExpiryCount + expiredTodayCount;
 
   DashboardState copyWith({
@@ -95,6 +96,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   final Dio _sas4Dio;
 
   DashboardNotifier(this._sas4Dio) : super(const DashboardState());
+
+  static int? _remainingDaysInt(dynamic days) {
+    if (days == null) return null;
+    if (days is int) return days;
+    if (days is double) return days.round();
+    return int.tryParse(days.toString().trim());
+  }
 
   int _parseWidgetInt(dynamic data) {
     if (data is Map && data.containsKey('data')) {
@@ -158,7 +166,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         name: 'DASH',
       );
 
-      // 2) Backend: subscribers with phones (for debt + near-expiry alerts)
+      // 2) Backend: subscribers with phones (debt for dashboard stats; bell uses near-expiry + expired-today only)
       int debtors = 0;
       double totalDebt = 0;
       int nearExpiry = 0, expiredToday = 0;
@@ -173,34 +181,25 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         if (subsResponse.data['success'] == true) {
           final data = subsResponse.data['data'] as List? ?? [];
           for (final sub in data) {
-            final days = sub['remaining_days'];
-            final daysInt =
-                days is int ? days : int.tryParse(days?.toString() ?? '');
+            final daysInt = _remainingDaysInt(sub['remaining_days']);
 
-            if (daysInt != null && daysInt > 0 && daysInt <= 3) {
+            // Bell / alerts: "قريب الانتهاء" = 1–3 days left (not same-day expiry).
+            if (daysInt != null && daysInt >= 1 && daysInt <= 3) {
               nearExpiry++;
               nearExpiryList.add(Map<String, dynamic>.from(sub));
             }
-            if (daysInt != null && daysInt <= 0 && daysInt >= -1) {
+            // "انتهى اليوم" = subscription ends today (remaining_days == 0 only).
+            if (daysInt == 0) {
               expiredToday++;
               expiredTodayList.add(Map<String, dynamic>.from(sub));
             }
 
-            final notes = (sub['notes'] ?? sub['comments'])?.toString() ?? '0';
-            final debtField = sub['debt'];
-            final hasDebtFlag = sub['hasDebt'] == true;
-
-            double debtAmount = 0;
-            if (debtField is num && debtField != 0) {
-              debtAmount = debtField.toDouble().abs();
-            } else {
-              final notesVal = double.tryParse(notes.replaceAll(',', '').trim()) ?? 0;
-              if (notesVal < 0) debtAmount = notesVal.abs();
-            }
-
-            if (debtAmount > 0 || hasDebtFlag) {
+            final notesRaw = (sub['notes'] ?? sub['comments'])?.toString() ?? '';
+            final notesVal =
+                double.tryParse(notesRaw.replaceAll(',', '').trim()) ?? 0;
+            if (notesVal < 0) {
               debtors++;
-              totalDebt += debtAmount;
+              totalDebt += notesVal.abs();
             }
           }
         }
