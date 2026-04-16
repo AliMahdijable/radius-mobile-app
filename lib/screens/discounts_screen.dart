@@ -133,7 +133,8 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               TextField(
                 controller: controller,
                 keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
                 decoration: const InputDecoration(
                   labelText: 'مبلغ الخصم',
                   suffixText: 'IQD',
@@ -322,6 +323,8 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
             TextField(
               controller: _customAmountController,
               keyboardType: TextInputType.number,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 labelText: 'مبلغ مخصص',
                 suffixText: 'IQD',
@@ -334,6 +337,8 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
           const SizedBox(height: 20),
           TextField(
             controller: _subscriberSearchController,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'بحث عن مشترك...',
               prefixIcon: Icon(Icons.search_rounded),
@@ -577,6 +582,8 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
           if (allDiscounts.isNotEmpty) ...[
             TextField(
               controller: _discountSearchController,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 labelText: 'بحث في الخصومات...',
                 prefixIcon: Icon(Icons.search_rounded),

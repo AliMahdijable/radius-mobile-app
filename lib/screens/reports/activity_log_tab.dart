@@ -156,6 +156,8 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
           child: Row(children: [
             Expanded(
               child: TextField(
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
                 onChanged: (v) => _search = v,
                 onSubmitted: (_) => _fetchActivities(),
                 decoration: InputDecoration(

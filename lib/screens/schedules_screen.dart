@@ -332,6 +332,8 @@ class _ScheduleCard extends StatelessWidget {
             TextField(
               controller: daysBeforeController,
               keyboardType: TextInputType.number,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.calendar_today_rounded),
                 hintText: '1 - 30',

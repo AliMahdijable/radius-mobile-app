@@ -20,6 +20,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
   late String _dateTo;
   String _filter = 'all';
   String _managerId = 'all';
+  String _searchQuery = '';
   bool _loaded = false;
   int _page = 1;
   int _perPage = 10;
@@ -49,12 +50,24 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
 
   List<Map<String, dynamic>> get _filtered {
     final all = ref.read(reportsProvider).activations;
-    if (_filter == 'all') return all;
-    return all.where((a) {
-      final type = (a['action_type'] ?? '').toString().toUpperCase();
-      if (_filter == 'activate') return type == 'SUBSCRIBER_ACTIVATE';
-      return type == 'SUBSCRIBER_EXTEND';
-    }).toList();
+    var list = all;
+    if (_filter != 'all') {
+      list = list.where((a) {
+        final type = (a['action_type'] ?? '').toString().toUpperCase();
+        if (_filter == 'activate') return type == 'SUBSCRIBER_ACTIVATE';
+        return type == 'SUBSCRIBER_EXTEND';
+      }).toList();
+    }
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((a) {
+        final target = (a['target_name'] ?? '').toString().toLowerCase();
+        final desc = (a['action_description'] ?? '').toString().toLowerCase();
+        final admin = (a['admin_username'] ?? '').toString().toLowerCase();
+        return target.contains(q) || desc.contains(q) || admin.contains(q);
+      }).toList();
+    }
+    return list;
   }
 
   Future<void> _exportCsv() async {
@@ -105,6 +118,26 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Search bar
+          TextField(
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            onChanged: (v) => setState(() { _searchQuery = v; _page = 1; }),
+            decoration: InputDecoration(
+              hintText: 'بحث باسم المشترك...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() { _searchQuery = ''; _page = 1; }),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // Action bar
           Row(children: [
             Expanded(

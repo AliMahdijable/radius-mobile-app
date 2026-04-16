@@ -79,6 +79,8 @@ class _SubscriberDetailsScreenState
             TextField(
               controller: _messageController,
               maxLines: 4,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 hintText: 'اكتب رسالتك هنا...',
                 border: OutlineInputBorder(),
@@ -244,6 +246,8 @@ class _SubscriberDetailsScreenState
                   Row(children: [
                     Expanded(child: TextField(
                       controller: fnCtrl,
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.left,
                       decoration: const InputDecoration(
                         labelText: 'الاسم الأول',
                         prefixIcon: Icon(Icons.person_outline, size: 20)),
@@ -251,6 +255,8 @@ class _SubscriberDetailsScreenState
                     const SizedBox(width: 10),
                     Expanded(child: TextField(
                       controller: lnCtrl,
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.left,
                       decoration: const InputDecoration(labelText: 'الاسم الأخير'),
                     )),
                   ]),
@@ -1456,6 +1462,8 @@ class _SubscriberDetailsScreenState
                 TextField(
                   controller: notesCtrl,
                   maxLines: 2,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
@@ -1704,6 +1712,8 @@ class _SubscriberDetailsScreenState
                 TextField(
                   controller: commentCtrl,
                   maxLines: 2,
+                  textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.left,
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(

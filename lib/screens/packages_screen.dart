@@ -583,7 +583,8 @@ class _PriceFieldState extends State<_PriceField> {
                 controller: _ctrl,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.center,
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 14,

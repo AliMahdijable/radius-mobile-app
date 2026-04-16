@@ -480,6 +480,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
       children: [
         TextField(
           controller: _searchControllers[tab],
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
           decoration: InputDecoration(
             hintText: 'بحث عن مشترك...',
             prefixIcon: const Icon(Icons.search),
@@ -590,6 +592,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
         TextField(
           controller: _messageControllers[tab],
           maxLines: 6,
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
           decoration: InputDecoration(
             hintText: 'اكتب رسالة البث هنا...',
             border: OutlineInputBorder(

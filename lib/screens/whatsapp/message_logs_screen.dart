@@ -552,6 +552,8 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: TextField(
               controller: _searchController,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.left,
               decoration: InputDecoration(
                 hintText: 'بحث باسم المستخدم أو الهاتف...',
                 prefixIcon: const Icon(Icons.search, size: 20),
