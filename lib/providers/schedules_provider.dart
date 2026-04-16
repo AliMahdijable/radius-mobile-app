@@ -83,6 +83,7 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
       }
       return body['message']?.toString() ?? 'فشل في حفظ الجدولة';
     } on DioException catch (e) {
+      final code = e.response?.statusCode;
       final data = e.response?.data;
       final map = _asJsonMap(data);
       if (map != null && map['message'] != null) {
@@ -90,6 +91,9 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
       }
       if (data is String && data.isNotEmpty) {
         return data.length > 200 ? '${data.substring(0, 200)}…' : data;
+      }
+      if (code != null) {
+        return '${e.message ?? 'فشل الاتصال بالخادم'} (رمز $code)';
       }
       return e.message ?? 'فشل في حفظ الجدولة';
     } catch (_) {
