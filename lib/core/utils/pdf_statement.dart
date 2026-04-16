@@ -33,7 +33,7 @@ class PdfStatement {
     final pdf = pw.Document();
     final baseStyle = pw.TextStyle(font: _cairoFont, fontSize: 10);
     final boldStyle = pw.TextStyle(font: _cairoBold, fontSize: 10, fontWeight: pw.FontWeight.bold);
-    final headerStyle = pw.TextStyle(font: _cairoBold, fontSize: 16, fontWeight: pw.FontWeight.bold,
+    final headerStyle = pw.TextStyle(font: _cairoBold, fontSize: 18, fontWeight: pw.FontWeight.bold,
         color: PdfColor.fromHex('#1a7f64'));
     final subStyle = pw.TextStyle(font: _cairoFont, fontSize: 9, color: PdfColors.grey700);
 
@@ -69,129 +69,105 @@ class PdfStatement {
       );
     }).toList();
 
-    const maxPerPage = 25;
-    final pageCount = (rows.length / maxPerPage).ceil().clamp(1, 999);
+    final tableHeader = pw.TableRow(
+      decoration: pw.BoxDecoration(color: PdfColor.fromHex('#1a7f64')),
+      children: ['التاريخ', 'الوقت', 'النوع', 'التفاصيل', 'المبلغ', 'المنفذ']
+          .map((h) => pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 4),
+                child: pw.Text(h,
+                    style: pw.TextStyle(font: _cairoBold, fontSize: 8,
+                        color: PdfColors.white, fontWeight: pw.FontWeight.bold),
+                    textDirection: pw.TextDirection.rtl,
+                    textAlign: pw.TextAlign.center),
+              ))
+          .toList(),
+    );
 
-    for (int p = 0; p < pageCount; p++) {
-      final pageRows = rows.skip(p * maxPerPage).take(maxPerPage).toList();
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          textDirection: pw.TextDirection.rtl,
-          margin: const pw.EdgeInsets.all(30),
-          build: (context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                if (p == 0) ...[
-                  pw.Center(child: pw.Text('كشف حساب المشترك', style: headerStyle,
-                      textDirection: pw.TextDirection.rtl)),
-                  pw.SizedBox(height: 4),
-                  pw.Center(child: pw.Text('الفترة: $dateFrom — $dateTo', style: subStyle,
-                      textDirection: pw.TextDirection.rtl)),
-                  pw.SizedBox(height: 12),
-
-                  // Subscriber info
-                  pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(
-                      color: PdfColor.fromHex('#f0fdf4'),
-                      borderRadius: pw.BorderRadius.circular(6),
-                      border: pw.Border.all(color: PdfColor.fromHex('#bbf7d0')),
-                    ),
-                    child: pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                      children: [
-                        _infoCol('الباقة', profileName.isNotEmpty ? profileName : '—', baseStyle, subStyle),
-                        _infoCol('الهاتف', phone.isNotEmpty ? phone : '—', baseStyle, subStyle),
-                        _infoCol('المشترك', username, boldStyle, subStyle),
-                      ],
-                    ),
-                  ),
-                  pw.SizedBox(height: 10),
-
-                  // Summary
-                  pw.Row(children: [
-                    _summaryBox('العمليات', '$totalTxn', PdfColor.fromHex('#3b82f6'), baseStyle, boldStyle),
-                    pw.SizedBox(width: 8),
-                    _summaryBox('الديون', AppHelpers.formatMoney(totalDebt), PdfColor.fromHex('#ef4444'), baseStyle, boldStyle),
-                    pw.SizedBox(width: 8),
-                    _summaryBox('المدفوعات', AppHelpers.formatMoney(totalPayments), PdfColor.fromHex('#22c55e'), baseStyle, boldStyle),
-                    pw.SizedBox(width: 8),
-                    _summaryBox('التفعيلات', '$totalActivations', PdfColor.fromHex('#f59e0b'), baseStyle, boldStyle),
-                  ]),
-                  pw.SizedBox(height: 12),
-                ],
-
-                if (p > 0)
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 8),
-                    child: pw.Text('كشف حساب: $username — صفحة ${p + 1}',
-                        style: subStyle, textDirection: pw.TextDirection.rtl),
-                  ),
-
-                // Table
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(1.2),
-                    1: const pw.FlexColumnWidth(0.7),
-                    2: const pw.FlexColumnWidth(1),
-                    3: const pw.FlexColumnWidth(2.5),
-                    4: const pw.FlexColumnWidth(1.2),
-                    5: const pw.FlexColumnWidth(1),
-                  },
-                  children: [
-                    pw.TableRow(
-                      decoration: pw.BoxDecoration(color: PdfColor.fromHex('#1a7f64')),
-                      children: ['التاريخ', 'الوقت', 'النوع', 'التفاصيل', 'المبلغ', 'المنفذ']
-                          .map((h) => pw.Container(
-                                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 4),
-                                child: pw.Text(h,
-                                    style: pw.TextStyle(font: _cairoBold, fontSize: 8,
-                                        color: PdfColors.white, fontWeight: pw.FontWeight.bold),
-                                    textDirection: pw.TextDirection.rtl,
-                                    textAlign: pw.TextAlign.center),
-                              ))
-                          .toList(),
-                    ),
-                    ...pageRows.asMap().entries.map((e) {
-                      final i = e.key;
-                      final r = e.value;
-                      final bg = i % 2 == 0 ? PdfColors.white : PdfColor.fromHex('#f8fafc');
-                      final amtColor = r.isDebt ? PdfColor.fromHex('#dc2626') : PdfColor.fromHex('#16a34a');
-                      return pw.TableRow(
-                        decoration: pw.BoxDecoration(color: bg),
-                        children: [
-                          _cell(r.date, baseStyle),
-                          _cell(r.time, baseStyle),
-                          _cell(r.type, baseStyle),
-                          _cell(r.desc, pw.TextStyle(font: _cairoFont, fontSize: 8), maxLines: 2),
-                          _cell(r.amount, pw.TextStyle(font: _cairoBold, fontSize: 9,
-                              color: amtColor, fontWeight: pw.FontWeight.bold)),
-                          _cell(r.admin, pw.TextStyle(font: _cairoFont, fontSize: 8)),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
-
-                pw.Spacer(),
-                pw.Divider(color: PdfColors.grey300),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('صفحة ${p + 1} / $pageCount', style: subStyle, textDirection: pw.TextDirection.rtl),
-                    pw.Text('نظام إدارة المشتركين — MyServices', style: subStyle, textDirection: pw.TextDirection.rtl),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
+    final tableRows = rows.asMap().entries.map((e) {
+      final i = e.key;
+      final r = e.value;
+      final bg = i % 2 == 0 ? PdfColors.white : PdfColor.fromHex('#f8fafc');
+      final amtColor = r.isDebt ? PdfColor.fromHex('#dc2626') : PdfColor.fromHex('#16a34a');
+      return pw.TableRow(
+        decoration: pw.BoxDecoration(color: bg),
+        children: [
+          _cell(r.date, baseStyle),
+          _cell(r.time, baseStyle),
+          _cell(r.type, baseStyle),
+          _cell(r.desc, pw.TextStyle(font: _cairoFont, fontSize: 8), maxLines: 2),
+          _cell(r.amount, pw.TextStyle(font: _cairoBold, fontSize: 9,
+              color: amtColor, fontWeight: pw.FontWeight.bold)),
+          _cell(r.admin, pw.TextStyle(font: _cairoFont, fontSize: 8)),
+        ],
       );
-    }
+    }).toList();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
+        margin: const pw.EdgeInsets.all(30),
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('صفحة ${context.pageNumber} / ${context.pagesCount}',
+                style: subStyle, textDirection: pw.TextDirection.rtl),
+            pw.Text('نظام إدارة المشتركين — MyServices',
+                style: subStyle, textDirection: pw.TextDirection.rtl),
+          ],
+        ),
+        build: (context) => [
+          pw.Center(child: pw.Text('كشف حساب المشترك', style: headerStyle,
+              textDirection: pw.TextDirection.rtl)),
+          pw.SizedBox(height: 4),
+          pw.Center(child: pw.Text('الفترة: $dateFrom — $dateTo', style: subStyle,
+              textDirection: pw.TextDirection.rtl)),
+          pw.SizedBox(height: 12),
+
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#f0fdf4'),
+              borderRadius: pw.BorderRadius.circular(6),
+              border: pw.Border.all(color: PdfColor.fromHex('#bbf7d0')),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                _infoCol('الباقة', profileName.isNotEmpty ? profileName : '—', baseStyle, subStyle),
+                _infoCol('الهاتف', phone.isNotEmpty ? phone : '—', baseStyle, subStyle),
+                _infoCol('المشترك', username, boldStyle, subStyle),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 10),
+
+          pw.Row(children: [
+            _summaryBox('العمليات', '$totalTxn', PdfColor.fromHex('#2563eb'), baseStyle, boldStyle),
+            pw.SizedBox(width: 6),
+            _summaryBox('الديون', AppHelpers.formatMoney(totalDebt), PdfColor.fromHex('#dc2626'), baseStyle, boldStyle),
+            pw.SizedBox(width: 6),
+            _summaryBox('المدفوعات', AppHelpers.formatMoney(totalPayments), PdfColor.fromHex('#16a34a'), baseStyle, boldStyle),
+            pw.SizedBox(width: 6),
+            _summaryBox('التفعيلات', '$totalActivations', PdfColor.fromHex('#d97706'), baseStyle, boldStyle),
+          ]),
+          pw.SizedBox(height: 14),
+
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            columnWidths: const {
+              0: pw.FlexColumnWidth(1.2),
+              1: pw.FlexColumnWidth(0.7),
+              2: pw.FlexColumnWidth(1),
+              3: pw.FlexColumnWidth(2.5),
+              4: pw.FlexColumnWidth(1.2),
+              5: pw.FlexColumnWidth(1),
+            },
+            children: [tableHeader, ...tableRows],
+          ),
+        ],
+      ),
+    );
 
     return await pdf.save();
   }
