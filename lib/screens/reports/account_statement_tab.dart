@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -6,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/pdf_statement.dart';
 import '../../providers/reports_provider.dart';
+import '../../providers/whatsapp_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/report_controls.dart';
 
@@ -153,6 +155,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
   }
 
   // ── WhatsApp send (PDF) ──────────────────────────────────────────
+  bool _waSending = false;
   Future<void> _handleSendWhatsApp() async {
     final state = ref.read(reportsProvider);
     if (_selectedSub == null || state.transactions.isEmpty) {
@@ -160,23 +163,61 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
       return;
     }
 
-    try {
-      final sub = state.subscriberInfo ?? _selectedSub ?? {};
-      final username = sub['username']?.toString() ?? '';
-      final phone = sub['phone']?.toString() ?? _selectedSub!['phone']?.toString() ?? '';
-      final profileName = sub['profile_name']?.toString() ?? '';
+    final waState = ref.read(whatsappProvider);
+    if (!waState.status.connected) {
+      AppSnackBar.error(context, 'واتساب غير متصل');
+      return;
+    }
 
-      await PdfStatement.generateAndShare(
+    final sub = state.subscriberInfo ?? _selectedSub ?? {};
+    final rawPhone = sub['phone']?.toString() ?? _selectedSub!['phone']?.toString() ?? '';
+    if (rawPhone.isEmpty) {
+      AppSnackBar.error(context, 'لا يوجد رقم هاتف للمشترك');
+      return;
+    }
+
+    setState(() => _waSending = true);
+    try {
+      final username = sub['username']?.toString() ?? '';
+      final profileName = sub['profile_name']?.toString() ?? '';
+      final phone = PdfStatement.formatPhoneForWa(rawPhone);
+
+      final pdfBytes = await PdfStatement.buildPdfBytes(
         username: username,
-        phone: phone,
+        phone: rawPhone,
         profileName: profileName,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         transactions: state.transactions,
         summary: state.statementSummary,
       );
-    } catch (_) {
-      if (mounted) AppSnackBar.error(context, 'فشل إنشاء ملف PDF');
+
+      final base64Pdf = base64Encode(pdfBytes);
+      final caption =
+          '📋 *كشف حساب المشترك*\n\n'
+          '👤 المشترك: $username\n'
+          '📅 الفترة: $_dateFrom — $_dateTo\n'
+          '📊 عدد الحركات: ${state.transactions.length}\n'
+          '💰 الدين الحالي: ${AppHelpers.formatMoney(double.tryParse(state.statementSummary['totalDebt']?.toString() ?? '0') ?? 0)}';
+
+      final result = await ref.read(whatsappProvider.notifier).sendMedia(
+        to: phone,
+        base64Data: base64Pdf,
+        mimetype: 'application/pdf',
+        filename: 'account-statement-$username.pdf',
+        caption: caption,
+      );
+
+      if (!mounted) return;
+      if (result.success) {
+        AppSnackBar.whatsapp(context, 'تم إرسال كشف الحساب عبر واتساب');
+      } else {
+        AppSnackBar.whatsappError(context, 'فشل إرسال كشف الحساب', detail: result.error);
+      }
+    } catch (e) {
+      if (mounted) AppSnackBar.error(context, 'فشل إنشاء ملف PDF', detail: e.toString());
+    } finally {
+      if (mounted) setState(() => _waSending = false);
     }
   }
 
@@ -245,10 +286,15 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
             hasData ? _handlePrint : null,
           ),
           const SizedBox(width: 4),
-          _SmallBtn(
-            Icons.share_rounded,
-            hasData ? _handleSendWhatsApp : null,
-          ),
+          _waSending
+              ? const SizedBox(width: 32, height: 32,
+                  child: Padding(padding: EdgeInsets.all(6),
+                    child: CircularProgressIndicator(strokeWidth: 2)))
+              : _SmallBtn(
+                  Icons.send_rounded,
+                  hasData ? _handleSendWhatsApp : null,
+                  color: const Color(0xFF25D366),
+                ),
         ]),
 
         // Search dropdown
@@ -728,11 +774,13 @@ class _TransactionRow extends StatelessWidget {
 class _SmallBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
-  const _SmallBtn(this.icon, this.onTap);
+  final Color? color;
+  const _SmallBtn(this.icon, this.onTap, {this.color});
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
+    final c = color ?? Theme.of(context).colorScheme.primary;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest
           .withValues(alpha: enabled ? .3 : .15),
@@ -744,7 +792,7 @@ class _SmallBtn extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           child: Icon(icon, size: 18,
               color: enabled
-                  ? Theme.of(context).colorScheme.primary
+                  ? c
                   : Theme.of(context).colorScheme.onSurface.withValues(alpha: .2)),
         ),
       ),

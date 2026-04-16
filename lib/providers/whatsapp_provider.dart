@@ -175,6 +175,41 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
     }
   }
 
+  Future<({bool success, String? error})> sendMedia({
+    required String to,
+    required String base64Data,
+    required String mimetype,
+    String filename = 'file',
+    String caption = '',
+  }) async {
+    final adminId = await _getAdminId();
+    if (adminId == null) {
+      return (success: false, error: 'لم يتم العثور على معرف المدير');
+    }
+    try {
+      final response = await _dio.post(ApiConstants.waSendMedia, data: {
+        'adminId': adminId,
+        'to': to,
+        'data': base64Data,
+        'mimetype': mimetype,
+        'filename': filename,
+        'caption': caption,
+      });
+      if (response.data['success'] == true) {
+        return (success: true, error: null);
+      }
+      final msg = response.data['message']?.toString() ??
+          response.data['error']?.toString();
+      return (success: false, error: msg ?? 'فشل إرسال الملف');
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message']?.toString() ??
+          e.response?.data?['error']?.toString();
+      return (success: false, error: msg ?? 'خطأ في الاتصال بالخادم');
+    } catch (_) {
+      return (success: false, error: 'خطأ غير متوقع');
+    }
+  }
+
   @override
   void dispose() {
     _statusSub?.cancel();

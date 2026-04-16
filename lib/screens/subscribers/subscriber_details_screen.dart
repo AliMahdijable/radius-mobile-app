@@ -2071,16 +2071,20 @@ class _SubscriberDetailsScreenState
 
       late final dynamic linkResponse;
       try {
+        debugPrint('[GEN-LINK] POST ${ApiConstants.generateUserLink}  body=$body');
         final res = await dio.post(ApiConstants.generateUserLink, data: body);
         linkResponse = res.data;
+        debugPrint('[GEN-LINK] Response: $linkResponse');
       } on DioException catch (dioErr) {
         final errMsg = dioErr.response?.data?['message']?.toString()
             ?? dioErr.message ?? 'خطأ في الاتصال';
+        debugPrint('[GEN-LINK] DioError: ${dioErr.response?.statusCode} $errMsg');
         if (mounted) AppSnackBar.error(context, 'فشل توليد الرابط', detail: errMsg);
         return;
       }
 
       if (linkResponse?['success'] != true || linkResponse?['token'] == null) {
+        debugPrint('[GEN-LINK] API returned failure: $linkResponse');
         if (mounted) {
           AppSnackBar.error(context, 'فشل توليد الرابط',
               detail: linkResponse?['message']?.toString() ?? 'لم يتم الحصول على رابط');
@@ -2090,6 +2094,7 @@ class _SubscriberDetailsScreenState
 
       final token = linkResponse['token'];
       final linkUrl = '${ApiConstants.backendUrl}/user-info/$token';
+      debugPrint('[GEN-LINK] Generated link: $linkUrl');
 
       final subscriberName = '${sub.firstname} ${sub.lastname}'.trim();
       final displayName = subscriberName.isNotEmpty ? subscriberName : sub.username;
@@ -2101,9 +2106,11 @@ class _SubscriberDetailsScreenState
           'في حال تجديد الاشتراك أو تسديد الدين، يرجى طلب رابط جديد للبيانات المحدثة.\n\n'
           'شكراً لك 🙏';
 
+      debugPrint('[GEN-LINK] Sending WA to: $phone');
       final sendResult = await ref.read(whatsappProvider.notifier).sendMessage(
         phone, message,
       );
+      debugPrint('[GEN-LINK] WA result: success=${sendResult.success} error=${sendResult.error}');
 
       if (!mounted) return;
       if (sendResult.success) {
