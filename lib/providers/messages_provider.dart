@@ -39,6 +39,9 @@ class MessagesState {
   final bool hasMore;
   final String? statusFilter;
   final String? typeFilter;
+  final String? searchFilter;
+  final String? dateFrom;
+  final String? dateTo;
   final BroadcastProgress? broadcast;
 
   const MessagesState({
@@ -51,6 +54,9 @@ class MessagesState {
     this.hasMore = true,
     this.statusFilter,
     this.typeFilter,
+    this.searchFilter,
+    this.dateFrom,
+    this.dateTo,
     this.broadcast,
   });
 
@@ -64,6 +70,9 @@ class MessagesState {
     bool? hasMore,
     String? statusFilter,
     String? typeFilter,
+    String? searchFilter,
+    String? dateFrom,
+    String? dateTo,
     BroadcastProgress? broadcast,
   }) {
     return MessagesState(
@@ -76,6 +85,9 @@ class MessagesState {
       hasMore: hasMore ?? this.hasMore,
       statusFilter: statusFilter ?? this.statusFilter,
       typeFilter: typeFilter ?? this.typeFilter,
+      searchFilter: searchFilter ?? this.searchFilter,
+      dateFrom: dateFrom ?? this.dateFrom,
+      dateTo: dateTo ?? this.dateTo,
       broadcast: broadcast ?? this.broadcast,
     );
   }
@@ -145,19 +157,31 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   Future<void> loadMessages({bool refresh = false}) async {
-    final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return;
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return;
     final page = refresh ? 1 : state.currentPage;
     if (!refresh && state.isLoading) return;
 
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      String url = '${ApiConstants.waMessageLogs}/$_adminId?page=$page&limit=20';
-      if (state.statusFilter != null) url += '&status=${state.statusFilter}';
-      if (state.typeFilter != null) url += '&type=${state.typeFilter}';
+      final params = <String, String>{
+        'page': '$page',
+        'limit': '50',
+      };
+      if (state.statusFilter != null) params['status'] = state.statusFilter!;
+      if (state.typeFilter != null) params['type'] = state.typeFilter!;
+      if (state.searchFilter != null) params['search'] = state.searchFilter!;
+      if (state.dateFrom != null) params['dateFrom'] = state.dateFrom!;
+      if (state.dateTo != null) params['dateTo'] = state.dateTo!;
 
-      final response = await _dio.get(url);
+      final queryString = params.entries
+          .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+
+      final response = await _dio.get(
+        '${ApiConstants.waMessageLogs}/$adminId?$queryString',
+      );
 
       if (response.data['success'] == true) {
         final list = (response.data['messages'] as List? ?? [])
@@ -172,7 +196,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           isLoading: false,
           totalMessages: total,
           currentPage: page + 1,
-          hasMore: list.length >= 20,
+          hasMore: list.length >= 50,
         );
       }
     } catch (e) {
@@ -180,30 +204,52 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
-  void setFilters({String? status, String? type}) {
-    state = state.copyWith(
+  void setFilters({
+    String? status,
+    String? type,
+    String? search,
+    String? dateFrom,
+    String? dateTo,
+  }) {
+    state = MessagesState(
       statusFilter: status,
       typeFilter: type,
-      currentPage: 1,
-      messages: [],
-      hasMore: true,
+      searchFilter: search,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      broadcast: state.broadcast,
     );
     loadMessages(refresh: true);
   }
 
   Future<bool> retryMessage(int messageId, {String source = 'queue'}) async {
-    final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return false;
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return false;
     try {
       final response = await _dio.post(ApiConstants.waRetryMessage, data: {
-        'adminId': _adminId,
+        'adminId': adminId,
         'messageId': messageId,
         'source': source,
       });
-      return response.data['success'] == true;
+      if (response.data['success'] == true) {
+        loadMessages(refresh: true);
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> clearLogs({String? status}) async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return;
+    try {
+      String url = '${ApiConstants.waMessageLogs}/$adminId';
+      if (status != null) url += '?status=$status';
+      await _dio.delete(url);
+      loadMessages(refresh: true);
+    } catch (_) {}
   }
 
   Future<bool> startBroadcast({
@@ -211,11 +257,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     required String type,
     List<String>? targetUsernames,
   }) async {
-    final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return false;
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return false;
     try {
+      final adminUsername = await _storage.getAdminUsername();
       final data = <String, dynamic>{
-        'adminId': _adminId,
+        'adminId': adminId,
+        'adminUsername': adminUsername ?? adminId,
         'message': message,
         'type': type,
       };
@@ -230,11 +278,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   Future<bool> cancelBroadcast() async {
-    final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return false;
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return false;
     try {
       await _dio.post(ApiConstants.waBroadcastCancel, data: {
-        'adminId': _adminId,
+        'adminId': adminId,
       });
       return true;
     } catch (_) {

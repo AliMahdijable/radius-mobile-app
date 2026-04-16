@@ -14,6 +14,13 @@ class SchedulesScreen extends ConsumerStatefulWidget {
 }
 
 class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
+  String _expiryTime = '10:00:00';
+  String _debtTime = '11:00:00';
+  List<int> _expiryDays = [0, 1, 2, 3, 4, 5, 6];
+  List<int> _debtDays = [0, 1, 2, 3, 4, 5, 6];
+  int _daysBefore = 3;
+  final _daysBeforeController = TextEditingController(text: '3');
+
   @override
   void initState() {
     super.initState();
@@ -22,322 +29,340 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
     });
   }
 
-  void _showEditScheduleSheet(ScheduleModel? schedule) {
-    final typeController = TextEditingController(
-      text: schedule?.scheduleType ?? 'debt_reminder',
+  @override
+  void dispose() {
+    _daysBeforeController.dispose();
+    super.dispose();
+  }
+
+  void _syncFromState(SchedulesState state) {
+    for (final s in state.schedules) {
+      if (s.scheduleType == 'expiry_warning') {
+        _expiryTime = s.scheduledTime;
+        _expiryDays = List<int>.from(s.activeDays);
+        _daysBefore = s.daysBefore ?? 3;
+        _daysBeforeController.text = _daysBefore.toString();
+      } else if (s.scheduleType == 'debt_reminder') {
+        _debtTime = s.scheduledTime;
+        _debtDays = List<int>.from(s.activeDays);
+      }
+    }
+  }
+
+  bool _didSync = false;
+
+  ScheduleModel? _findSchedule(SchedulesState state, String type) {
+    try {
+      return state.schedules.firstWhere((s) => s.scheduleType == type);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _pickTime(String currentTime, ValueChanged<String> onPicked) async {
+    final parts = currentTime.split(':');
+    final initial = TimeOfDay(
+      hour: int.tryParse(parts[0]) ?? 10,
+      minute: int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0,
     );
-    final timeController = TextEditingController(
-      text: schedule?.scheduledTime ?? '12:00:00',
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked != null) {
+      final formatted =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}:00';
+      onPicked(formatted);
+    }
+  }
+
+  Future<void> _saveSchedule(String type) async {
+    final state = ref.read(schedulesProvider);
+    final existing = _findSchedule(state, type);
+
+    final schedule = ScheduleModel(
+      id: existing?.id,
+      adminId: existing?.adminId ?? '',
+      scheduleType: type,
+      isEnabled: existing?.isEnabled ?? true,
+      scheduledTime: type == 'expiry_warning' ? _expiryTime : _debtTime,
+      activeDays: List<int>.from(
+        type == 'expiry_warning' ? _expiryDays : _debtDays,
+      )..sort(),
+      daysBefore: type == 'expiry_warning'
+          ? (int.tryParse(_daysBeforeController.text) ?? _daysBefore)
+          : null,
+      executionCount: existing?.executionCount ?? 0,
     );
-    final daysBeforeController = TextEditingController(
-      text: schedule?.daysBefore?.toString() ?? '3',
-    );
-    List<int> activeDays = schedule?.activeDays ?? [0, 1, 2, 3, 4, 5, 6];
-    String selectedType = schedule?.scheduleType ?? 'debt_reminder';
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 20,
-            right: 20,
-            top: 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                schedule == null ? 'إضافة جدولة' : 'تعديل الجدولة',
-                style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 20),
-
-              if (schedule == null) ...[
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(labelText: 'نوع الجدولة'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'debt_reminder',
-                      child: Text('تذكير ديون'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'expiry_warning',
-                      child: Text('تحذير انتهاء'),
-                    ),
-                  ],
-                  onChanged: (v) =>
-                      setSheetState(() => selectedType = v ?? selectedType),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Time picker
-              InkWell(
-                onTap: () async {
-                  final parts = timeController.text.split(':');
-                  final initial = TimeOfDay(
-                    hour: int.tryParse(parts[0]) ?? 12,
-                    minute: int.tryParse(parts[1]) ?? 0,
-                  );
-                  final picked = await showTimePicker(
-                    context: ctx,
-                    initialTime: initial,
-                  );
-                  if (picked != null) {
-                    setSheetState(() {
-                      timeController.text =
-                          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}:00';
-                    });
-                  }
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'وقت التنفيذ (بتوقيت بغداد)',
-                    prefixIcon: Icon(Icons.access_time),
-                  ),
-                  child: Text(timeController.text),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Days
-              Text('أيام التنفيذ',
-                  style: Theme.of(ctx).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                children: List.generate(7, (i) {
-                  final isSelected = activeDays.contains(i);
-                  return FilterChip(
-                    label: Text(AppHelpers.getArabicWeekday(i)),
-                    selected: isSelected,
-                    onSelected: (v) {
-                      setSheetState(() {
-                        if (v) {
-                          activeDays.add(i);
-                        } else {
-                          activeDays.remove(i);
-                        }
-                      });
-                    },
-                  );
-                }),
-              ),
-
-              if (selectedType == 'expiry_warning') ...[
-                const SizedBox(height: 16),
-                TextField(
-                  controller: daysBeforeController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'عدد الأيام قبل الانتهاء',
-                    prefixIcon: Icon(Icons.calendar_today),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  final adminId = schedule?.adminId ?? '';
-                  final newSchedule = ScheduleModel(
-                    id: schedule?.id,
-                    adminId: adminId,
-                    scheduleType: selectedType,
-                    isEnabled: schedule?.isEnabled ?? true,
-                    scheduledTime: timeController.text,
-                    activeDays: activeDays..sort(),
-                    daysBefore: selectedType == 'expiry_warning'
-                        ? int.tryParse(daysBeforeController.text)
-                        : null,
-                    executionCount: schedule?.executionCount ?? 0,
-                  );
-                  final ok = await ref
-                      .read(schedulesProvider.notifier)
-                      .saveSchedule(newSchedule);
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                    if (ok) {
-                      AppSnackBar.success(context, 'تم حفظ الجدولة');
-                    } else {
-                      AppSnackBar.error(context, 'فشل حفظ الجدولة');
-                    }
-                  }
-                },
-                child: const Text('حفظ'),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
-    );
+    final ok = await ref.read(schedulesProvider.notifier).saveSchedule(schedule);
+    if (mounted) {
+      if (ok) {
+        AppSnackBar.success(context, 'تم حفظ الجدولة');
+      } else {
+        AppSnackBar.error(context, 'فشل حفظ الجدولة');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(schedulesProvider);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+
+    if (!_didSync && !state.isLoading && state.schedules.isNotEmpty) {
+      _didSync = true;
+      Future.microtask(() {
+        if (mounted) setState(() => _syncFromState(state));
+      });
+    }
+
+    final expirySchedule = _findSchedule(state, 'expiry_warning');
+    final debtSchedule = _findSchedule(state, 'debt_reminder');
 
     return Scaffold(
       appBar: AppBar(title: const Text('الجدولة')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEditScheduleSheet(null),
-        child: const Icon(Icons.add),
-      ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : state.schedules.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.schedule,
-                          size: 64,
-                          color: theme.colorScheme.onSurface.withOpacity(0.2)),
-                      const SizedBox(height: 16),
-                      const Text('لا توجد جدولة'),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(schedulesProvider.notifier).loadSchedules(),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: state.schedules.length,
-                    itemBuilder: (context, index) {
-                      final schedule = state.schedules[index];
-                      final typeColor = schedule.scheduleType == 'debt_reminder'
-                          ? AppTheme.warningColor
-                          : AppTheme.dangerColor;
+          : RefreshIndicator(
+              onRefresh: () async {
+                _didSync = false;
+                await ref.read(schedulesProvider.notifier).loadSchedules();
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _ScheduleCard(
+                      icon: Icons.warning_amber_rounded,
+                      accentColor: AppTheme.warningColor,
+                      title: 'تنبيه قرب انتهاء الاشتراك',
+                      isEnabled: expirySchedule?.isEnabled ?? false,
+                      onToggle: (v) {
+                        ref
+                            .read(schedulesProvider.notifier)
+                            .toggleSchedule('expiry_warning', v);
+                      },
+                      time: _expiryTime,
+                      onTimeTap: () => _pickTime(_expiryTime, (t) {
+                        setState(() => _expiryTime = t);
+                      }),
+                      activeDays: _expiryDays,
+                      onDayToggled: (day, selected) {
+                        setState(() {
+                          if (selected) {
+                            _expiryDays.add(day);
+                          } else {
+                            _expiryDays.remove(day);
+                          }
+                        });
+                      },
+                      daysBeforeController: _daysBeforeController,
+                      showDaysBefore: true,
+                      onSave: () => _saveSchedule('expiry_warning'),
+                    ),
+                    const SizedBox(height: 16),
+                    _ScheduleCard(
+                      icon: Icons.credit_card_rounded,
+                      accentColor: AppTheme.infoColor,
+                      title: 'تذكير بالديون المستحقة',
+                      isEnabled: debtSchedule?.isEnabled ?? false,
+                      onToggle: (v) {
+                        ref
+                            .read(schedulesProvider.notifier)
+                            .toggleSchedule('debt_reminder', v);
+                      },
+                      time: _debtTime,
+                      onTimeTap: () => _pickTime(_debtTime, (t) {
+                        setState(() => _debtTime = t);
+                      }),
+                      activeDays: _debtDays,
+                      onDayToggled: (day, selected) {
+                        setState(() {
+                          if (selected) {
+                            _debtDays.add(day);
+                          } else {
+                            _debtDays.remove(day);
+                          }
+                        });
+                      },
+                      showDaysBefore: false,
+                      onSave: () => _saveSchedule('debt_reminder'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color:
-                              theme.cardTheme.color,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              leading: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: typeColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  schedule.scheduleType == 'debt_reminder'
-                                      ? Icons.credit_card
-                                      : Icons.warning_amber,
-                                  color: typeColor,
-                                ),
-                              ),
-                              title: Text(
-                                ScheduleModel.getArabicType(
-                                    schedule.scheduleType),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700),
-                              ),
-                              subtitle: Text(
-                                'الوقت: ${schedule.scheduledTime} • التنفيذ: ${schedule.executionCount}',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                              trailing: Switch.adaptive(
-                                value: schedule.isEnabled,
-                                activeColor: AppTheme.successColor,
-                                onChanged: (v) {
-                                  ref
-                                      .read(schedulesProvider.notifier)
-                                      .toggleSchedule(
-                                          schedule.scheduleType, v);
-                                },
-                              ),
-                              onTap: () =>
-                                  _showEditScheduleSheet(schedule),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              child: Row(
-                                children: [
-                                  ...List.generate(7, (i) {
-                                    final active =
-                                        schedule.activeDays.contains(i);
-                                    return Container(
-                                      width: 30,
-                                      height: 30,
-                                      margin: const EdgeInsets.only(left: 4),
-                                      decoration: BoxDecoration(
-                                        color: active
-                                            ? typeColor.withOpacity(0.15)
-                                            : Colors.transparent,
-                                        borderRadius:
-                                            BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: active
-                                              ? typeColor.withOpacity(0.3)
-                                              : theme.colorScheme.onSurface
-                                                  .withOpacity(0.1),
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          AppHelpers.getArabicWeekday(i)[0],
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: active
-                                                ? typeColor
-                                                : theme
-                                                    .colorScheme.onSurface
-                                                    .withOpacity(0.3),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                  const Spacer(),
-                                  IconButton(
-                                    icon: const Icon(Icons.play_circle_outline,
-                                        size: 20),
-                                    onPressed: () async {
-                                      final ok = await ref
-                                          .read(schedulesProvider.notifier)
-                                          .triggerSchedule(
-                                              schedule.scheduleType);
-                                      if (mounted) {
-                                        if (ok) {
-                                          AppSnackBar.success(context, 'تم تشغيل الجدولة');
-                                        } else {
-                                          AppSnackBar.error(context, 'فشل التشغيل');
-                                        }
-                                      }
-                                    },
-                                    tooltip: 'تشغيل الآن',
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+class _ScheduleCard extends StatelessWidget {
+  final IconData icon;
+  final Color accentColor;
+  final String title;
+  final bool isEnabled;
+  final ValueChanged<bool> onToggle;
+  final String time;
+  final VoidCallback onTimeTap;
+  final List<int> activeDays;
+  final void Function(int day, bool selected) onDayToggled;
+  final TextEditingController? daysBeforeController;
+  final bool showDaysBefore;
+  final VoidCallback onSave;
+
+  const _ScheduleCard({
+    required this.icon,
+    required this.accentColor,
+    required this.title,
+    required this.isEnabled,
+    required this.onToggle,
+    required this.time,
+    required this.onTimeTap,
+    required this.activeDays,
+    required this.onDayToggled,
+    this.daysBeforeController,
+    required this.showDaysBefore,
+    required this.onSave,
+  });
+
+  String get _displayTime {
+    final parts = time.split(':');
+    if (parts.length < 2) return time;
+    return '${parts[0]}:${parts[1]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: accentColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
+                Switch.adaptive(
+                  value: isEnabled,
+                  activeColor: AppTheme.successColor,
+                  onChanged: onToggle,
+                ),
+              ],
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: _buildBody(context, theme),
+            crossFadeState:
+                isEnabled ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 300),
+            sizeCurve: Curves.easeInOut,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Divider(color: theme.dividerTheme.color, height: 1),
+          const SizedBox(height: 16),
+          Text(
+            'وقت التنفيذ',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: onTimeTap,
+            borderRadius: BorderRadius.circular(14),
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.access_time_rounded),
+                hintText: 'اختر الوقت',
+              ),
+              child: Text(
+                _displayTime,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          if (showDaysBefore) ...[
+            const SizedBox(height: 16),
+            Text(
+              'عدد الأيام قبل الانتهاء',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: daysBeforeController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.calendar_today_rounded),
+                hintText: '1 - 30',
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Text(
+            'أيام التنفيذ',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: List.generate(7, (i) {
+              final selected = activeDays.contains(i);
+              return FilterChip(
+                label: Text(AppHelpers.getArabicWeekday(i)),
+                selected: selected,
+                selectedColor: accentColor.withOpacity(0.15),
+                checkmarkColor: accentColor,
+                onSelected: (v) => onDayToggled(i, v),
+              );
+            }),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: onSave,
+            icon: const Icon(Icons.save_rounded, size: 20),
+            label: const Text('حفظ الجدولة'),
+          ),
+        ],
+      ),
     );
   }
 }

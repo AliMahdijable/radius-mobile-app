@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
+import '../widgets/app_snackbar.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -22,70 +23,137 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final settings = ref.watch(settingsProvider);
-    final themeMode = ref.watch(themeModeProvider);
-    final user = ref.watch(authProvider).user;
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+  void _showFeaturesModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Consumer(
+        builder: (ctx, ref, _) {
+          final settings = ref.watch(settingsProvider);
+          final theme = Theme.of(ctx);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      children: [
-        // Profile card
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: AppTheme.primaryGradient,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(16),
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              left: 20,
+              right: 20,
+              top: 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 16),
+                Row(
                   children: [
-                    Text(
-                      user?.username ?? '—',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.whatsappGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
                       ),
+                      child: const Icon(Icons.whatsapp,
+                          color: AppTheme.whatsappGreen, size: 22),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(width: 10),
                     Text(
-                      'ID: ${user?.id ?? '—'} • ${user?.role ?? ''}',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 13,
+                      'ميزات واتساب',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-        ),
+                const SizedBox(height: 16),
+                _FeatureToggle(
+                  icon: Icons.add_circle_outline,
+                  title: 'إرسال عند التفعيل',
+                  subtitle: 'إرسال رسالة ترحيب عند تفعيل مشترك جديد',
+                  value: settings.features.sendOnActivation,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('sendOnActivation', v),
+                ),
+                _FeatureToggle(
+                  icon: Icons.autorenew,
+                  title: 'إرسال عند التمديد',
+                  subtitle: 'إرسال إشعار عند تمديد اشتراك',
+                  value: settings.features.sendOnExtension,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('sendOnExtension', v),
+                ),
+                _FeatureToggle(
+                  icon: Icons.warning_amber_outlined,
+                  title: 'تذكير انتهاء',
+                  subtitle: 'إرسال تحذير قبل انتهاء الاشتراك',
+                  value: settings.features.expiryReminder,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('expiryReminder', v),
+                ),
+                _FeatureToggle(
+                  icon: Icons.credit_card,
+                  title: 'تذكير ديون',
+                  subtitle: 'إرسال تذكير تلقائي للمديونين',
+                  value: settings.features.debtReminder,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('debtReminder', v),
+                ),
+                _FeatureToggle(
+                  icon: Icons.event_busy,
+                  title: 'إشعار انتهاء الخدمة',
+                  subtitle: 'إرسال إشعار عند انتهاء الخدمة',
+                  value: settings.features.serviceEndNotification,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('serviceEndNotification', v),
+                ),
+                _FeatureToggle(
+                  icon: Icons.waving_hand,
+                  title: 'رسالة ترحيب',
+                  subtitle: 'إرسال رسالة ترحيب للمشتركين الجدد',
+                  value: settings.features.welcomeMessage,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('welcomeMessage', v),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
-        const SizedBox(height: 24),
+  void _showDebtExportDialog() {
+    context.push('/debt-export');
+  }
 
-        // Theme
+  void _showDebtImportDialog() {
+    context.push('/debt-import');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      children: [
         _SectionTitle(title: 'المظهر'),
         const SizedBox(height: 8),
         _SettingTile(
@@ -98,72 +166,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
 
-        const SizedBox(height: 20),
-
-        // WhatsApp Features
-        _SectionTitle(title: 'ميزات واتساب'),
         const SizedBox(height: 8),
-
-        _FeatureToggle(
-          icon: Icons.add_circle_outline,
-          title: 'إرسال عند التفعيل',
-          subtitle: 'إرسال رسالة ترحيب عند تفعيل مشترك جديد',
-          value: settings.features.sendOnActivation,
-          onChanged: (v) => ref
-              .read(settingsProvider.notifier)
-              .updateFeature('sendOnActivation', v),
-        ),
-        _FeatureToggle(
-          icon: Icons.autorenew,
-          title: 'إرسال عند التمديد',
-          subtitle: 'إرسال إشعار عند تمديد اشتراك',
-          value: settings.features.sendOnExtension,
-          onChanged: (v) => ref
-              .read(settingsProvider.notifier)
-              .updateFeature('sendOnExtension', v),
-        ),
-        _FeatureToggle(
-          icon: Icons.warning_amber_outlined,
-          title: 'تذكير انتهاء',
-          subtitle: 'إرسال تحذير قبل انتهاء الاشتراك',
-          value: settings.features.expiryReminder,
-          onChanged: (v) => ref
-              .read(settingsProvider.notifier)
-              .updateFeature('expiryReminder', v),
-        ),
-        _FeatureToggle(
-          icon: Icons.credit_card,
-          title: 'تذكير ديون',
-          subtitle: 'إرسال تذكير تلقائي للمديونين',
-          value: settings.features.debtReminder,
-          onChanged: (v) => ref
-              .read(settingsProvider.notifier)
-              .updateFeature('debtReminder', v),
-        ),
-        _FeatureToggle(
-          icon: Icons.event_busy,
-          title: 'إشعار انتهاء الخدمة',
-          subtitle: 'إرسال إشعار عند انتهاء الخدمة',
-          value: settings.features.serviceEndNotification,
-          onChanged: (v) => ref
-              .read(settingsProvider.notifier)
-              .updateFeature('serviceEndNotification', v),
-        ),
-        _FeatureToggle(
-          icon: Icons.waving_hand,
-          title: 'رسالة ترحيب',
-          subtitle: 'إرسال رسالة ترحيب للمشتركين الجدد',
-          value: settings.features.welcomeMessage,
-          onChanged: (v) => ref
-              .read(settingsProvider.notifier)
-              .updateFeature('welcomeMessage', v),
+        _SettingTile(
+          icon: Icons.discount_rounded,
+          title: 'قائمة الخصومات',
+          subtitle: 'إدارة خصومات المشتركين',
+          onTap: () => context.push('/discounts'),
         ),
 
         const SizedBox(height: 20),
 
-        // Navigation items
-        _SectionTitle(title: 'إدارة'),
+        _SectionTitle(title: 'إدارة واتساب'),
         const SizedBox(height: 8),
+        _SettingTile(
+          icon: Icons.tune_rounded,
+          title: 'ميزات واتساب',
+          subtitle: 'التحكم بالإرسال التلقائي',
+          iconColor: AppTheme.whatsappGreen,
+          onTap: _showFeaturesModal,
+        ),
         _SettingTile(
           icon: Icons.link,
           title: 'اتصال واتساب',
@@ -192,7 +213,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         const SizedBox(height: 20),
 
-        // App info
+        _SectionTitle(title: 'إدارة الديون'),
+        const SizedBox(height: 8),
+        _SettingTile(
+          icon: Icons.file_download_outlined,
+          title: 'تصدير ديون المشتركين',
+          subtitle: 'تصدير ملف CSV بالمشتركين المديونين',
+          onTap: _showDebtExportDialog,
+        ),
+        _SettingTile(
+          icon: Icons.file_upload_outlined,
+          title: 'استيراد ديون المشتركين',
+          subtitle: 'استيراد ديون من ملف CSV',
+          onTap: _showDebtImportDialog,
+        ),
+
+        const SizedBox(height: 20),
+
         _SectionTitle(title: 'حول'),
         const SizedBox(height: 8),
         _SettingTile(
@@ -203,7 +240,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         const SizedBox(height: 20),
 
-        // Logout
         SizedBox(
           height: 52,
           child: OutlinedButton.icon(
@@ -212,8 +248,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 context: context,
                 builder: (ctx) => AlertDialog(
                   title: const Text('تسجيل الخروج'),
-                  content:
-                      const Text('هل أنت متأكد من تسجيل الخروج؟'),
+                  content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
@@ -270,6 +305,7 @@ class _SettingTile extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final Color? iconColor;
 
   const _SettingTile({
     required this.icon,
@@ -277,10 +313,12 @@ class _SettingTile extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.onTap,
+    this.iconColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final themeColor = iconColor ?? Theme.of(context).colorScheme.primary;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
@@ -291,16 +329,16 @@ class _SettingTile extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color:
-                Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            color: themeColor.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon,
-              color: Theme.of(context).colorScheme.primary, size: 20),
+          child: Icon(icon, color: themeColor, size: 20),
         ),
         title: Text(title,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: subtitle != null ? Text(subtitle!, style: const TextStyle(fontSize: 12)) : null,
+        subtitle: subtitle != null
+            ? Text(subtitle!, style: const TextStyle(fontSize: 12))
+            : null,
         trailing: trailing ??
             (onTap != null
                 ? Icon(Icons.arrow_forward_ios,
