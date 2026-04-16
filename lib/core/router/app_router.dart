@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 import '../../providers/auth_provider.dart';
 import '../../models/subscriber_model.dart';
 import '../../screens/login_screen.dart';
@@ -19,6 +17,9 @@ import '../../screens/debt_export_screen.dart';
 import '../../screens/debt_import_screen.dart';
 import '../../screens/packages_screen.dart';
 import '../../screens/print_templates_screen.dart';
+
+/// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
