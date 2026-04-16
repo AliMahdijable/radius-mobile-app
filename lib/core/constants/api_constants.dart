@@ -27,6 +27,7 @@ class ApiConstants {
 
   // WhatsApp Messaging
   static const String waSendMessage = '/api/whatsapp/send-message';
+  static const String waSendMedia = '/api/whatsapp/send-media';
   static const String waBroadcast = '/api/whatsapp/broadcast';
   static const String waBroadcastCancel = '/api/whatsapp/broadcast/cancel';
   static const String waClearPending = '/api/whatsapp/clear-pending';

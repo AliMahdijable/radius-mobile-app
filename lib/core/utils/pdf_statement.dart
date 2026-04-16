@@ -19,7 +19,7 @@ class PdfStatement {
     _cairoBold = pw.Font.ttf(fontData);
   }
 
-  static Future<void> generateAndShare({
+  static Future<Uint8List> buildPdfBytes({
     required String username,
     required String phone,
     required String profileName,
@@ -193,13 +193,39 @@ class PdfStatement {
       );
     }
 
-    final bytes = await pdf.save();
+    return await pdf.save();
+  }
+
+  static Future<void> generateAndShare({
+    required String username,
+    required String phone,
+    required String profileName,
+    required String dateFrom,
+    required String dateTo,
+    required List<Map<String, dynamic>> transactions,
+    required Map<String, dynamic> summary,
+  }) async {
+    final bytes = await buildPdfBytes(
+      username: username, phone: phone, profileName: profileName,
+      dateFrom: dateFrom, dateTo: dateTo,
+      transactions: transactions, summary: summary,
+    );
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/account-statement-$username.pdf');
     await file.writeAsBytes(bytes);
 
     // ignore: deprecated_member_use
-    await Share.shareXFiles([XFile(file.path)]);
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: '📋 كشف حساب المشترك: $username\n📅 الفترة: $dateFrom — $dateTo',
+    );
+  }
+
+  static String formatPhoneForWa(String phone) {
+    String cleaned = phone.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
+    if (cleaned.startsWith('07')) return '964${cleaned.substring(1)}';
+    if (cleaned.startsWith('7') && cleaned.length == 10) return '964$cleaned';
+    return cleaned;
   }
 
   static Future<void> printStatement({
@@ -211,119 +237,12 @@ class PdfStatement {
     required List<Map<String, dynamic>> transactions,
     required Map<String, dynamic> summary,
   }) async {
-    await _loadFonts();
-
-    final pdf = pw.Document();
-    final baseStyle = pw.TextStyle(font: _cairoFont, fontSize: 10);
-    final boldStyle = pw.TextStyle(font: _cairoBold, fontSize: 10, fontWeight: pw.FontWeight.bold);
-    final headerStyle = pw.TextStyle(font: _cairoBold, fontSize: 16, fontWeight: pw.FontWeight.bold,
-        color: PdfColor.fromHex('#1a7f64'));
-    final subStyle = pw.TextStyle(font: _cairoFont, fontSize: 9, color: PdfColors.grey700);
-
-    final totalTxn = _toInt(summary['totalTransactions']);
-    final totalDebt = _toDouble(summary['totalDebt']);
-    final totalPayments = _toDouble(summary['totalPayments']);
-    final totalActivations = _toInt(summary['totalActivations']);
-
-    final rows = transactions.map((t) {
-      final type = (t['action_type'] ?? '').toString().toUpperCase();
-      final amount = _toDouble(t['amount']).abs();
-      final isDebt = type == 'BALANCE_ADD';
-      final time = t['created_at']?.toString() ?? '';
-      final dt = DateTime.tryParse(time);
-      final fDate = dt != null ? '${dt.day}/${dt.month}/${dt.year}' : time;
-      final fTime = dt != null
-          ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-          : '';
-      return _TxnRow(date: fDate, time: fTime, type: _typeLabel(type),
-          desc: t['description']?.toString() ?? t['action_description']?.toString() ?? '',
-          amount: '${isDebt ? "-" : "+"}${AppHelpers.formatMoney(amount)}',
-          admin: t['admin_name']?.toString() ?? '', isDebt: isDebt);
-    }).toList();
-
-    const maxPerPage = 25;
-    final pageCount = (rows.length / maxPerPage).ceil().clamp(1, 999);
-
-    for (int p = 0; p < pageCount; p++) {
-      final pageRows = rows.skip(p * maxPerPage).take(maxPerPage).toList();
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          textDirection: pw.TextDirection.rtl,
-          margin: const pw.EdgeInsets.all(30),
-          build: (context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: [
-                if (p == 0) ...[
-                  pw.Center(child: pw.Text('كشف حساب المشترك', style: headerStyle, textDirection: pw.TextDirection.rtl)),
-                  pw.SizedBox(height: 4),
-                  pw.Center(child: pw.Text('$username | $dateFrom — $dateTo', style: subStyle, textDirection: pw.TextDirection.rtl)),
-                  pw.SizedBox(height: 12),
-                  pw.Row(children: [
-                    _summaryBox('العمليات', '$totalTxn', PdfColor.fromHex('#3b82f6'), baseStyle, boldStyle),
-                    pw.SizedBox(width: 8),
-                    _summaryBox('الديون', AppHelpers.formatMoney(totalDebt), PdfColor.fromHex('#ef4444'), baseStyle, boldStyle),
-                    pw.SizedBox(width: 8),
-                    _summaryBox('المدفوعات', AppHelpers.formatMoney(totalPayments), PdfColor.fromHex('#22c55e'), baseStyle, boldStyle),
-                    pw.SizedBox(width: 8),
-                    _summaryBox('التفعيلات', '$totalActivations', PdfColor.fromHex('#f59e0b'), baseStyle, boldStyle),
-                  ]),
-                  pw.SizedBox(height: 12),
-                ],
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(1.2),
-                    1: const pw.FlexColumnWidth(0.7),
-                    2: const pw.FlexColumnWidth(1),
-                    3: const pw.FlexColumnWidth(2.5),
-                    4: const pw.FlexColumnWidth(1.2),
-                    5: const pw.FlexColumnWidth(1),
-                  },
-                  children: [
-                    pw.TableRow(
-                      decoration: pw.BoxDecoration(color: PdfColor.fromHex('#1a7f64')),
-                      children: ['التاريخ', 'الوقت', 'النوع', 'التفاصيل', 'المبلغ', 'المنفذ']
-                          .map((h) => pw.Container(
-                                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 4),
-                                child: pw.Text(h, style: pw.TextStyle(font: _cairoBold, fontSize: 8,
-                                    color: PdfColors.white, fontWeight: pw.FontWeight.bold),
-                                    textDirection: pw.TextDirection.rtl, textAlign: pw.TextAlign.center),
-                              ))
-                          .toList(),
-                    ),
-                    ...pageRows.asMap().entries.map((e) {
-                      final i = e.key;
-                      final r = e.value;
-                      final bg = i % 2 == 0 ? PdfColors.white : PdfColor.fromHex('#f8fafc');
-                      final amtColor = r.isDebt ? PdfColor.fromHex('#dc2626') : PdfColor.fromHex('#16a34a');
-                      return pw.TableRow(
-                        decoration: pw.BoxDecoration(color: bg),
-                        children: [
-                          _cell(r.date, baseStyle),
-                          _cell(r.time, baseStyle),
-                          _cell(r.type, baseStyle),
-                          _cell(r.desc, pw.TextStyle(font: _cairoFont, fontSize: 8), maxLines: 2),
-                          _cell(r.amount, pw.TextStyle(font: _cairoBold, fontSize: 9,
-                              color: amtColor, fontWeight: pw.FontWeight.bold)),
-                          _cell(r.admin, pw.TextStyle(font: _cairoFont, fontSize: 8)),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
-                pw.Spacer(),
-                pw.Divider(color: PdfColors.grey300),
-                pw.Text('صفحة ${p + 1} / $pageCount', style: subStyle, textDirection: pw.TextDirection.rtl),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    await Printing.layoutPdf(onLayout: (_) => pdf.save());
+    final bytes = await buildPdfBytes(
+      username: username, phone: phone, profileName: profileName,
+      dateFrom: dateFrom, dateTo: dateTo,
+      transactions: transactions, summary: summary,
+    );
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
   }
 
   static pw.Widget _infoCol(String label, String value, pw.TextStyle valStyle, pw.TextStyle lblStyle) {
