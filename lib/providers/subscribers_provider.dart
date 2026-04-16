@@ -555,7 +555,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         if (totalCount > 0 && allItems.length >= totalCount) break;
         page++;
 
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 50));
       } catch (e) {
         retries++;
         if (retries > 3) {

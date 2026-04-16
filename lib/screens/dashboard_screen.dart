@@ -28,7 +28,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _autoRefresh = Timer.periodic(const Duration(seconds: 30), (_) {
+    _autoRefresh = Timer.periodic(const Duration(seconds: 60), (_) {
       if (mounted) _refresh();
     });
   }

@@ -135,8 +135,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
     final backendDio = Dio(BaseOptions(
       baseUrl: ApiConstants.backendUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -146,35 +146,46 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     ));
 
     try {
-      // 1) SAS4 Widgets — 6 simple GET requests in parallel
-      final widgetResults = await Future.wait([
-        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => Response(
-            requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => Response(
-            requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => Response(
-            requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => Response(
-            requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdBalance).catchError((_) => Response(
-            requestOptions: RequestOptions(), data: {'data': '0'})),
-        _sas4Dio.get(ApiConstants.sas4WdRewardPoints).catchError((_) => Response(
-            requestOptions: RequestOptions(), data: {'data': '0'})),
+      // تشغيل كل الطلبات بالتوازي لتسريع التحميل
+      final offlinePayload = EncryptionService.encrypt({
+        'page': 1, 'count': 1, 'sortBy': 'username', 'direction': 'asc',
+        'search': '', 'status': 1, 'connection': 1, 'profile_id': -1,
+        'parent_id': -1, 'sub_users': 1, 'mac': '', 'columns': ['idx'],
+      });
+      final expiredPayload = EncryptionService.encrypt({
+        'page': 1, 'count': 1, 'sortBy': 'username', 'direction': 'asc',
+        'search': '', 'status': 2, 'connection': -1, 'profile_id': -1,
+        'parent_id': -1, 'group_id': -1, 'site_id': -1, 'sub_users': 1,
+        'mac': '', 'columns': ['idx'],
+      });
+
+      final allResults = await Future.wait([
+        // [0-5] SAS4 Widgets
+        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdBalance).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': '0'})),
+        _sas4Dio.get(ApiConstants.sas4WdRewardPoints).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': '0'})),
+        // [6] Backend subscribers
+        backendDio.get('${ApiConstants.subscribersWithPhones}?adminId=$adminId').catchError((_) => Response(requestOptions: RequestOptions(), data: {'success': false})),
+        // [7] Backend daily activations
+        backendDio.get('${ApiConstants.dailyActivations}?admin_id=$adminId').catchError((_) => Response(requestOptions: RequestOptions(), data: {'success': false})),
+        // [8-9] SAS4 offline + expired counts
+        _sas4Dio.post(ApiConstants.sas4ListUsers, data: {'payload': offlinePayload}, options: Options(contentType: 'application/x-www-form-urlencoded')).catchError((_) => Response(requestOptions: RequestOptions())),
+        _sas4Dio.post(ApiConstants.sas4ListUsers, data: {'payload': expiredPayload}, options: Options(contentType: 'application/x-www-form-urlencoded')).catchError((_) => Response(requestOptions: RequestOptions())),
       ]);
 
-      final total = _parseWidgetInt(widgetResults[0].data);
-      final active = _parseWidgetInt(widgetResults[1].data);
-      final expired = _parseWidgetInt(widgetResults[2].data);
-      final online = _parseWidgetInt(widgetResults[3].data);
-      final balance = _parseWidgetStr(widgetResults[4].data);
-      final points = _parseWidgetStr(widgetResults[5].data);
+      final total = _parseWidgetInt(allResults[0].data);
+      final active = _parseWidgetInt(allResults[1].data);
+      final expired = _parseWidgetInt(allResults[2].data);
+      final online = _parseWidgetInt(allResults[3].data);
+      final balance = _parseWidgetStr(allResults[4].data);
+      final points = _parseWidgetStr(allResults[5].data);
 
-      dev.log(
-        'Widgets: total=$total active=$active expired=$expired online=$online balance=$balance points=$points',
-        name: 'DASH',
-      );
+      dev.log('Widgets: total=$total active=$active expired=$expired online=$online', name: 'DASH');
 
-      // 2) Backend: subscribers with phones (debt for dashboard stats; bell uses near-expiry + expired-today only)
+      // معالجة بيانات المشتركين
       int debtors = 0;
       double totalDebt = 0;
       int nearExpiry = 0, expiredToday = 0, expiredOverdue = 0;
@@ -182,131 +193,62 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       List<Map<String, dynamic>> expiredTodayList = [];
       List<Map<String, dynamic>> expiredOverdueList = [];
 
-      try {
-        final subsResponse = await backendDio.get(
-          '${ApiConstants.subscribersWithPhones}?adminId=$adminId',
-        );
-
-        if (subsResponse.data['success'] == true) {
-          final data = subsResponse.data['data'] as List? ?? [];
-          for (final sub in data) {
-            final daysInt = _remainingDaysInt(sub['remaining_days']);
-
-            if (daysInt != null && daysInt >= 1 && daysInt <= 3) {
-              nearExpiry++;
-              nearExpiryList.add(Map<String, dynamic>.from(sub));
-            }
-            if (daysInt == 0) {
-              expiredToday++;
-              expiredTodayList.add(Map<String, dynamic>.from(sub));
-            }
-            if (daysInt != null && daysInt < 0) {
-              expiredOverdue++;
-              expiredOverdueList.add(Map<String, dynamic>.from(sub));
-            }
-
-            final notesRaw = (sub['notes'] ?? sub['comments'])?.toString() ?? '';
-            var notesVal =
-                double.tryParse(notesRaw.replaceAll(',', '').trim()) ?? 0;
-            if (notesVal == 0 &&
-                (sub['hasDebt'] == true || sub['hasDebt'] == 1)) {
-              final d = sub['debt'];
-              if (d is num && d != 0) {
-                notesVal = -d.abs().toDouble();
-              }
-            }
-            if (notesVal < 0) {
-              debtors++;
-              totalDebt += notesVal.abs();
-            }
+      final subsData = allResults[6].data;
+      if (subsData is Map && subsData['success'] == true) {
+        final data = subsData['data'] as List? ?? [];
+        for (final sub in data) {
+          final daysInt = _remainingDaysInt(sub['remaining_days']);
+          if (daysInt != null && daysInt >= 1 && daysInt <= 3) {
+            nearExpiry++;
+            nearExpiryList.add(Map<String, dynamic>.from(sub));
+          }
+          if (daysInt == 0) {
+            expiredToday++;
+            expiredTodayList.add(Map<String, dynamic>.from(sub));
+          }
+          if (daysInt != null && daysInt < 0) {
+            expiredOverdue++;
+            expiredOverdueList.add(Map<String, dynamic>.from(sub));
+          }
+          final notesRaw = (sub['notes'] ?? sub['comments'])?.toString() ?? '';
+          var notesVal = double.tryParse(notesRaw.replaceAll(',', '').trim()) ?? 0;
+          if (notesVal == 0 && (sub['hasDebt'] == true || sub['hasDebt'] == 1)) {
+            final d = sub['debt'];
+            if (d is num && d != 0) notesVal = -d.abs().toDouble();
+          }
+          if (notesVal < 0) {
+            debtors++;
+            totalDebt += notesVal.abs();
           }
         }
-      } catch (e) {
-        dev.log('Backend subscribers error: $e', name: 'DASH');
       }
 
-      // 3) Daily activations from rad backend
+      // معالجة التفعيلات اليومية
       int todayAct = 0, todayExt = 0;
       List<Map<String, dynamic>> activities = [];
-      try {
-        final actResponse = await backendDio.get(
-          '${ApiConstants.dailyActivations}?admin_id=$adminId',
-        );
-        if (actResponse.data['success'] == true) {
-          final counts = actResponse.data['counts'] ?? {};
-          todayAct = counts['activations'] ?? counts['activate'] ?? 0;
-          todayExt = counts['extensions'] ?? counts['extend'] ?? 0;
-          final actData = actResponse.data['data'] as List? ?? [];
-          activities =
-              actData.map((e) => Map<String, dynamic>.from(e)).toList();
-        }
-      } catch (_) {}
+      final actData = allResults[7].data;
+      if (actData is Map && actData['success'] == true) {
+        final counts = actData['counts'] ?? {};
+        todayAct = counts['activations'] ?? counts['activate'] ?? 0;
+        todayExt = counts['extensions'] ?? counts['extend'] ?? 0;
+        final actList = actData['data'] as List? ?? [];
+        activities = actList.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
 
-      // Fetch actual offline + expired counts via SAS4 encrypted calls (same as React Dashboard)
+      // معالجة أعداد الأوفلاين والمنتهين
       int offline = active - online;
       int expiredActual = expired;
-
-      try {
-        final offlinePayload = EncryptionService.encrypt({
-          'page': 1,
-          'count': 1,
-          'sortBy': 'username',
-          'direction': 'asc',
-          'search': '',
-          'status': 1,
-          'connection': 1,
-          'profile_id': -1,
-          'parent_id': -1,
-          'sub_users': 1,
-          'mac': '',
-          'columns': ['idx'],
-        });
-        final expiredPayload = EncryptionService.encrypt({
-          'page': 1,
-          'count': 1,
-          'sortBy': 'username',
-          'direction': 'asc',
-          'search': '',
-          'status': 2,
-          'connection': -1,
-          'profile_id': -1,
-          'parent_id': -1,
-          'group_id': -1,
-          'site_id': -1,
-          'sub_users': 1,
-          'mac': '',
-          'columns': ['idx'],
-        });
-
-        final results = await Future.wait([
-          _sas4Dio.post(
-            ApiConstants.sas4ListUsers,
-            data: {'payload': offlinePayload},
-            options: Options(contentType: 'application/x-www-form-urlencoded'),
-          ).catchError((_) => Response(requestOptions: RequestOptions())),
-          _sas4Dio.post(
-            ApiConstants.sas4ListUsers,
-            data: {'payload': expiredPayload},
-            options: Options(contentType: 'application/x-www-form-urlencoded'),
-          ).catchError((_) => Response(requestOptions: RequestOptions())),
-        ]);
-
-        for (int i = 0; i < results.length; i++) {
-          dynamic parsed = results[i].data;
-          if (parsed is String) {
-            parsed = EncryptionService.decrypt(parsed);
-          }
-          if (parsed is Map) {
-            final tc = parsed['totalCount'] ?? parsed['total'] ?? parsed['count'];
-            if (tc != null) {
-              final val = tc is int ? tc : (int.tryParse(tc.toString()) ?? 0);
-              if (i == 0) offline = val;
-              if (i == 1) expiredActual = val;
-            }
+      for (int i = 8; i <= 9; i++) {
+        dynamic parsed = allResults[i].data;
+        if (parsed is String) parsed = EncryptionService.decrypt(parsed);
+        if (parsed is Map) {
+          final tc = parsed['totalCount'] ?? parsed['total'] ?? parsed['count'];
+          if (tc != null) {
+            final val = tc is int ? tc : (int.tryParse(tc.toString()) ?? 0);
+            if (i == 8) offline = val;
+            if (i == 9) expiredActual = val;
           }
         }
-      } catch (e) {
-        dev.log('SAS4 offline/expired count fetch error: $e', name: 'DASH');
       }
       if (offline < 0) offline = 0;
 
