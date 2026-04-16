@@ -762,6 +762,19 @@ class _SubscriberDetailsScreenState
   }
 
   // ── Activate ───────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> _fetchSubscriberDiscount(String username) async {
+    try {
+      final dio = ref.read(backendDioProvider);
+      final response = await dio.get('${ApiConstants.discounts}/$username');
+      if (response.data is Map &&
+          response.data['success'] == true &&
+          response.data['data'] != null) {
+        return Map<String, dynamic>.from(response.data['data']);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _activateSubscriber() async {
     final id = _subscriberId;
     if (id == null) {
@@ -775,19 +788,28 @@ class _SubscriberDetailsScreenState
     final results = await Future.wait([
       notifier.getActivationData(id),
       notifier.getSubscriberDetails(id),
+      _fetchSubscriberDiscount(widget.subscriber.username),
     ]);
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
     final activationData = results[0] as Map<String, dynamic>?;
     final userData = results[1] as Map<String, dynamic>?;
+    final discountData = results[2] as Map<String, dynamic>?;
 
     if (activationData == null) {
       _showSnack('فشل جلب بيانات التفعيل', success: false);
       return;
     }
 
-    final userPrice = _toDouble(activationData['user_price']);
+    final originalPrice = _toDouble(activationData['user_price']);
+    final discountAmount = discountData != null
+        ? _toDouble(discountData['discount_amount'])
+        : 0.0;
+    final hasDiscount = discountAmount > 0;
+    final userPrice = hasDiscount
+        ? (originalPrice - discountAmount).clamp(0.0, double.infinity)
+        : originalPrice;
     final units = activationData['units'];
     final profileName = activationData['profile_name']?.toString() ?? '—';
     final profileDuration = activationData['profile_duration']?.toString() ?? '—';
@@ -795,6 +817,15 @@ class _SubscriberDetailsScreenState
     final managerBalance = activationData['manager_balance']?.toString() ?? '—';
     final rewardPoints = activationData['reward_points']?.toString() ?? '0';
     final currentBalance = _toDouble(userData?['notes']);
+
+    if (hasDiscount && mounted) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          AppSnackBar.info(context,
+              'هذا المشترك لديه خصم ${AppHelpers.formatMoney(discountAmount)}');
+        }
+      });
+    }
 
     final partialCtrl = TextEditingController();
     final partialFocus = FocusNode();
@@ -885,12 +916,40 @@ class _SubscriberDetailsScreenState
                           const SizedBox(width: 8),
                           Text('السعر: ', style: TextStyle(fontSize: 13,
                               color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                          if (hasDiscount) ...[
+                            Text(AppHelpers.formatMoney(originalPrice),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade500,
+                                  decoration: TextDecoration.lineThrough,
+                                  decorationColor: Colors.grey.shade500)),
+                            const SizedBox(width: 8),
+                          ],
                           Text(AppHelpers.formatMoney(userPrice),
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
                                 color: AppTheme.successColor)),
                         ],
                       ),
                     ),
+                    if (hasDiscount) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.redeem_rounded, size: 18, color: AppTheme.secondary),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(
+                            'خصم خاص: ${AppHelpers.formatMoney(discountAmount)}',
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                                fontWeight: FontWeight.w700, color: AppTheme.secondary),
+                          )),
+                        ]),
+                      ),
+                    ],
                   ]),
                 ),
 
@@ -1004,6 +1063,12 @@ class _SubscriberDetailsScreenState
                               color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
                           const SizedBox(height: 10),
                           _SummaryRow(label: 'سعر الباقة', value: AppHelpers.formatMoney(userPrice)),
+                          if (hasDiscount)
+                            _SummaryRow(
+                              label: 'خصم',
+                              value: '-${AppHelpers.formatMoney(discountAmount)}',
+                              valueColor: AppTheme.secondary,
+                            ),
                           if (currentBalance != 0)
                             _SummaryRow(
                               label: currentBalance < 0 ? 'دين سابق' : 'رصيد سابق',
