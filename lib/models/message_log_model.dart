@@ -36,9 +36,9 @@ class MessageLogModel {
           ? json['id']
           : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
       adminId: (json['admin_id'] ?? '').toString(),
-      recipientUsername: json['recipient_username']?.toString(),
+      recipientUsername: (json['recipient_username'] ?? json['recipient_name'])?.toString(),
       recipientPhone: json['recipient_phone']?.toString(),
-      messageContent: json['message_content']?.toString(),
+      messageContent: (json['message_content'] ?? json['message_preview'])?.toString(),
       messageType: (json['message_type'] ?? 'manual').toString(),
       status: (json['status'] ?? 'pending').toString(),
       errorMessage: json['error_message']?.toString(),
@@ -69,12 +69,19 @@ class MessageStats {
 
   int get total => sent + failed + pending + cancelled;
 
+  static int _toInt(dynamic v) {
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
   factory MessageStats.fromJson(Map<String, dynamic> json) {
     return MessageStats(
-      sent: json['sent'] is int ? json['sent'] : 0,
-      failed: json['failed'] is int ? json['failed'] : 0,
-      pending: json['pending'] is int ? json['pending'] : 0,
-      cancelled: json['cancelled'] is int ? json['cancelled'] : 0,
+      sent: _toInt(json['sent']),
+      failed: _toInt(json['failed']),
+      pending: _toInt(json['pending']),
+      cancelled: _toInt(json['cancelled']),
     );
   }
 }
