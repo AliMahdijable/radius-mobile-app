@@ -50,6 +50,7 @@ dependencies:
   printing: ^5.13.3
   pull_to_refresh_flutter3: ^2.0.2
   fluttertoast: ^8.2.10
+  file_picker: ^8.1.6
 
   # Icons
   iconsax: ^0.0.8

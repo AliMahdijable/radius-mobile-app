@@ -11,6 +11,9 @@ import '../../screens/whatsapp/message_logs_screen.dart';
 import '../../screens/whatsapp/broadcast_screen.dart';
 import '../../screens/schedules_screen.dart';
 import '../../screens/templates_screen.dart';
+import '../../screens/discounts_screen.dart';
+import '../../screens/debt_export_screen.dart';
+import '../../screens/debt_import_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
@@ -65,6 +68,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/templates',
         builder: (context, state) => const TemplatesScreen(),
+      ),
+      GoRoute(
+        path: '/discounts',
+        builder: (context, state) => const DiscountsScreen(),
+      ),
+      GoRoute(
+        path: '/debt-export',
+        builder: (context, state) => const DebtExportScreen(),
+      ),
+      GoRoute(
+        path: '/debt-import',
+        builder: (context, state) => const DebtImportScreen(),
       ),
     ],
   );
