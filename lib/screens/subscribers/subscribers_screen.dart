@@ -7,6 +7,7 @@ import '../../providers/dashboard_provider.dart';
 import '../../models/subscriber_model.dart';
 import '../../widgets/subscriber_card.dart';
 import '../../widgets/loading_overlay.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/add_subscriber_sheet.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -458,10 +459,11 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                                     if (confirm == true) {
                                       final ok = await ref.read(subscribersProvider.notifier).disconnectUser(sub.idx!);
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                          content: Text(ok ? 'تم فصل ${sub.username}' : 'فشل فصل المستخدم'),
-                                          backgroundColor: ok ? Colors.green : Colors.red,
-                                        ));
+                                        if (ok) {
+                                          AppSnackBar.success(context, 'تم فصل ${sub.fullName.isNotEmpty ? sub.fullName : sub.username}');
+                                        } else {
+                                          AppSnackBar.error(context, 'فشل فصل المستخدم');
+                                        }
                                       }
                                     }
                                   }
