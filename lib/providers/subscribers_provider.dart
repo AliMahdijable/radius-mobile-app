@@ -282,6 +282,17 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             isOnlineFlag: isOnline,
             enabled: sub.enabled ?? backend?.enabled,
             ipAddress: (e['framedipaddress'] ?? e['framed_ip_address'])?.toString(),
+            macAddress: e['callingstationid']?.toString(),
+            sessionTime: e['acctsessiontime'] is int
+                ? e['acctsessiontime']
+                : int.tryParse(e['acctsessiontime']?.toString() ?? ''),
+            downloadBytes: e['acctoutputoctets'] is int
+                ? e['acctoutputoctets']
+                : int.tryParse(e['acctoutputoctets']?.toString() ?? ''),
+            uploadBytes: e['acctinputoctets'] is int
+                ? e['acctinputoctets']
+                : int.tryParse(e['acctinputoctets']?.toString() ?? ''),
+            deviceVendor: e['oui']?.toString(),
           ));
         }
       } else {
@@ -503,6 +514,8 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             'phone', 'mobile', 'is_online', 'online_status',
             'enabled', 'parent_username', 'profile_details',
             'framedipaddress', 'framed_ip_address',
+            'acctsessiontime', 'acctinputoctets', 'acctoutputoctets',
+            'callingstationid', 'oui',
           ],
           'status': -1,
           'connection': -1,
