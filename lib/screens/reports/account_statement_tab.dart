@@ -279,11 +279,13 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           _SmallBtn(
             Icons.picture_as_pdf_rounded,
             hasData ? _handleSharePdf : null,
+            tooltip: 'مشاركة PDF',
           ),
           const SizedBox(width: 4),
           _SmallBtn(
             Icons.print_rounded,
             hasData ? _handlePrint : null,
+            tooltip: 'طباعة',
           ),
           const SizedBox(width: 4),
           _waSending
@@ -294,6 +296,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                   Icons.send_rounded,
                   hasData ? _handleSendWhatsApp : null,
                   color: const Color(0xFF25D366),
+                  tooltip: 'إرسال واتساب',
                 ),
         ]),
 
@@ -775,13 +778,14 @@ class _SmallBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final Color? color;
-  const _SmallBtn(this.icon, this.onTap, {this.color});
+  final String? tooltip;
+  const _SmallBtn(this.icon, this.onTap, {this.color, this.tooltip});
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final c = color ?? Theme.of(context).colorScheme.primary;
-    return Material(
+    final btn = Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest
           .withValues(alpha: enabled ? .3 : .15),
       borderRadius: BorderRadius.circular(10),
@@ -797,6 +801,8 @@ class _SmallBtn extends StatelessWidget {
         ),
       ),
     );
+    if (tooltip != null) return Tooltip(message: tooltip!, child: btn);
+    return btn;
   }
 }
 
