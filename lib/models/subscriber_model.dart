@@ -85,7 +85,26 @@ class SubscriberModel {
     return 0;
   }
 
-  bool get isExpired => (remainingDays ?? 0) <= 0;
+  bool get isExpired {
+    // أولاً: تحقق من تاريخ الانتهاء الفعلي (أدق من remaining_days)
+    if (expiration != null && expiration!.isNotEmpty) {
+      try {
+        final expStr = expiration!.trim();
+        DateTime? expDate;
+        if (expStr.contains('T') || expStr.contains('+')) {
+          expDate = DateTime.tryParse(expStr);
+        } else {
+          // تاريخ بدون timezone → نعتبره بتوقيت بغداد (+03:00)
+          expDate = DateTime.tryParse('${expStr.replaceAll(' ', 'T')}+03:00');
+        }
+        if (expDate != null) {
+          return expDate.isBefore(DateTime.now());
+        }
+      } catch (_) {}
+    }
+    // fallback على remaining_days
+    return (remainingDays ?? 0) < 0;
+  }
 
   bool get isActive => !isExpired;
 

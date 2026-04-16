@@ -55,7 +55,7 @@ class AppHelpers {
   /// Check if subscriber has debt
   static bool hasDebt(String? notes) => parseDebt(notes) < 0;
 
-  /// Check if subscriber is expired
+  /// Check if subscriber is expired (remaining_days < 0 means truly expired)
   static bool isExpired(int? remainingDays) =>
       remainingDays != null && remainingDays < 0;
 
@@ -63,6 +63,7 @@ class AppHelpers {
   static Color getRemainingDaysColor(int? days) {
     if (days == null) return Colors.grey;
     if (days < 0) return Colors.red;
+    if (days == 0) return Colors.deepOrange;
     if (days <= 3) return Colors.orange;
     if (days <= 7) return Colors.amber;
     return Colors.green;
