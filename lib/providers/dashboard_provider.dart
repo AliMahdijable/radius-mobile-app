@@ -194,9 +194,18 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
               expiredTodayList.add(Map<String, dynamic>.from(sub));
             }
 
+            // Prefer signed value from notes/comments. /with-phones historically omitted
+            // notes; server now sends notes + debt/hasDebt derived from notes as fallback.
             final notesRaw = (sub['notes'] ?? sub['comments'])?.toString() ?? '';
-            final notesVal =
+            var notesVal =
                 double.tryParse(notesRaw.replaceAll(',', '').trim()) ?? 0;
+            if (notesVal == 0 &&
+                (sub['hasDebt'] == true || sub['hasDebt'] == 1)) {
+              final d = sub['debt'];
+              if (d is num && d != 0) {
+                notesVal = -d.abs().toDouble();
+              }
+            }
             if (notesVal < 0) {
               debtors++;
               totalDebt += notesVal.abs();
