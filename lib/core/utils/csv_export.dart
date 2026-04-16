@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_saver/file_saver.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -32,23 +32,21 @@ class CsvExport {
     await Share.shareXFiles([XFile(file.path)]);
   }
 
-  /// Opens the system save dialog (e.g. SAF on Android) so the user can pick
-  /// Downloads or another folder on the device.
-  static Future<String?> saveWithSystemPicker({
+  /// Opens the system save dialog; on mobile [bytes] are written and the
+  /// absolute path of the saved file is returned (null if cancelled).
+  static Future<String?> saveWithFilePicker({
     required String fileName,
     required List<String> headers,
     required List<List<String>> rows,
   }) async {
     final csv = buildCsvString(headers: headers, rows: rows);
-    final baseName = fileName.toLowerCase().endsWith('.csv')
-        ? fileName.substring(0, fileName.length - 4)
-        : fileName;
     final bytes = Uint8List.fromList(utf8.encode(csv));
-    return FileSaver.instance.saveFile(
-      name: baseName,
+    return FilePicker.platform.saveFile(
+      dialogTitle: 'حفظ ملف CSV',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: const ['csv'],
       bytes: bytes,
-      fileExtension: 'csv',
-      mimeType: MimeType.csv,
     );
   }
 
