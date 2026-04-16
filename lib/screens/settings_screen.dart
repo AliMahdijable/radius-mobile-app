@@ -179,6 +179,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'إدارة أسعار الباقات للمدراء',
           onTap: () => context.push('/packages'),
         ),
+        _SettingTile(
+          icon: Icons.print_rounded,
+          title: 'قوالب الطباعة',
+          subtitle: 'إدارة قوالب وصولات الطباعة',
+          onTap: () => context.push('/print-templates'),
+        ),
 
         const SizedBox(height: 20),
 

@@ -67,6 +67,14 @@ class ApiConstants {
   static const String financeReport = '/api/reports/finance';
   static const String accountStatement = '/api/reports/account-statement';
 
+  // Print Templates
+  static const String printTemplates = '/api/print-templates/templates';
+  static const String printTemplateById = '/api/print-templates/template';
+  static const String printTemplateCreate = '/api/print-templates/create';
+  static const String printTemplateUpdate = '/api/print-templates/update';
+  static const String printTemplateDelete = '/api/print-templates/delete';
+  static const String printTemplateToggle = '/api/print-templates/toggle-active';
+
   // User Info Link
   static const String generateUserLink = '/api/generate-user-link';
 
