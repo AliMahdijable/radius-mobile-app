@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_theme.dart';
@@ -25,7 +26,6 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(printTemplatesProvider);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     final hasA4 = state.templates.any((t) => t.templateType == 'a4');
     final hasPOS = state.templates.any((t) => t.templateType == 'pos');
@@ -43,7 +43,6 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // Info banner
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -59,8 +58,7 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
                         child: Text(
                           'القالب النشط سيُستخدم في طباعة الوصولات عند التفعيل وتسديد الديون',
                           style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 12,
+                            fontFamily: 'Cairo', fontSize: 12,
                             color: theme.colorScheme.onSurface.withOpacity(0.6),
                           ),
                         ),
@@ -69,36 +67,30 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Add buttons for missing types
                   if (!hasA4 || !hasPOS) ...[
                     Row(children: [
                       if (!hasA4)
                         Expanded(
                           child: _AddTemplateCard(
-                            type: 'a4',
-                            label: 'A4',
-                            icon: Icons.description_rounded,
-                            onTap: () => _openEditor(null, 'a4'),
+                            label: 'A4', icon: Icons.description_rounded,
+                            onTap: () => _openBuilder(null, 'a4'),
                           ),
                         ),
                       if (!hasA4 && !hasPOS) const SizedBox(width: 10),
                       if (!hasPOS)
                         Expanded(
                           child: _AddTemplateCard(
-                            type: 'pos',
-                            label: 'POS',
-                            icon: Icons.receipt_long_rounded,
-                            onTap: () => _openEditor(null, 'pos'),
+                            label: 'POS', icon: Icons.receipt_long_rounded,
+                            onTap: () => _openBuilder(null, 'pos'),
                           ),
                         ),
                     ]),
                     const SizedBox(height: 16),
                   ],
 
-                  // Existing templates
                   ...state.templates.map((t) => _TemplateCard(
                         template: t,
-                        onEdit: () => _openEditor(t, t.templateType),
+                        onEdit: () => _openBuilder(t, t.templateType),
                         onToggle: () => _toggleTemplate(t),
                         onDelete: () => _deleteTemplate(t),
                         onPreview: () => _previewTemplate(t),
@@ -120,21 +112,17 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
             color: theme.colorScheme.onSurface.withOpacity(0.2)),
         const SizedBox(height: 12),
         Text('لا توجد قوالب طباعة',
-            style: TextStyle(
-                fontFamily: 'Cairo',
+            style: TextStyle(fontFamily: 'Cairo',
                 color: theme.colorScheme.onSurface.withOpacity(0.4))),
       ]),
     );
   }
 
-  void _openEditor(PrintTemplateModel? existing, String type) {
+  void _openBuilder(PrintTemplateModel? existing, String type) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _TemplateEditorPage(
-          template: existing,
-          templateType: type,
-        ),
+        builder: (_) => _InvoiceBuilderPage(template: existing, templateType: type),
       ),
     ).then((saved) {
       if (saved == true) {
@@ -186,12 +174,9 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
       subscriberName: 'أحمد محمد',
       phoneNumber: '07801234567',
       packageName: 'باقة 10 ميغا',
-      packagePrice: 15000,
-      paidAmount: 15000,
-      remainingAmount: 0,
-      debtAmount: 0,
-      expiryDate: '2026-05-15',
-      operationType: 'activation',
+      packagePrice: 15000, paidAmount: 15000,
+      remainingAmount: 0, debtAmount: 0,
+      expiryDate: '2026-05-15', operationType: 'activation',
     );
     try {
       await ReceiptPrinter.printReceipt(data: sampleData, htmlTemplate: t.content);
@@ -201,42 +186,33 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Shared Widgets
+// ─────────────────────────────────────────────────────────
+
 class _AddTemplateCard extends StatelessWidget {
-  final String type;
   final String label;
   final IconData icon;
   final VoidCallback onTap;
-
-  const _AddTemplateCard({
-    required this.type,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
+  const _AddTemplateCard({required this.label, required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      onTap: onTap, borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 28),
         decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppTheme.primary.withOpacity(0.2),
-            style: BorderStyle.solid,
-          ),
+          color: theme.cardTheme.color, borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
         ),
         child: Column(children: [
           Icon(icon, size: 32, color: AppTheme.primary.withOpacity(0.5)),
           const SizedBox(height: 8),
           Text('إضافة قالب $label',
-              style: const TextStyle(
-                  fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w600,
-                  color: AppTheme.primary)),
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                  fontWeight: FontWeight.w600, color: AppTheme.primary)),
         ]),
       ),
     );
@@ -245,106 +221,78 @@ class _AddTemplateCard extends StatelessWidget {
 
 class _TemplateCard extends StatelessWidget {
   final PrintTemplateModel template;
-  final VoidCallback onEdit;
-  final VoidCallback onToggle;
-  final VoidCallback onDelete;
-  final VoidCallback onPreview;
-
-  const _TemplateCard({
-    required this.template,
-    required this.onEdit,
-    required this.onToggle,
-    required this.onDelete,
-    required this.onPreview,
-  });
+  final VoidCallback onEdit, onToggle, onDelete, onPreview;
+  const _TemplateCard({required this.template, required this.onEdit,
+      required this.onToggle, required this.onDelete, required this.onPreview});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isA4 = template.templateType == 'a4';
-    final typeLabel = isA4 ? 'A4' : 'POS';
-    final typeIcon = isA4 ? Icons.description_rounded : Icons.receipt_long_rounded;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(14),
+        color: theme.cardTheme.color, borderRadius: BorderRadius.circular(14),
         border: template.isActive
-            ? Border.all(color: AppTheme.successColor.withOpacity(0.4), width: 1.5)
-            : null,
+            ? Border.all(color: AppTheme.successColor.withOpacity(0.4), width: 1.5) : null,
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: (template.isActive ? AppTheme.successColor : Colors.grey)
-                      .withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(typeIcon, size: 22,
-                    color: template.isActive ? AppTheme.successColor : Colors.grey),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (template.isActive ? AppTheme.successColor : Colors.grey).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(template.templateName,
-                      style: const TextStyle(
-                          fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w700)),
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(typeLabel,
-                          style: const TextStyle(
-                              fontFamily: 'Cairo', fontSize: 10,
-                              fontWeight: FontWeight.w700, color: AppTheme.primary)),
-                    ),
+              child: Icon(isA4 ? Icons.description_rounded : Icons.receipt_long_rounded,
+                  size: 22, color: template.isActive ? AppTheme.successColor : Colors.grey),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(template.templateName, style: const TextStyle(
+                    fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w700)),
+                Row(children: [
+                  _Badge(label: isA4 ? 'A4' : 'POS', color: AppTheme.primary),
+                  if (template.isActive) ...[
                     const SizedBox(width: 6),
-                    if (template.isActive)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: AppTheme.successColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text('نشط',
-                            style: TextStyle(
-                                fontFamily: 'Cairo', fontSize: 10,
-                                fontWeight: FontWeight.w700, color: AppTheme.successColor)),
-                      ),
-                  ]),
+                    _Badge(label: 'نشط', color: AppTheme.successColor),
+                  ],
                 ]),
-              ),
-              Switch.adaptive(
-                value: template.isActive,
-                onChanged: (_) => onToggle(),
-                activeColor: AppTheme.successColor,
-              ),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              _ActionChip(icon: Icons.edit_rounded, label: 'تعديل', onTap: onEdit),
-              const SizedBox(width: 8),
-              _ActionChip(icon: Icons.visibility_rounded, label: 'معاينة', onTap: onPreview),
-              const SizedBox(width: 8),
-              _ActionChip(
-                  icon: Icons.delete_outline_rounded,
-                  label: 'حذف',
-                  onTap: onDelete,
-                  color: Colors.red),
-            ]),
-          ],
-        ),
+              ]),
+            ),
+            Switch.adaptive(value: template.isActive, onChanged: (_) => onToggle(),
+                activeColor: AppTheme.successColor),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            _ActionChip(icon: Icons.edit_rounded, label: 'تعديل', onTap: onEdit),
+            const SizedBox(width: 8),
+            _ActionChip(icon: Icons.visibility_rounded, label: 'معاينة', onTap: onPreview),
+            const SizedBox(width: 8),
+            _ActionChip(icon: Icons.delete_outline_rounded, label: 'حذف',
+                onTap: onDelete, color: Colors.red),
+          ]),
+        ]),
       ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Badge({required this.label, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+      child: Text(label, style: TextStyle(fontFamily: 'Cairo', fontSize: 10,
+          fontWeight: FontWeight.w700, color: color)),
     );
   }
 }
@@ -354,33 +302,23 @@ class _ActionChip extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
-
-  const _ActionChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
-
+  const _ActionChip({required this.icon, required this.label,
+      required this.onTap, this.color});
   @override
   Widget build(BuildContext context) {
     final c = color ?? AppTheme.primary;
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      onTap: onTap, borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: c.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: c.withOpacity(0.15)),
-        ),
+        decoration: BoxDecoration(color: c.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: c.withOpacity(0.15))),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 14, color: c),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.w600, color: c)),
+          Text(label, style: TextStyle(fontFamily: 'Cairo', fontSize: 11,
+              fontWeight: FontWeight.w600, color: c)),
         ]),
       ),
     );
@@ -388,83 +326,264 @@ class _ActionChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Template Editor Page
+// Invoice Builder Page (visual designer)
 // ─────────────────────────────────────────────────────────
 
-class _TemplateEditorPage extends ConsumerStatefulWidget {
-  final PrintTemplateModel? template;
-  final String templateType;
+class _InvoiceElement {
+  String id;
+  String type; // header, field, divider, footer, text
+  String label;
+  String content;
+  String variable;
+  String fontSize;
+  String color;
+  String align;
+  int order;
+  bool visible;
+  String dividerStyle;
 
-  const _TemplateEditorPage({this.template, required this.templateType});
+  _InvoiceElement({
+    required this.id, required this.type, required this.label,
+    this.content = '', this.variable = '', this.fontSize = '14px',
+    this.color = '#1f2937', this.align = 'right', this.order = 0,
+    this.visible = true, this.dividerStyle = 'solid',
+  });
 
-  @override
-  ConsumerState<_TemplateEditorPage> createState() => _TemplateEditorPageState();
+  Map<String, dynamic> toJson() => {
+    'id': id, 'type': type, 'label': label, 'content': content,
+    'variable': variable, 'fontSize': fontSize, 'color': color,
+    'align': align, 'order': order, 'visible': visible,
+    'style': dividerStyle,
+  };
+
+  factory _InvoiceElement.fromJson(Map<String, dynamic> json) {
+    return _InvoiceElement(
+      id: json['id'] ?? 'el_${DateTime.now().millisecondsSinceEpoch}',
+      type: json['type'] ?? 'field',
+      label: json['label'] ?? '',
+      content: json['content'] ?? '',
+      variable: json['variable'] ?? '',
+      fontSize: json['fontSize'] ?? '14px',
+      color: json['color'] ?? '#1f2937',
+      align: json['align'] ?? 'right',
+      order: json['order'] ?? 0,
+      visible: json['visible'] ?? true,
+      dividerStyle: json['style'] ?? 'solid',
+    );
+  }
 }
 
-class _TemplateEditorPageState extends ConsumerState<_TemplateEditorPage> {
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _contentCtrl;
+class _InvoiceBuilderPage extends ConsumerStatefulWidget {
+  final PrintTemplateModel? template;
+  final String templateType;
+  const _InvoiceBuilderPage({this.template, required this.templateType});
+
+  @override
+  ConsumerState<_InvoiceBuilderPage> createState() => _InvoiceBuilderPageState();
+}
+
+class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabCtrl;
+  late TextEditingController _nameCtrl;
+  late List<_InvoiceElement> _elements;
+  late String _layoutType;
   bool _saving = false;
+
+  String _bgColor = '#ffffff';
+  String _padding = '20px';
+  String _fontFamily = 'Cairo';
+
+  static const _variableOptions = <String, String>{
+    '{invoice_number}': 'رقم الفاتورة',
+    '{date}': 'التاريخ',
+    '{subscriber_name}': 'اسم المشترك',
+    '{phone_number}': 'رقم الهاتف',
+    '{package_name}': 'اسم الباقة',
+    '{package_price}': 'سعر الباقة',
+    '{paid_amount}': 'المبلغ المدفوع',
+    '{remaining_amount}': 'المبلغ المتبقي',
+    '{expiry_date}': 'تاريخ الانتهاء',
+    '{debt_amount}': 'مبلغ الدين',
+  };
+
+  static const _fontSizes = ['12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px'];
 
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+    _layoutType = widget.templateType;
     _nameCtrl = TextEditingController(
-        text: widget.template?.templateName ??
-            (widget.templateType == 'a4' ? 'قالب A4' : 'قالب POS'));
-    _contentCtrl = TextEditingController(
-        text: widget.template?.content ?? _defaultTemplate(widget.templateType));
+      text: widget.template?.templateName ??
+          (widget.templateType == 'a4' ? 'قالب A4' : 'قالب POS'),
+    );
+    _loadElements();
+  }
+
+  void _loadElements() {
+    if (widget.template?.templateData != null) {
+      try {
+        final data = jsonDecode(widget.template!.templateData!);
+        if (data is Map && data['elements'] is List) {
+          _elements = (data['elements'] as List)
+              .map((e) => _InvoiceElement.fromJson(e as Map<String, dynamic>))
+              .toList();
+          if (data['globalSettings'] is Map) {
+            final gs = data['globalSettings'] as Map;
+            _bgColor = gs['backgroundColor'] ?? '#ffffff';
+            _padding = gs['padding'] ?? '20px';
+            _fontFamily = gs['fontFamily'] ?? 'Cairo';
+          }
+          if (data['layoutType'] is String) {
+            _layoutType = data['layoutType'];
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    _elements = _defaultElements();
+  }
+
+  List<_InvoiceElement> _defaultElements() {
+    return [
+      _InvoiceElement(id: 'header', type: 'header', label: 'العنوان',
+          content: 'فاتورة', fontSize: '28px', color: '#10b981', align: 'center', order: 0),
+      _InvoiceElement(id: 'invoice_number', type: 'field', label: 'رقم الفاتورة',
+          variable: '{invoice_number}', fontSize: '14px', color: '#6b7280', align: 'center', order: 1),
+      _InvoiceElement(id: 'date', type: 'field', label: 'التاريخ',
+          variable: '{date}', fontSize: '14px', color: '#6b7280', align: 'center', order: 2),
+      _InvoiceElement(id: 'divider1', type: 'divider', label: 'خط فاصل',
+          dividerStyle: 'solid', color: '#e5e7eb', order: 3),
+      _InvoiceElement(id: 'subscriber_name', type: 'field', label: 'اسم المشترك',
+          variable: '{subscriber_name}', fontSize: '16px', color: '#1f2937', align: 'right', order: 4),
+      _InvoiceElement(id: 'phone_number', type: 'field', label: 'رقم الهاتف',
+          variable: '{phone_number}', fontSize: '14px', color: '#374151', align: 'right', order: 5),
+      _InvoiceElement(id: 'package_name', type: 'field', label: 'اسم الباقة',
+          variable: '{package_name}', fontSize: '14px', color: '#374151', align: 'right', order: 6),
+      _InvoiceElement(id: 'divider2', type: 'divider', label: 'خط فاصل',
+          dividerStyle: 'solid', color: '#e5e7eb', order: 7),
+      _InvoiceElement(id: 'package_price', type: 'field', label: 'سعر الباقة',
+          variable: '{package_price} IQD', fontSize: '15px', color: '#1f2937', align: 'right', order: 8),
+      _InvoiceElement(id: 'paid_amount', type: 'field', label: 'المبلغ المدفوع',
+          variable: '{paid_amount} IQD', fontSize: '15px', color: '#047857', align: 'right', order: 9),
+      _InvoiceElement(id: 'remaining_amount', type: 'field', label: 'المبلغ المتبقي',
+          variable: '{remaining_amount} IQD', fontSize: '15px', color: '#dc2626', align: 'right', order: 10),
+      _InvoiceElement(id: 'expiry_date', type: 'field', label: 'تاريخ الانتهاء',
+          variable: '{expiry_date}', fontSize: '14px', color: '#374151', align: 'right', order: 11),
+      _InvoiceElement(id: 'divider3', type: 'divider', label: 'خط فاصل',
+          dividerStyle: 'solid', color: '#10b981', order: 12),
+      _InvoiceElement(id: 'footer', type: 'footer', label: 'الذيل',
+          content: 'شكراً لتعاملكم معنا', fontSize: '14px', color: '#6b7280', align: 'center', order: 13),
+    ];
   }
 
   @override
   void dispose() {
+    _tabCtrl.dispose();
     _nameCtrl.dispose();
-    _contentCtrl.dispose();
     super.dispose();
   }
 
-  String _defaultTemplate(String type) {
-    return '''<div style="text-align: center; padding: 20px; font-family: sans-serif; direction: rtl;">
-  <h2 style="color: #1a7f64; margin-bottom: 10px;">وصل</h2>
-  <hr style="border: 1px solid #1a7f64; margin-bottom: 15px;">
-  <table style="width: 100%; border-collapse: collapse; text-align: right;">
-    <tr><td style="padding: 6px; font-weight: bold;">رقم الفاتورة:</td><td style="padding: 6px;">{invoice_number}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">التاريخ:</td><td style="padding: 6px;">{date}</td></tr>
-    <tr><td colspan="2"><hr style="border: 0.5px solid #ddd;"></td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">اسم المشترك:</td><td style="padding: 6px;">{subscriber_name}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">رقم الهاتف:</td><td style="padding: 6px;">{phone_number}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">الباقة:</td><td style="padding: 6px;">{package_name}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">سعر الباقة:</td><td style="padding: 6px;">{package_price}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">تاريخ الانتهاء:</td><td style="padding: 6px;">{expiry_date}</td></tr>
-    <tr><td colspan="2"><hr style="border: 0.5px solid #ddd;"></td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">المبلغ المدفوع:</td><td style="padding: 6px;">{paid_amount}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">مبلغ الدين:</td><td style="padding: 6px;">{debt_amount}</td></tr>
-    <tr><td style="padding: 6px; font-weight: bold;">المتبقي:</td><td style="padding: 6px;">{remaining_amount}</td></tr>
-  </table>
-  <hr style="border: 1px solid #1a7f64; margin-top: 15px;">
-  <p style="color: #888; font-size: 11px; margin-top: 8px;">شكراً لكم</p>
-</div>''';
+  String _generateHTML() {
+    final sorted = List<_InvoiceElement>.from(_elements)
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final width = _layoutType == 'pos' ? '80mm' : '100%';
+    final maxW = _layoutType == 'pos' ? '80mm' : '21cm';
+
+    final buf = StringBuffer();
+    buf.write('<div style="width:$width;max-width:$maxW;padding:$_padding;'
+        'font-family:$_fontFamily,sans-serif;direction:rtl;background:$_bgColor;">');
+
+    for (final el in sorted) {
+      if (!el.visible) continue;
+      switch (el.type) {
+        case 'header':
+          buf.write('<div style="text-align:${el.align};margin:15px 0;">'
+              '<h1 style="margin:0;color:${el.color};font-size:${el.fontSize};font-weight:700;">'
+              '${el.content}</h1></div>');
+          break;
+        case 'field':
+          buf.write('<div style="text-align:${el.align};margin:8px 0;font-size:${el.fontSize};'
+              'color:${el.color};"><strong>${el.label}:</strong> ${el.variable}</div>');
+          break;
+        case 'divider':
+          buf.write('<hr style="border:none;border-top:2px ${el.dividerStyle} ${el.color};margin:15px 0;" />');
+          break;
+        case 'footer':
+          buf.write('<div style="text-align:${el.align};margin-top:30px;padding-top:15px;'
+              'border-top:2px solid ${el.color};color:${el.color};font-size:${el.fontSize};">'
+              '${el.content}</div>');
+          break;
+        case 'text':
+          buf.write('<div style="text-align:${el.align};margin:8px 0;font-size:${el.fontSize};'
+              'color:${el.color};">${el.content}</div>');
+          break;
+      }
+    }
+    buf.write('</div>');
+    return buf.toString();
   }
 
-  void _insertVariable(String variable) {
-    final text = _contentCtrl.text;
-    final sel = _contentCtrl.selection;
-    final pos = sel.isValid ? sel.baseOffset : text.length;
-    final newText = text.substring(0, pos) + variable + text.substring(pos);
-    _contentCtrl.text = newText;
-    _contentCtrl.selection = TextSelection.collapsed(offset: pos + variable.length);
+  String _previewHTML() {
+    return _generateHTML()
+        .replaceAll('{invoice_number}', '12345')
+        .replaceAll('{date}', DateTime.now().toString().substring(0, 10))
+        .replaceAll('{subscriber_name}', 'محمد أحمد علي')
+        .replaceAll('{phone_number}', '07901234567')
+        .replaceAll('{package_name}', 'الباقة الذهبية')
+        .replaceAll('{package_price}', '50,000')
+        .replaceAll('{paid_amount}', '50,000')
+        .replaceAll('{remaining_amount}', '0')
+        .replaceAll('{expiry_date}', '2026-12-31')
+        .replaceAll('{debt_amount}', '0');
+  }
+
+  void _addElement(String type) {
+    final newEl = _InvoiceElement(
+      id: 'el_${DateTime.now().millisecondsSinceEpoch}',
+      type: type,
+      label: type == 'header' ? 'عنوان جديد' : type == 'field' ? 'حقل جديد'
+          : type == 'divider' ? 'خط فاصل' : type == 'text' ? 'نص حر' : 'ذيل',
+      content: type == 'text' ? 'نص مخصص' : type == 'header' ? 'عنوان' : type == 'footer' ? 'تذييل' : '',
+      variable: type == 'field' ? '{subscriber_name}' : '',
+      fontSize: type == 'header' ? '24px' : '14px',
+      color: type == 'header' ? '#10b981' : '#1f2937',
+      align: type == 'header' || type == 'footer' ? 'center' : 'right',
+      order: _elements.length,
+      dividerStyle: 'solid',
+    );
+    setState(() => _elements.add(newEl));
+  }
+
+  void _deleteElement(int index) {
+    setState(() {
+      _elements.removeAt(index);
+      for (int i = 0; i < _elements.length; i++) _elements[i].order = i;
+    });
   }
 
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
-    final content = _contentCtrl.text.trim();
-
-    if (name.isEmpty || content.isEmpty) {
-      AppSnackBar.warning(context, 'يرجى إدخال اسم القالب والمحتوى');
+    if (name.isEmpty) {
+      AppSnackBar.warning(context, 'يرجى إدخال اسم القالب');
       return;
     }
 
     setState(() => _saving = true);
+
+    final html = _generateHTML();
+    final templateData = jsonEncode({
+      'html': html,
+      'elements': _elements.map((e) => e.toJson()).toList(),
+      'globalSettings': {
+        'backgroundColor': _bgColor,
+        'padding': _padding,
+        'fontFamily': _fontFamily,
+      },
+      'layoutType': _layoutType,
+      'templateName': name,
+    });
 
     final notifier = ref.read(printTemplatesProvider.notifier);
     bool ok;
@@ -472,20 +591,17 @@ class _TemplateEditorPageState extends ConsumerState<_TemplateEditorPage> {
     if (widget.template?.id != null) {
       ok = await notifier.updateTemplate(
         widget.template!.id!,
-        widget.template!.copyWith(templateName: name, content: content),
+        widget.template!.copyWith(templateName: name, content: html, templateData: templateData),
       );
     } else {
       ok = await notifier.createTemplate(PrintTemplateModel(
-        adminId: '',
-        templateType: widget.templateType,
-        templateName: name,
-        content: content,
-        isActive: true,
+        adminId: '', templateType: _layoutType,
+        templateName: name, content: html,
+        templateData: templateData, isActive: true,
       ));
     }
 
     setState(() => _saving = false);
-
     if (mounted) {
       if (ok) {
         AppSnackBar.success(context, 'تم حفظ القالب بنجاح');
@@ -496,127 +612,855 @@ class _TemplateEditorPageState extends ConsumerState<_TemplateEditorPage> {
     }
   }
 
+  void _showElementProperties(int index) {
+    final el = _elements[index];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ElementPropertiesSheet(
+        element: el,
+        variableOptions: _variableOptions,
+        fontSizes: _fontSizes,
+        onUpdate: (updated) {
+          setState(() => _elements[index] = updated);
+        },
+        onDelete: () {
+          Navigator.pop(ctx);
+          _deleteElement(index);
+        },
+      ),
+    );
+  }
+
+  void _showGlobalSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        var bg = _bgColor;
+        var pad = _padding;
+        var font = _fontFamily;
+        return StatefulBuilder(builder: (ctx2, setSheet) {
+          return _BottomSheet(
+            title: 'إعدادات عامة',
+            icon: Icons.settings_rounded,
+            children: [
+              _PropRow(label: 'لون الخلفية', child: Row(children: [
+                _ColorDot(color: bg, onTap: () async {
+                  final c = await _pickColor(ctx2, bg);
+                  if (c != null) setSheet(() => bg = c);
+                }),
+                const SizedBox(width: 8),
+                Text(bg, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+              ])),
+              _PropRow(label: 'المسافة الداخلية', child: DropdownButton<String>(
+                value: pad, isExpanded: true, isDense: true,
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                    color: Theme.of(ctx2).colorScheme.onSurface),
+                items: const [
+                  DropdownMenuItem(value: '10px', child: Text('صغيرة')),
+                  DropdownMenuItem(value: '20px', child: Text('متوسطة')),
+                  DropdownMenuItem(value: '30px', child: Text('كبيرة')),
+                  DropdownMenuItem(value: '40px', child: Text('كبيرة جداً')),
+                ],
+                onChanged: (v) => setSheet(() => pad = v!),
+              )),
+              _PropRow(label: 'الخط', child: DropdownButton<String>(
+                value: font, isExpanded: true, isDense: true,
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                    color: Theme.of(ctx2).colorScheme.onSurface),
+                items: const [
+                  DropdownMenuItem(value: 'Cairo', child: Text('Cairo')),
+                  DropdownMenuItem(value: 'Arial', child: Text('Arial')),
+                  DropdownMenuItem(value: 'Tahoma', child: Text('Tahoma')),
+                ],
+                onChanged: (v) => setSheet(() => font = v!),
+              )),
+              const SizedBox(height: 16),
+              SizedBox(width: double.infinity, height: 54, child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _bgColor = bg;
+                    _padding = pad;
+                    _fontFamily = font;
+                  });
+                  Navigator.pop(ctx2);
+                },
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('تطبيق', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+              )),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  Future<String?> _pickColor(BuildContext ctx, String current) async {
+    final colors = [
+      '#ffffff', '#f9fafb', '#f3f4f6', '#1f2937', '#111827', '#000000',
+      '#10b981', '#047857', '#059669', '#14b8a6', '#0d9488',
+      '#3b82f6', '#2563eb', '#6366f1', '#8b5cf6',
+      '#ef4444', '#dc2626', '#f59e0b', '#f97316',
+      '#e5e7eb', '#d1d5db', '#9ca3af', '#6b7280', '#374151',
+    ];
+    return showDialog<String>(
+      context: ctx,
+      builder: (dlg) => AlertDialog(
+        title: const Text('اختر لون', style: TextStyle(fontFamily: 'Cairo')),
+        content: Wrap(
+          spacing: 8, runSpacing: 8,
+          children: colors.map((c) {
+            final parsed = Color(int.parse('FF${c.replaceAll('#', '')}', radix: 16));
+            return GestureDetector(
+              onTap: () => Navigator.pop(dlg, c),
+              child: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: parsed, borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: c == current ? AppTheme.primary : Colors.grey.shade300, width: c == current ? 2 : 1),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  IconData _typeIcon(String type) {
+    switch (type) {
+      case 'header': return Icons.title_rounded;
+      case 'field': return Icons.text_fields_rounded;
+      case 'divider': return Icons.horizontal_rule_rounded;
+      case 'footer': return Icons.vertical_align_bottom_rounded;
+      case 'text': return Icons.notes_rounded;
+      default: return Icons.widgets_rounded;
+    }
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'header': return 'عنوان';
+      case 'field': return 'حقل';
+      case 'divider': return 'خط فاصل';
+      case 'footer': return 'ذيل';
+      case 'text': return 'نص حر';
+      default: return type;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isEditing = widget.template?.id != null;
-    final typeLabel = widget.templateType == 'a4' ? 'A4' : 'POS';
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          isEditing ? 'تعديل قالب $typeLabel' : 'إنشاء قالب $typeLabel',
+          isEditing ? 'تعديل التصميم' : 'تصميم فاتورة جديدة',
           style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            onPressed: _showGlobalSettings,
+            icon: const Icon(Icons.settings_rounded),
+            tooltip: 'إعدادات عامة',
+          ),
           if (_saving)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: SizedBox(
-                  width: 24, height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            )
+            const Padding(padding: EdgeInsets.all(12),
+                child: SizedBox(width: 24, height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2)))
           else
-            IconButton(
-              onPressed: _save,
-              icon: const Icon(Icons.save_rounded),
-              tooltip: 'حفظ',
-            ),
+            IconButton(onPressed: _save, icon: const Icon(Icons.save_rounded), tooltip: 'حفظ'),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _LayoutToggle(label: 'A4', icon: Icons.description_rounded,
+                  active: _layoutType == 'a4', onTap: () => setState(() => _layoutType = 'a4')),
+              const SizedBox(width: 8),
+              _LayoutToggle(label: 'POS', icon: Icons.receipt_long_rounded,
+                  active: _layoutType == 'pos', onTap: () => setState(() => _layoutType = 'pos')),
+            ]),
+            const SizedBox(height: 4),
+            TabBar(controller: _tabCtrl, tabs: const [
+              Tab(text: 'العناصر'),
+              Tab(text: 'المعاينة'),
+            ]),
+          ]),
+        ),
       ),
-      body: Column(
-        children: [
-          // Template name
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
-              controller: _nameCtrl,
-              textDirection: TextDirection.ltr,
-              textAlign: TextAlign.left,
-              decoration: const InputDecoration(
-                labelText: 'اسم القالب',
-                prefixIcon: Icon(Icons.label_outline, size: 20),
-                isDense: true,
-              ),
+      body: Column(children: [
+        // Template name
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: TextField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'اسم القالب', prefixIcon: Icon(Icons.label_outline, size: 20), isDense: true,
             ),
           ),
+        ),
+        Expanded(
+          child: TabBarView(controller: _tabCtrl, children: [
+            _buildElementsTab(theme),
+            _buildPreviewTab(theme),
+          ]),
+        ),
+        // Save button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: SizedBox(width: double.infinity, height: 54, child: ElevatedButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.save_rounded, size: 20),
+            label: Text(_saving ? 'جاري الحفظ...' : 'حفظ التصميم',
+                style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+          )),
+        ),
+      ]),
+    );
+  }
 
-          // Variable chips
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: PrintTemplateModel.availableVariables.map((v) {
-                final label = PrintTemplateModel.variableLabels[v] ?? v;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: ActionChip(
-                    avatar: const Icon(Icons.add, size: 14),
-                    label: Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
-                    onPressed: () => _insertVariable(v),
-                    visualDensity: VisualDensity.compact,
+  Widget _buildElementsTab(ThemeData theme) {
+    return Column(children: [
+      // Add buttons
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Row(children: [
+          _AddBtn(icon: Icons.title_rounded, label: 'عنوان',
+              onTap: () => _addElement('header')),
+          const SizedBox(width: 6),
+          _AddBtn(icon: Icons.text_fields_rounded, label: 'حقل',
+              onTap: () => _addElement('field')),
+          const SizedBox(width: 6),
+          _AddBtn(icon: Icons.horizontal_rule_rounded, label: 'فاصل',
+              onTap: () => _addElement('divider')),
+          const SizedBox(width: 6),
+          _AddBtn(icon: Icons.notes_rounded, label: 'نص',
+              onTap: () => _addElement('text')),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(children: [
+          Icon(Icons.info_outline, size: 14, color: theme.colorScheme.onSurface.withOpacity(0.3)),
+          const SizedBox(width: 6),
+          Text('اسحب لإعادة الترتيب • اضغط لتعديل الخصائص',
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 10,
+                  color: theme.colorScheme.onSurface.withOpacity(0.4))),
+        ]),
+      ),
+      const SizedBox(height: 4),
+      Expanded(
+        child: ReorderableListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          itemCount: _elements.length,
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (newIndex > oldIndex) newIndex--;
+              final item = _elements.removeAt(oldIndex);
+              _elements.insert(newIndex, item);
+              for (int i = 0; i < _elements.length; i++) _elements[i].order = i;
+            });
+          },
+          itemBuilder: (ctx, i) {
+            final el = _elements[i];
+            final typeColor = el.type == 'header' ? Colors.green
+                : el.type == 'field' ? Colors.blue
+                : el.type == 'divider' ? Colors.grey
+                : el.type == 'footer' ? Colors.orange
+                : Colors.purple;
+
+            return Container(
+              key: ValueKey(el.id),
+              margin: const EdgeInsets.only(bottom: 4),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _showElementProperties(i),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: el.visible
+                          ? theme.cardTheme.color
+                          : theme.colorScheme.onSurface.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.08)),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.drag_indicator_rounded, size: 18,
+                          color: theme.colorScheme.onSurface.withOpacity(0.2)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: typeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(_typeIcon(el.type), size: 16, color: typeColor),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(el.label, style: TextStyle(
+                              fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w600,
+                              color: el.visible ? null : theme.colorScheme.onSurface.withOpacity(0.3))),
+                          Text(_typeLabel(el.type), style: TextStyle(
+                              fontFamily: 'Cairo', fontSize: 10,
+                              color: theme.colorScheme.onSurface.withOpacity(0.4))),
+                        ]),
+                      ),
+                      IconButton(
+                        icon: Icon(el.visible ? Icons.visibility : Icons.visibility_off,
+                            size: 18, color: el.visible ? AppTheme.primary : Colors.grey),
+                        onPressed: () => setState(() => el.visible = !el.visible),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      Icon(Icons.chevron_left, size: 16,
+                          color: theme.colorScheme.onSurface.withOpacity(0.2)),
+                    ]),
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 4),
-
-          // HTML content editor
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: TextField(
-                controller: _contentCtrl,
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  height: 1.5,
-                  color: theme.colorScheme.onSurface,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'محتوى القالب (HTML)...',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
-            ),
-          ),
+            );
+          },
+        ),
+      ),
+    ]);
+  }
 
-          // Save button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.save_rounded, size: 20),
-                label: Text(
-                  _saving ? 'جاري الحفظ...' : 'حفظ القالب',
-                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  Widget _buildPreviewTab(ThemeData theme) {
+    final html = _previewHTML();
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+          ),
+          child: _HtmlPreviewWidget(html: html),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity, height: 46, child: OutlinedButton.icon(
+          onPressed: () async {
+            final sampleData = ReceiptData(
+              subscriberName: 'محمد أحمد علي', phoneNumber: '07901234567',
+              packageName: 'الباقة الذهبية', packagePrice: 50000,
+              paidAmount: 50000, remainingAmount: 0, debtAmount: 0,
+              expiryDate: '2026-12-31', operationType: 'activation',
+            );
+            try {
+              await ReceiptPrinter.printReceipt(data: sampleData, htmlTemplate: _generateHTML());
+            } catch (e) {
+              if (mounted) AppSnackBar.error(context, 'فشل في الطباعة التجريبية');
+            }
+          },
+          icon: const Icon(Icons.print_rounded, size: 18),
+          label: const Text('تجربة الطباعة',
+              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+        )),
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Element Properties Bottom Sheet
+// ─────────────────────────────────────────────────────────
+
+class _ElementPropertiesSheet extends StatefulWidget {
+  final _InvoiceElement element;
+  final Map<String, String> variableOptions;
+  final List<String> fontSizes;
+  final ValueChanged<_InvoiceElement> onUpdate;
+  final VoidCallback onDelete;
+
+  const _ElementPropertiesSheet({
+    required this.element, required this.variableOptions,
+    required this.fontSizes, required this.onUpdate, required this.onDelete,
+  });
+
+  @override
+  State<_ElementPropertiesSheet> createState() => _ElementPropertiesSheetState();
+}
+
+class _ElementPropertiesSheetState extends State<_ElementPropertiesSheet> {
+  late _InvoiceElement _el;
+  late TextEditingController _labelCtrl;
+  late TextEditingController _contentCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _el = widget.element;
+    _labelCtrl = TextEditingController(text: _el.label);
+    _contentCtrl = TextEditingController(text: _el.content);
+  }
+
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _contentCtrl.dispose();
+    super.dispose();
+  }
+
+  void _update() {
+    _el.label = _labelCtrl.text;
+    _el.content = _contentCtrl.text;
+    widget.onUpdate(_el);
+  }
+
+  Future<String?> _pickColor(String current) async {
+    final colors = [
+      '#ffffff', '#f9fafb', '#1f2937', '#111827', '#000000',
+      '#10b981', '#047857', '#059669', '#14b8a6', '#0d9488',
+      '#3b82f6', '#2563eb', '#6366f1', '#8b5cf6',
+      '#ef4444', '#dc2626', '#f59e0b', '#f97316',
+      '#e5e7eb', '#d1d5db', '#9ca3af', '#6b7280', '#374151',
+    ];
+    return showDialog<String>(
+      context: context,
+      builder: (dlg) => AlertDialog(
+        title: const Text('اختر لون', style: TextStyle(fontFamily: 'Cairo')),
+        content: Wrap(
+          spacing: 8, runSpacing: 8,
+          children: colors.map((c) {
+            final parsed = Color(int.parse('FF${c.replaceAll('#', '')}', radix: 16));
+            return GestureDetector(
+              onTap: () => Navigator.pop(dlg, c),
+              child: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: parsed, borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: c == current ? AppTheme.primary : Colors.grey.shade300,
+                    width: c == current ? 2 : 1),
                 ),
               ),
-            ),
-          ),
-        ],
+            );
+          }).toList(),
+        ),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isField = _el.type == 'field';
+    final isDivider = _el.type == 'divider';
+    final hasContent = _el.type == 'header' || _el.type == 'footer' || _el.type == 'text';
+
+    return _BottomSheet(
+      title: 'خصائص العنصر',
+      icon: Icons.tune_rounded,
+      children: [
+        _PropRow(label: 'العنوان', child: TextField(
+          controller: _labelCtrl,
+          onChanged: (_) => _update(),
+          decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+          style: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+        )),
+
+        if (hasContent)
+          _PropRow(label: 'المحتوى', child: TextField(
+            controller: _contentCtrl,
+            onChanged: (_) => _update(),
+            decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+          )),
+
+        if (isField)
+          _PropRow(label: 'المتغير', child: DropdownButton<String>(
+            value: widget.variableOptions.keys.contains(_el.variable) ? _el.variable : null,
+            hint: Text(_el.variable, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+            isExpanded: true, isDense: true,
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: theme.colorScheme.onSurface),
+            items: widget.variableOptions.entries.map((e) =>
+                DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            onChanged: (v) {
+              if (v != null) setState(() { _el.variable = v; _update(); });
+            },
+          )),
+
+        if (!isDivider) ...[
+          _PropRow(label: 'حجم الخط', child: DropdownButton<String>(
+            value: widget.fontSizes.contains(_el.fontSize) ? _el.fontSize : '14px',
+            isExpanded: true, isDense: true,
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: theme.colorScheme.onSurface),
+            items: widget.fontSizes.map((s) =>
+                DropdownMenuItem(value: s, child: Text(s))).toList(),
+            onChanged: (v) {
+              if (v != null) setState(() { _el.fontSize = v; _update(); });
+            },
+          )),
+
+          _PropRow(label: 'اللون', child: Row(children: [
+            _ColorDot(color: _el.color, onTap: () async {
+              final c = await _pickColor(_el.color);
+              if (c != null) setState(() { _el.color = c; _update(); });
+            }),
+            const SizedBox(width: 8),
+            Text(_el.color, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+          ])),
+
+          _PropRow(label: 'المحاذاة', child: Row(children: [
+            _AlignBtn(icon: Icons.format_align_right, active: _el.align == 'right',
+                onTap: () => setState(() { _el.align = 'right'; _update(); })),
+            const SizedBox(width: 4),
+            _AlignBtn(icon: Icons.format_align_center, active: _el.align == 'center',
+                onTap: () => setState(() { _el.align = 'center'; _update(); })),
+            const SizedBox(width: 4),
+            _AlignBtn(icon: Icons.format_align_left, active: _el.align == 'left',
+                onTap: () => setState(() { _el.align = 'left'; _update(); })),
+          ])),
+        ],
+
+        if (isDivider)
+          _PropRow(label: 'نمط الخط', child: DropdownButton<String>(
+            value: _el.dividerStyle, isExpanded: true, isDense: true,
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: theme.colorScheme.onSurface),
+            items: const [
+              DropdownMenuItem(value: 'solid', child: Text('متصل')),
+              DropdownMenuItem(value: 'dashed', child: Text('متقطع')),
+              DropdownMenuItem(value: 'dotted', child: Text('منقط')),
+              DropdownMenuItem(value: 'double', child: Text('مزدوج')),
+            ],
+            onChanged: (v) {
+              if (v != null) setState(() { _el.dividerStyle = v; _update(); });
+            },
+          )),
+
+        if (isDivider)
+          _PropRow(label: 'اللون', child: Row(children: [
+            _ColorDot(color: _el.color, onTap: () async {
+              final c = await _pickColor(_el.color);
+              if (c != null) setState(() { _el.color = c; _update(); });
+            }),
+            const SizedBox(width: 8),
+            Text(_el.color, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+          ])),
+
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity, height: 44, child: ElevatedButton.icon(
+          onPressed: widget.onDelete,
+          icon: const Icon(Icons.delete_rounded, size: 18),
+          label: const Text('حذف العنصر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+        )),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper Widgets
+// ─────────────────────────────────────────────────────────
+
+class _BottomSheet extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final List<Widget> children;
+  const _BottomSheet({required this.title, required this.icon, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 40, height: 4, margin: const EdgeInsets.only(top: 12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Row(children: [
+            Icon(icon, size: 20, color: AppTheme.primary),
+            const SizedBox(width: 8),
+            Text(title, style: const TextStyle(fontFamily: 'Cairo', fontSize: 16,
+                fontWeight: FontWeight.w700)),
+          ]),
+        ),
+        const Divider(height: 1),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _PropRow extends StatelessWidget {
+  final String label;
+  final Widget child;
+  const _PropRow({required this.label, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+        const SizedBox(height: 4),
+        child,
+      ]),
+    );
+  }
+}
+
+class _ColorDot extends StatelessWidget {
+  final String color;
+  final VoidCallback onTap;
+  const _ColorDot({required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = Color(int.parse('FF${color.replaceAll('#', '')}', radix: 16));
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(
+          color: parsed, borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlignBtn extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _AlignBtn({required this.icon, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primary.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? AppTheme.primary.withOpacity(0.3)
+              : Colors.grey.shade300),
+        ),
+        child: Icon(icon, size: 18, color: active ? AppTheme.primary : Colors.grey),
+      ),
+    );
+  }
+}
+
+class _LayoutToggle extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _LayoutToggle({required this.label, required this.icon,
+      required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primary.withOpacity(0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? AppTheme.primary : Colors.grey.shade400),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 16, color: active ? AppTheme.primary : Colors.grey),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: active ? AppTheme.primary : Colors.grey)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _AddBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _AddBtn({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap, borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.primary.withOpacity(0.15)),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 20, color: AppTheme.primary),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 10,
+                fontWeight: FontWeight.w600, color: AppTheme.primary)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _HtmlPreviewWidget extends StatelessWidget {
+  final String html;
+  const _HtmlPreviewWidget({required this.html});
+
+  @override
+  Widget build(BuildContext context) {
+    final elements = _parseSimpleHTML(html);
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: elements,
+      ),
+    );
+  }
+
+  List<Widget> _parseSimpleHTML(String html) {
+    final widgets = <Widget>[];
+    final divRegex = RegExp(r'<div[^>]*style="([^"]*)"[^>]*>(.*?)</div>', dotAll: true);
+    final hrRegex = RegExp(r'<hr[^>]*style="([^"]*)"[^>]*/?>');
+    final h1Regex = RegExp(r'<h1[^>]*style="([^"]*)"[^>]*>(.*?)</h1>', dotAll: true);
+
+    final allTags = RegExp(r'(<div[^>]*>.*?</div>|<hr[^>]*/>)', dotAll: true);
+
+    for (final match in allTags.allMatches(html)) {
+      final tag = match.group(0) ?? '';
+
+      final hr = hrRegex.firstMatch(tag);
+      if (hr != null) {
+        final style = hr.group(1) ?? '';
+        final colorMatch = RegExp(r'border-top:[^;]*\s(#[0-9a-fA-F]{3,6})').firstMatch(style);
+        final color = _parseColor(colorMatch?.group(1) ?? '#e5e7eb');
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Divider(color: color, thickness: 2),
+        ));
+        continue;
+      }
+
+      final div = divRegex.firstMatch(tag);
+      if (div != null) {
+        final style = div.group(1) ?? '';
+        final content = div.group(2) ?? '';
+
+        final align = _extractAlign(style);
+        final color = _extractColor(style);
+        final fontSize = _extractFontSize(style);
+        final isBorderTop = style.contains('border-top');
+
+        final h1 = h1Regex.firstMatch(content);
+        if (h1 != null) {
+          final h1Style = h1.group(1) ?? '';
+          final h1Text = h1.group(2) ?? '';
+          final h1Color = _extractColor(h1Style);
+          final h1Size = _extractFontSize(h1Style);
+          widgets.add(Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(h1Text,
+              textAlign: align, textDirection: TextDirection.rtl,
+              style: TextStyle(fontSize: h1Size, fontWeight: FontWeight.w700,
+                  color: h1Color, fontFamily: 'Cairo')),
+          ));
+          continue;
+        }
+
+        final cleanContent = content
+            .replaceAll(RegExp(r'<strong>(.*?)</strong>'), r'$1')
+            .replaceAll(RegExp(r'<[^>]+>'), '')
+            .trim();
+
+        if (cleanContent.isNotEmpty) {
+          if (isBorderTop) {
+            widgets.add(Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Divider(color: color, thickness: 2),
+            ));
+          }
+          final hasBold = content.contains('<strong>');
+          widgets.add(Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Text(cleanContent,
+              textAlign: align, textDirection: TextDirection.rtl,
+              style: TextStyle(fontSize: fontSize, color: color,
+                  fontWeight: hasBold ? FontWeight.w600 : FontWeight.normal,
+                  fontFamily: 'Cairo')),
+          ));
+        }
+      }
+    }
+
+    if (widgets.isEmpty) {
+      widgets.add(const Padding(
+        padding: EdgeInsets.all(20),
+        child: Text('أضف عناصر لبدء تصميم الفاتورة',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
+      ));
+    }
+
+    return widgets;
+  }
+
+  TextAlign _extractAlign(String style) {
+    if (style.contains('text-align:center') || style.contains('text-align: center')) return TextAlign.center;
+    if (style.contains('text-align:left') || style.contains('text-align: left')) return TextAlign.left;
+    return TextAlign.right;
+  }
+
+  Color _extractColor(String style) {
+    final m = RegExp(r'color:\s*(#[0-9a-fA-F]{3,6})').firstMatch(style);
+    return _parseColor(m?.group(1) ?? '#1f2937');
+  }
+
+  double _extractFontSize(String style) {
+    final m = RegExp(r'font-size:\s*(\d+)px').firstMatch(style);
+    return double.tryParse(m?.group(1) ?? '14') ?? 14;
+  }
+
+  Color _parseColor(String hex) {
+    try {
+      return Color(int.parse('FF${hex.replaceAll('#', '')}', radix: 16));
+    } catch (_) {
+      return const Color(0xFF1f2937);
+    }
   }
 }
