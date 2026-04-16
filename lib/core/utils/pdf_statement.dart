@@ -71,7 +71,7 @@ class PdfStatement {
 
     final tableHeader = pw.TableRow(
       decoration: pw.BoxDecoration(color: PdfColor.fromHex('#1a7f64')),
-      children: ['التاريخ', 'الوقت', 'النوع', 'التفاصيل', 'المبلغ', 'المنفذ']
+      children: ['التاريخ', 'الوقت', 'النوع', 'التفاصيل', 'المبلغ']
           .map((h) => pw.Container(
                 padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 4),
                 child: pw.Text(h,
@@ -97,7 +97,6 @@ class PdfStatement {
           _cell(r.desc, pw.TextStyle(font: _cairoFont, fontSize: 8), maxLines: 2),
           _cell(r.amount, pw.TextStyle(font: _cairoBold, fontSize: 9,
               color: amtColor, fontWeight: pw.FontWeight.bold)),
-          _cell(r.admin, pw.TextStyle(font: _cairoFont, fontSize: 8)),
         ],
       );
     }).toList();
@@ -157,11 +156,10 @@ class PdfStatement {
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             columnWidths: const {
               0: pw.FlexColumnWidth(1.2),
-              1: pw.FlexColumnWidth(0.7),
+              1: pw.FlexColumnWidth(0.8),
               2: pw.FlexColumnWidth(1),
-              3: pw.FlexColumnWidth(2.5),
-              4: pw.FlexColumnWidth(1.2),
-              5: pw.FlexColumnWidth(1),
+              3: pw.FlexColumnWidth(3),
+              4: pw.FlexColumnWidth(1.3),
             },
             children: [tableHeader, ...tableRows],
           ),
