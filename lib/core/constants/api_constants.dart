@@ -78,6 +78,10 @@ class ApiConstants {
   // User Info Link
   static const String generateUserLink = '/api/generate-user-link';
 
+  // FCM
+  static const String fcmRegister = '/api/fcm/register';
+  static const String fcmUnregister = '/api/fcm/unregister';
+
   // Settings
   static const String settingsTheme = '/api/settings/theme';
   static const String settingsDashboard = '/api/settings/dashboard';

@@ -8,6 +8,7 @@ import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/expiry_push_service.dart';
+import '../core/services/fcm_service.dart';
 import '../widgets/app_snackbar.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -67,18 +68,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _onFcmChanged(bool value) async {
     final storage = ref.read(storageServiceProvider);
     if (value) {
-      final ok = await ExpiryPushService.requestOsPermission();
+      final ok = await FcmService.enable(storage);
       if (!ok && mounted) {
         AppSnackBar.error(context,
-            'لم يُمنح إذن الإشعارات. يمكنك تفعيله من إعدادات الجهاز.');
+            'لم يُمنح إذن الإشعارات أو فشل التسجيل. تحقق من إعدادات الجهاز.');
         return;
       }
-      await ExpiryPushService.init();
-      await ExpiryPushService.registerPeriodicTask();
     } else {
-      await ExpiryPushService.cancelPeriodicTask();
+      await FcmService.disable(storage);
     }
-    await storage.setFcmEnabled(value);
     if (mounted) {
       setState(() => _fcmEnabled = value);
       AppSnackBar.success(
