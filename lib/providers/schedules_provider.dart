@@ -77,17 +77,24 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
       if (body == null) {
         return 'استجابة غير متوقعة من الخادم';
       }
-      if (body['success'] == true) {
+      final ok = body['success'] == true ||
+          body['success'] == 1 ||
+          body['success'] == '1' ||
+          body['success'] == 'true';
+      if (ok) {
         await loadSchedules();
         return null;
       }
-      return body['message']?.toString() ?? 'فشل في حفظ الجدولة';
+      return body['message']?.toString() ??
+          body['error']?.toString() ??
+          'فشل في حفظ الجدولة';
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final data = e.response?.data;
       final map = _asJsonMap(data);
-      if (map != null && map['message'] != null) {
-        return map['message'].toString();
+      if (map != null) {
+        if (map['message'] != null) return map['message'].toString();
+        if (map['error'] != null) return map['error'].toString();
       }
       if (data is String && data.isNotEmpty) {
         return data.length > 200 ? '${data.substring(0, 200)}…' : data;
