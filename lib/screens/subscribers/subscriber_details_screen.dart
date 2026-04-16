@@ -2015,10 +2015,17 @@ class _SubscriberDetailsScreenState
     );
   }
 
+  static String _formatPhone(String phone) {
+    String cleaned = phone.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
+    if (cleaned.startsWith('07')) return '964${cleaned.substring(1)}';
+    if (cleaned.startsWith('7') && cleaned.length == 10) return '964$cleaned';
+    return cleaned;
+  }
+
   // ── Generate Info Link ───────────────────────────────────────────────
   Future<void> _generateInfoLink() async {
     final sub = widget.subscriber;
-    final phone = sub.phone;
+    final rawPhone = sub.phone;
 
     final waState = ref.read(whatsappProvider);
     if (!waState.status.connected) {
@@ -2026,11 +2033,12 @@ class _SubscriberDetailsScreenState
       return;
     }
 
-    if (phone == null || phone.isEmpty) {
+    if (rawPhone == null || rawPhone.isEmpty) {
       _showSnack('لا يوجد رقم هاتف للمشترك', success: false);
       return;
     }
 
+    final phone = _formatPhone(rawPhone);
     setState(() => _isProcessing = true);
     try {
       final dio = ref.read(backendDioProvider);
@@ -2053,15 +2061,17 @@ class _SubscriberDetailsScreenState
       );
 
       if (linkResponse.data?['success'] != true || linkResponse.data?['token'] == null) {
-        if (mounted) _showSnack('فشل توليد الرابط', success: false,
-            detail: linkResponse.data?['message']?.toString());
+        if (mounted) {
+          AppSnackBar.error(context, 'فشل توليد الرابط',
+              detail: linkResponse.data?['message']?.toString() ?? 'لم يتم الحصول على رابط');
+        }
         return;
       }
 
       final token = linkResponse.data['token'];
       final linkUrl = '${ApiConstants.backendUrl}/user-info/$token';
 
-      final subscriberName = '${sub.firstname ?? ''} ${sub.lastname ?? ''}'.trim();
+      final subscriberName = '${sub.firstname} ${sub.lastname}'.trim();
       final displayName = subscriberName.isNotEmpty ? subscriberName : sub.username;
       final message =
           'مرحباً $displayName 👋\n\n'
@@ -2079,11 +2089,13 @@ class _SubscriberDetailsScreenState
       if (sendResult.success) {
         AppSnackBar.whatsapp(context, 'تم إرسال رابط معلومات المشترك');
       } else {
-        AppSnackBar.whatsappError(context, 'فشل إرسال الرابط',
+        AppSnackBar.whatsappError(context, 'فشل إرسال الرابط عبر الواتساب',
             detail: sendResult.error);
       }
     } catch (e) {
-      if (mounted) _showSnack('خطأ في توليد الرابط', success: false, detail: e.toString());
+      if (mounted) {
+        AppSnackBar.error(context, 'خطأ في توليد الرابط', detail: e.toString());
+      }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }

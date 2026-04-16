@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/csv_export.dart';
+import '../../core/utils/pdf_statement.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/storage_service.dart';
@@ -111,7 +112,30 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
     return 0;
   }
 
-  // ── Print (share as text) ──────────────────────────────────────────
+  // ── PDF Share ──────────────────────────────────────────────────────
+  Future<void> _handleSharePdf() async {
+    final state = ref.read(reportsProvider);
+    if (state.transactions.isEmpty) {
+      AppSnackBar.warning(context, 'لا توجد بيانات');
+      return;
+    }
+    try {
+      final sub = state.subscriberInfo ?? _selectedSub ?? {};
+      await PdfStatement.generateAndShare(
+        username: sub['username']?.toString() ?? '',
+        phone: sub['phone']?.toString() ?? '',
+        profileName: sub['profile_name']?.toString() ?? '',
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+        transactions: state.transactions,
+        summary: state.statementSummary,
+      );
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل إنشاء الملف');
+    }
+  }
+
+  // ── PDF Print ──────────────────────────────────────────────────────
   Future<void> _handlePrint() async {
     final state = ref.read(reportsProvider);
     if (state.transactions.isEmpty) {
@@ -120,57 +144,14 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
     }
     try {
       final sub = state.subscriberInfo ?? _selectedSub ?? {};
-      final username = sub['username']?.toString() ?? '';
-      final phone = sub['phone']?.toString() ?? '';
-      final profileName = sub['profile_name']?.toString() ?? '';
-      final summary = state.statementSummary;
-
-      final lines = <String>[];
-      lines.add('═══ كشف حساب المشترك ═══');
-      lines.add('الفترة: $_dateFrom — $_dateTo');
-      lines.add('');
-      lines.add('المشترك: $username');
-      if (phone.isNotEmpty) lines.add('الهاتف: $phone');
-      if (profileName.isNotEmpty) lines.add('الباقة: $profileName');
-      lines.add('');
-      lines.add('─── العمليات ───');
-
-      for (final t in state.transactions) {
-        final time = t['created_at']?.toString() ?? '';
-        final dt = DateTime.tryParse(time);
-        final fTime = dt != null
-            ? intl.DateFormat('MM/dd HH:mm').format(dt.toLocal())
-            : time;
-        final typeLabel = _typeLabel(
-            (t['action_type'] ?? '').toString().toUpperCase());
-        final amount = (t['amount'] is num)
-            ? (t['amount'] as num).toDouble().abs()
-            : double.tryParse(t['amount']?.toString() ?? '')?.abs() ?? 0;
-        lines.add('$fTime | $typeLabel | ${AppHelpers.formatMoney(amount)}');
-      }
-
-      lines.add('');
-      lines.add('─── الملخص ───');
-      lines.add('إجمالي الحركات: ${_num(summary['totalTransactions']).toInt()}');
-      lines.add('مجموع الدين: ${AppHelpers.formatMoney(_num(summary['totalDebt']))}');
-      lines.add('');
-      lines.add('نظام إدارة المشتركين');
-
-      await CsvExport.exportAndShare(
-        fileName: 'account-statement-$username.csv',
-        headers: ['التاريخ', 'النوع', 'التفاصيل', 'المبلغ', 'المنفذ'],
-        rows: state.transactions.map((t) {
-          final amount = (t['amount'] is num)
-              ? (t['amount'] as num).toDouble().abs()
-              : double.tryParse(t['amount']?.toString() ?? '')?.abs() ?? 0;
-          return [
-            t['created_at']?.toString() ?? '',
-            _typeLabel((t['action_type'] ?? '').toString().toUpperCase()),
-            t['description']?.toString() ?? t['action_description']?.toString() ?? '',
-            amount.toString(),
-            t['admin_name']?.toString() ?? '',
-          ];
-        }).toList(),
+      await PdfStatement.printStatement(
+        username: sub['username']?.toString() ?? '',
+        phone: sub['phone']?.toString() ?? '',
+        profileName: sub['profile_name']?.toString() ?? '',
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+        transactions: state.transactions,
+        summary: state.statementSummary,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل الطباعة');
@@ -303,6 +284,11 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
             ),
           ),
           const SizedBox(width: 6),
+          _SmallBtn(
+            Icons.picture_as_pdf_rounded,
+            hasData ? _handleSharePdf : null,
+          ),
+          const SizedBox(width: 4),
           _SmallBtn(
             Icons.print_rounded,
             hasData ? _handlePrint : null,
