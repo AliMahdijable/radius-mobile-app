@@ -81,12 +81,22 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
 
     final storage = ref.read(storageServiceProvider);
     final adminId = await storage.getAdminId() ?? existing?.adminId ?? '';
+    if (adminId.isEmpty) {
+      if (mounted) {
+        AppSnackBar.error(
+          context,
+          'معرّف المدير غير متوفر. سجّل الخروج والدخول ثم أعد المحاولة.',
+        );
+      }
+      return;
+    }
 
     final schedule = ScheduleModel(
       id: existing?.id,
       adminId: adminId,
       scheduleType: type,
-      isEnabled: existing?.isEnabled ?? true,
+      // Match web default (WhatsAppSettings.js): new schedules start disabled so save works without WA.
+      isEnabled: existing?.isEnabled ?? false,
       scheduledTime: type == 'expiry_warning' ? _expiryTime : _debtTime,
       activeDays: List<int>.from(
         type == 'expiry_warning' ? _expiryDays : _debtDays,
@@ -97,12 +107,12 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
       executionCount: existing?.executionCount ?? 0,
     );
 
-    final ok = await ref.read(schedulesProvider.notifier).saveSchedule(schedule);
+    final err = await ref.read(schedulesProvider.notifier).saveSchedule(schedule);
     if (mounted) {
-      if (ok) {
+      if (err == null) {
         AppSnackBar.success(context, 'تم حفظ الجدولة');
       } else {
-        AppSnackBar.error(context, 'فشل حفظ الجدولة');
+        AppSnackBar.error(context, err);
       }
     }
   }
