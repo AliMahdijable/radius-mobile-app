@@ -61,24 +61,28 @@ class SubscriberModel {
     return double.tryParse(cleaned) ?? 0;
   }
 
-  double get debtAmount {
-    if (notes != null && notes!.isNotEmpty) {
-      final v = _cleanParseDouble(notes);
-      if (v != 0) return v;
-    }
-    if (debt != null && debt != 0) return debt!;
-    return 0;
+  /// Signed number from `notes` / `comments` only (SAS user field). No `balance` column.
+  double? get _notesSignedOrNull {
+    if (notes == null || notes!.trim().isEmpty) return null;
+    return _cleanParseDouble(notes);
   }
 
-  bool get hasDebt {
-    if (hasDebtFlag != null) return hasDebtFlag!;
-    return debtAmount < 0;
+  /// Signed value from `notes`/`comments` only: positive = رصيد، negative = دين.
+  /// Does not use SAS `balance`, `debt`, or `hasDebt`.
+  double get debtAmount {
+    if (notes == null || notes!.trim().isEmpty) return 0;
+    return _cleanParseDouble(notes);
   }
+
+  bool get hasDebt => debtAmount < 0;
 
   bool get hasCredit => debtAmount > 0;
 
+  /// Credit shown as «رصيد»: positive part of `notes`/`comments` only. Never read SAS `balance`.
   double get balanceAmount {
-    return _cleanParseDouble(balance);
+    final n = _notesSignedOrNull;
+    if (n != null && n > 0) return n;
+    return 0;
   }
 
   bool get isExpired => (remainingDays ?? 0) <= 0;
