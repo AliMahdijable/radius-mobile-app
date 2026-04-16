@@ -114,6 +114,17 @@ class AppTheme {
             fontFamily: _fontFamily,
             fontSize: 16,
             fontWeight: FontWeight.w700,
+            height: 1.4,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          textStyle: const TextStyle(
+            fontFamily: _fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            height: 1.4,
           ),
         ),
       ),
@@ -129,6 +140,7 @@ class AppTheme {
             fontFamily: _fontFamily,
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            height: 1.4,
           ),
         ),
       ),
@@ -263,6 +275,17 @@ class AppTheme {
             fontFamily: _fontFamily,
             fontSize: 16,
             fontWeight: FontWeight.w700,
+            height: 1.4,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          textStyle: const TextStyle(
+            fontFamily: _fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            height: 1.4,
           ),
         ),
       ),
@@ -278,6 +301,7 @@ class AppTheme {
             fontFamily: _fontFamily,
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            height: 1.4,
           ),
         ),
       ),

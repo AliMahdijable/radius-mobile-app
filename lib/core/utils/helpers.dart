@@ -49,7 +49,7 @@ class AppHelpers {
   /// Parse debt from notes field (negative = debt)
   static double parseDebt(String? notes) {
     if (notes == null || notes.isEmpty) return 0;
-    return double.tryParse(notes) ?? 0;
+    return double.tryParse(notes.replaceAll(',', '').trim()) ?? 0;
   }
 
   /// Check if subscriber has debt

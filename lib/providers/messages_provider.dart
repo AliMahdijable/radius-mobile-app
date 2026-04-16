@@ -185,22 +185,28 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
       if (response.data['success'] == true) {
         final list = (response.data['messages'] as List? ?? [])
-            .map((e) => MessageLogModel.fromJson(e))
+            .map((e) => MessageLogModel.fromJson(e as Map<String, dynamic>))
             .toList();
-        final stats = MessageStats.fromJson(response.data['stats'] ?? {});
+        final stats = MessageStats.fromJson(
+            (response.data['stats'] as Map<String, dynamic>?) ?? {});
         final total = response.data['total'] ?? 0;
 
         state = state.copyWith(
           messages: refresh ? list : [...state.messages, ...list],
           stats: stats,
           isLoading: false,
-          totalMessages: total,
+          totalMessages: total is int ? total : int.tryParse(total.toString()) ?? 0,
           currentPage: page + 1,
           hasMore: list.length >= 50,
         );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          error: response.data['error']?.toString() ?? 'فشل تحميل الرسائل',
+        );
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'فشل تحميل الرسائل');
+      state = state.copyWith(isLoading: false, error: 'فشل تحميل الرسائل: $e');
     }
   }
 

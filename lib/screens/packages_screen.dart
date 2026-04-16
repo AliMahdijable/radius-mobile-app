@@ -306,7 +306,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SizedBox(
                 width: double.infinity,
-                height: 46,
+                height: 54,
                 child: ElevatedButton.icon(
                   onPressed: _saving ? null : _save,
                   icon: _saving

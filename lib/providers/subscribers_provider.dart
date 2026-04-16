@@ -141,6 +141,13 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   Map<int, Map<String, dynamic>> _priceMap = {};
 
+  static double _parseNotes(Map<String, dynamic>? details) {
+    if (details == null) return 0;
+    final raw = (details['notes'] ?? details['comments'])?.toString() ?? '';
+    if (raw.isEmpty) return 0;
+    return double.tryParse(raw.replaceAll(',', '').trim()) ?? 0;
+  }
+
   Future<void> loadSubscribers() async {
     final adminId = await _storage.getAdminId();
     if (adminId == null) return;
@@ -484,7 +491,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           'search': '',
           'columns': [
             'idx', 'username', 'firstname', 'lastname', 'name',
-            'expiration', 'remaining_days', 'notes', 'balance',
+            'expiration', 'remaining_days', 'notes', 'comments', 'balance',
             'phone', 'mobile', 'is_online', 'online_status',
             'enabled', 'parent_username', 'profile_details',
             'framedipaddress', 'framed_ip_address',
@@ -1118,7 +1125,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final details = await getSubscriberDetails(userId);
       if (details == null) return false;
 
-      final currentNotes = double.tryParse(details['notes']?.toString() ?? '') ?? 0;
+      final currentNotes = _parseNotes(details);
       final newNotes = currentNotes + amount;
       final remaining = newNotes < 0 ? newNotes.abs() : 0.0;
       final credit = newNotes > 0 ? newNotes : 0.0;
@@ -1158,7 +1165,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final details = await getSubscriberDetails(userId);
       if (details == null) return false;
 
-      final currentNotes = double.tryParse(details['notes']?.toString() ?? '') ?? 0;
+      final currentNotes = _parseNotes(details);
       final newNotes = currentNotes - amount;
 
       final ok = await updateUserNotes(userId, newNotes);
@@ -1188,8 +1195,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       if (!forceSkipDebtCheck) {
         final details = await getSubscriberDetails(id);
         if (details != null) {
-          final notes =
-              double.tryParse(details['notes']?.toString() ?? '') ?? 0;
+          final notes = _parseNotes(details);
           if (notes < 0) return false;
         }
       }

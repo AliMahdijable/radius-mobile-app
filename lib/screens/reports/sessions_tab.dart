@@ -306,7 +306,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                     tooltip: 'بحث متقدم',
                   ),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 ),
               ),
             ),

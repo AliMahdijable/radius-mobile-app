@@ -98,7 +98,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
         if (cols.length <= usernameCol || cols.length <= balanceCol) continue;
         final username = cols[usernameCol].trim();
         if (username.isEmpty) continue;
-        final balance = double.tryParse(cols[balanceCol].trim()) ?? 0;
+        final balance = double.tryParse(cols[balanceCol].trim().replaceAll(',', '')) ?? 0;
         if (balance == 0) continue;
         final name = nameCol >= 0 && cols.length > nameCol
             ? cols[nameCol].trim()
@@ -297,7 +297,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 54,
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _pickFile,
                 icon: const Icon(Icons.file_upload_rounded),
@@ -493,7 +493,7 @@ class _ImportRowCard extends StatelessWidget {
             const Icon(Icons.error, color: AppTheme.dangerColor, size: 28)
           else if (canApply)
             SizedBox(
-              height: 36,
+              height: 42,
               child: ElevatedButton(
                 onPressed: onApply,
                 style: ElevatedButton.styleFrom(

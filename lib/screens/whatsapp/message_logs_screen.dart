@@ -609,11 +609,22 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
           Expanded(
             child: state.isLoading && state.messages.isEmpty
                 ? const ShimmerList()
-                : state.messages.isEmpty
-                    ? const EmptyState(
-                        icon: Icons.message_outlined,
-                        title: 'لا توجد رسائل',
+                : state.error != null && state.messages.isEmpty
+                    ? EmptyState(
+                        icon: Icons.error_outline,
+                        title: 'حدث خطأ',
+                        subtitle: state.error,
+                        action: ElevatedButton.icon(
+                          onPressed: () => ref.read(messagesProvider.notifier).loadMessages(refresh: true),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('إعادة المحاولة'),
+                        ),
                       )
+                    : state.messages.isEmpty
+                        ? const EmptyState(
+                            icon: Icons.message_outlined,
+                            title: 'لا توجد رسائل',
+                          )
                     : RefreshIndicator(
                         onRefresh: () => ref
                             .read(messagesProvider.notifier)

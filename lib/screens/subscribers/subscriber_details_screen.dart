@@ -378,7 +378,7 @@ class _SubscriberDetailsScreenState
                   ),
                   const SizedBox(height: 24),
 
-                  SizedBox(height: 50, child: ElevatedButton.icon(
+                  SizedBox(height: 54, child: ElevatedButton.icon(
                     onPressed: saving ? null : () async {
                       setSheet(() => saving = true);
                       try {
@@ -762,7 +762,7 @@ class _SubscriberDetailsScreenState
                   _InfoChip(label: 'تكلفة التمديد', value: AppHelpers.formatMoney(pkgPrice)),
                 ],
                 const SizedBox(height: 20),
-                SizedBox(height: 50, child: ElevatedButton.icon(
+                SizedBox(height: 54, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     setSheet(() => submitting = true);
                     final success = await notifier.extendSubscription(
@@ -774,7 +774,7 @@ class _SubscriberDetailsScreenState
                       if (success) {
                         await notifier.loadSubscribers();
                         final fresh = await notifier.getSubscriberDetails(id);
-                        final newDebt = _toDouble(fresh?['notes']);
+                        final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final remDays = fresh?['remaining_days']?.toString() ?? '';
                         await _sendWhatsAppFromTemplate('renewal',
@@ -875,7 +875,7 @@ class _SubscriberDetailsScreenState
     final requiredAmount = activationData['required_amount']?.toString() ?? '—';
     final managerBalance = activationData['manager_balance']?.toString() ?? '—';
     final rewardPoints = activationData['reward_points']?.toString() ?? '0';
-    final currentBalance = _toDouble(userData?['notes']);
+    final currentBalance = _toDouble(userData?['notes'] ?? userData?['comments']);
 
     if (hasDiscount && mounted) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -1180,7 +1180,7 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 18),
 
-                SizedBox(height: 50, child: ElevatedButton.icon(
+                SizedBox(height: 54, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     final cashAmount = _parseMoney(partialCtrl.text);
                     setSheet(() => submitting = true);
@@ -1200,7 +1200,7 @@ class _SubscriberDetailsScreenState
                       if (success) {
                         await notifier.loadSubscribers();
                         final fresh = await notifier.getSubscriberDetails(id);
-                        final newDebt = _toDouble(fresh?['notes']);
+                        final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                         await _sendWhatsAppFromTemplate('activation_notice', extraVars: {
                           '{package_name}': profileName,
                           '{package_price}': _formatNumber(userPrice),
@@ -1254,7 +1254,7 @@ class _SubscriberDetailsScreenState
 
   double _toDouble(dynamic v) {
     if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v) ?? 0;
+    if (v is String) return double.tryParse(v.replaceAll(',', '').trim()) ?? 0;
     return 0;
   }
 
@@ -1351,7 +1351,7 @@ class _SubscriberDetailsScreenState
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
-    final currentNotes = _toDouble(details?['notes']);
+    final currentNotes = _toDouble(details?['notes'] ?? details?['comments']);
     final currentDebt = currentNotes < 0 ? currentNotes.abs() : 0.0;
 
     if (currentDebt <= 0) {
@@ -1589,7 +1589,7 @@ class _SubscriberDetailsScreenState
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
                     final btnAmount = _parseMoney(val.text);
-                    return SizedBox(height: 50, child: ElevatedButton.icon(
+                    return SizedBox(height: 54, child: ElevatedButton.icon(
                       onPressed: submitting || (!payAll && btnAmount <= 0) ? null : () async {
                         final payAmount = payAll ? currentDebt : btnAmount;
                         setSheet(() => submitting = true);
@@ -1605,7 +1605,7 @@ class _SubscriberDetailsScreenState
                           if (success) {
                             await notifier.loadSubscribers();
                             final fresh = await notifier.getSubscriberDetails(id);
-                            final newDebt = _toDouble(fresh?['notes']);
+                            final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                             await _sendWhatsAppFromTemplate('payment_confirmation',
                               extraVars: {
                                 '{paid_amount}': _formatNumber(payAmount),
@@ -1672,7 +1672,7 @@ class _SubscriberDetailsScreenState
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
-    final currentNotes = _toDouble(details?['notes']);
+    final currentNotes = _toDouble(details?['notes'] ?? details?['comments']);
     final currentDebt = currentNotes < 0 ? currentNotes.abs() : 0.0;
     final currentCredit = currentNotes > 0 ? currentNotes : 0.0;
 
@@ -1853,7 +1853,7 @@ class _SubscriberDetailsScreenState
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
                     final btnAmount = _parseMoney(val.text);
-                    return SizedBox(height: 50, child: ElevatedButton.icon(
+                    return SizedBox(height: 54, child: ElevatedButton.icon(
                       onPressed: submitting || btnAmount <= 0 ? null : () async {
                         final addPreview = currentNotes - btnAmount;
                         final confirmed = await showDialog<bool>(

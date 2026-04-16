@@ -44,7 +44,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
           'search': '',
           'columns': [
             'idx', 'username', 'firstname', 'lastname', 'name',
-            'phone', 'mobile', 'balance', 'notes',
+            'phone', 'mobile', 'balance', 'notes', 'comments',
           ],
           'status': -1,
           'connection': -1,
@@ -81,8 +81,8 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
       }
 
       final debtors = allUsers.where((u) {
-        final balance = _parseNum(u['balance']) + _parseNum(u['notes']);
-        return balance != 0;
+        final notesVal = _parseNum(u['notes'] ?? u['comments']);
+        return notesVal != 0;
       }).toList();
 
       setState(() {
@@ -101,11 +101,12 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
   double _parseNum(dynamic val) {
     if (val == null) return 0;
     if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0;
+    return double.tryParse(val.toString().replaceAll(',', '').trim()) ?? 0;
   }
 
   double _getDebt(Map<String, dynamic> u) {
-    return _parseNum(u['balance']) + _parseNum(u['notes']);
+    final notesVal = _parseNum(u['notes'] ?? u['comments']);
+    return notesVal;
   }
 
   Future<void> _exportCsv() async {
@@ -177,7 +178,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
               padding: const EdgeInsets.all(16),
               child: SizedBox(
                 width: double.infinity,
-                height: 52,
+                height: 54,
                 child: ElevatedButton.icon(
                   onPressed: _loadDebtors,
                   icon: const Icon(Icons.download_rounded),
