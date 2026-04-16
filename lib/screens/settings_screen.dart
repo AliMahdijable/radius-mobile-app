@@ -62,7 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         color: AppTheme.whatsappGreen.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.whatsapp,
+                      child: const Icon(Icons.message_rounded,
                           color: AppTheme.whatsappGreen, size: 22),
                     ),
                     const SizedBox(width: 10),
