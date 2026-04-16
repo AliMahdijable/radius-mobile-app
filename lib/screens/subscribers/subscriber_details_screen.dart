@@ -790,7 +790,7 @@ class _SubscriberDetailsScreenState
                           });
                         final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
                         await _offerPrintReceipt(ReceiptData(
-                          subscriberName: widget.subscriber.displayName,
+                          subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
                           phoneNumber: widget.subscriber.displayPhone,
                           packageName: widget.subscriber.profileName ?? '',
                           packagePrice: extPrice,
@@ -1208,7 +1208,7 @@ class _SubscriberDetailsScreenState
                           '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                         });
                         await _offerPrintReceipt(ReceiptData(
-                          subscriberName: widget.subscriber.displayName,
+                          subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
                           phoneNumber: widget.subscriber.displayPhone,
                           packageName: profileName,
                           packagePrice: userPrice,
@@ -1615,7 +1615,7 @@ class _SubscriberDetailsScreenState
                                 '{expiration_date}': fresh?['expiration']?.toString() ?? '',
                               });
                             await _offerPrintReceipt(ReceiptData(
-                              subscriberName: widget.subscriber.displayName,
+                              subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
                               phoneNumber: widget.subscriber.displayPhone,
                               packageName: widget.subscriber.profileName ?? '',
                               packagePrice: 0,
@@ -1893,7 +1893,7 @@ class _SubscriberDetailsScreenState
                           if (success) {
                             await notifier.loadSubscribers();
                             await _offerPrintReceipt(ReceiptData(
-                              subscriberName: widget.subscriber.displayName,
+                              subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
                               phoneNumber: widget.subscriber.displayPhone,
                               packageName: widget.subscriber.profileName ?? '',
                               debtAmount: btnAmount,
