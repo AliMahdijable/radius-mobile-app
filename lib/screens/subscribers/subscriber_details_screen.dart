@@ -2046,29 +2046,48 @@ class _SubscriberDetailsScreenState
       final adminId = await storage.getAdminId();
       final adminToken = await storage.getToken();
 
-      final linkResponse = await dio.post(
-        ApiConstants.generateUserLink,
-        data: {
-          'userId': sub.idx ?? '',
-          'username': sub.username,
-          'adminId': adminId ?? 'unknown',
-          'adminToken': adminToken ?? '',
-          'price': sub.notes ?? sub.price ?? '0',
-          'notes': sub.notes ?? '',
-          'profileName': sub.profileName ?? '',
-          'profileId': (sub.profileId ?? '').toString(),
-        },
-      );
+      if (adminToken == null || adminToken.isEmpty) {
+        if (mounted) AppSnackBar.error(context, 'فشل توليد الرابط', detail: 'توكن المدير غير متوفر - أعد تسجيل الدخول');
+        return;
+      }
 
-      if (linkResponse.data?['success'] != true || linkResponse.data?['token'] == null) {
+      final userId = sub.idx ?? '';
+      if (userId.isEmpty) {
+        if (mounted) AppSnackBar.error(context, 'فشل توليد الرابط', detail: 'معرف المشترك غير متوفر');
+        return;
+      }
+
+      final body = {
+        'userId': userId,
+        'username': sub.username,
+        'adminId': adminId ?? 'unknown',
+        'adminToken': adminToken,
+        'price': sub.notes ?? sub.price ?? '0',
+        'notes': sub.notes ?? '',
+        'profileName': sub.profileName ?? '',
+        'profileId': (sub.profileId ?? '').toString(),
+      };
+
+      late final dynamic linkResponse;
+      try {
+        final res = await dio.post(ApiConstants.generateUserLink, data: body);
+        linkResponse = res.data;
+      } on DioException catch (dioErr) {
+        final errMsg = dioErr.response?.data?['message']?.toString()
+            ?? dioErr.message ?? 'خطأ في الاتصال';
+        if (mounted) AppSnackBar.error(context, 'فشل توليد الرابط', detail: errMsg);
+        return;
+      }
+
+      if (linkResponse?['success'] != true || linkResponse?['token'] == null) {
         if (mounted) {
           AppSnackBar.error(context, 'فشل توليد الرابط',
-              detail: linkResponse.data?['message']?.toString() ?? 'لم يتم الحصول على رابط');
+              detail: linkResponse?['message']?.toString() ?? 'لم يتم الحصول على رابط');
         }
         return;
       }
 
-      final token = linkResponse.data['token'];
+      final token = linkResponse['token'];
       final linkUrl = '${ApiConstants.backendUrl}/user-info/$token';
 
       final subscriberName = '${sub.firstname} ${sub.lastname}'.trim();
@@ -2094,7 +2113,7 @@ class _SubscriberDetailsScreenState
       }
     } catch (e) {
       if (mounted) {
-        AppSnackBar.error(context, 'خطأ في توليد الرابط', detail: e.toString());
+        AppSnackBar.error(context, 'خطأ غير متوقع', detail: e.toString());
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
