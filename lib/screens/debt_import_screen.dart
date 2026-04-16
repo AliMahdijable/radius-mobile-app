@@ -382,7 +382,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SizedBox(
               width: double.infinity,
-              height: 54,
+              height: AppTheme.actionButtonHeight,
               child: ElevatedButton.icon(
                 onPressed: (_isLoading || _isBulkApplying) ? null : _pickFile,
                 icon: const Icon(Icons.file_upload_rounded),
@@ -448,7 +448,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     child: SizedBox(
                       width: double.infinity,
-                      height: 54,
+                      height: AppTheme.actionButtonHeight,
                       child: ElevatedButton.icon(
                         onPressed: _isBulkApplying ? null : _applyAllMatched,
                         icon: const Icon(Icons.done_all_rounded),

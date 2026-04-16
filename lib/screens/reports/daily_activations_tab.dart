@@ -225,7 +225,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                     const SizedBox(height: 14),
                   ],
 
-                  SizedBox(height: 54, child: ElevatedButton(
+                  SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
                       setState(() { _managerId = mgr; _page = 1; });

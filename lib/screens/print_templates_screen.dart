@@ -679,7 +679,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
                 onChanged: (v) => setSheet(() => font = v!),
               )),
               const SizedBox(height: 16),
-              SizedBox(width: double.infinity, height: 54, child: ElevatedButton.icon(
+              SizedBox(width: double.infinity, height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
                 onPressed: () {
                   setState(() {
                     _bgColor = bg;
@@ -806,7 +806,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: SizedBox(
               width: double.infinity,
-              height: 54,
+              height: AppTheme.actionButtonHeight,
               child: ElevatedButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: _saving

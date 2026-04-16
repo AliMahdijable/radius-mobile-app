@@ -293,7 +293,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           const SizedBox(height: 24),
 
           SizedBox(
-            height: 50,
+            height: AppTheme.actionButtonHeight,
             child: ElevatedButton.icon(
               onPressed: _isLoading ? null : _submit,
               icon: _isLoading

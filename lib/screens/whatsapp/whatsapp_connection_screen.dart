@@ -204,7 +204,7 @@ class _WhatsAppConnectionScreenState
             // Action Buttons
             if (!wa.status.connected) ...[
               SizedBox(
-                height: 52,
+                height: AppTheme.actionButtonHeight,
                 child: ElevatedButton.icon(
                   onPressed: wa.isConnecting
                       ? null
@@ -219,7 +219,7 @@ class _WhatsAppConnectionScreenState
               ),
               const SizedBox(height: 12),
               SizedBox(
-                height: 52,
+                height: AppTheme.actionButtonHeight,
                 child: OutlinedButton.icon(
                   onPressed: wa.isConnecting
                       ? null
@@ -230,7 +230,7 @@ class _WhatsAppConnectionScreenState
               ),
             ] else ...[
               SizedBox(
-                height: 52,
+                height: AppTheme.actionButtonHeight,
                 child: OutlinedButton.icon(
                   onPressed: () =>
                       ref.read(whatsappProvider.notifier).disconnect(),

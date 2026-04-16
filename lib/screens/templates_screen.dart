@@ -147,7 +147,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                 ),
 
                 const SizedBox(height: 12),
-                SizedBox(height: 54, child: ElevatedButton(
+                SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isEmpty || contentController.text.isEmpty) {
                       AppSnackBar.warning(context, 'يرجى ملء جميع الحقول');

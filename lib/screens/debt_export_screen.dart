@@ -275,7 +275,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
               padding: const EdgeInsets.all(16),
               child: SizedBox(
                 width: double.infinity,
-                height: 54,
+                height: AppTheme.actionButtonHeight,
                 child: ElevatedButton.icon(
                   onPressed: _loadDebtors,
                   icon: const Icon(Icons.download_rounded),
@@ -312,7 +312,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                     children: [
                       Expanded(
                         child: SizedBox(
-                          height: 54,
+                          height: AppTheme.actionButtonHeight,
                           child: ElevatedButton.icon(
                             onPressed: _saveToPhone,
                             icon: const Icon(Icons.save_alt_rounded, size: 20),
@@ -329,7 +329,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: SizedBox(
-                          height: 54,
+                          height: AppTheme.actionButtonHeight,
                           child: OutlinedButton.icon(
                             onPressed: _shareCsv,
                             icon: const Icon(Icons.share_rounded, size: 20),

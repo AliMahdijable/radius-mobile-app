@@ -338,7 +338,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           const SizedBox(height: 16),
         ],
         SizedBox(
-          height: 52,
+          height: AppTheme.actionButtonHeight,
           child: ElevatedButton.icon(
             onPressed: isActive ? null : () => _startBroadcast(tab),
             icon: const Icon(Icons.campaign),
