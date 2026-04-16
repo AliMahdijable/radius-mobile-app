@@ -11,6 +11,7 @@ class SubscriberCard extends StatelessWidget {
   final bool showOnlineDetails;
   final Map<String, dynamic>? lastPayment;
   final VoidCallback? onDisconnect;
+  final VoidCallback? onPreview;
 
   const SubscriberCard({
     super.key,
@@ -19,6 +20,7 @@ class SubscriberCard extends StatelessWidget {
     this.showOnlineDetails = false,
     this.lastPayment,
     this.onDisconnect,
+    this.onPreview,
   });
 
   static String formatBytes(int? bytes) {
@@ -253,7 +255,7 @@ class SubscriberCard extends StatelessWidget {
               _OnlineRow(
                 subscriber: subscriber,
                 onDisconnect: onDisconnect,
-                onView: onTap,
+                onPreview: onPreview,
               ),
           ],
         ),
@@ -304,8 +306,8 @@ class SubscriberCard extends StatelessWidget {
 class _OnlineRow extends StatelessWidget {
   final SubscriberModel subscriber;
   final VoidCallback? onDisconnect;
-  final VoidCallback? onView;
-  const _OnlineRow({required this.subscriber, this.onDisconnect, this.onView});
+  final VoidCallback? onPreview;
+  const _OnlineRow({required this.subscriber, this.onDisconnect, this.onPreview});
 
   void _openInBrowser(String ip) {
     final uri = Uri.parse('http://$ip');
@@ -372,14 +374,14 @@ class _OnlineRow extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              if (onView != null)
+              if (onPreview != null)
                 _ActionBtn(
                   icon: Icons.visibility_rounded,
                   label: 'معاينة',
                   color: AppTheme.teal600,
-                  onTap: onView!,
+                  onTap: onPreview!,
                 ),
-              if (onView != null && onDisconnect != null)
+              if (onPreview != null && onDisconnect != null)
                 const SizedBox(width: 8),
               if (onDisconnect != null)
                 _ActionBtn(

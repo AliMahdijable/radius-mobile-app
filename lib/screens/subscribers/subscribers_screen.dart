@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../models/subscriber_model.dart';
@@ -10,6 +12,7 @@ import '../../widgets/loading_overlay.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/add_subscriber_sheet.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/helpers.dart';
 
 class SubscribersScreen extends ConsumerStatefulWidget {
   const SubscribersScreen({super.key});
@@ -197,6 +200,373 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           },
         );
       },
+    );
+  }
+
+  void _showOnlineUserSheet(BuildContext context, SubscriberModel sub) {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Header: avatar + name
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.teal600.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Stack(
+                        children: [
+                          Center(
+                            child: Text(
+                              sub.firstname.isNotEmpty ? sub.firstname[0] : '?',
+                              style: const TextStyle(
+                                color: AppTheme.teal600,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0, left: 0,
+                            child: Container(
+                              width: 12, height: 12,
+                              decoration: BoxDecoration(
+                                color: AppTheme.whatsappGreen,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: theme.scaffoldBackgroundColor,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sub.fullName.isNotEmpty ? sub.fullName : sub.username,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                          if (sub.fullName.isNotEmpty)
+                            Text(
+                              sub.username,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(0.5),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                      style: IconButton.styleFrom(
+                        backgroundColor: theme.colorScheme.onSurface.withOpacity(0.06),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Divider(height: 1, color: theme.colorScheme.onSurface.withOpacity(0.06)),
+
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  children: [
+                    // Connection info section
+                    _sheetSection(theme, 'معلومات الاتصال', Icons.wifi_rounded),
+                    const SizedBox(height: 8),
+                    _sheetInfoTile(
+                      theme,
+                      icon: Icons.lan_rounded,
+                      label: 'عنوان IP',
+                      value: sub.ipAddress ?? '—',
+                      valueColor: AppTheme.teal600,
+                      onTap: sub.ipAddress != null && sub.ipAddress!.isNotEmpty
+                          ? () => launchUrl(
+                              Uri.parse('http://${sub.ipAddress}'),
+                              mode: LaunchMode.externalApplication,
+                            )
+                          : null,
+                      trailing: sub.ipAddress != null && sub.ipAddress!.isNotEmpty
+                          ? const Icon(Icons.open_in_new_rounded, size: 14, color: AppTheme.teal400)
+                          : null,
+                    ),
+                    _sheetInfoTile(
+                      theme,
+                      icon: Icons.router_rounded,
+                      label: 'MAC Address',
+                      value: sub.macAddress ?? '—',
+                      isLtr: true,
+                      onLongPress: sub.macAddress != null
+                          ? () {
+                              Clipboard.setData(ClipboardData(text: sub.macAddress!));
+                              if (context.mounted) {
+                                AppSnackBar.success(context, 'تم نسخ MAC');
+                              }
+                            }
+                          : null,
+                    ),
+                    _sheetInfoTile(
+                      theme,
+                      icon: Icons.timer_outlined,
+                      label: 'مدة الجلسة',
+                      value: SubscriberCard.formatDuration(sub.sessionTime),
+                    ),
+
+                    const SizedBox(height: 16),
+                    _sheetSection(theme, 'الاستهلاك', Icons.data_usage_rounded),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _sheetStatCard(
+                            theme,
+                            icon: Icons.download_rounded,
+                            label: 'التحميل',
+                            value: SubscriberCard.formatBytes(sub.downloadBytes),
+                            color: AppTheme.teal600,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _sheetStatCard(
+                            theme,
+                            icon: Icons.upload_rounded,
+                            label: 'الرفع',
+                            value: SubscriberCard.formatBytes(sub.uploadBytes),
+                            color: AppTheme.infoColor,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+                    _sheetSection(theme, 'معلومات الاشتراك', Icons.inventory_2_rounded),
+                    const SizedBox(height: 8),
+                    if (sub.profileName != null && sub.profileName!.isNotEmpty)
+                      _sheetInfoTile(
+                        theme,
+                        icon: Icons.card_membership_rounded,
+                        label: 'الباقة',
+                        value: sub.profileName!,
+                        valueColor: theme.colorScheme.primary,
+                      ),
+                    if (sub.expiration != null && sub.expiration!.isNotEmpty)
+                      _sheetInfoTile(
+                        theme,
+                        icon: Icons.event_rounded,
+                        label: 'تاريخ الانتهاء',
+                        value: AppHelpers.formatDate(sub.expiration),
+                        isLtr: true,
+                      ),
+                    _sheetInfoTile(
+                      theme,
+                      icon: Icons.schedule_rounded,
+                      label: 'الأيام المتبقية',
+                      value: sub.isExpired
+                          ? 'منتهي'
+                          : '${sub.remainingDays ?? 0} يوم',
+                      valueColor: sub.isExpired ? Colors.red : AppHelpers.getRemainingDaysColor(sub.remainingDays),
+                    ),
+                    if (sub.deviceVendor != null && sub.deviceVendor != 'unknown' && sub.deviceVendor!.isNotEmpty)
+                      _sheetInfoTile(
+                        theme,
+                        icon: Icons.devices_rounded,
+                        label: 'اسم الجهاز',
+                        value: sub.deviceVendor!,
+                      ),
+
+                    // Disconnect button
+                    if (sub.idx != null) ...[
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: ctx,
+                              builder: (dlg) => AlertDialog(
+                                title: const Text('فصل المستخدم'),
+                                content: Text('هل تريد فصل ${sub.fullName.isNotEmpty ? sub.fullName : sub.username}؟'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(dlg, false),
+                                    child: const Text('إلغاء'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(dlg, true),
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                    child: const Text('فصل', style: TextStyle(color: Colors.white)),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              final ok = await ref.read(subscribersProvider.notifier).disconnectUser(sub.idx!);
+                              if (context.mounted) {
+                                if (ok) {
+                                  AppSnackBar.success(context, 'تم فصل ${sub.fullName.isNotEmpty ? sub.fullName : sub.username}');
+                                } else {
+                                  AppSnackBar.error(context, 'فشل فصل المستخدم');
+                                }
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                          label: const Text('فصل المستخدم', style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _sheetSection(ThemeData theme, String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: theme.colorScheme.primary),
+        const SizedBox(width: 6),
+        Text(title, style: TextStyle(
+          fontSize: 13, fontWeight: FontWeight.w700,
+          color: theme.colorScheme.primary,
+        )),
+      ],
+    );
+  }
+
+  static Widget _sheetInfoTile(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+    bool isLtr = false,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+    Widget? trailing,
+  }) {
+    final tile = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.4)),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 95,
+            child: Text(label, style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w500,
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+            )),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textDirection: isLtr ? TextDirection.ltr : null,
+              style: TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w600,
+                color: valueColor ?? theme.colorScheme.onSurface.withOpacity(0.85),
+              ),
+            ),
+          ),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+    if (onTap != null || onLongPress != null) {
+      return GestureDetector(onTap: onTap, onLongPress: onLongPress, child: tile);
+    }
+    return tile;
+  }
+
+  static Widget _sheetStatCard(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.12)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                )),
+                const SizedBox(height: 2),
+                Text(value, style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w700, color: color,
+                )),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -439,6 +809,9 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                                 extra: sub,
                               );
                             },
+                            onPreview: isOnlineFilter && sub.isOnline
+                                ? () => _showOnlineUserSheet(context, sub)
+                                : null,
                             onDisconnect: isOnlineFilter && sub.idx != null
                                 ? () async {
                                     final confirm = await showDialog<bool>(

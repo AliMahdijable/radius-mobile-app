@@ -733,6 +733,29 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   Future<bool> disconnectUser(String sessionId) async {
     try {
+      // Immediately remove from online list for instant UI feedback
+      final updatedOnline = state.onlineUsers
+          .where((u) => u.idx != sessionId)
+          .toList();
+      final updatedSubs = state.subscribers.map((s) {
+        if (s.idx == sessionId) {
+          return SubscriberModel(
+            idx: s.idx, username: s.username,
+            firstname: s.firstname, lastname: s.lastname,
+            phone: s.phone, mobile: s.mobile,
+            expiration: s.expiration, remainingDays: s.remainingDays,
+            notes: s.notes, debt: s.debt, hasDebtFlag: s.hasDebtFlag,
+            profileName: s.profileName, profileId: s.profileId,
+            balance: s.balance, price: s.price,
+            parentUsername: s.parentUsername,
+            isOnlineFlag: false,
+            enabled: s.enabled,
+          );
+        }
+        return s;
+      }).toList();
+      state = state.copyWith(onlineUsers: updatedOnline, subscribers: updatedSubs);
+
       final response = await _sas4Dio.get(
         '${ApiConstants.sas4DisconnectUser}/$sessionId',
       );
