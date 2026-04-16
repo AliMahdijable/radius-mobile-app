@@ -6,6 +6,7 @@ import '../../models/subscriber_model.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/api_constants.dart';
+import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/storage_service.dart';
 import '../../providers/whatsapp_provider.dart';
