@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -153,19 +155,85 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
   Future<void> _saveToPhone() async {
     if (_debtors.isEmpty) return;
     try {
-      await CsvExport.saveWithSystemPicker(
+      final path = await CsvExport.saveWithFilePicker(
         fileName: _csvFileName(),
         headers: _csvHeaders,
         rows: _csvRows(),
       );
-      if (mounted) {
-        AppSnackBar.success(context, 'تم حفظ الملف (${_debtors.length} مشترك)');
+      if (!mounted) return;
+      if (path != null && path.isNotEmpty) {
+        _showSavedPathDialog(path);
+      } else if (kIsWeb) {
+        AppSnackBar.success(
+          context,
+          'تم بدء تنزيل الملف',
+          detail: 'تحقق من مجلد التنزيلات في المتصفح',
+        );
+      } else {
+        AppSnackBar.warning(
+          context,
+          'لم يتم الحفظ',
+          detail: 'ألغيت اختيار المكان أو لم يُكتب الملف',
+        );
       }
     } catch (_) {
       if (mounted) {
-        AppSnackBar.error(context, 'تعذر حفظ الملف أو تم الإلغاء');
+        AppSnackBar.error(context, 'تعذر حفظ الملف');
       }
     }
+  }
+
+  void _showSavedPathDialog(String path) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          'تم الحفظ',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'مسار الملف على الجهاز:',
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                path,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: path));
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) {
+                AppSnackBar.success(context, 'تم نسخ المسار');
+              }
+            },
+            child: const Text('نسخ المسار', style: TextStyle(fontFamily: 'Cairo')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('حسناً', style: TextStyle(fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
