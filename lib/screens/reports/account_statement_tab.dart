@@ -258,7 +258,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                 hintText: 'بحث عن مشترك...',
                 prefixIcon: const Icon(Icons.person_search_rounded, size: 20),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 suffixIcon: _selectedSub != null
                     ? IconButton(
                         icon: const Icon(Icons.close, size: 16),

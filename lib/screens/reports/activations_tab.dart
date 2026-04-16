@@ -127,7 +127,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
               hintText: 'بحث باسم المشترك...',
               prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
