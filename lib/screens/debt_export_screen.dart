@@ -109,11 +109,16 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
     return notesVal;
   }
 
-  Future<void> _exportCsv() async {
-    if (_debtors.isEmpty) return;
+  List<String> get _csvHeaders => const [
+        'اسم المستخدم',
+        'الاسم العربي',
+        'الاسم الكامل',
+        'الهاتف',
+        'الرصيد (balance)',
+      ];
 
-    final headers = ['اسم المستخدم', 'الاسم العربي', 'الاسم الكامل', 'الهاتف', 'الرصيد (balance)'];
-    final rows = _debtors.map((u) {
+  List<List<String>> _csvRows() {
+    return _debtors.map((u) {
       final firstname = u['firstname']?.toString() ?? '';
       final lastname = u['lastname']?.toString() ?? '';
       final phone = u['phone']?.toString() ?? u['mobile']?.toString() ?? '';
@@ -126,16 +131,40 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
         debt.toStringAsFixed(0),
       ];
     }).toList();
+  }
 
+  String _csvFileName() {
     final date = intl.DateFormat('yyyy-MM-dd').format(DateTime.now());
-    await CsvExport.exportAndShare(
-      fileName: 'debtors-export-$date.csv',
-      headers: headers,
-      rows: rows,
-    );
+    return 'debtors-export-$date.csv';
+  }
 
+  Future<void> _shareCsv() async {
+    if (_debtors.isEmpty) return;
+    await CsvExport.exportAndShare(
+      fileName: _csvFileName(),
+      headers: _csvHeaders,
+      rows: _csvRows(),
+    );
     if (mounted) {
-      AppSnackBar.success(context, 'تم تصدير ${_debtors.length} مشترك');
+      AppSnackBar.success(context, 'تم تجهيز الملف (${_debtors.length} مشترك)');
+    }
+  }
+
+  Future<void> _saveToPhone() async {
+    if (_debtors.isEmpty) return;
+    try {
+      await CsvExport.saveWithSystemPicker(
+        fileName: _csvFileName(),
+        headers: _csvHeaders,
+        rows: _csvRows(),
+      );
+      if (mounted) {
+        AppSnackBar.success(context, 'تم حفظ الملف (${_debtors.length} مشترك)');
+      }
+    } catch (_) {
+      if (mounted) {
+        AppSnackBar.error(context, 'تعذر حفظ الملف أو تم الإلغاء');
+      }
     }
   }
 
@@ -161,7 +190,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'سيتم تحميل جميع المشتركين وتصفية من لديهم ديون (رصيد غير صفري) ثم تصديرهم كملف CSV',
+                    'سيتم تحميل جميع المشتركين وتصفية من لديهم ديون (رصيد غير صفري) ثم تصديرهم كملف CSV. يمكنك حفظ الملف في الهاتف أو مشاركته.',
                     style: TextStyle(
                       color: AppTheme.infoColor,
                       fontWeight: FontWeight.w500,
@@ -193,21 +222,60 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
           if (_loaded && !_isLoading) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.people, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_debtors.length} مشترك بديون',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Icon(Icons.people, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_debtors.length} مشترك بديون',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    onPressed: _exportCsv,
-                    icon: const Icon(Icons.file_download_rounded, size: 20),
-                    label: const Text('تصدير CSV'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 54,
+                          child: ElevatedButton.icon(
+                            onPressed: _saveToPhone,
+                            icon: const Icon(Icons.save_alt_rounded, size: 20),
+                            label: const Text(
+                              'حفظ في الهاتف',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SizedBox(
+                          height: 54,
+                          child: OutlinedButton.icon(
+                            onPressed: _shareCsv,
+                            icon: const Icon(Icons.share_rounded, size: 20),
+                            label: const Text(
+                              'مشاركة',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
