@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../constants/api_constants.dart';
 import '../constants/app_constants.dart';
@@ -80,6 +81,15 @@ class FcmService {
 
   /// طلب إذن الإشعارات وإرجاع FCM token
   static Future<String?> requestPermissionAndGetToken() async {
+    // Android 13+ يحتاج طلب إذن POST_NOTIFICATIONS بشكل runtime
+    if (Platform.isAndroid) {
+      final status = await Permission.notification.request();
+      if (!status.isGranted) {
+        debugPrint('FCM: OS notification permission denied');
+        return null;
+      }
+    }
+
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(
       alert: true,
@@ -89,7 +99,7 @@ class FcmService {
 
     if (settings.authorizationStatus != AuthorizationStatus.authorized &&
         settings.authorizationStatus != AuthorizationStatus.provisional) {
-      debugPrint('FCM: permission denied');
+      debugPrint('FCM: Firebase permission denied');
       return null;
     }
 
