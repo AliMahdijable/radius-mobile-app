@@ -227,11 +227,18 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
         ? (_selectedUsernames[tab] ?? {}).toList()
         : null;
 
-    await ref.read(messagesProvider.notifier).startBroadcast(
+    final ok = await ref.read(messagesProvider.notifier).startBroadcast(
           message: config.hasCustomMessage ? message : '',
           type: config.apiType,
           targetUsernames: targetUsernames,
         );
+
+    if (!mounted) return;
+    if (ok) {
+      AppSnackBar.success(context, 'تم بدء البث بنجاح');
+    } else {
+      AppSnackBar.error(context, 'فشل بدء البث');
+    }
   }
 
   void _selectAll(_TabType tab) {
@@ -262,47 +269,43 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: DefaultTabController(
-        length: _tabOrder.length,
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('التبليغات'),
-            bottom: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
-              indicatorColor: theme.colorScheme.primary,
-              tabs: _tabOrder.map((tab) {
-                final config = _tabs[tab]!;
-                return Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(config.icon, size: 18),
-                      const SizedBox(width: 6),
-                      Text(config.label),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('التبليغات'),
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          labelStyle: const TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
           ),
-          body: TabBarView(
-            controller: _tabController,
-            children:
-                _tabOrder.map((tab) => _buildTabBody(tab, theme)).toList(),
+          unselectedLabelStyle: const TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w500,
+            fontSize: 13,
           ),
+          indicatorColor: theme.colorScheme.primary,
+          tabs: _tabOrder.map((tab) {
+            final config = _tabs[tab]!;
+            return Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(config.icon, size: 18),
+                  const SizedBox(width: 6),
+                  Text(config.label),
+                ],
+              ),
+            );
+          }).toList(),
         ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children:
+            _tabOrder.map((tab) => _buildTabBody(tab, theme)).toList(),
       ),
     );
   }
@@ -341,7 +344,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
             icon: const Icon(Icons.campaign),
             label: const Text(
               'بدء البث',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ),
         ),
@@ -421,7 +424,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
                 ref.read(messagesProvider.notifier).cancelBroadcast(),
             icon: const Icon(Icons.stop, color: Colors.red),
             label:
-                const Text('إيقاف البث', style: TextStyle(color: Colors.red)),
+                const Text('إيقاف البث', style: TextStyle(fontFamily: 'Cairo', color: Colors.red)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.red),
             ),
@@ -446,7 +449,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           const SizedBox(height: 10),
           const Text(
             'اكتمل البث',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(
@@ -521,6 +524,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
               child: Text(
                 '${selected.length} / ${filteredSubs.length}',
                 style: TextStyle(
+                  fontFamily: 'Cairo',
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                   color: theme.colorScheme.primary,
@@ -613,6 +617,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
             child: Text(
               'سيتم إرسال رسالة الديون باستخدام قالب تذكير الديون المحفوظ في إعدادات واتساب',
               style: TextStyle(
+                fontFamily: 'Cairo',
                 color: AppTheme.warningColor,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
@@ -655,7 +660,7 @@ class _ActionChip extends StatelessWidget {
           children: [
             Icon(icon, size: 16),
             const SizedBox(width: 4),
-            Text(label, style: const TextStyle(fontSize: 12)),
+            Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12)),
           ],
         ),
       ),
@@ -703,11 +708,12 @@ class _SubscriberTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                    Text(
                     subscriber.fullName.trim().isNotEmpty
                         ? subscriber.fullName
                         : subscriber.username,
                     style: const TextStyle(
+                      fontFamily: 'Cairo',
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -753,6 +759,7 @@ class _SubscriberTile extends StatelessWidget {
                 child: Text(
                   AppHelpers.formatMoney(subscriber.debtAmount.abs()),
                   style: const TextStyle(
+                    fontFamily: 'Cairo',
                     color: AppTheme.dangerColor,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,

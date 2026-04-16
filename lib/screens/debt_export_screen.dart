@@ -236,6 +236,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                               Text(
                                 u['username']?.toString() ?? '—',
                                 style: const TextStyle(
+                                  fontFamily: 'Cairo',
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14,
                                 ),

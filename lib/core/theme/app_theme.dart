@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const String _fontFamily = 'Cairo';
+  static const String fontFamily = 'Cairo';
+  static const String _fontFamily = fontFamily;
 
   // Teal palette
   static const Color primary = Color(0xFF387478);

@@ -4,6 +4,8 @@ import '../providers/schedules_provider.dart';
 import '../models/schedule_model.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
+import '../core/services/storage_service.dart';
+import '../core/network/dio_client.dart';
 import '../widgets/app_snackbar.dart';
 
 class SchedulesScreen extends ConsumerStatefulWidget {
@@ -77,9 +79,12 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
     final state = ref.read(schedulesProvider);
     final existing = _findSchedule(state, type);
 
+    final storage = ref.read(storageServiceProvider);
+    final adminId = await storage.getAdminId() ?? existing?.adminId ?? '';
+
     final schedule = ScheduleModel(
       id: existing?.id,
-      adminId: existing?.adminId ?? '',
+      adminId: adminId,
       scheduleType: type,
       isEnabled: existing?.isEnabled ?? true,
       scheduledTime: type == 'expiry_warning' ? _expiryTime : _debtTime,
