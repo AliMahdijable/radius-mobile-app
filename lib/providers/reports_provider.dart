@@ -475,7 +475,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
 
     final res = await _sas4Dio.post(
       ApiConstants.sas4UserSessions,
-      data: 'payload=$encrypted',
+      data: {'payload': encrypted},
       options: Options(
         contentType: 'application/x-www-form-urlencoded',
       ),
