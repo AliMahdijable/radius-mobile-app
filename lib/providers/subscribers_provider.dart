@@ -462,23 +462,35 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   Future<void> loadLastPayments() async {
     final adminId = await _storage.getAdminId();
     if (adminId == null) return;
+
+    void applyPayments(dynamic data) {
+      if (data is! Map || data['success'] != true) return;
+      final payments = data['payments'] as List? ?? [];
+      final map = <String, Map<String, dynamic>>{};
+      for (final p in payments) {
+        if (p is Map<String, dynamic>) {
+          final username = p['subscriber_username']?.toString() ?? '';
+          if (username.isNotEmpty) map[username] = p;
+        }
+      }
+      state = state.copyWith(lastPayments: map);
+    }
+
     try {
       final res = await _backendDio.get(
         '${ApiConstants.lastFinancialMovements}/$adminId',
       );
-      if (res.data is Map && res.data['success'] == true) {
-        final payments = res.data['payments'] as List? ?? [];
-        final map = <String, Map<String, dynamic>>{};
-        for (final p in payments) {
-          if (p is Map<String, dynamic>) {
-            final username = p['subscriber_username']?.toString() ?? '';
-            if (username.isNotEmpty) map[username] = p;
-          }
-        }
-        state = state.copyWith(lastPayments: map);
-      }
+      applyPayments(res.data);
     } catch (e) {
-      dev.log('loadLastPayments error: $e', name: 'SUBS');
+      dev.log('loadLastPayments modern endpoint failed: $e', name: 'SUBS');
+      try {
+        final legacyRes = await _backendDio.get(
+          '${ApiConstants.lastPayments}/$adminId',
+        );
+        applyPayments(legacyRes.data);
+      } catch (legacyError) {
+        dev.log('loadLastPayments legacy endpoint failed: $legacyError', name: 'SUBS');
+      }
     }
   }
 

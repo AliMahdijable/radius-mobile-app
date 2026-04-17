@@ -2307,10 +2307,16 @@ class _SubscriberDetailsScreenState
                       final daysAgo = DateTime.now().difference(date).inDays;
                       if (daysAgo > 30) return const SizedBox.shrink();
                       final timeLabel = daysAgo == 0 ? 'اليوم' : 'منذ $daysAgo يوم';
+                      final actionType = lp['action_type']?.toString();
+                      final paymentType = lp['payment_type']?.toString() ?? '';
                       final movementLabel =
                           lp['movement_label']?.toString().trim().isNotEmpty == true
                               ? lp['movement_label'].toString().trim()
-                              : 'حركة مالية';
+                              : actionType == 'SUBSCRIBER_ACTIVATE'
+                                  ? (paymentType.contains('جزئي')
+                                      ? 'تفعيل نقدي جزئي'
+                                      : 'تفعيل نقدي')
+                                  : 'تسديد دين';
                       final rawAmount = lp['amount'];
                       final amountValue = rawAmount is num
                           ? rawAmount.toDouble()
