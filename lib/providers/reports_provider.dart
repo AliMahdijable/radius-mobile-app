@@ -350,7 +350,13 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       );
     } catch (e) {
       dev.log('fetchSessions error: $e', name: 'REPORTS');
-      state = state.copyWith(loading: false, error: 'خطأ في جلب الجلسات');
+      state = state.copyWith(
+        loading: false,
+        error: 'خطأ في جلب الجلسات',
+        sessions: const [],
+        sessionsTotal: 0,
+        sessionsPage: 1,
+      );
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
@@ -20,6 +21,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   bool _loaded = false;
   int _page = 1;
   int _pageSize = 50;
+  String? _lastAdminId;
 
   String _advIp = '';
   String _advUsername = '';
@@ -33,6 +35,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   @override
   void initState() {
     super.initState();
+    _lastAdminId = ref.read(authProvider).user?.id;
     Future.microtask(() => _load());
   }
 
@@ -102,6 +105,18 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
         _page = page;
       });
     }
+  }
+
+  void _resetSessionFilters() {
+    _searchCtrl.clear();
+    _loaded = false;
+    _page = 1;
+    _pageSize = 50;
+    _advIp = '';
+    _advUsername = '';
+    _advMac = '';
+    _advFromDate = '';
+    _advToDate = '';
   }
 
   String _formatBytes(dynamic octets) {
@@ -327,8 +342,21 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final authState = ref.watch(authProvider);
     final state = ref.watch(reportsProvider);
     final theme = Theme.of(context);
+    final currentAdminId = authState.user?.id;
+
+    if (currentAdminId != _lastAdminId) {
+      _lastAdminId = currentAdminId;
+      if (currentAdminId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(_resetSessionFilters);
+          _load(page: 1);
+        });
+      }
+    }
 
     if (state.loading && !_loaded) {
       return const Center(child: CircularProgressIndicator());
