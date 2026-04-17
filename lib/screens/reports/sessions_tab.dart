@@ -17,7 +17,6 @@ class SessionsTab extends ConsumerStatefulWidget {
 
 class _SessionsTabState extends ConsumerState<SessionsTab>
     with AutomaticKeepAliveClientMixin {
-  final _searchCtrl = TextEditingController();
   bool _loaded = false;
   int _page = 1;
   int _pageSize = 50;
@@ -39,12 +38,6 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
     Future.microtask(() => _load());
   }
 
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
   bool get _hasAdvancedFilters =>
       _advIp.isNotEmpty ||
       _advUsername.isNotEmpty ||
@@ -53,27 +46,12 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       _advToDate.isNotEmpty;
 
   Map<String, String> _buildSearchFilters() {
-    final partialUsernameQuery = _searchCtrl.text.trim();
-    final exactUsernameQuery = _advUsername.trim();
-
     return {
-      // The quick search box should support partial username matches.
-      'search': exactUsernameQuery.isEmpty ? partialUsernameQuery : '',
-      'username': exactUsernameQuery,
+      'search': '',
+      'username': _advUsername.trim(),
       'ip': _advIp.trim(),
       'mac': _advMac.trim(),
     };
-  }
-
-  void _runQuickSearch() {
-    final quickSearchValue = _searchCtrl.text.trim();
-    setState(() {
-      if (quickSearchValue.isNotEmpty) {
-        // Quick search should never stay locked to an exact advanced username.
-        _advUsername = '';
-      }
-    });
-    _load(page: 1);
   }
 
   Future<void> _load({int page = 1}) async {
@@ -97,7 +75,6 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   }
 
   void _resetSessionFilters() {
-    _searchCtrl.clear();
     _loaded = false;
     _page = 1;
     _pageSize = 50;
@@ -307,7 +284,6 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                             _advMac = mac;
                             _advFromDate = fromDate;
                             _advToDate = toDate;
-                            _searchCtrl.clear();
                           });
                           _load(page: 1);
                         },
@@ -347,65 +323,41 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       return const Center(child: CircularProgressIndicator());
     }
 
-    final totalPages = (state.sessionsTotal / _pageSize).ceil();
-
     return Column(
       children: [
-        // Search + action buttons
+        // Advanced search + action buttons
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Row(children: [
             Expanded(
-              child: TextField(
-                controller: _searchCtrl,
-                textDirection: TextDirection.ltr,
-                textAlign: TextAlign.left,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _runQuickSearch(),
-                onChanged: (value) {
-                  if (_advUsername.isNotEmpty &&
-                      value.trim() != _advUsername.trim()) {
-                    setState(() => _advUsername = '');
-                    return;
-                  }
-                  setState(() {});
-                },
-                decoration: InputDecoration(
-                  hintText: 'ابحث بجزء من اسم المستخدم',
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_searchCtrl.text.isNotEmpty || _hasAdvancedFilters)
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 20),
-                          onPressed: () {
-                            setState(() {
-                              _searchCtrl.clear();
-                              _advIp = '';
-                              _advUsername = '';
-                              _advMac = '';
-                              _advFromDate = '';
-                              _advToDate = '';
-                            });
-                            _load(page: 1);
-                          },
-                          tooltip: 'مسح البحث',
-                        ),
-                      IconButton(
-                        icon: const Icon(Icons.manage_search_rounded, size: 20),
-                        onPressed: _showAdvancedSearch,
-                        tooltip: 'بحث متقدم',
-                      ),
-                    ],
+              child: OutlinedButton.icon(
+                onPressed: _showAdvancedSearch,
+                icon: const Icon(Icons.manage_search_rounded, size: 18),
+                label: Text(
+                  _hasAdvancedFilters ? 'تعديل البحث المتقدم' : 'البحث المتقدم',
+                  overflow: TextOverflow.ellipsis,
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
                   ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 ),
               ),
             ),
-            const SizedBox(width: 6),
-            _SmallBtn(Icons.search_rounded, _runQuickSearch),
+            if (_hasAdvancedFilters) ...[
+              const SizedBox(width: 6),
+              _SmallBtn(Icons.close_rounded, () {
+                setState(() {
+                  _advIp = '';
+                  _advUsername = '';
+                  _advMac = '';
+                  _advFromDate = '';
+                  _advToDate = '';
+                });
+                _load(page: 1);
+              }),
+            ],
             const SizedBox(width: 4),
             _SmallBtn(Icons.download_rounded, _exportCsv),
             const SizedBox(width: 4),
