@@ -19,7 +19,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
   final _searchCtrl = TextEditingController();
   bool _loaded = false;
   int _page = 1;
-  int _pageSize = 10;
+  int _pageSize = 50;
 
   String _advIp = '';
   String _advUsername = '';
@@ -42,11 +42,76 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
     super.dispose();
   }
 
+  bool get _hasAdvancedFilters =>
+      _advIp.isNotEmpty ||
+      _advUsername.isNotEmpty ||
+      _advMac.isNotEmpty ||
+      _advFromDate.isNotEmpty ||
+      _advToDate.isNotEmpty;
+
+  bool _looksLikeIp(String value) =>
+      RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value);
+
+  bool _looksLikeMac(String value) => RegExp(
+        r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$',
+      ).hasMatch(value);
+
+  Map<String, String> _buildSearchFilters() {
+    final query = _searchCtrl.text.trim();
+
+    if (_advUsername.isNotEmpty || _advIp.isNotEmpty || _advMac.isNotEmpty) {
+      return {
+        'search': '',
+        'username': _advUsername.trim(),
+        'ip': _advIp.trim(),
+        'mac': _advMac.trim(),
+      };
+    }
+
+    if (query.isEmpty) {
+      return {
+        'search': '',
+        'username': '',
+        'ip': '',
+        'mac': '',
+      };
+    }
+
+    if (_looksLikeMac(query)) {
+      return {
+        'search': '',
+        'username': '',
+        'ip': '',
+        'mac': query,
+      };
+    }
+
+    if (_looksLikeIp(query)) {
+      return {
+        'search': '',
+        'username': '',
+        'ip': query,
+        'mac': '',
+      };
+    }
+
+    return {
+      'search': '',
+      'username': query,
+      'ip': '',
+      'mac': '',
+    };
+  }
+
   Future<void> _load({int page = 1}) async {
+    final filters = _buildSearchFilters();
     await ref.read(reportsProvider.notifier).fetchSessions(
           page: page,
           count: _pageSize,
-          search: _searchCtrl.text.trim(),
+          search: filters['search'] ?? '',
+          username: filters['username'] ?? '',
+          ipAddress: filters['ip'] ?? '',
+          mac: filters['mac'] ?? '',
           fromDate: _advFromDate.isNotEmpty ? _advFromDate : null,
           toDate: _advToDate.isNotEmpty ? _advToDate : null,
         );
@@ -257,7 +322,11 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                             _advMac = mac;
                             _advFromDate = fromDate;
                             _advToDate = toDate;
-                            _searchCtrl.text = username.isNotEmpty ? username : ip;
+                            _searchCtrl.text = username.isNotEmpty
+                                ? username
+                                : ip.isNotEmpty
+                                    ? ip
+                                    : mac;
                           });
                           _load(page: 1);
                         },
@@ -297,14 +366,37 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                 controller: _searchCtrl,
                 textDirection: TextDirection.ltr,
                 textAlign: TextAlign.left,
+                textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _load(page: 1),
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: 'بحث...',
+                  hintText: 'بحث باليوزر أو IP أو MAC',
                   prefixIcon: const Icon(Icons.search, size: 20),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.manage_search_rounded, size: 20),
-                    onPressed: _showAdvancedSearch,
-                    tooltip: 'بحث متقدم',
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchCtrl.text.isNotEmpty || _hasAdvancedFilters)
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () {
+                            setState(() {
+                              _searchCtrl.clear();
+                              _advIp = '';
+                              _advUsername = '';
+                              _advMac = '';
+                              _advFromDate = '';
+                              _advToDate = '';
+                            });
+                            _load(page: 1);
+                          },
+                          tooltip: 'مسح البحث',
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.manage_search_rounded, size: 20),
+                        onPressed: _showAdvancedSearch,
+                        tooltip: 'بحث متقدم',
+                      ),
+                    ],
                   ),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -312,6 +404,8 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
               ),
             ),
             const SizedBox(width: 6),
+            _SmallBtn(Icons.search_rounded, () => _load(page: 1)),
+            const SizedBox(width: 4),
             _SmallBtn(Icons.download_rounded, _exportCsv),
             const SizedBox(width: 4),
             _SmallBtn(Icons.refresh_rounded, () => _load(page: _page)),

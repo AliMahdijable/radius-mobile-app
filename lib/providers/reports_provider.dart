@@ -290,6 +290,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     int page = 1,
     int count = 50,
     String search = '',
+    String username = '',
+    String ipAddress = '',
+    String mac = '',
     String sortBy = 'acctstarttime',
     String direction = 'desc',
     String? fromDate,
@@ -316,9 +319,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
           'nasportid',
           'acctterminatecause',
         ],
-        'framedipaddress': '',
-        'username': search,
-        'mac': '',
+        'framedipaddress': ipAddress,
+        'username': username,
+        'mac': mac,
         'start_date': fromDate ?? '',
         'end_date': toDate ?? '',
       };
@@ -338,19 +341,13 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
         resData = EncryptionService.decrypt(resData);
       }
 
-      if (resData is Map) {
-        final rows = resData['data'] as List? ?? [];
-        final total = _toInt(resData['total'] ?? resData['recordsTotal']);
-        state = state.copyWith(
-          loading: false,
-          sessions:
-              rows.map((e) => Map<String, dynamic>.from(e)).toList(),
-          sessionsTotal: total,
-          sessionsPage: page,
-        );
-      } else {
-        state = state.copyWith(loading: false, sessions: [], sessionsTotal: 0);
-      }
+      final parsed = _parseSessionsResponse(resData, page);
+      state = state.copyWith(
+        loading: false,
+        sessions: parsed['sessions'] as List<Map<String, dynamic>>,
+        sessionsTotal: parsed['total'] as int,
+        sessionsPage: page,
+      );
     } catch (e) {
       dev.log('fetchSessions error: $e', name: 'REPORTS');
       state = state.copyWith(loading: false, error: 'خطأ في جلب الجلسات');
@@ -428,6 +425,40 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       subscriberInfo: null,
       statementSummary: {},
     );
+  }
+
+  Map<String, dynamic> _parseSessionsResponse(dynamic data, int page) {
+    List rawRows = const [];
+    var total = 0;
+
+    if (data is Map && data['data'] is List) {
+      rawRows = data['data'] as List;
+      total = _toInt(data['total'] ?? data['recordsTotal']);
+    } else if (data is Map && data['sessions'] is List) {
+      rawRows = data['sessions'] as List;
+      total = _toInt(data['total'] ?? data['totalCount']);
+    } else if (data is Map && data['list'] is List) {
+      rawRows = data['list'] as List;
+      total = _toInt(data['total'] ?? data['totalCount']);
+    } else if (data is List) {
+      rawRows = data;
+      total = data.length;
+    }
+
+    final sessions = <Map<String, dynamic>>[];
+    for (var i = 0; i < rawRows.length; i++) {
+      final row = rawRows[i];
+      if (row is! Map) continue;
+      final map = Map<String, dynamic>.from(row);
+      map['id'] ??=
+          map['radacctid'] ?? map['acctsessionid'] ?? '$page-$i';
+      sessions.add(map);
+    }
+
+    return {
+      'sessions': sessions,
+      'total': total > 0 ? total : sessions.length,
+    };
   }
 
   int _toInt(dynamic v) {
