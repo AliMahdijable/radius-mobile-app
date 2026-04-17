@@ -47,6 +47,9 @@ class SubscriberCard extends StatelessWidget {
     final isOnline = subscriber.isOnline;
     final hasProfile = subscriber.profileName != null &&
         subscriber.profileName!.isNotEmpty;
+    final hasPhone = subscriber.displayPhone.trim().isNotEmpty;
+    final hasExpiration =
+        subscriber.expiration != null && subscriber.expiration!.trim().isNotEmpty;
 
     return Opacity(
       opacity: isDisabled ? 0.55 : 1.0,
@@ -210,7 +213,35 @@ class SubscriberCard extends StatelessWidget {
               ),
             ),
 
-            // Row 3: debt (red) or credit (green) or balance
+            // Row 3: phone + expiration
+            if (hasPhone || hasExpiration)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, right: 46),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (hasExpiration)
+                      _metaChip(
+                        theme: theme,
+                        icon: Icons.event_outlined,
+                        text: AppHelpers.formatDate(subscriber.expiration),
+                        iconColor: isDisabled ? Colors.grey : daysColor,
+                        isLtr: true,
+                      ),
+                    if (hasPhone)
+                      _metaChip(
+                        theme: theme,
+                        icon: Icons.phone_outlined,
+                        text: AppHelpers.formatPhone(subscriber.displayPhone),
+                        iconColor: AppTheme.infoColor,
+                        isLtr: true,
+                      ),
+                  ],
+                ),
+              ),
+
+            // Row 4: debt (red) or credit (green) or balance
             if (subscriber.hasDebt)
               Padding(
                 padding: const EdgeInsets.only(top: 4, right: 46),
@@ -249,10 +280,10 @@ class SubscriberCard extends StatelessWidget {
                 ),
               ),
 
-            // Row 4: Last payment
+            // Row 5: Last payment
             if (lastPayment != null) _LastPaymentRow(data: lastPayment!),
 
-            // Row 5: Online details + action buttons
+            // Row 6: Online details + action buttons
             if (showOnlineDetails && isOnline)
               _OnlineRow(
                 subscriber: subscriber,
@@ -300,6 +331,38 @@ class SubscriberCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.onSurface.withOpacity(0.2),
         shape: BoxShape.circle,
+      ),
+    );
+  }
+
+  static Widget _metaChip({
+    required ThemeData theme,
+    required IconData icon,
+    required String text,
+    required Color iconColor,
+    bool isLtr = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurface.withOpacity(0.035),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: iconColor),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            textDirection: isLtr ? TextDirection.ltr : null,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.55),
+            ),
+          ),
+        ],
       ),
     );
   }

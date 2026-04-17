@@ -9,6 +9,7 @@ import '../providers/subscribers_provider.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/loading_overlay.dart';
+import '../models/subscriber_model.dart';
 import '../core/utils/helpers.dart';
 import '../core/theme/app_theme.dart';
 
@@ -118,6 +119,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (subsState.subscribers.isEmpty && !subsState.isLoading) {
       ref.read(subscribersProvider.notifier).loadSubscribers();
     }
+  }
+
+  SubscriberModel? _findActivitySubscriber(
+    List<SubscriberModel> subscribers,
+    Map<String, dynamic> activity,
+  ) {
+    final targetId = activity['target_id']?.toString().trim();
+    final targetName = activity['target_name']?.toString().trim().toLowerCase();
+
+    if (targetId != null && targetId.isNotEmpty) {
+      for (final sub in subscribers) {
+        if (sub.idx?.trim() == targetId) return sub;
+      }
+    }
+
+    if (targetName != null && targetName.isNotEmpty) {
+      for (final sub in subscribers) {
+        if (sub.username.trim().toLowerCase() == targetName) return sub;
+      }
+    }
+
+    return null;
+  }
+
+  bool _isActivationActivity(Map<String, dynamic> activity) {
+    final actionType =
+        activity['action_type']?.toString().toUpperCase() ?? '';
+    final description = activity['action_description']?.toString() ?? '';
+    return actionType.contains('ACTIVATE') ||
+        actionType.contains('ADD') ||
+        description.contains('تفعيل');
   }
 
   @override
@@ -278,9 +310,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 10),
                   ...dash.recentActivities.take(8).map((activity) {
-                    final actionType =
-                        activity['action_type']?.toString() ?? '';
-                    final isActivation = actionType.contains('ACTIVATE');
+                    final matchedSub = _findActivitySubscriber(
+                      subsState.subscribers,
+                      activity,
+                    );
+                    final matchedUsername = matchedSub?.username.trim() ?? '';
+                    final matchedArabicName = matchedSub?.fullName.trim() ?? '';
+                    final username = matchedUsername.isNotEmpty
+                        ? matchedUsername
+                        : activity['target_name']?.toString().trim() ?? '—';
+                    final arabicName = matchedArabicName.isNotEmpty
+                        ? matchedArabicName
+                        : username;
+                    final showUsername =
+                        username.isNotEmpty && username != arabicName;
+                    final isActivation = _isActivationActivity(activity);
+                    final actionLabel = isActivation ? 'تفعيل' : 'تمديد';
+                    final accentColor = isActivation
+                        ? AppTheme.successColor
+                        : AppTheme.infoColor;
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(14),
@@ -293,10 +341,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: (isActivation
-                                      ? AppTheme.successColor
-                                      : AppTheme.infoColor)
-                                  .withValues(alpha: 0.1),
+                              color: accentColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
@@ -304,9 +349,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   ? Icons.person_add_alt_1
                                   : Icons.autorenew,
                               size: 18,
-                              color: isActivation
-                                  ? AppTheme.successColor
-                                  : AppTheme.infoColor,
+                              color: accentColor,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -314,27 +357,89 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  activity['target_name']?.toString() ?? '—',
-                                  style: theme.textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        arabicName,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(fontWeight: FontWeight.w700),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: accentColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        actionLabel,
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: accentColor,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  isActivation ? 'تفعيل' : 'تمديد',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.5),
+                                if (showUsername) ...[
+                                  const SizedBox(height: 5),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.alternate_email_rounded,
+                                        size: 13,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.45),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          username,
+                                          textDirection: TextDirection.ltr,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.58),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ],
+                                const SizedBox(height: 5),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.event_outlined,
+                                      size: 13,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.42),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        AppHelpers.formatDate(
+                                          activity['created_at']?.toString(),
+                                        ),
+                                        textDirection: TextDirection.ltr,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.5),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ),
-                          Text(
-                            AppHelpers.formatRelative(
-                                activity['created_at']?.toString()),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.4),
                             ),
                           ),
                         ],
