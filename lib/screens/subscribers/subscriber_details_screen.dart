@@ -792,13 +792,36 @@ class _SubscriberDetailsScreenState
                         if (id != null) await notifier.refreshSingleSubscriber(id);
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
-                        final sub = widget.subscriber;
-                        final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
-                        final phone = sub.displayPhone;
-                        if (phone.isNotEmpty) {
-                          final msg = 'عزيزي المشترك : $displayName\nتم تمديد اشتراكك لغاية تاريخ: $expDate ✅';
-                          await ref.read(whatsappProvider.notifier).sendMessage(phone, msg);
-                        }
+                        final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
+                        final remDays = fresh?['remaining_days']?.toString() ?? '';
+                        // حساب المبلغ المسدد بناءً على طريقة التمديد
+                        final paidAmountForMsg = method == 'credit'
+                          ? _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0)
+                          : '0'; // نقاط: لا يوجد مبلغ نقدي
+
+                        await _sendWhatsAppFromTemplate('renewal',
+                          extraVars: {
+                            '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
+                            '{paid_amount}': paidAmountForMsg,
+                            '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                            '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
+                            '{expiry_date}': expDate,
+                            '{expiration_date}': expDate,
+                            '{days_remaining}': remDays,
+                            '{remaining_days}': remDays,
+                          });
+                        final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
+                        await _offerPrintReceipt(ReceiptData(
+                          subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
+                          phoneNumber: widget.subscriber.displayPhone,
+                          packageName: widget.subscriber.profileName ?? '',
+                          packagePrice: extPrice,
+                          paidAmount: method == 'credit' ? extPrice : 0,
+                          debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                          remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                          expiryDate: expDate,
+                          operationType: 'activation',
+                        ));
                         if (mounted) context.pop();
                       }
                     }
@@ -1206,9 +1229,14 @@ class _SubscriberDetailsScreenState
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                         final freshExpDate = fresh?['expiration']?.toString() ?? '';
                         final freshRemDays = _calcRemainingDays(freshExpDate);
+                        final actualPaidAmount = isCash
+                          ? (isPartialCash ? cashAmount : userPrice)
+                          : 0.0;
+                        final paidAmountForMsg = _formatNumber(actualPaidAmount);
                         await _sendWhatsAppFromTemplate('activation_notice', extraVars: {
                           '{package_name}': profileName,
                           '{package_price}': _formatNumber(userPrice),
+                          '{paid_amount}': paidAmountForMsg,
                           '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
                           '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
                           '{expiry_date}': freshExpDate,
@@ -1221,7 +1249,7 @@ class _SubscriberDetailsScreenState
                           phoneNumber: widget.subscriber.displayPhone,
                           packageName: profileName,
                           packagePrice: userPrice,
-                          paidAmount: isCash ? userPrice : 0,
+                          paidAmount: actualPaidAmount,
                           debtAmount: newDebt < 0 ? newDebt.abs() : 0,
                           remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
                           expiryDate: fresh?['expiration']?.toString() ?? '',
