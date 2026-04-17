@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/subscriber_model.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/theme/app_theme.dart';
@@ -28,7 +29,6 @@ class SubscriberDetailsScreen extends ConsumerStatefulWidget {
 
 class _SubscriberDetailsScreenState
     extends ConsumerState<SubscriberDetailsScreen> {
-  final _messageController = TextEditingController();
   bool _isProcessing = false;
 
   int? get _subscriberId =>
@@ -64,18 +64,60 @@ class _SubscriberDetailsScreenState
     );
   }
 
-  @override
-  void dispose() {
-    _messageController.dispose();
-    super.dispose();
-  }
-
   void _showSnack(String msg, {bool success = true, String? detail}) {
     if (!mounted) return;
     if (success) {
       AppSnackBar.success(context, msg, detail: detail);
     } else {
       AppSnackBar.error(context, msg, detail: detail);
+    }
+  }
+
+  Future<void> _launchPhoneCall() async {
+    final sub = _readCurrentSubscriber();
+    final rawPhone = sub.displayPhone.trim();
+    if (rawPhone.isEmpty) {
+      AppSnackBar.warning(context, 'لا يوجد رقم هاتف للمشترك');
+      return;
+    }
+
+    final sanitized = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
+    final dialPhone = sanitized.startsWith('+')
+        ? sanitized
+        : sanitized.startsWith('964')
+            ? '+$sanitized'
+            : sanitized;
+    final uri = Uri(scheme: 'tel', path: dialPhone);
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      AppSnackBar.error(context, 'تعذر فتح تطبيق الاتصال');
+    }
+  }
+
+  Future<void> _launchWhatsAppChat() async {
+    final sub = _readCurrentSubscriber();
+    final rawPhone = sub.displayPhone.trim();
+    if (rawPhone.isEmpty) {
+      AppSnackBar.warning(context, 'لا يوجد رقم هاتف للمشترك');
+      return;
+    }
+
+    final phone = _formatPhone(rawPhone);
+    if (phone.isEmpty) {
+      AppSnackBar.warning(context, 'رقم الهاتف غير صالح لواتساب');
+      return;
+    }
+
+    final uri = Uri.parse('https://wa.me/$phone');
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      AppSnackBar.error(context, 'تعذر فتح واتساب');
     }
   }
 
@@ -116,81 +158,6 @@ class _SubscriberDetailsScreenState
     } catch (e) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
     }
-  }
-
-  // ── WhatsApp ──────────────────────────────────────────────────────────
-  void _showSendMessageSheet() {
-    final sub = _readCurrentSubscriber();
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-          left: 20, right: 20, top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.chat, color: AppTheme.whatsappGreen),
-                const SizedBox(width: 8),
-                Text('إرسال رسالة واتساب',
-                    style: Theme.of(ctx).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'إلى: ${sub.fullName} (${sub.displayPhone})',
-              style: Theme.of(ctx).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _messageController,
-              maxLines: 4,
-              textDirection: TextDirection.ltr,
-              textAlign: TextAlign.left,
-              decoration: const InputDecoration(
-                hintText: 'اكتب رسالتك هنا...',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () async {
-                if (_messageController.text.trim().isEmpty) return;
-                final result =
-                    await ref.read(whatsappProvider.notifier).sendMessage(
-                          sub.displayPhone,
-                          _messageController.text.trim(),
-                        );
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  if (result.success) {
-                    AppSnackBar.whatsapp(context, 'تم الإرسال بنجاح');
-                  } else {
-                    AppSnackBar.whatsappError(context, 'فشل الإرسال',
-                        detail: result.error);
-                  }
-                  _messageController.clear();
-                }
-              },
-              icon: const Icon(Icons.send),
-              label: const Text('إرسال'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.whatsappGreen,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
   }
 
   // ── Edit ───────────────────────────────────────────────────────────────
@@ -2228,6 +2195,36 @@ class _SubscriberDetailsScreenState
                   ),
                 ),
 
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ContactShortcutButton(
+                        icon: Icons.call_rounded,
+                        label: 'اتصال',
+                        color: AppTheme.teal600,
+                        enabled: sub.displayPhone.trim().isNotEmpty,
+                        onTap: () {
+                          _launchPhoneCall();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ContactShortcutButton(
+                        icon: Icons.chat_rounded,
+                        label: 'واتساب',
+                        color: AppTheme.whatsappGreen,
+                        enabled: sub.displayPhone.trim().isNotEmpty,
+                        onTap: () {
+                          _launchWhatsAppChat();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+
                 const SizedBox(height: 20),
 
                 // ── Account Info ──
@@ -2444,7 +2441,15 @@ class _SubscriberDetailsScreenState
       _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
       if (sub.hasDebt)
         _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
-      _FabAction(Icons.chat_outlined, 'واتساب', AppTheme.whatsappGreen, _showSendMessageSheet),
+      if (sub.hasDebt)
+        _FabAction(
+          Icons.notifications_active_outlined,
+          'تذكير دين',
+          Colors.orange,
+          () {
+            _sendWhatsAppFromTemplate('debt_reminder');
+          },
+        ),
       _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
       _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
       _FabAction(
@@ -2684,6 +2689,66 @@ class _MethodBtn extends StatelessWidget {
                   : theme.colorScheme.onSurface.withOpacity(0.7),
             )),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContactShortcutButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _ContactShortcutButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final foreground = enabled ? color : theme.colorScheme.onSurface.withOpacity(0.35);
+    final background = enabled
+        ? color.withOpacity(0.08)
+        : theme.colorScheme.onSurface.withOpacity(0.04);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: enabled
+                  ? color.withOpacity(0.18)
+                  : theme.colorScheme.onSurface.withOpacity(0.08),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: foreground),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: foreground,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
