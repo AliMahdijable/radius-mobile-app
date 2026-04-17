@@ -34,6 +34,36 @@ class _SubscriberDetailsScreenState
   int? get _subscriberId =>
       int.tryParse(widget.subscriber.idx ?? '');
 
+  bool _matchesCurrentSubscriber(SubscriberModel candidate) {
+    final originalIdx = widget.subscriber.idx;
+    if (originalIdx != null && originalIdx.isNotEmpty) {
+      return candidate.idx == originalIdx;
+    }
+    return candidate.username == widget.subscriber.username;
+  }
+
+  SubscriberModel _resolveCurrentSubscriber(
+      Iterable<SubscriberModel> subscribers) {
+    for (final candidate in subscribers) {
+      if (_matchesCurrentSubscriber(candidate)) {
+        return candidate;
+      }
+    }
+    return widget.subscriber;
+  }
+
+  SubscriberModel _readCurrentSubscriber() {
+    return _resolveCurrentSubscriber(ref.read(subscribersProvider).subscribers);
+  }
+
+  SubscriberModel _watchCurrentSubscriber() {
+    return ref.watch(
+      subscribersProvider.select(
+        (state) => _resolveCurrentSubscriber(state.subscribers),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _messageController.dispose();
@@ -90,6 +120,7 @@ class _SubscriberDetailsScreenState
 
   // ── WhatsApp ──────────────────────────────────────────────────────────
   void _showSendMessageSheet() {
+    final sub = _readCurrentSubscriber();
     showModalBottomSheet(
       useSafeArea: true,
       context: context,
@@ -114,7 +145,7 @@ class _SubscriberDetailsScreenState
             ),
             const SizedBox(height: 6),
             Text(
-              'إلى: ${widget.subscriber.fullName} (${widget.subscriber.displayPhone})',
+              'إلى: ${sub.fullName} (${sub.displayPhone})',
               style: Theme.of(ctx).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
@@ -134,7 +165,7 @@ class _SubscriberDetailsScreenState
                 if (_messageController.text.trim().isEmpty) return;
                 final result =
                     await ref.read(whatsappProvider.notifier).sendMessage(
-                          widget.subscriber.displayPhone,
+                          sub.displayPhone,
                           _messageController.text.trim(),
                         );
                 if (mounted) {
@@ -202,7 +233,7 @@ class _SubscriberDetailsScreenState
       }
     }
 
-    final sub = widget.subscriber;
+    final sub = _readCurrentSubscriber();
     final originalUsername = details['username']?.toString() ?? sub.username;
     final originalProfileId = details['profile_id'] ??
         (details['profile_details'] is Map ? details['profile_details']['id'] : null) ??
@@ -561,7 +592,7 @@ class _SubscriberDetailsScreenState
       return;
     }
 
-    final sub = widget.subscriber;
+    final sub = _readCurrentSubscriber();
     if (sub.hasDebt) {
       _showSnack('لا يمكن حذف مشترك عليه دين: ${AppHelpers.formatMoney(sub.debtAmount.abs())}',
           success: false);
@@ -612,6 +643,7 @@ class _SubscriberDetailsScreenState
       _showSnack('معرف المشترك غير متوفر', success: false);
       return;
     }
+    final sub = _readCurrentSubscriber();
 
     setState(() => _isProcessing = true);
     final notifier = ref.read(subscribersProvider.notifier);
@@ -628,7 +660,7 @@ class _SubscriberDetailsScreenState
         (extData['profile_details'] is Map
             ? extData['profile_details']['id']
             : null) ??
-        widget.subscriber.profileId;
+        sub.profileId;
 
     List<Map<String, dynamic>> allowedPkgs = [];
     if (pkgId != null) {
@@ -641,7 +673,7 @@ class _SubscriberDetailsScreenState
     final requiredPoints = extData['required_points']?.toString() ?? '0';
     final availablePoints = extData['reward_points_balance']?.toString() ?? '0';
     final notesSigned = _toDouble(
-      extData['notes'] ?? extData['comments'] ?? widget.subscriber.notes,
+      extData['notes'] ?? extData['comments'] ?? sub.notes,
     );
 
     if (!mounted) return;
@@ -686,7 +718,7 @@ class _SubscriberDetailsScreenState
                       ?.copyWith(fontWeight: FontWeight.w700)),
                 ]),
                 const SizedBox(height: 16),
-                _InfoChip(label: 'المشترك', value: widget.subscriber.fullName),
+                _InfoChip(label: 'المشترك', value: sub.fullName),
                 _InfoChip(label: 'النقاط المطلوبة', value: '$requiredPoints نقطة'),
                 _InfoChip(label: 'النقاط المتاحة', value: '$availablePoints نقطة'),
                 if (notesSigned > 0)
@@ -790,6 +822,7 @@ class _SubscriberDetailsScreenState
                           success: success);
                       if (success) {
                         if (id != null) await notifier.refreshSingleSubscriber(id);
+                        final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
@@ -812,9 +845,9 @@ class _SubscriberDetailsScreenState
                           });
                         final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
                         await _offerPrintReceipt(ReceiptData(
-                          subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
-                          phoneNumber: widget.subscriber.displayPhone,
-                          packageName: widget.subscriber.profileName ?? '',
+                          subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                          phoneNumber: currentSub.displayPhone,
+                          packageName: currentSub.profileName ?? '',
                           packagePrice: extPrice,
                           paidAmount: method == 'credit' ? extPrice : 0,
                           debtAmount: newDebt < 0 ? newDebt.abs() : 0,
@@ -862,6 +895,7 @@ class _SubscriberDetailsScreenState
       _showSnack('معرف المشترك غير متوفر', success: false);
       return;
     }
+    final sub = _readCurrentSubscriber();
 
     setState(() => _isProcessing = true);
     final notifier = ref.read(subscribersProvider.notifier);
@@ -869,7 +903,7 @@ class _SubscriberDetailsScreenState
     final results = await Future.wait([
       notifier.getActivationData(id),
       notifier.getSubscriberDetails(id),
-      _fetchSubscriberDiscount(widget.subscriber.username),
+      _fetchSubscriberDiscount(sub.username),
     ]);
     if (!mounted) return;
     setState(() => _isProcessing = false);
@@ -952,7 +986,7 @@ class _SubscriberDetailsScreenState
                     children: [
                       Text('تفعيل المشترك', style: Theme.of(ctx).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(widget.subscriber.fullName,
+                      Text(sub.fullName,
                           style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                             color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
                     ],
@@ -1279,6 +1313,7 @@ class _SubscriberDetailsScreenState
                       _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
                       if (success) {
                         if (id != null) await notifier.refreshSingleSubscriber(id);
+                        final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                         final freshExpDate = fresh?['expiration']?.toString() ?? '';
@@ -1299,8 +1334,8 @@ class _SubscriberDetailsScreenState
                           '{days_remaining}': freshRemDays,
                         });
                         await _offerPrintReceipt(ReceiptData(
-                          subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
-                          phoneNumber: widget.subscriber.displayPhone,
+                          subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                          phoneNumber: currentSub.displayPhone,
                           packageName: profileName,
                           packagePrice: userPrice,
                           paidAmount: actualPaidAmount,
@@ -1371,7 +1406,8 @@ class _SubscriberDetailsScreenState
   Future<void> _sendWhatsAppFromTemplate(String templateType, {
     Map<String, String>? extraVars,
   }) async {
-    final phone = widget.subscriber.displayPhone;
+    final sub = _readCurrentSubscriber();
+    final phone = sub.displayPhone;
     if (phone.isEmpty) {
       if (mounted) AppSnackBar.warning(context, 'لا يوجد رقم هاتف للمشترك');
       return;
@@ -1409,7 +1445,6 @@ class _SubscriberDetailsScreenState
         return;
       }
 
-      final sub = widget.subscriber;
       final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
       final creditVal = sub.debtAmount > 0 ? _formatNumber(sub.debtAmount) : '0';
       final pkgPriceFormatted = _formatNumber(double.tryParse(sub.price ?? '0') ?? 0);
@@ -1461,6 +1496,7 @@ class _SubscriberDetailsScreenState
       _showSnack('معرف المشترك غير متوفر', success: false);
       return;
     }
+    final sub = _readCurrentSubscriber();
 
     setState(() => _isProcessing = true);
     final notifier = ref.read(subscribersProvider.notifier);
@@ -1517,7 +1553,7 @@ class _SubscriberDetailsScreenState
                     children: [
                       Text('تسديد دين', style: Theme.of(ctx).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(widget.subscriber.fullName,
+                      Text(sub.fullName,
                           style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                             color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
                     ],
@@ -1713,7 +1749,7 @@ class _SubscriberDetailsScreenState
                         setSheet(() => submitting = true);
                         final success = await notifier.payDebt(
                           userId: id,
-                          username: widget.subscriber.username,
+                          username: sub.username,
                           amount: payAmount,
                           paymentNotes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
                         );
@@ -1722,6 +1758,7 @@ class _SubscriberDetailsScreenState
                           _showSnack(success ? 'تم التسديد بنجاح' : 'فشل التسديد', success: success);
                           if (success) {
                             if (id != null) await notifier.refreshSingleSubscriber(id);
+                            final currentSub = _readCurrentSubscriber();
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                             final freshExpDate2 = fresh?['expiration']?.toString() ?? '';
@@ -1737,9 +1774,9 @@ class _SubscriberDetailsScreenState
                                 '{days_remaining}': freshRemDays2,
                               });
                             await _offerPrintReceipt(ReceiptData(
-                              subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
-                              phoneNumber: widget.subscriber.displayPhone,
-                              packageName: widget.subscriber.profileName ?? '',
+                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                              phoneNumber: currentSub.displayPhone,
+                              packageName: currentSub.profileName ?? '',
                               packagePrice: 0,
                               paidAmount: payAmount,
                               debtAmount: newDebt < 0 ? newDebt.abs() : 0,
@@ -1787,6 +1824,7 @@ class _SubscriberDetailsScreenState
       _showSnack('معرف المشترك غير متوفر', success: false);
       return;
     }
+    final sub = _readCurrentSubscriber();
 
     setState(() => _isProcessing = true);
     final notifier = ref.read(subscribersProvider.notifier);
@@ -1838,7 +1876,7 @@ class _SubscriberDetailsScreenState
                     children: [
                       Text('إضافة دين', style: Theme.of(ctx).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(widget.subscriber.fullName,
+                      Text(sub.fullName,
                           style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                             color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
                     ],
@@ -1985,7 +2023,7 @@ class _SubscriberDetailsScreenState
                             title: const Text('تأكيد إضافة الدين',
                                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                             content: Text(
-                              'سيتم إضافة ${AppHelpers.formatMoney(btnAmount)} كدين على "${widget.subscriber.fullName}".\n'
+                              'سيتم إضافة ${AppHelpers.formatMoney(btnAmount)} كدين على "${sub.fullName}".\n'
                               'الدين الجديد: ${AppHelpers.formatMoney(addPreview.abs())}',
                             ),
                             actions: [
@@ -2006,7 +2044,7 @@ class _SubscriberDetailsScreenState
                         setSheet(() => submitting = true);
                         final success = await notifier.addDebt(
                           userId: id,
-                          username: widget.subscriber.username,
+                          username: sub.username,
                           amount: btnAmount,
                           comment: commentCtrl.text.trim().isEmpty ? null : commentCtrl.text.trim(),
                         );
@@ -2015,10 +2053,11 @@ class _SubscriberDetailsScreenState
                           _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
                           if (success) {
                             if (id != null) await notifier.refreshSingleSubscriber(id);
+                            final currentSub = _readCurrentSubscriber();
                             await _offerPrintReceipt(ReceiptData(
-                              subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
-                              phoneNumber: widget.subscriber.displayPhone,
-                              packageName: widget.subscriber.profileName ?? '',
+                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                              phoneNumber: currentSub.displayPhone,
+                              packageName: currentSub.profileName ?? '',
                               debtAmount: btnAmount,
                               remainingAmount: btnAmount,
                               operationType: 'debt_add',
@@ -2055,13 +2094,14 @@ class _SubscriberDetailsScreenState
       _showSnack('معرف المشترك غير متوفر', success: false);
       return;
     }
+    final sub = _readCurrentSubscriber();
 
     final action = enable ? 'تفعيل الحساب' : 'تعطيل الحساب';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد $action'),
-        content: Text('هل تريد $action للمشترك "${widget.subscriber.fullName}"؟'),
+        content: Text('هل تريد $action للمشترك "${sub.fullName}"؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -2100,7 +2140,7 @@ class _SubscriberDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final sub = widget.subscriber;
+    final sub = _watchCurrentSubscriber();
     final theme = Theme.of(context);
     final daysColor = AppHelpers.getRemainingDaysColor(sub.remainingDays);
     final isEnabled = sub.enabled == null || sub.enabled == 1;
@@ -2292,7 +2332,7 @@ class _SubscriberDetailsScreenState
 
   // ── Generate Info Link ───────────────────────────────────────────────
   Future<void> _generateInfoLink() async {
-    final sub = widget.subscriber;
+    final sub = _readCurrentSubscriber();
     final rawPhone = sub.phone;
 
     final waState = ref.read(whatsappProvider);
@@ -2396,7 +2436,7 @@ class _SubscriberDetailsScreenState
   }
 
   void _showActionsSheet(bool isEnabled) {
-    final sub = widget.subscriber;
+    final sub = _readCurrentSubscriber();
     final actions = [
       _FabAction(Icons.edit_outlined, 'تعديل', AppTheme.primary, _showEditSheet),
       _FabAction(Icons.bolt, 'تفعيل', AppTheme.successColor, _activateSubscriber),
