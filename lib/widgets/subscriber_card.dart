@@ -53,6 +53,10 @@ class SubscriberCard extends StatelessWidget {
     final hasPrice = subscriber.price != null &&
         subscriber.price!.isNotEmpty &&
         subscriber.price != '0';
+    final displayName =
+        subscriber.fullName.isNotEmpty ? subscriber.fullName : subscriber.username;
+    final showUsernameLine =
+        subscriber.username.isNotEmpty && subscriber.username != displayName;
 
     return Opacity(
       opacity: isDisabled ? 0.55 : 1.0,
@@ -121,30 +125,53 @@ class SubscriberCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Text(
-                          subscriber.fullName,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13,
+                                color: isDisabled ? Colors.grey : null,
+                                decoration: isDisabled ? TextDecoration.lineThrough : null,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isDisabled) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4)),
+                              child: const Text('معطّل', style: TextStyle(
+                                  fontSize: 8, fontWeight: FontWeight.w700,
+                                  color: Colors.red)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (showUsernameLine) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subscriber.username,
+                          textDirection: TextDirection.ltr,
                           style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 13,
-                            color: isDisabled ? Colors.grey : null,
-                            decoration: isDisabled ? TextDecoration.lineThrough : null,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDisabled
+                                ? Colors.grey
+                                : theme.colorScheme.onSurface.withOpacity(0.5),
+                            decoration:
+                                isDisabled ? TextDecoration.lineThrough : null,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (isDisabled) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4)),
-                          child: const Text('معطّل', style: TextStyle(
-                              fontSize: 8, fontWeight: FontWeight.w700,
-                              color: Colors.red)),
                         ),
                       ],
                     ],
@@ -178,7 +205,7 @@ class SubscriberCard extends StatelessWidget {
               ],
             ),
 
-            // Row 2: username + package/price chips
+            // Row 2: package/price chips
             Padding(
               padding: const EdgeInsets.only(top: 5, right: 46),
               child: Wrap(
@@ -186,11 +213,6 @@ class SubscriberCard extends StatelessWidget {
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    subscriber.username,
-                    style: TextStyle(fontSize: 10,
-                        color: theme.colorScheme.onSurface.withOpacity(0.4)),
-                  ),
                   if (hasProfile) ...[
                     _metaChip(
                       theme: theme,
