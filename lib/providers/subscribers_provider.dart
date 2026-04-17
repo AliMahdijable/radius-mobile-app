@@ -675,7 +675,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   void setFilter(String filter) {
     state = state.copyWith(filter: filter);
-    if (filter == 'online' && state.onlineUsers.isEmpty) {
+    if (filter == 'online') {
       loadOnlineUsers();
     }
   }
@@ -759,8 +759,40 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           );
         }).toList();
 
-        dev.log('Online users loaded: ${list.length}', name: 'SUBS');
-        state = state.copyWith(onlineUsers: list);
+        final subs = state.subscribers;
+        final subMap = <String, SubscriberModel>{};
+        for (final s in subs) {
+          subMap[s.username.toLowerCase()] = s;
+        }
+
+        final enriched = list.map((o) {
+          final match = subMap[o.username.toLowerCase()];
+          if (match != null) {
+            return SubscriberModel(
+              idx: o.idx, username: o.username,
+              firstname: match.firstname.isNotEmpty ? match.firstname : o.firstname,
+              lastname: match.lastname.isNotEmpty ? match.lastname : o.lastname,
+              phone: o.phone ?? match.phone,
+              mobile: o.mobile ?? match.mobile,
+              expiration: o.expiration ?? match.expiration,
+              remainingDays: o.remainingDays ?? match.remainingDays,
+              notes: o.notes ?? match.notes,
+              profileName: o.profileName ?? match.profileName,
+              profileId: o.profileId ?? match.profileId,
+              balance: match.balance, price: match.price,
+              parentUsername: o.parentUsername ?? match.parentUsername,
+              isOnlineFlag: true, enabled: 1,
+              ipAddress: o.ipAddress, macAddress: o.macAddress,
+              sessionTime: o.sessionTime,
+              downloadBytes: o.downloadBytes, uploadBytes: o.uploadBytes,
+              deviceVendor: o.deviceVendor,
+            );
+          }
+          return o;
+        }).toList();
+
+        dev.log('Online users loaded: ${enriched.length}', name: 'SUBS');
+        state = state.copyWith(onlineUsers: enriched);
       }
     } catch (e) {
       dev.log('loadOnlineUsers error: $e', name: 'SUBS');
