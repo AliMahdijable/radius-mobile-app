@@ -65,6 +65,17 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
     };
   }
 
+  void _runQuickSearch() {
+    final quickSearchValue = _searchCtrl.text.trim();
+    setState(() {
+      if (quickSearchValue.isNotEmpty) {
+        // Quick search should never stay locked to an exact advanced username.
+        _advUsername = '';
+      }
+    });
+    _load(page: 1);
+  }
+
   Future<void> _load({int page = 1}) async {
     final filters = _buildSearchFilters();
     await ref.read(reportsProvider.notifier).fetchSessions(
@@ -296,7 +307,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                             _advMac = mac;
                             _advFromDate = fromDate;
                             _advToDate = toDate;
-                            _searchCtrl.text = username;
+                            _searchCtrl.clear();
                           });
                           _load(page: 1);
                         },
@@ -350,8 +361,15 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                 textDirection: TextDirection.ltr,
                 textAlign: TextAlign.left,
                 textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _load(page: 1),
-                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _runQuickSearch(),
+                onChanged: (value) {
+                  if (_advUsername.isNotEmpty &&
+                      value.trim() != _advUsername.trim()) {
+                    setState(() => _advUsername = '');
+                    return;
+                  }
+                  setState(() {});
+                },
                 decoration: InputDecoration(
                   hintText: 'ابحث بجزء من اسم المستخدم',
                   prefixIcon: const Icon(Icons.search, size: 20),
@@ -387,7 +405,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
               ),
             ),
             const SizedBox(width: 6),
-            _SmallBtn(Icons.search_rounded, () => _load(page: 1)),
+            _SmallBtn(Icons.search_rounded, _runQuickSearch),
             const SizedBox(width: 4),
             _SmallBtn(Icons.download_rounded, _exportCsv),
             const SizedBox(width: 4),
