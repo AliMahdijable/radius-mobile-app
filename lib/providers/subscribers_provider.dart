@@ -7,6 +7,7 @@ import '../core/network/dio_client.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/encryption_service.dart';
 import '../models/subscriber_model.dart';
+import 'dashboard_provider.dart';
 
 class SubscribersState {
   final List<SubscriberModel> subscribers;
@@ -21,8 +22,8 @@ class SubscribersState {
   final String sortBy;
   final String sortDirection;
   final Map<String, Map<String, dynamic>> lastPayments;
-
   final String? managerFilter;
+  final int? sas4OfflineCount;
 
   const SubscribersState({
     this.subscribers = const [],
@@ -38,6 +39,7 @@ class SubscribersState {
     this.sortDirection = 'asc',
     this.lastPayments = const {},
     this.managerFilter,
+    this.sas4OfflineCount,
   });
 
   List<String> get availableManagers {
@@ -136,7 +138,14 @@ class SubscribersState {
   int get activeCount => _managerScoped.where((s) => s.isActive).length;
   int get expiredCount => _managerScoped.where((s) => s.isExpired).length;
   int get onlineCount => _managerScoped.where((s) => s.isOnline).length;
-  int get offlineCount => _managerScoped.where((s) => s.isOffline).length;
+  int get offlineCount {
+    // Use SAS4 offline count from dashboard if available (more accurate from backend)
+    if (sas4OfflineCount != null) {
+      return sas4OfflineCount!;
+    }
+    // Fallback to local calculation
+    return _managerScoped.where((s) => s.isOffline).length;
+  }
   int get debtorsCount => _managerScoped.where((s) => s.hasDebt).length;
   int get nearExpiryCount => _managerScoped.where((s) => s.isNearExpiry).length;
 
@@ -154,6 +163,7 @@ class SubscribersState {
     String? sortDirection,
     Map<String, Map<String, dynamic>>? lastPayments,
     String? managerFilter,
+    int? sas4OfflineCount,
     bool clearManager = false,
   }) {
     return SubscribersState(
@@ -170,6 +180,7 @@ class SubscribersState {
       sortDirection: sortDirection ?? this.sortDirection,
       lastPayments: lastPayments ?? this.lastPayments,
       managerFilter: clearManager ? null : (managerFilter ?? this.managerFilter),
+      sas4OfflineCount: sas4OfflineCount ?? this.sas4OfflineCount,
     );
   }
 }
@@ -178,8 +189,9 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   final Dio _backendDio;
   final Dio _sas4Dio;
   final StorageService _storage;
+  final Ref _ref;
 
-  SubscribersNotifier(this._backendDio, this._sas4Dio, this._storage)
+  SubscribersNotifier(this._backendDio, this._sas4Dio, this._storage, this._ref)
       : super(const SubscribersState());
 
   Map<int, Map<String, dynamic>> _priceMap = {};
@@ -197,11 +209,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
     state = state.copyWith(isLoading: true, error: null);
     try {
-      if (_priceMap.isEmpty) {
-        await _loadPriceList(adminId);
-      }
-
-      if (state.packages.isEmpty) {
+      if (state.packages.isEmpty || _priceMap.isEmpty) {
         await loadPackages();
       }
 
@@ -342,10 +350,18 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
       dev.log('Final: ${enriched.length} subs, online=${enriched.where((s) => s.isOnline).length}, expired=${enriched.where((s) => s.isExpired).length}', name: 'SUBS');
 
+      final localOffline = enriched.where((s) => s.isOffline).length;
+      try {
+        _ref.read(dashboardProvider.notifier).updateOfflineCount(localOffline);
+      } catch (e) {
+        dev.log('Could not update dashboard offline count: $e', name: 'SUBS');
+      }
+
       state = state.copyWith(
         subscribers: enriched,
         isLoading: false,
         totalRecords: enriched.length,
+        sas4OfflineCount: localOffline,
       );
 
       loadLastPayments();
@@ -1006,6 +1022,39 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
+  Future<void> refreshSingleSubscriber(int userId) async {
+    try {
+      final details = await getSubscriberDetails(userId);
+      if (details == null) return;
+      final idx = state.subscribers.indexWhere((s) => s.idx == userId.toString());
+      if (idx == -1) return;
+      final existing = state.subscribers[idx];
+      final merged = <String, dynamic>{
+        ...details,
+        'phone': existing.phone,
+        'mobile': existing.mobile,
+        'parent_username': existing.parentUsername,
+      };
+      var updated = SubscriberModel.fromJson(merged);
+      updated = _enrichWithPackage(updated, state.packages);
+      updated = _enrichWithPriceList(updated);
+      final newList = List<SubscriberModel>.from(state.subscribers);
+      newList[idx] = updated;
+      final localOffline = newList.where((s) => s.isOffline).length;
+      try { _ref.read(dashboardProvider.notifier).updateOfflineCount(localOffline); } catch (_) {}
+      state = state.copyWith(subscribers: newList, sas4OfflineCount: localOffline);
+    } catch (e) {
+      dev.log('refreshSingleSubscriber error: $e', name: 'SUBS');
+    }
+  }
+
+  void removeSubscriberFromList(int userId) {
+    final newList = state.subscribers.where((s) => s.idx != userId.toString()).toList();
+    final localOffline = newList.where((s) => s.isOffline).length;
+    try { _ref.read(dashboardProvider.notifier).updateOfflineCount(localOffline); } catch (_) {}
+    state = state.copyWith(subscribers: newList, totalRecords: newList.length, sas4OfflineCount: localOffline);
+  }
+
   Future<Map<String, dynamic>?> getActivationData(int userId) async {
     try {
       final response =
@@ -1498,5 +1547,6 @@ final subscribersProvider =
     ref.read(backendDioProvider),
     ref.read(sas4DioProvider),
     ref.read(storageServiceProvider),
+    ref,
   );
 });

@@ -418,7 +418,7 @@ class _SubscriberDetailsScreenState
                           Navigator.pop(ctx);
                           _showSnack(anySuccess ? 'تم التعديل بنجاح' : 'فشل بعض التعديلات',
                               success: anySuccess);
-                          await notifier.loadSubscribers();
+                          if (id != null) await notifier.refreshSingleSubscriber(id);
                           if (mounted) context.pop();
                         }
                       } finally {
@@ -597,7 +597,8 @@ class _SubscriberDetailsScreenState
 
     if (success) {
       _showSnack('تم حذف المشترك بنجاح');
-      ref.read(subscribersProvider.notifier).loadSubscribers();
+      final delId = _subscriberId;
+      if (delId != null) ref.read(subscribersProvider.notifier).removeSubscriberFromList(delId);
       context.pop();
     } else {
       _showSnack('فشل حذف المشترك — قد يكون عليه دين', success: false);
@@ -788,7 +789,7 @@ class _SubscriberDetailsScreenState
                       _showSnack(success ? 'تم التمديد بنجاح' : 'فشل التمديد',
                           success: success);
                       if (success) {
-                        await notifier.loadSubscribers();
+                        if (id != null) await notifier.refreshSingleSubscriber(id);
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final sub = widget.subscriber;
@@ -1200,7 +1201,7 @@ class _SubscriberDetailsScreenState
                       Navigator.pop(ctx);
                       _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
                       if (success) {
-                        await notifier.loadSubscribers();
+                        if (id != null) await notifier.refreshSingleSubscriber(id);
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                         final freshExpDate = fresh?['expiration']?.toString() ?? '';
@@ -1638,7 +1639,7 @@ class _SubscriberDetailsScreenState
                           Navigator.pop(ctx);
                           _showSnack(success ? 'تم التسديد بنجاح' : 'فشل التسديد', success: success);
                           if (success) {
-                            await notifier.loadSubscribers();
+                            if (id != null) await notifier.refreshSingleSubscriber(id);
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                             final freshExpDate2 = fresh?['expiration']?.toString() ?? '';
@@ -1931,7 +1932,7 @@ class _SubscriberDetailsScreenState
                           Navigator.pop(ctx);
                           _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
                           if (success) {
-                            await notifier.loadSubscribers();
+                            if (id != null) await notifier.refreshSingleSubscriber(id);
                             await _offerPrintReceipt(ReceiptData(
                               subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
                               phoneNumber: widget.subscriber.displayPhone,
@@ -2010,7 +2011,8 @@ class _SubscriberDetailsScreenState
       success: success,
     );
     if (success) {
-      ref.read(subscribersProvider.notifier).loadSubscribers();
+      final id = _subscriberId;
+      if (id != null) await ref.read(subscribersProvider.notifier).refreshSingleSubscriber(id);
     }
   }
 

@@ -22,15 +22,28 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  bool _hasTriedLoad = false;
   Timer? _autoRefresh;
 
   @override
   void initState() {
     super.initState();
-    _autoRefresh = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (mounted) _refresh();
+    _autoRefresh = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) ref.read(dashboardProvider.notifier).refreshCountsOnly();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAndLoad());
+  }
+
+  void _checkAndLoad() {
+    if (!mounted) return;
+    final dash = ref.read(dashboardProvider);
+    final auth = ref.read(authProvider);
+    if (auth.user != null && !dash.isLoading && !dash.hasLoaded) {
+      _tryLoad();
+      final subs = ref.read(subscribersProvider);
+      if (subs.subscribers.isEmpty && !subs.isLoading) {
+        ref.read(subscribersProvider.notifier).loadSubscribers();
+      }
+    }
   }
 
   @override
@@ -42,12 +55,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _tryLoad() {
     final user = ref.read(authProvider).user;
     if (user == null) return;
-    _hasTriedLoad = true;
     ref
         .read(dashboardProvider.notifier)
         .loadDashboard(adminId: user.id, token: user.token);
     ref.read(whatsappProvider.notifier).fetchStatus();
-    ref.read(subscribersProvider.notifier).loadPackages();
   }
 
   Future<void> _refresh() async {
@@ -58,6 +69,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .loadDashboard(adminId: user.id, token: user.token);
     if (!mounted) return;
     await ref.read(whatsappProvider.notifier).fetchStatus();
+  }
+
+  Widget _buildErrorState(ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.wifi_off_rounded, size: 64, color: theme.colorScheme.outline),
+            const SizedBox(height: 16),
+            Text('لا يوجد اتصال بالشبكة',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text('تحقق من الاتصال ثم اضغط إعادة المحاولة',
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _refresh,
+              icon: const Icon(Icons.refresh),
+              label: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   static String _formatDebt(double amount) {
@@ -91,19 +130,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final realDebtors = subsState.subscribers.where((s) => s.hasDebt).length;
     final realTotalDebt = subsState.subscribers.where((s) => s.hasDebt).fold<double>(0, (sum, s) => sum + s.debtAmount.abs());
 
-    if (authState.status == AuthStatus.authenticated &&
-        !_hasTriedLoad &&
-        !dash.isLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _tryLoad();
-      });
+    if (authState.status == AuthStatus.authenticated && !dash.isLoading && !dash.hasLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkAndLoad());
     }
+
+    final noData = dash.totalSubscribers == 0;
 
     return RefreshIndicator(
       onRefresh: _refresh,
-      child: dash.isLoading && dash.totalSubscribers == 0
+      child: !dash.hasLoaded
           ? const ShimmerList(itemCount: 4)
-          : ListView(
+          : dash.error != null && noData
+              ? _buildErrorState(theme)
+              : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               children: [
                 if (dash.error != null)
@@ -135,6 +174,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
                 // Subscribers Ring Card
                 _SubscribersRingCard(
+                  isLoading: !dash.hasLoaded,
+                  offlineLoading: !dash.offlineLoaded,
                   total: dash.totalSubscribers,
                   active: dash.activeSubscribers,
                   expired: dash.expiredSubscribers,
@@ -314,6 +355,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 class _SubscribersRingCard extends StatelessWidget {
   final int total, active, expired, online, offline, debtors, nearExpiry;
   final double totalDebt;
+  final bool isLoading;
+  final bool offlineLoading;
   final VoidCallback onTapActive, onTapExpired, onTapOnline, onTapOffline,
       onTapTotal, onTapDebtors, onTapNearExpiry;
 
@@ -333,6 +376,8 @@ class _SubscribersRingCard extends StatelessWidget {
     required this.onTapTotal,
     required this.onTapDebtors,
     required this.onTapNearExpiry,
+    this.isLoading = false,
+    this.offlineLoading = false,
   });
 
   static String _fmtDebt(double v) {
@@ -377,11 +422,13 @@ class _SubscribersRingCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '$total',
-                            style: const TextStyle(
+                            isLoading ? '--' : '$total',
+                            style: TextStyle(
                               fontSize: 30,
                               fontWeight: FontWeight.w900,
-                              color: AppTheme.primary,
+                              color: isLoading
+                                  ? AppTheme.primary.withValues(alpha: 0.3)
+                                  : AppTheme.primary,
                               height: 1,
                             ),
                           ),
@@ -407,45 +454,20 @@ class _SubscribersRingCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    _RingStatRow(
-                      color: AppTheme.teal600,
-                      icon: Icons.check_circle_rounded,
-                      label: 'الفعالين',
-                      value: active,
-                      onTap: onTapActive,
-                    ),
+                    _RingStatRow(color: AppTheme.teal600, icon: Icons.check_circle_rounded,
+                      label: 'الفعالين', value: active, onTap: onTapActive, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(
-                      color: AppTheme.teal400,
-                      icon: Icons.wifi_rounded,
-                      label: 'متصل الآن',
-                      value: online,
-                      onTap: onTapOnline,
-                    ),
+                    _RingStatRow(color: AppTheme.teal400, icon: Icons.wifi_rounded,
+                      label: 'متصل الآن', value: online, onTap: onTapOnline, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(
-                      color: const Color(0xFF90A4AE),
-                      icon: Icons.wifi_off_rounded,
-                      label: 'غير متصل',
-                      value: offline,
-                      onTap: onTapOffline,
-                    ),
+                    _RingStatRow(color: const Color(0xFF90A4AE), icon: Icons.wifi_off_rounded,
+                      label: 'غير متصل', value: offline, onTap: onTapOffline, isLoading: isLoading || offlineLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(
-                      color: const Color(0xFFEF5350),
-                      icon: Icons.timer_off_rounded,
-                      label: 'منتهي',
-                      value: expired,
-                      onTap: onTapExpired,
-                    ),
+                    _RingStatRow(color: const Color(0xFFEF5350), icon: Icons.timer_off_rounded,
+                      label: 'منتهي', value: expired, onTap: onTapExpired, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(
-                      color: Colors.deepOrange,
-                      icon: Icons.warning_amber_rounded,
-                      label: 'قريب الانتهاء',
-                      value: nearExpiry,
-                      onTap: onTapNearExpiry,
-                    ),
+                    _RingStatRow(color: Colors.deepOrange, icon: Icons.warning_amber_rounded,
+                      label: 'قريب الانتهاء', value: nearExpiry, onTap: onTapNearExpiry, isLoading: isLoading),
                   ],
                 ),
               ),
@@ -564,6 +586,7 @@ class _RingStatRow extends StatelessWidget {
   final String label;
   final int value;
   final VoidCallback onTap;
+  final bool isLoading;
 
   const _RingStatRow({
     required this.color,
@@ -571,6 +594,7 @@ class _RingStatRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onTap,
+    this.isLoading = false,
   });
 
   @override
@@ -601,11 +625,11 @@ class _RingStatRow extends StatelessWidget {
             ),
           ),
           Text(
-            '$value',
+            isLoading ? '--' : '$value',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: color,
+              color: isLoading ? color.withValues(alpha: 0.3) : color,
             ),
           ),
           const SizedBox(width: 4),

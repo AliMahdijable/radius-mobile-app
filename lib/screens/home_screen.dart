@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dashboard_screen.dart';
 import 'subscribers/subscribers_screen.dart';
@@ -49,7 +51,7 @@ String _formatRemaining(String? expiration) {
   }
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _alertsEnabled = true;
   bool _alertsDismissed = false;
@@ -66,7 +68,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAlertsPref();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      Future.microtask(() {
+        if (!mounted) return;
+        ref.read(dashboardProvider.notifier).refreshCountsOnly();
+        final subs = ref.read(subscribersProvider);
+        if (subs.subscribers.isNotEmpty && !subs.isLoading) {
+          ref.read(subscribersProvider.notifier).loadSubscribers();
+        }
+      });
+    }
   }
 
   Future<void> _loadAlertsPref() async {
@@ -377,7 +400,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           setState(() => _currentIndex = 0);
           return;
         }
-        final exit = await showDialog<bool>(
+        final shouldExit = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('الخروج من التطبيق'),
@@ -395,8 +418,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         );
-        if (exit == true && context.mounted) {
-          Navigator.of(context).pop();
+        if (shouldExit == true) {
+          // Clean exit: close all resources and exit cleanly
+          WidgetsBinding.instance.removeObserver(this);
+          Future.delayed(const Duration(milliseconds: 200), () {
+            SystemNavigator.pop();
+          });
         }
       },
       child: Scaffold(

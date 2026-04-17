@@ -25,6 +25,8 @@ class DashboardState {
   final List<Map<String, dynamic>> expiredTodayList;
   final List<Map<String, dynamic>> expiredOverdueList;
   final bool isLoading;
+  final bool hasLoaded;
+  final bool offlineLoaded;
   final String? error;
 
   const DashboardState({
@@ -47,6 +49,8 @@ class DashboardState {
     this.expiredTodayList = const [],
     this.expiredOverdueList = const [],
     this.isLoading = false,
+    this.hasLoaded = false,
+    this.offlineLoaded = false,
     this.error,
   });
 
@@ -72,6 +76,8 @@ class DashboardState {
     List<Map<String, dynamic>>? expiredTodayList,
     List<Map<String, dynamic>>? expiredOverdueList,
     bool? isLoading,
+    bool? hasLoaded,
+    bool? offlineLoaded,
     String? error,
   }) {
     return DashboardState(
@@ -94,6 +100,8 @@ class DashboardState {
       expiredTodayList: expiredTodayList ?? this.expiredTodayList,
       expiredOverdueList: expiredOverdueList ?? this.expiredOverdueList,
       isLoading: isLoading ?? this.isLoading,
+      hasLoaded: hasLoaded ?? this.hasLoaded,
+      offlineLoaded: offlineLoaded ?? this.offlineLoaded,
       error: error,
     );
   }
@@ -103,6 +111,32 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   final Dio _sas4Dio;
 
   DashboardNotifier(this._sas4Dio) : super(const DashboardState());
+
+  void updateOfflineCount(int count) {
+    state = state.copyWith(offlineCount: count, offlineLoaded: true);
+  }
+
+  Future<void> refreshCountsOnly() async {
+    try {
+      final results = await Future.wait([
+        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+      ]);
+      final total  = _parseWidgetInt(results[0].data);
+      final active = _parseWidgetInt(results[1].data);
+      final expired = _parseWidgetInt(results[2].data);
+      final online = _parseWidgetInt(results[3].data);
+      if (total == 0 && active == 0) return;
+      state = state.copyWith(
+        totalSubscribers: total,
+        activeSubscribers: active,
+        expiredSubscribers: expired,
+        onlineCount: online,
+      );
+    } catch (_) {}
+  }
 
   static int? _remainingDaysInt(dynamic days) {
     if (days == null) return null;
@@ -174,7 +208,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       // تشغيل كل الطلبات بالتوازي لتسريع التحميل
       final offlinePayload = EncryptionService.encrypt({
         'page': 1, 'count': 1, 'sortBy': 'username', 'direction': 'asc',
-        'search': '', 'status': 1, 'connection': 1, 'profile_id': -1,
+        'search': '', 'status': 1, 'connection': 0, 'profile_id': -1,
         'parent_id': -1, 'sub_users': 1, 'mac': '', 'columns': ['idx'],
       });
       final expiredPayload = EncryptionService.encrypt({
@@ -265,22 +299,14 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         activities = actList.map((e) => Map<String, dynamic>.from(e)).toList();
       }
 
-      // معالجة أعداد الأوفلاين والمنتهين
-      int offline = active - online;
+      // معالجة عدد المنتهين فقط — الأوفلاين يُحدَّث من المشتركين عبر updateOfflineCount
       int expiredActual = expired;
-      for (int i = 8; i <= 9; i++) {
-        dynamic parsed = allResults[i].data;
-        if (parsed is String) parsed = EncryptionService.decrypt(parsed);
-        if (parsed is Map) {
-          final tc = parsed['totalCount'] ?? parsed['total'] ?? parsed['count'];
-          if (tc != null) {
-            final val = tc is int ? tc : (int.tryParse(tc.toString()) ?? 0);
-            if (i == 8) offline = val;
-            if (i == 9) expiredActual = val;
-          }
-        }
+      dynamic expParsed = allResults[9].data;
+      if (expParsed is String) expParsed = EncryptionService.decrypt(expParsed);
+      if (expParsed is Map) {
+        final tc = expParsed['totalCount'] ?? expParsed['total'] ?? expParsed['count'];
+        if (tc != null) expiredActual = tc is int ? tc : (int.tryParse(tc.toString()) ?? expired);
       }
-      if (offline < 0) offline = 0;
 
       expiredOverdueList.sort((a, b) {
         final da = _remainingDaysInt(a['remaining_days']) ?? 0;
@@ -293,7 +319,6 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         activeSubscribers: active,
         expiredSubscribers: expiredActual,
         onlineCount: online,
-        offlineCount: offline < 0 ? 0 : offline,
         managerBalance: balance,
         managerPoints: points,
         nearExpiryCount: nearExpiry,
@@ -308,14 +333,16 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         expiredTodayList: expiredTodayList,
         expiredOverdueList: expiredOverdueList,
         isLoading: false,
+        hasLoaded: true,
       );
     } on DioException catch (e) {
       state = state.copyWith(
         isLoading: false,
+        hasLoaded: true,
         error: 'خطأ اتصال: ${e.type.name}',
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: '$e');
+      state = state.copyWith(isLoading: false, hasLoaded: true, error: '$e');
     } finally {
       backendDio.close();
     }
