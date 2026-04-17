@@ -50,6 +50,9 @@ class SubscriberCard extends StatelessWidget {
     final hasPhone = subscriber.displayPhone.trim().isNotEmpty;
     final hasExpiration =
         subscriber.expiration != null && subscriber.expiration!.trim().isNotEmpty;
+    final hasPrice = subscriber.price != null &&
+        subscriber.price!.isNotEmpty &&
+        subscriber.price != '0';
 
     return Opacity(
       opacity: isDisabled ? 0.55 : 1.0,
@@ -175,10 +178,13 @@ class SubscriberCard extends StatelessWidget {
               ],
             ),
 
-            // Row 2: username · package · price · debt
+            // Row 2: username + package/price chips
             Padding(
               padding: const EdgeInsets.only(top: 5, right: 46),
-              child: Row(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     subscriber.username,
@@ -186,27 +192,33 @@ class SubscriberCard extends StatelessWidget {
                         color: theme.colorScheme.onSurface.withOpacity(0.4)),
                   ),
                   if (hasProfile) ...[
-                    _dot(theme),
-                    Flexible(
-                      child: Text(
-                        subscriber.profileName!,
-                        style: TextStyle(fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary.withOpacity(0.7)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    _metaChip(
+                      theme: theme,
+                      icon: Icons.wifi_rounded,
+                      text: subscriber.profileName!,
+                      iconColor: isDisabled ? Colors.grey : AppTheme.primary,
+                      textColor: isDisabled ? Colors.grey : AppTheme.primary,
+                      backgroundColor: isDisabled
+                          ? Colors.grey.withOpacity(0.08)
+                          : AppTheme.primary.withOpacity(0.10),
+                      borderColor: isDisabled
+                          ? Colors.grey.withOpacity(0.12)
+                          : AppTheme.primary.withOpacity(0.18),
                     ),
                   ],
-                  if (subscriber.price != null &&
-                      subscriber.price!.isNotEmpty &&
-                      subscriber.price != '0') ...[
-                    _dot(theme),
-                    Text(
-                      AppHelpers.formatMoney(subscriber.price),
-                      style: TextStyle(fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                  if (hasPrice) ...[
+                    _metaChip(
+                      theme: theme,
+                      icon: Icons.sell_outlined,
+                      text: AppHelpers.formatMoney(subscriber.price),
+                      iconColor: isDisabled ? Colors.grey : AppTheme.warningColor,
+                      textColor: isDisabled ? Colors.grey : AppTheme.warningColor,
+                      backgroundColor: isDisabled
+                          ? Colors.grey.withOpacity(0.08)
+                          : AppTheme.warningColor.withOpacity(0.10),
+                      borderColor: isDisabled
+                          ? Colors.grey.withOpacity(0.12)
+                          : AppTheme.warningColor.withOpacity(0.18),
                     ),
                   ],
                 ],
@@ -324,29 +336,24 @@ class SubscriberCard extends StatelessWidget {
     return '0 يوم';
   }
 
-  static Widget _dot(ThemeData theme) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 5),
-      width: 3, height: 3,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withOpacity(0.2),
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-
   static Widget _metaChip({
     required ThemeData theme,
     required IconData icon,
     required String text,
     required Color iconColor,
+    Color? textColor,
+    Color? backgroundColor,
+    Color? borderColor,
     bool isLtr = false,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withOpacity(0.035),
+        color: backgroundColor ?? theme.colorScheme.onSurface.withOpacity(0.035),
         borderRadius: BorderRadius.circular(8),
+        border: borderColor == null
+            ? null
+            : Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -359,7 +366,7 @@ class SubscriberCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withOpacity(0.55),
+              color: textColor ?? theme.colorScheme.onSurface.withOpacity(0.55),
             ),
           ),
         ],
