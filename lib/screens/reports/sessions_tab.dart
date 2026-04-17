@@ -52,38 +52,16 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       _advFromDate.isNotEmpty ||
       _advToDate.isNotEmpty;
 
-  bool _looksLikeIp(String value) =>
-      RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value);
-
-  bool _looksLikeMac(String value) => RegExp(
-        r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$',
-      ).hasMatch(value);
-
   Map<String, String> _buildSearchFilters() {
-    final query = _searchCtrl.text.trim();
-    final hasSpecificAdvancedFilters =
-        _advUsername.isNotEmpty || _advIp.isNotEmpty || _advMac.isNotEmpty;
+    final usernameQuery = _searchCtrl.text.trim();
 
     return {
-      'search': query,
+      'search': '',
       'username': _advUsername.trim().isNotEmpty
           ? _advUsername.trim()
-          : (!hasSpecificAdvancedFilters &&
-                  query.isNotEmpty &&
-                  !_looksLikeIp(query) &&
-                  !_looksLikeMac(query))
-              ? query
-              : '',
-      'ip': _advIp.trim().isNotEmpty
-          ? _advIp.trim()
-          : (!hasSpecificAdvancedFilters && _looksLikeIp(query))
-              ? query
-              : '',
-      'mac': _advMac.trim().isNotEmpty
-          ? _advMac.trim()
-          : (!hasSpecificAdvancedFilters && _looksLikeMac(query))
-              ? query
-              : '',
+          : usernameQuery,
+      'ip': _advIp.trim(),
+      'mac': _advMac.trim(),
     };
   }
 
@@ -318,11 +296,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                             _advMac = mac;
                             _advFromDate = fromDate;
                             _advToDate = toDate;
-                            _searchCtrl.text = username.isNotEmpty
-                                ? username
-                                : ip.isNotEmpty
-                                    ? ip
-                                    : mac;
+                            _searchCtrl.text = username;
                           });
                           _load(page: 1);
                         },
@@ -379,7 +353,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                 onSubmitted: (_) => _load(page: 1),
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: 'بحث باليوزر أو IP أو MAC',
+                  hintText: 'بحث باسم المستخدم',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
