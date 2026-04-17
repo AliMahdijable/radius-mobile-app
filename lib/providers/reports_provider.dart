@@ -300,52 +300,52 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final payload = {
-        'page': page,
-        'count': count,
-        'sortBy': sortBy,
-        'direction': direction,
-        'search': search,
-        'columns': [
-          'username',
-          'acctstarttime',
-          'acctstoptime',
-          'framedipaddress',
-          'nasipaddress',
-          'callingstationid',
-          'acctinputoctets',
-          'acctoutputoctets',
-          'calledstationid',
-          'nasportid',
-          'acctterminatecause',
-        ],
-        'framedipaddress': ipAddress,
-        'username': username,
-        'mac': mac,
-        'start_date': fromDate ?? '',
-        'end_date': toDate ?? '',
-      };
-
-      final encrypted = EncryptionService.encrypt(payload);
-
-      final res = await _sas4Dio.post(
-        ApiConstants.sas4UserSessions,
-        data: 'payload=$encrypted',
-        options: Options(
-          contentType: 'application/x-www-form-urlencoded',
-        ),
+      final parsed = await _fetchSessionsPage(
+        page: page,
+        count: count,
+        search: search,
+        username: username,
+        ipAddress: ipAddress,
+        mac: mac,
+        sortBy: sortBy,
+        direction: direction,
+        fromDate: fromDate,
+        toDate: toDate,
       );
 
-      dynamic resData = res.data;
-      if (resData is String) {
-        resData = EncryptionService.decrypt(resData);
+      final total = parsed['total'] as int;
+      final sessions =
+          List<Map<String, dynamic>>.from(parsed['sessions'] as List);
+
+      // Match the web behavior when the page size is large enough to pull all pages.
+      if (page == 1 && count >= 100 && count < total) {
+        final totalPages = (total / count).ceil();
+        for (var currentPage = 2; currentPage <= totalPages; currentPage++) {
+          final pageResult = await _fetchSessionsPage(
+            page: currentPage,
+            count: count,
+            search: search,
+            username: username,
+            ipAddress: ipAddress,
+            mac: mac,
+            sortBy: sortBy,
+            direction: direction,
+            fromDate: fromDate,
+            toDate: toDate,
+          );
+          final pageSessions =
+              pageResult['sessions'] as List<Map<String, dynamic>>;
+          if (pageSessions.isNotEmpty) {
+            sessions.addAll(pageSessions);
+          }
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
       }
 
-      final parsed = _parseSessionsResponse(resData, page);
       state = state.copyWith(
         loading: false,
-        sessions: parsed['sessions'] as List<Map<String, dynamic>>,
-        sessionsTotal: parsed['total'] as int,
+        sessions: sessions,
+        sessionsTotal: total,
         sessionsPage: page,
       );
     } catch (e) {
@@ -427,6 +427,62 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     );
   }
 
+  Future<Map<String, dynamic>> _fetchSessionsPage({
+    required int page,
+    required int count,
+    required String search,
+    required String username,
+    required String ipAddress,
+    required String mac,
+    required String sortBy,
+    required String direction,
+    String? fromDate,
+    String? toDate,
+  }) async {
+    final payload = {
+      'page': page,
+      'count': count,
+      'sortBy': sortBy,
+      'direction': direction,
+      'search': search,
+      'columns': [
+        'username',
+        'acctstarttime',
+        'acctstoptime',
+        'framedipaddress',
+        'nasipaddress',
+        'callingstationid',
+        'acctinputoctets',
+        'acctoutputoctets',
+        'calledstationid',
+        'nasportid',
+        'acctterminatecause',
+      ],
+      'framedipaddress': ipAddress,
+      'username': username,
+      'mac': mac,
+      'start_date': fromDate ?? '',
+      'end_date': toDate ?? '',
+    };
+
+    final encrypted = EncryptionService.encrypt(payload);
+
+    final res = await _sas4Dio.post(
+      ApiConstants.sas4UserSessions,
+      data: 'payload=$encrypted',
+      options: Options(
+        contentType: 'application/x-www-form-urlencoded',
+      ),
+    );
+
+    dynamic resData = res.data;
+    if (resData is String) {
+      resData = EncryptionService.decrypt(resData);
+    }
+
+    return _parseSessionsResponse(resData, page);
+  }
+
   Map<String, dynamic> _parseSessionsResponse(dynamic data, int page) {
     List rawRows = const [];
     var total = 0;
@@ -450,9 +506,20 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       final row = rawRows[i];
       if (row is! Map) continue;
       final map = Map<String, dynamic>.from(row);
-      map['id'] ??=
-          map['radacctid'] ?? map['acctsessionid'] ?? '$page-$i';
-      sessions.add(map);
+      sessions.add({
+        'id': map['id'] ?? map['radacctid'] ?? map['acctsessionid'] ?? '$page-$i',
+        'username': map['username']?.toString() ?? '-',
+        'acctstarttime': map['acctstarttime']?.toString() ?? '-',
+        'acctstoptime': map['acctstoptime']?.toString() ?? '-',
+        'framedipaddress': map['framedipaddress']?.toString() ?? '-',
+        'nasipaddress': map['nasipaddress']?.toString() ?? '-',
+        'callingstationid': map['callingstationid']?.toString() ?? '-',
+        'acctinputoctets': map['acctinputoctets'] ?? 0,
+        'acctoutputoctets': map['acctoutputoctets'] ?? 0,
+        'calledstationid': map['calledstationid']?.toString() ?? '-',
+        'nasportid': map['nasportid']?.toString() ?? '-',
+        'acctterminatecause': map['acctterminatecause']?.toString() ?? '-',
+      });
     }
 
     return {

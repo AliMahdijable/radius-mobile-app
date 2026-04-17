@@ -49,21 +49,38 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       _advFromDate.isNotEmpty ||
       _advToDate.isNotEmpty;
 
+  bool _looksLikeIp(String value) =>
+      RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value);
+
+  bool _looksLikeMac(String value) => RegExp(
+        r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$',
+      ).hasMatch(value);
+
   Map<String, String> _buildSearchFilters() {
-    if (_advUsername.isNotEmpty || _advIp.isNotEmpty || _advMac.isNotEmpty) {
-      return {
-        'search': '',
-        'username': _advUsername.trim(),
-        'ip': _advIp.trim(),
-        'mac': _advMac.trim(),
-      };
-    }
+    final query = _searchCtrl.text.trim();
+    final hasSpecificAdvancedFilters =
+        _advUsername.isNotEmpty || _advIp.isNotEmpty || _advMac.isNotEmpty;
 
     return {
-      'search': _searchCtrl.text.trim(),
-      'username': '',
-      'ip': '',
-      'mac': '',
+      'search': query,
+      'username': _advUsername.trim().isNotEmpty
+          ? _advUsername.trim()
+          : (!hasSpecificAdvancedFilters &&
+                  query.isNotEmpty &&
+                  !_looksLikeIp(query) &&
+                  !_looksLikeMac(query))
+              ? query
+              : '',
+      'ip': _advIp.trim().isNotEmpty
+          ? _advIp.trim()
+          : (!hasSpecificAdvancedFilters && _looksLikeIp(query))
+              ? query
+              : '',
+      'mac': _advMac.trim().isNotEmpty
+          ? _advMac.trim()
+          : (!hasSpecificAdvancedFilters && _looksLikeMac(query))
+              ? query
+              : '',
     };
   }
 
@@ -334,7 +351,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                 onSubmitted: (_) => _load(page: 1),
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: 'بحث عام أو اسم المستخدم',
+                  hintText: 'بحث باليوزر أو IP أو MAC',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
