@@ -788,7 +788,17 @@ class _SubscriberDetailsScreenState
                       _showSnack(success ? 'تم التمديد بنجاح' : 'فشل التمديد',
                           success: success);
                       if (success) {
-                        if (id != null) await notifier.refreshSingleSubscriber(id);
+                        if (id != null) {
+                          final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
+                          await notifier.refreshSubscriberAfterOperation(
+                            id,
+                            refreshLastPayments: method == 'credit',
+                            paymentUsername: method == 'credit' ? sub.username : null,
+                            paymentDescription: method == 'credit'
+                                ? 'تمديد اشتراك ${sub.username} بمبلغ ${_formatNumber(extPrice)} IQD'
+                                : null,
+                          );
+                        }
                         final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
@@ -1279,7 +1289,18 @@ class _SubscriberDetailsScreenState
                       Navigator.pop(ctx);
                       _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
                       if (success) {
-                        if (id != null) await notifier.refreshSingleSubscriber(id);
+                        if (id != null) {
+                          final paymentLabel = isCash
+                              ? (isPartialCash ? 'نقدي جزئي' : 'نقدي')
+                              : 'غير نقدي';
+                          await notifier.refreshSubscriberAfterOperation(
+                            id,
+                            refreshLastPayments: true,
+                            paymentUsername: sub.username,
+                            paymentDescription:
+                                'تفعيل المشترك ${sub.username} | الباقة: $profileName | السعر: ${_formatNumber(userPrice)} IQD | $paymentLabel',
+                          );
+                        }
                         final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
@@ -1724,7 +1745,15 @@ class _SubscriberDetailsScreenState
                           Navigator.pop(ctx);
                           _showSnack(success ? 'تم التسديد بنجاح' : 'فشل التسديد', success: success);
                           if (success) {
-                            if (id != null) await notifier.refreshSingleSubscriber(id);
+                            if (id != null) {
+                              await notifier.refreshSubscriberAfterOperation(
+                                id,
+                                refreshLastPayments: true,
+                                paymentUsername: sub.username,
+                                paymentDescription:
+                                    'تسديد دين ${_formatNumber(payAmount)} IQD من المشترك ${sub.username}',
+                              );
+                            }
                             final currentSub = _readCurrentSubscriber();
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
@@ -2019,7 +2048,9 @@ class _SubscriberDetailsScreenState
                           Navigator.pop(ctx);
                           _showSnack(success ? 'تم إضافة الدين بنجاح' : 'فشل إضافة الدين', success: success);
                           if (success) {
-                            if (id != null) await notifier.refreshSingleSubscriber(id);
+                            if (id != null) {
+                              await notifier.refreshSubscriberAfterOperation(id);
+                            }
                             final currentSub = _readCurrentSubscriber();
                             await _offerPrintReceipt(ReceiptData(
                               subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,

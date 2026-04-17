@@ -203,6 +203,94 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     return double.tryParse(raw.replaceAll(',', '').trim()) ?? 0;
   }
 
+  static String? _nonEmptyString(dynamic value) {
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty || text == 'null') return null;
+    return text;
+  }
+
+  static int? _parseRemainingDays(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static int? _calculateRemainingDays(String? expiration) {
+    if (expiration == null || expiration.trim().isEmpty) return null;
+    try {
+      final raw = expiration.trim();
+      final parsed = raw.contains('T') || raw.contains('+')
+          ? DateTime.tryParse(raw)
+          : DateTime.tryParse('${raw.replaceAll(' ', 'T')}+03:00');
+      if (parsed == null) return null;
+      return parsed.difference(DateTime.now()).inDays;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<SubscriberModel> _replaceSubscriberInList(
+    List<SubscriberModel> source,
+    SubscriberModel updated,
+  ) {
+    final index = source.indexWhere((s) => s.idx == updated.idx);
+    if (index == -1) return source;
+    final next = List<SubscriberModel>.from(source);
+    next[index] = updated;
+    return next;
+  }
+
+  SubscriberModel _mergeSubscriberDetails(
+    SubscriberModel existing,
+    Map<String, dynamic> details,
+    int userId,
+  ) {
+    final expiration =
+        _nonEmptyString(details['expiration']) ?? existing.expiration;
+    final remainingDays = _parseRemainingDays(details['remaining_days']) ??
+        _calculateRemainingDays(expiration) ??
+        existing.remainingDays;
+    final merged = <String, dynamic>{
+      'id': userId.toString(),
+      'idx': userId.toString(),
+      'username': _nonEmptyString(details['username']) ?? existing.username,
+      'firstname': _nonEmptyString(details['firstname']) ?? existing.firstname,
+      'lastname': _nonEmptyString(details['lastname']) ?? existing.lastname,
+      'phone': _nonEmptyString(details['phone']) ?? existing.phone,
+      'mobile': _nonEmptyString(details['mobile']) ?? existing.mobile,
+      'expiration': expiration,
+      'remaining_days': remainingDays,
+      'notes': details['notes'] ?? details['comments'] ?? existing.notes,
+      'profile_name': _nonEmptyString(details['profile_name']) ??
+          (details['profile_details'] is Map
+              ? _nonEmptyString(details['profile_details']['name'])
+              : null) ??
+          existing.profileName,
+      'profile_id': details['profile_id'] ??
+          (details['profile_details'] is Map
+              ? details['profile_details']['id']
+              : null) ??
+          existing.profileId,
+      'balance': _nonEmptyString(details['balance']) ?? existing.balance,
+      'price': existing.price,
+      'parent_username': existing.parentUsername,
+      'is_online': existing.isOnline,
+      'enabled': details['enabled'] ?? existing.enabled,
+      'framedipaddress':
+          _nonEmptyString(details['framedipaddress']) ?? existing.ipAddress,
+      'callingstationid':
+          _nonEmptyString(details['callingstationid']) ?? existing.macAddress,
+      'acctsessiontime': existing.sessionTime,
+      'acctinputoctets': existing.uploadBytes,
+      'acctoutputoctets': existing.downloadBytes,
+      'oui': existing.deviceVendor,
+    };
+
+    var updated = SubscriberModel.fromJson(merged);
+    updated = _enrichWithPackage(updated, state.packages);
+    updated = _enrichWithPriceList(updated);
+    return updated;
+  }
+
   Future<void> loadSubscribers() async {
     final adminId = await _storage.getAdminId();
     if (adminId == null) return;
@@ -1029,22 +1117,60 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final idx = state.subscribers.indexWhere((s) => s.idx == userId.toString());
       if (idx == -1) return;
       final existing = state.subscribers[idx];
-      final merged = <String, dynamic>{
-        ...details,
-        'phone': existing.phone,
-        'mobile': existing.mobile,
-        'parent_username': existing.parentUsername,
-      };
-      var updated = SubscriberModel.fromJson(merged);
-      updated = _enrichWithPackage(updated, state.packages);
-      updated = _enrichWithPriceList(updated);
+      final updated = _mergeSubscriberDetails(existing, details, userId);
       final newList = List<SubscriberModel>.from(state.subscribers);
       newList[idx] = updated;
+      final newSearchResults =
+          _replaceSubscriberInList(state.searchResults, updated);
+      final newOnlineUsers = updated.isOnline
+          ? _replaceSubscriberInList(state.onlineUsers, updated)
+          : state.onlineUsers.where((s) => s.idx != updated.idx).toList();
       final localOffline = newList.where((s) => s.isOffline).length;
       try { _ref.read(dashboardProvider.notifier).updateOfflineCount(localOffline); } catch (_) {}
-      state = state.copyWith(subscribers: newList, sas4OfflineCount: localOffline);
+      state = state.copyWith(
+        subscribers: newList,
+        searchResults: newSearchResults,
+        onlineUsers: newOnlineUsers,
+        sas4OfflineCount: localOffline,
+      );
     } catch (e) {
       dev.log('refreshSingleSubscriber error: $e', name: 'SUBS');
+    }
+  }
+
+  void setLastPaymentPreview({
+    required String username,
+    required String description,
+  }) {
+    final cleanUsername = username.trim();
+    if (cleanUsername.isEmpty || description.trim().isEmpty) return;
+    final updated = Map<String, Map<String, dynamic>>.from(state.lastPayments);
+    updated[cleanUsername] = {
+      'subscriber_username': cleanUsername,
+      'action_description': description,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    state = state.copyWith(lastPayments: updated);
+  }
+
+  Future<void> refreshSubscriberAfterOperation(
+    int userId, {
+    bool refreshLastPayments = false,
+    String? paymentUsername,
+    String? paymentDescription,
+  }) async {
+    await refreshSingleSubscriber(userId);
+
+    if (paymentUsername != null && paymentDescription != null) {
+      setLastPaymentPreview(
+        username: paymentUsername,
+        description: paymentDescription,
+      );
+    }
+
+    if (refreshLastPayments) {
+      await Future.delayed(const Duration(milliseconds: 350));
+      await loadLastPayments();
     }
   }
 
