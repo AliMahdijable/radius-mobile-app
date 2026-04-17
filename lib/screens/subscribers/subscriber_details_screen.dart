@@ -1122,7 +1122,33 @@ class _SubscriberDetailsScreenState
                   valueListenable: partialCtrl,
                   builder: (ctx3, partialVal, _) {
                     final livePartial = _parseMoney(partialVal.text);
-                    final partialBalanceDelta = livePartial - userPrice;
+                    final partialShortfall =
+                        livePartial < userPrice ? userPrice - livePartial : 0.0;
+                    final partialSurplus =
+                        livePartial > userPrice ? livePartial - userPrice : 0.0;
+                    final creditConsumed = currentBalance > 0 && partialShortfall > 0
+                        ? (currentBalance < partialShortfall
+                            ? currentBalance
+                            : partialShortfall)
+                        : 0.0;
+                    final remainingDebtFromShortfall =
+                        currentBalance > 0 && partialShortfall > creditConsumed
+                            ? partialShortfall - creditConsumed
+                            : currentBalance <= 0
+                                ? partialShortfall
+                                : 0.0;
+                    final debtSettled =
+                        currentBalance < 0 && partialSurplus > 0
+                            ? (currentBalance.abs() < partialSurplus
+                                ? currentBalance.abs()
+                                : partialSurplus)
+                            : 0.0;
+                    final creditAddedFromPayment =
+                        currentBalance < 0 && partialSurplus > debtSettled
+                            ? partialSurplus - debtSettled
+                            : currentBalance >= 0
+                                ? partialSurplus
+                                : 0.0;
                     double liveDebtPreview = currentBalance;
                     if (isCash && !isPartialCash) {
                       liveDebtPreview = currentBalance;
@@ -1163,22 +1189,38 @@ class _SubscriberDetailsScreenState
                           if (isCash && !isPartialCash)
                             _SummaryRow(label: 'الدفع', value: 'نقدي كامل',
                                 valueColor: Colors.green),
-                          if (isCash && isPartialCash && livePartial > 0) ...[
-                            _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(livePartial),
-                                valueColor: Colors.green),
-                            _SummaryRow(
-                              label: 'صافي العملية على الرصيد',
-                              value: partialBalanceDelta > 0
-                                  ? '+${AppHelpers.formatMoney(partialBalanceDelta)}'
-                                  : partialBalanceDelta < 0
-                                      ? '-${AppHelpers.formatMoney(partialBalanceDelta.abs())}'
-                                      : AppHelpers.formatMoney(0),
-                              valueColor: partialBalanceDelta > 0
-                                  ? Colors.green
-                                  : partialBalanceDelta < 0
-                                      ? Colors.orange
-                                      : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
-                            ),
+                          if (isCash && isPartialCash) ...[
+                            if (livePartial > 0)
+                              _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(livePartial),
+                                  valueColor: Colors.green),
+                            if (creditConsumed > 0)
+                              _SummaryRow(
+                                label: 'يخصم من الرصيد',
+                                value: AppHelpers.formatMoney(creditConsumed),
+                                valueColor: Colors.orange,
+                              ),
+                            if (debtSettled > 0)
+                              _SummaryRow(
+                                label: 'تسديد من الدين السابق',
+                                value: AppHelpers.formatMoney(debtSettled),
+                                valueColor: Colors.green,
+                              ),
+                            if (creditAddedFromPayment > 0)
+                              _SummaryRow(
+                                label: 'يضاف إلى الرصيد',
+                                value: AppHelpers.formatMoney(creditAddedFromPayment),
+                                valueColor: Colors.green,
+                              ),
+                            if (remainingDebtFromShortfall > 0)
+                              _SummaryRow(
+                                label: currentBalance > 0
+                                    ? 'المتبقي كدين'
+                                    : currentBalance < 0
+                                        ? 'يضاف إلى الدين'
+                                        : 'يضاف كدين',
+                                value: AppHelpers.formatMoney(remainingDebtFromShortfall),
+                                valueColor: currentBalance < 0 ? Colors.red : Colors.orange,
+                              ),
                           ],
                           if (!isCash)
                             _SummaryRow(label: 'الدفع', value: 'آجل (يضاف كدين)',
