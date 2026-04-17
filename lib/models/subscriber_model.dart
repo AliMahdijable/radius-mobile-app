@@ -67,12 +67,9 @@ class SubscriberModel {
     return _cleanParseDouble(notes);
   }
 
-  /// Signed value from `notes`/`comments` only: positive = رصيد، negative = دين.
-  /// Does not use SAS `balance`, `debt`, or `hasDebt`.
   double get debtAmount {
     if (notes == null || notes!.trim().isEmpty) return 0;
     final val = _cleanParseDouble(notes);
-    // تجاهل -0 والقيم القريبة من الصفر
     if (val.abs() < 1) return 0;
     return val;
   }
@@ -104,25 +101,18 @@ class SubscriberModel {
   bool get isExpired {
     final expDate = _parsedExpiration;
     if (expDate != null) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final expDay = DateTime(expDate.year, expDate.month, expDate.day);
-      return expDay.isBefore(today);
+      return expDate.isBefore(DateTime.now());
     }
     return (remainingDays ?? 0) < 0;
   }
 
   bool get isExpiredToday {
-    if (expiration == null || expiration!.isEmpty) return false;
-    try {
-      final match = RegExp(r'(\d{4}-\d{2}-\d{2})').firstMatch(expiration!);
-      if (match != null) {
-        final now = DateTime.now();
-        final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-        return match.group(1) == todayStr;
-      }
-    } catch (_) {}
-    return false;
+    final expDate = _parsedExpiration;
+    if (expDate == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expDay = DateTime(expDate.year, expDate.month, expDate.day);
+    return expDay == today && expDate.isBefore(now);
   }
 
   bool get isActive => !isExpired;

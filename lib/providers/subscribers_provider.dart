@@ -61,7 +61,7 @@ class SubscribersState {
         list = source.where((s) => s.isActive).toList();
         break;
       case 'expired':
-        list = source.where((s) => s.isExpiredToday).toList();
+        list = source.where((s) => s.isExpired).toList();
         break;
       case 'online':
         if (managerFilter != null) {
@@ -133,7 +133,7 @@ class SubscribersState {
 
   int get allCount => _managerScoped.length;
   int get activeCount => _managerScoped.where((s) => s.isActive).length;
-  int get expiredCount => _managerScoped.where((s) => s.isExpiredToday).length;
+  int get expiredCount => _managerScoped.where((s) => s.isExpired).length;
   int get onlineCount => _managerScoped.where((s) => s.isOnline).length;
   int get offlineCount => _managerScoped.where((s) => s.isOffline).length;
   int get debtorsCount => _managerScoped.where((s) => s.hasDebt).length;

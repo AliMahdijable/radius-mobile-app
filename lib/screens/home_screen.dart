@@ -367,7 +367,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final showAlertBadge =
         _alertsEnabled && !_alertsDismissed && dash.totalAlerts > 0;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+          return;
+        }
+        final exit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('الخروج من التطبيق'),
+            content: const Text('هل تريد الخروج؟'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('لا'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('خروج', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+        if (exit == true && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
         leading: Padding(
@@ -515,6 +545,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

@@ -86,7 +86,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final dash = ref.watch(dashboardProvider);
     final wa = ref.watch(whatsappProvider);
     final authState = ref.watch(authProvider);
+    final subsState = ref.watch(subscribersProvider);
     final theme = Theme.of(context);
+    final realDebtors = subsState.subscribers.where((s) => s.hasDebt).length;
+    final realTotalDebt = subsState.subscribers.where((s) => s.hasDebt).fold<double>(0, (sum, s) => sum + s.debtAmount.abs());
 
     if (authState.status == AuthStatus.authenticated &&
         !_hasTriedLoad &&
@@ -144,8 +147,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   onTapTotal: () { _ensureSubscribersLoaded(); _onCardTap('all'); },
                   onTapDebtors: () { _ensureSubscribersLoaded(); _onCardTap('debtors'); },
                   onTapNearExpiry: () { _ensureSubscribersLoaded(); _onCardTap('nearExpiry'); },
-                  debtors: dash.debtors,
-                  totalDebt: dash.totalDebt,
+                  debtors: realDebtors > 0 ? realDebtors : dash.debtors,
+                  totalDebt: realTotalDebt > 0 ? realTotalDebt : dash.totalDebt,
                   nearExpiry: dash.nearExpiryCount,
                 ),
                 const SizedBox(height: 12),
@@ -160,13 +163,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       ),
                     if (dash.managerBalance.isNotEmpty && dash.managerBalance != '0' &&
-                        (dash.debtors > 0 || dash.totalDebt > 0))
+                        ((realDebtors > 0 ? realDebtors : dash.debtors) > 0))
                       const SizedBox(width: 10),
-                    if (dash.debtors > 0 || dash.totalDebt > 0)
+                    if ((realDebtors > 0 ? realDebtors : dash.debtors) > 0)
                       Expanded(
                         child: _DebtCard(
-                          debtors: dash.debtors,
-                          totalDebt: dash.totalDebt,
+                          debtors: realDebtors > 0 ? realDebtors : dash.debtors,
+                          totalDebt: realTotalDebt > 0 ? realTotalDebt : dash.totalDebt,
                           onTap: () { _ensureSubscribersLoaded(); _onCardTap('debtors'); },
                         ),
                       ),
