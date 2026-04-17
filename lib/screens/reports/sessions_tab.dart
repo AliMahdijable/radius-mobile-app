@@ -49,16 +49,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       _advFromDate.isNotEmpty ||
       _advToDate.isNotEmpty;
 
-  bool _looksLikeIp(String value) =>
-      RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value);
-
-  bool _looksLikeMac(String value) => RegExp(
-        r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$',
-      ).hasMatch(value);
-
   Map<String, String> _buildSearchFilters() {
-    final query = _searchCtrl.text.trim();
-
     if (_advUsername.isNotEmpty || _advIp.isNotEmpty || _advMac.isNotEmpty) {
       return {
         'search': '',
@@ -68,36 +59,9 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       };
     }
 
-    if (query.isEmpty) {
-      return {
-        'search': '',
-        'username': '',
-        'ip': '',
-        'mac': '',
-      };
-    }
-
-    if (_looksLikeMac(query)) {
-      return {
-        'search': '',
-        'username': '',
-        'ip': '',
-        'mac': query,
-      };
-    }
-
-    if (_looksLikeIp(query)) {
-      return {
-        'search': '',
-        'username': '',
-        'ip': query,
-        'mac': '',
-      };
-    }
-
     return {
-      'search': '',
-      'username': query,
+      'search': _searchCtrl.text.trim(),
+      'username': '',
       'ip': '',
       'mac': '',
     };
@@ -370,7 +334,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                 onSubmitted: (_) => _load(page: 1),
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: 'بحث باليوزر أو IP أو MAC',
+                  hintText: 'بحث عام أو اسم المستخدم',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
