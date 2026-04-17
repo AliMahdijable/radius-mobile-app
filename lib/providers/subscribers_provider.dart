@@ -463,7 +463,9 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     final adminId = await _storage.getAdminId();
     if (adminId == null) return;
     try {
-      final res = await _backendDio.get('${ApiConstants.lastPayments}/$adminId');
+      final res = await _backendDio.get(
+        '${ApiConstants.lastFinancialMovements}/$adminId',
+      );
       if (res.data is Map && res.data['success'] == true) {
         final payments = res.data['payments'] as List? ?? [];
         final map = <String, Map<String, dynamic>>{};
@@ -1141,13 +1143,21 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   void setLastPaymentPreview({
     required String username,
     required String description,
+    double? amount,
+    String? actionType,
+    String? movementLabel,
+    String? paymentType,
   }) {
     final cleanUsername = username.trim();
     if (cleanUsername.isEmpty || description.trim().isEmpty) return;
     final updated = Map<String, Map<String, dynamic>>.from(state.lastPayments);
     updated[cleanUsername] = {
       'subscriber_username': cleanUsername,
+      'action_type': actionType,
       'action_description': description,
+      'amount': amount,
+      'movement_label': movementLabel,
+      'payment_type': paymentType,
       'created_at': DateTime.now().toIso8601String(),
     };
     state = state.copyWith(lastPayments: updated);
@@ -1158,6 +1168,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     bool refreshLastPayments = false,
     String? paymentUsername,
     String? paymentDescription,
+    double? paymentAmount,
+    String? paymentActionType,
+    String? paymentMovementLabel,
+    String? paymentType,
   }) async {
     await refreshSingleSubscriber(userId);
 
@@ -1165,6 +1179,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       setLastPaymentPreview(
         username: paymentUsername,
         description: paymentDescription,
+        amount: paymentAmount,
+        actionType: paymentActionType,
+        movementLabel: paymentMovementLabel,
+        paymentType: paymentType,
       );
     }
 

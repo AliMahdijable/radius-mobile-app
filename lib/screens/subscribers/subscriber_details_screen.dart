@@ -789,15 +789,7 @@ class _SubscriberDetailsScreenState
                           success: success);
                       if (success) {
                         if (id != null) {
-                          final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
-                          await notifier.refreshSubscriberAfterOperation(
-                            id,
-                            refreshLastPayments: method == 'credit',
-                            paymentUsername: method == 'credit' ? sub.username : null,
-                            paymentDescription: method == 'credit'
-                                ? 'تمديد اشتراك ${sub.username} بمبلغ ${_formatNumber(extPrice)} IQD'
-                                : null,
-                          );
+                          await notifier.refreshSubscriberAfterOperation(id);
                         }
                         final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
@@ -1293,13 +1285,24 @@ class _SubscriberDetailsScreenState
                           final paymentLabel = isCash
                               ? (isPartialCash ? 'نقدي جزئي' : 'نقدي')
                               : 'غير نقدي';
-                          await notifier.refreshSubscriberAfterOperation(
-                            id,
-                            refreshLastPayments: true,
-                            paymentUsername: sub.username,
-                            paymentDescription:
-                                'تفعيل المشترك ${sub.username} | الباقة: $profileName | السعر: ${_formatNumber(userPrice)} IQD | $paymentLabel',
-                          );
+                          if (isCash) {
+                            final actualPaidAmount = isPartialCash ? cashAmount : userPrice;
+                            await notifier.refreshSubscriberAfterOperation(
+                              id,
+                              refreshLastPayments: true,
+                              paymentUsername: sub.username,
+                              paymentDescription:
+                                  'تفعيل المشترك ${sub.username} | الباقة: $profileName | السعر: ${_formatNumber(userPrice)} IQD | $paymentLabel',
+                              paymentAmount: actualPaidAmount,
+                              paymentActionType: 'SUBSCRIBER_ACTIVATE',
+                              paymentMovementLabel: isPartialCash
+                                  ? 'تفعيل نقدي جزئي'
+                                  : 'تفعيل نقدي',
+                              paymentType: paymentLabel,
+                            );
+                          } else {
+                            await notifier.refreshSubscriberAfterOperation(id);
+                          }
                         }
                         final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
@@ -1752,6 +1755,9 @@ class _SubscriberDetailsScreenState
                                 paymentUsername: sub.username,
                                 paymentDescription:
                                     'تسديد دين ${_formatNumber(payAmount)} IQD من المشترك ${sub.username}',
+                                paymentAmount: payAmount,
+                                paymentActionType: 'BALANCE_DEDUCT',
+                                paymentMovementLabel: 'تسديد دين',
                               );
                             }
                             final currentSub = _readCurrentSubscriber();
@@ -2301,13 +2307,23 @@ class _SubscriberDetailsScreenState
                       final daysAgo = DateTime.now().difference(date).inDays;
                       if (daysAgo > 30) return const SizedBox.shrink();
                       final timeLabel = daysAgo == 0 ? 'اليوم' : 'منذ $daysAgo يوم';
+                      final movementLabel =
+                          lp['movement_label']?.toString().trim().isNotEmpty == true
+                              ? lp['movement_label'].toString().trim()
+                              : 'حركة مالية';
+                      final rawAmount = lp['amount'];
+                      final amountValue = rawAmount is num
+                          ? rawAmount.toDouble()
+                          : double.tryParse(rawAmount?.toString() ?? '');
                       final desc = lp['action_description']?.toString() ?? '';
-                      final amountMatch = RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc);
-                      final amountText = amountMatch?.group(0) ?? '';
+                      final amountText = amountValue != null && amountValue > 0
+                          ? '${AppHelpers.formatMoney(amountValue)} IQD'
+                          : (RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc)?.group(0) ?? '');
                       return _DetailRow(
                         icon: Icons.monetization_on_rounded,
-                        label: 'آخر تسديد',
-                        value: '$timeLabel${amountText.isNotEmpty ? ' — $amountText' : ''}',
+                        label: 'آخر حركة مالية',
+                        value:
+                            '$movementLabel — $timeLabel${amountText.isNotEmpty ? ' — $amountText' : ''}',
                         valueColor: AppTheme.teal600,
                       );
                     }),

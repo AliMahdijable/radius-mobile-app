@@ -16,6 +16,7 @@ class ApiConstants {
   static const String subscribersWithPhones = '/api/subscribers/with-phones';
   static const String subscribersSearch = '/api/subscribers/search';
   static const String lastPayments = '/api/subscribers/last-payments';
+  static const String lastFinancialMovements = '/api/subscribers/last-financial-movements';
 
   // WhatsApp Connection
   static const String waStartSession = '/api/whatsapp/start-session';

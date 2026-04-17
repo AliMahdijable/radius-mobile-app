@@ -535,6 +535,31 @@ class _LastPaymentRow extends StatelessWidget {
   final Map<String, dynamic> data;
   const _LastPaymentRow({required this.data});
 
+  String _movementLabel() {
+    final explicit = data['movement_label']?.toString().trim();
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+
+    final actionType = data['action_type']?.toString();
+    final paymentType = data['payment_type']?.toString() ?? '';
+    if (actionType == 'SUBSCRIBER_ACTIVATE') {
+      return paymentType.contains('جزئي') ? 'تفعيل نقدي جزئي' : 'تفعيل نقدي';
+    }
+    return 'تسديد دين';
+  }
+
+  String _amountText() {
+    final rawAmount = data['amount'];
+    final amountValue = rawAmount is num
+        ? rawAmount.toDouble()
+        : double.tryParse(rawAmount?.toString() ?? '');
+    if (amountValue != null && amountValue > 0) {
+      return '${AppHelpers.formatMoney(amountValue)} IQD';
+    }
+
+    final desc = data['action_description']?.toString() ?? '';
+    return RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc)?.group(0) ?? '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final createdAt = data['created_at']?.toString();
@@ -547,10 +572,8 @@ class _LastPaymentRow extends StatelessWidget {
     if (daysAgo > 30) return const SizedBox.shrink();
 
     final timeLabel = daysAgo == 0 ? 'اليوم' : 'منذ $daysAgo يوم';
-
-    final desc = data['action_description']?.toString() ?? '';
-    final amountMatch = RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc);
-    final amountText = amountMatch != null ? '${amountMatch.group(0)}' : '';
+    final movementLabel = _movementLabel();
+    final amountText = _amountText();
 
     return Padding(
       padding: const EdgeInsets.only(top: 3, right: 46),
@@ -559,17 +582,15 @@ class _LastPaymentRow extends StatelessWidget {
           Icon(Icons.monetization_on_rounded, size: 10,
               color: AppTheme.teal600.withOpacity(0.7)),
           const SizedBox(width: 3),
-          Text(
-            '💰 $timeLabel',
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
-              color: AppTheme.teal600),
+          Expanded(
+            child: Text(
+              '$movementLabel | $timeLabel${amountText.isNotEmpty ? ' | $amountText' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
+                color: AppTheme.teal600),
+            ),
           ),
-          if (amountText.isNotEmpty) ...[
-            Text(' | ', style: TextStyle(fontSize: 9,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3))),
-            Text(amountText, style: TextStyle(fontSize: 9,
-              fontWeight: FontWeight.w600, color: AppTheme.teal600)),
-          ],
         ],
       ),
     );
