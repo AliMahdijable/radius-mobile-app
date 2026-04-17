@@ -38,153 +38,268 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        final screenH = MediaQuery.of(ctx).size.height;
         return StatefulBuilder(
-          builder: (ctx, setSheetState) => Container(
-            height: screenH * 0.85,
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
-              left: 20, right: 20, top: 16,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(child: Container(width: 40, height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 12),
-                Text(
-                  template == null ? 'إنشاء قالب' : 'تعديل القالب',
-                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 16),
+          builder: (ctx, setSheetState) {
+            final keyboardH = MediaQuery.of(ctx).viewInsets.bottom;
+            final safeBottom = MediaQuery.of(ctx).padding.bottom;
+            final screenH = MediaQuery.of(ctx).size.height;
+            final keyboardOpen = keyboardH > 50;
 
-                if (template == null) ...[
-                  DropdownButtonFormField<String>(
-                    value: selectedType,
-                    decoration: const InputDecoration(
-                      labelText: 'نوع القالب',
-                      isDense: true,
-                    ),
-                    dropdownColor: Theme.of(ctx).scaffoldBackgroundColor,
-                    style: TextStyle(fontSize: 13, fontFamily: 'Cairo',
-                        color: Theme.of(ctx).colorScheme.onSurface),
-                    items: [
-                      'debt_reminder', 'expiry_warning', 'service_end',
-                      'activation_notice', 'renewal', 'payment_confirmation',
-                      'welcome_message',
-                    ].map((t) => DropdownMenuItem(
-                      value: t,
-                      child: Text(TemplateModel.getArabicType(t),
-                          style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
-                              color: Theme.of(ctx).colorScheme.onSurface)),
-                    )).toList(),
-                    onChanged: (v) =>
-                        setSheetState(() => selectedType = v ?? selectedType),
+            void insertVar(String v) {
+              final text = contentController.text;
+              final sel = contentController.selection;
+              final start = sel.isValid ? sel.start : text.length;
+              final end = sel.isValid ? sel.end : text.length;
+              contentController.text = text.replaceRange(start, end, v);
+              contentController.selection =
+                  TextSelection.collapsed(offset: start + v.length);
+            }
+
+            Widget varChip(String v, {bool compact = false}) {
+              final label = TemplateModel.variableLabels[v] ?? v;
+              final icon  = TemplateModel.variableIcons[v] ?? '';
+              final primary = Theme.of(ctx).colorScheme.primary;
+              return GestureDetector(
+                onTap: () => insertVar(v),
+                child: Container(
+                  margin: EdgeInsets.only(left: compact ? 6 : 0),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 10 : 8,
+                    vertical:   compact ? 6  : 5,
                   ),
-                  const SizedBox(height: 12),
-                ],
-
-                TextField(
-                  controller: nameController,
-                  style: const TextStyle(fontSize: 14, fontFamily: 'Cairo'),
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم القالب',
-                    prefixIcon: Icon(Icons.label_outline, size: 20),
-                    isDense: true,
+                  decoration: BoxDecoration(
+                    color: primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: primary.withOpacity(0.22)),
                   ),
-                ),
-                const SizedBox(height: 12),
-
-                Expanded(
-                  child: TextField(
-                    controller: contentController,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    textDirection: TextDirection.ltr,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(fontSize: 14, height: 1.6, fontFamily: 'Cairo'),
-                    decoration: const InputDecoration(
-                      labelText: 'محتوى الرسالة',
-                      hintText: 'مرحبا {firstname}...',
-                      alignLabelWithHint: true,
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                Text('المتغيرات:', style: TextStyle(fontSize: 12,
-                    fontWeight: FontWeight.w600, fontFamily: 'Cairo',
-                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4, runSpacing: 4,
-                  children: TemplateModel.availableVariables.map((v) {
-                    return GestureDetector(
-                      onTap: () {
-                        final text = contentController.text;
-                        final sel = contentController.selection;
-                        final start = sel.isValid ? sel.start : text.length;
-                        final end = sel.isValid ? sel.end : text.length;
-                        contentController.text = text.replaceRange(start, end, v);
-                        contentController.selection = TextSelection.collapsed(
-                            offset: start + v.length);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Theme.of(ctx).colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Theme.of(ctx).colorScheme.primary.withOpacity(0.2)),
-                        ),
-                        child: Text(
-                          TemplateModel.variableLabels[v] ?? v,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-                              fontFamily: 'Cairo',
-                              color: Theme.of(ctx).colorScheme.primary),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (icon.isNotEmpty) ...[
+                        Text(icon, style: const TextStyle(fontSize: 12)),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: compact ? 12 : 11,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Cairo',
+                          color: primary,
                         ),
                       ),
-                    );
-                  }).toList(),
+                    ],
+                  ),
                 ),
+              );
+            }
 
-                const SizedBox(height: 12),
-                SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
-                  onPressed: () async {
-                    if (nameController.text.isEmpty || contentController.text.isEmpty) {
-                      AppSnackBar.warning(context, 'يرجى ملء جميع الحقول');
-                      return;
-                    }
-                    final newTemplate = TemplateModel(
-                      id: template?.id,
-                      adminId: adminId,
-                      templateType: template?.templateType ?? selectedType,
-                      templateName: nameController.text,
-                      messageContent: contentController.text,
-                      isActive: template?.isActive ?? true,
-                    );
-                    final ok = await ref.read(templatesProvider.notifier)
-                        .saveTemplate(newTemplate);
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                      if (ok) {
-                        AppSnackBar.success(context, 'تم حفظ القالب');
-                      } else {
-                        AppSnackBar.error(context, 'فشل حفظ القالب');
-                      }
-                    }
-                  },
-                  child: const Text('حفظ القالب'),
-                )),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: screenH * 0.93),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: keyboardH,
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Drag handle
+                    Center(
+                      child: Container(
+                        width: 40, height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      template == null ? 'إنشاء قالب' : 'تعديل القالب',
+                      style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Dropdown (إنشاء فقط)
+                    if (template == null) ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedType,
+                        decoration: const InputDecoration(
+                          labelText: 'نوع القالب',
+                          isDense: true,
+                        ),
+                        dropdownColor: Theme.of(ctx).scaffoldBackgroundColor,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'Cairo',
+                          color: Theme.of(ctx).colorScheme.onSurface,
+                        ),
+                        items: [
+                          'debt_reminder', 'expiry_warning', 'service_end',
+                          'activation_notice', 'renewal', 'payment_confirmation',
+                          'welcome_message',
+                        ].map((t) => DropdownMenuItem(
+                          value: t,
+                          child: Text(
+                            TemplateModel.getArabicType(t),
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 13,
+                              color: Theme.of(ctx).colorScheme.onSurface,
+                            ),
+                          ),
+                        )).toList(),
+                        onChanged: (v) =>
+                            setSheetState(() => selectedType = v ?? selectedType),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    // اسم القالب
+                    TextField(
+                      controller: nameController,
+                      style: const TextStyle(fontSize: 14, fontFamily: 'Cairo'),
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.left,
+                      decoration: const InputDecoration(
+                        labelText: 'اسم القالب',
+                        prefixIcon: Icon(Icons.label_outline, size: 20),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // محتوى الرسالة - يتمدد ليملأ المساحة
+                    Expanded(
+                      child: TextField(
+                        controller: contentController,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        textDirection: TextDirection.ltr,
+                        textAlign: TextAlign.left,
+                        style: const TextStyle(
+                          fontSize: 14, height: 1.6, fontFamily: 'Cairo',
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'محتوى الرسالة',
+                          hintText: 'مرحبا {firstname}...',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.all(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // شريط المتغيرات
+                    if (keyboardOpen) ...[
+                      // كيبورد مفتوح: شريط أفقي مدمج
+                      Container(
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).colorScheme.primary.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Theme.of(ctx).colorScheme.primary.withOpacity(0.12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              child: Text(
+                                '{ }',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Theme.of(ctx).colorScheme.primary.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                            Container(width: 1, height: 24,
+                              color: Theme.of(ctx).colorScheme.primary.withOpacity(0.15)),
+                            Expanded(
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                                itemCount: TemplateModel.availableVariables.length,
+                                itemBuilder: (_, i) => varChip(
+                                  TemplateModel.availableVariables[i],
+                                  compact: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      // كيبورد مغلق: عنوان + شبكة كاملة
+                      Row(children: [
+                        const Text('{ }', style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey)),
+                        const SizedBox(width: 6),
+                        Text('المتغيرات', style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          fontFamily: 'Cairo',
+                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
+                        )),
+                      ]),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: TemplateModel.availableVariables
+                            .map((v) => varChip(v))
+                            .toList(),
+                      ),
+                    ],
+
+                    const SizedBox(height: 10),
+
+                    // زر الحفظ
+                    SizedBox(
+                      height: AppTheme.actionButtonHeight,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          if (nameController.text.isEmpty ||
+                              contentController.text.isEmpty) {
+                            AppSnackBar.warning(context, 'يرجى ملء جميع الحقول');
+                            return;
+                          }
+                          final newTemplate = TemplateModel(
+                            id: template?.id,
+                            adminId: adminId,
+                            templateType: template?.templateType ?? selectedType,
+                            templateName: nameController.text,
+                            messageContent: contentController.text,
+                            isActive: template?.isActive ?? true,
+                          );
+                          final ok = await ref
+                              .read(templatesProvider.notifier)
+                              .saveTemplate(newTemplate);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            if (ok) {
+                              AppSnackBar.success(context, 'تم حفظ القالب');
+                            } else {
+                              AppSnackBar.error(context, 'فشل حفظ القالب');
+                            }
+                          }
+                        },
+                        child: const Text('حفظ القالب'),
+                      ),
+                    ),
+                    SizedBox(height: safeBottom + 6),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
