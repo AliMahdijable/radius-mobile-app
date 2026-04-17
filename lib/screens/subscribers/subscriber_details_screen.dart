@@ -2195,36 +2195,6 @@ class _SubscriberDetailsScreenState
                   ),
                 ),
 
-                const SizedBox(height: 12),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ContactShortcutButton(
-                        icon: Icons.call_rounded,
-                        label: 'اتصال',
-                        color: AppTheme.teal600,
-                        enabled: sub.displayPhone.trim().isNotEmpty,
-                        onTap: () {
-                          _launchPhoneCall();
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _ContactShortcutButton(
-                        icon: Icons.chat_rounded,
-                        label: 'واتساب',
-                        color: AppTheme.whatsappGreen,
-                        enabled: sub.displayPhone.trim().isNotEmpty,
-                        onTap: () {
-                          _launchWhatsAppChat();
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-
                 const SizedBox(height: 20),
 
                 // ── Account Info ──
@@ -2236,10 +2206,15 @@ class _SubscriberDetailsScreenState
                       label: 'اسم المستخدم',
                       value: sub.username,
                     ),
-                    _DetailRow(
-                      icon: Icons.phone_outlined,
-                      label: 'رقم الهاتف',
+                    _PhoneDetailRow(
                       value: AppHelpers.formatPhone(sub.displayPhone),
+                      enabled: sub.displayPhone.trim().isNotEmpty,
+                      onCall: () {
+                        _launchPhoneCall();
+                      },
+                      onWhatsApp: () {
+                        _launchWhatsAppChat();
+                      },
                     ),
                     _DetailRow(
                       icon: Icons.wifi,
@@ -2695,66 +2670,6 @@ class _MethodBtn extends StatelessWidget {
   }
 }
 
-class _ContactShortcutButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  const _ContactShortcutButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final foreground = enabled ? color : theme.colorScheme.onSurface.withOpacity(0.35);
-    final background = enabled
-        ? color.withOpacity(0.08)
-        : theme.colorScheme.onSurface.withOpacity(0.04);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: enabled
-                  ? color.withOpacity(0.18)
-                  : theme.colorScheme.onSurface.withOpacity(0.08),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: foreground),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: foreground,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _QuickAmountChips extends StatelessWidget {
   final List<double> amounts;
   final double selectedAmount;
@@ -2949,6 +2864,122 @@ class _DetailRow extends StatelessWidget {
                 textAlign: TextAlign.end),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PhoneDetailRow extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final VoidCallback onCall;
+  final VoidCallback onWhatsApp;
+
+  const _PhoneDetailRow({
+    required this.value,
+    required this.enabled,
+    required this.onCall,
+    required this.onWhatsApp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withOpacity(0.6);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.phone_outlined,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'رقم الهاتف',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: muted,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    value,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.end,
+                    textDirection: TextDirection.ltr,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (enabled) ...[
+                  const SizedBox(width: 8),
+                  _PhoneActionIcon(
+                    icon: Icons.call_rounded,
+                    color: AppTheme.teal600,
+                    onTap: onCall,
+                  ),
+                  const SizedBox(width: 6),
+                  _PhoneActionIcon(
+                    icon: Icons.chat_rounded,
+                    color: AppTheme.whatsappGreen,
+                    onTap: onWhatsApp,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhoneActionIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _PhoneActionIcon({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: color.withOpacity(0.18),
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 15,
+            color: color,
+          ),
+        ),
       ),
     );
   }
