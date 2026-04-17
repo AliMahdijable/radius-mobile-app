@@ -2910,6 +2910,7 @@ class _PhoneDetailRow extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Row(
+              textDirection: TextDirection.ltr,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Flexible(
@@ -2924,7 +2925,7 @@ class _PhoneDetailRow extends StatelessWidget {
                   ),
                 ),
                 if (enabled) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   _PhoneActionIcon(
                     icon: Icons.call_rounded,
                     color: AppTheme.teal600,
