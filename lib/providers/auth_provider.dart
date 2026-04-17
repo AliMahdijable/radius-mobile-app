@@ -6,6 +6,16 @@ import '../core/services/socket_service.dart';
 import '../core/services/expiry_push_service.dart';
 import '../core/services/fcm_service.dart';
 import '../models/user_model.dart';
+import 'dashboard_provider.dart';
+import 'discounts_provider.dart';
+import 'messages_provider.dart';
+import 'print_templates_provider.dart';
+import 'reports_provider.dart';
+import 'schedules_provider.dart';
+import 'settings_provider.dart';
+import 'subscribers_provider.dart';
+import 'templates_provider.dart';
+import 'whatsapp_provider.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
 
@@ -37,8 +47,23 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final StorageService _storage;
   final SocketService _socket;
+  final Ref _ref;
 
-  AuthNotifier(this._storage, this._socket) : super(const AuthState());
+  AuthNotifier(this._storage, this._socket, this._ref)
+      : super(const AuthState());
+
+  void _resetSessionScopedProviders() {
+    _ref.invalidate(dashboardProvider);
+    _ref.invalidate(subscribersProvider);
+    _ref.invalidate(whatsappProvider);
+    _ref.invalidate(templatesProvider);
+    _ref.invalidate(printTemplatesProvider);
+    _ref.invalidate(messagesProvider);
+    _ref.invalidate(reportsProvider);
+    _ref.invalidate(discountsProvider);
+    _ref.invalidate(settingsProvider);
+    _ref.invalidate(schedulesProvider);
+  }
 
   Future<void> checkAuth() async {
     try {
@@ -70,6 +95,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         token: token,
         expiresAt: expiry ?? '',
       );
+      _resetSessionScopedProviders();
+      _socket.disconnect();
       _socket.connect(adminId);
       state = AuthState(
         status: AuthStatus.authenticated,
@@ -118,6 +145,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           adminUsername: user.username,
         );
 
+        _resetSessionScopedProviders();
+        _socket.disconnect();
         _socket.connect(user.id);
         await ExpiryPushService.onLoggedIn(_storage);
         FcmService.onLoggedIn(_storage);
@@ -155,6 +184,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await FcmService.onLoggedOut();
     await ExpiryPushService.onLoggedOut();
     await _storage.clearAll();
+    _resetSessionScopedProviders();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 }
@@ -163,5 +193,6 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(
     ref.read(storageServiceProvider),
     ref.read(socketServiceProvider),
+    ref,
   );
 });
