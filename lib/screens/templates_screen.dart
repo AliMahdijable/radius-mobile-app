@@ -66,14 +66,18 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                       labelText: 'نوع القالب',
                       isDense: true,
                     ),
-                    style: const TextStyle(fontSize: 13),
+                    dropdownColor: Theme.of(ctx).scaffoldBackgroundColor,
+                    style: TextStyle(fontSize: 13, fontFamily: 'Cairo',
+                        color: Theme.of(ctx).colorScheme.onSurface),
                     items: [
                       'debt_reminder', 'expiry_warning', 'service_end',
                       'activation_notice', 'renewal', 'payment_confirmation',
                       'welcome_message',
                     ].map((t) => DropdownMenuItem(
                       value: t,
-                      child: Text(TemplateModel.getArabicType(t)),
+                      child: Text(TemplateModel.getArabicType(t),
+                          style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                              color: Theme.of(ctx).colorScheme.onSurface)),
                     )).toList(),
                     onChanged: (v) =>
                         setSheetState(() => selectedType = v ?? selectedType),
@@ -83,7 +87,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
 
                 TextField(
                   controller: nameController,
-                  style: const TextStyle(fontSize: 14),
+                  style: const TextStyle(fontSize: 14, fontFamily: 'Cairo'),
                   textDirection: TextDirection.ltr,
                   textAlign: TextAlign.left,
                   decoration: const InputDecoration(
@@ -102,7 +106,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                     textAlignVertical: TextAlignVertical.top,
                     textDirection: TextDirection.ltr,
                     textAlign: TextAlign.left,
-                    style: const TextStyle(fontSize: 14, height: 1.6),
+                    style: const TextStyle(fontSize: 14, height: 1.6, fontFamily: 'Cairo'),
                     decoration: const InputDecoration(
                       labelText: 'محتوى الرسالة',
                       hintText: 'مرحبا {firstname}...',
@@ -113,9 +117,9 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                 ),
                 const SizedBox(height: 8),
 
-                Text('المتغيرات:', style: TextStyle(fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                Text('المتغيرات:', style: TextStyle(fontSize: 12,
+                    fontWeight: FontWeight.w600, fontFamily: 'Cairo',
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
                 const SizedBox(height: 4),
                 Wrap(
                   spacing: 4, runSpacing: 4,
@@ -131,14 +135,16 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                             offset: start + v.length);
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Theme.of(ctx).colorScheme.primary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(4),
+                          color: Theme.of(ctx).colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Theme.of(ctx).colorScheme.primary.withOpacity(0.2)),
                         ),
                         child: Text(
                           TemplateModel.variableLabels[v] ?? v,
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                              fontFamily: 'Cairo',
                               color: Theme.of(ctx).colorScheme.primary),
                         ),
                       ),

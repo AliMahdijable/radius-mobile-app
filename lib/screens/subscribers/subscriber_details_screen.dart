@@ -787,32 +787,14 @@ class _SubscriberDetailsScreenState
                       if (success) {
                         await notifier.loadSubscribers();
                         final fresh = await notifier.getSubscriberDetails(id);
-                        final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                         final expDate = fresh?['expiration']?.toString() ?? '';
-                        final remDays = fresh?['remaining_days']?.toString() ?? '';
-                        await _sendWhatsAppFromTemplate('renewal',
-                          extraVars: {
-                            '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
-                            '{paid_amount}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
-                            '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
-                            '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
-                            '{expiry_date}': expDate,
-                            '{expiration_date}': expDate,
-                            '{days_remaining}': remDays,
-                            '{remaining_days}': remDays,
-                          });
-                        final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
-                        await _offerPrintReceipt(ReceiptData(
-                          subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
-                          phoneNumber: widget.subscriber.displayPhone,
-                          packageName: widget.subscriber.profileName ?? '',
-                          packagePrice: extPrice,
-                          paidAmount: method == 'credit' ? extPrice : 0,
-                          debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                          remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                          expiryDate: expDate,
-                          operationType: 'activation',
-                        ));
+                        final sub = widget.subscriber;
+                        final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
+                        final phone = sub.displayPhone;
+                        if (phone.isNotEmpty) {
+                          final msg = 'عزيزي المشترك : $displayName\nتم تمديد اشتراكك لغاية تاريخ: $expDate ✅';
+                          await ref.read(whatsappProvider.notifier).sendMessage(phone, msg);
+                        }
                         if (mounted) context.pop();
                       }
                     }
@@ -1214,11 +1196,17 @@ class _SubscriberDetailsScreenState
                         await notifier.loadSubscribers();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
+                        final freshExpDate = fresh?['expiration']?.toString() ?? '';
+                        final freshRemDays = _calcRemainingDays(freshExpDate);
                         await _sendWhatsAppFromTemplate('activation_notice', extraVars: {
                           '{package_name}': profileName,
                           '{package_price}': _formatNumber(userPrice),
                           '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
                           '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
+                          '{expiry_date}': freshExpDate,
+                          '{expiration_date}': freshExpDate,
+                          '{remaining_days}': freshRemDays,
+                          '{days_remaining}': freshRemDays,
                         });
                         await _offerPrintReceipt(ReceiptData(
                           subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
@@ -1271,6 +1259,25 @@ class _SubscriberDetailsScreenState
     return 0;
   }
 
+  String _calcRemainingDays(String? expiration) {
+    if (expiration == null || expiration.isEmpty) return '0';
+    try {
+      final s = expiration.trim();
+      DateTime? exp;
+      if (s.contains('T') || s.contains('+')) {
+        exp = DateTime.tryParse(s);
+      } else {
+        exp = DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
+      }
+      if (exp == null) return '0';
+      final diff = exp.difference(DateTime.now());
+      if (diff.isNegative) return '0';
+      return '${diff.inDays}';
+    } catch (_) {
+      return '0';
+    }
+  }
+
   Future<void> _sendWhatsAppFromTemplate(String templateType, {
     Map<String, String>? extraVars,
   }) async {
@@ -1316,11 +1323,12 @@ class _SubscriberDetailsScreenState
       final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
       final creditVal = sub.debtAmount > 0 ? _formatNumber(sub.debtAmount) : '0';
       final pkgPriceFormatted = _formatNumber(double.tryParse(sub.price ?? '0') ?? 0);
+      final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
 
       String msg = match.first.messageContent;
       final vars = {
-        '{subscriber_name}': sub.fullName,
-        '{firstname}': sub.firstname,
+        '{subscriber_name}': displayName,
+        '{firstname}': sub.firstname.isNotEmpty ? sub.firstname : sub.username,
         '{lastname}': sub.lastname,
         '{phone}': sub.displayPhone,
         '{remaining_days}': '${sub.remainingDays ?? 0}',
@@ -1625,13 +1633,17 @@ class _SubscriberDetailsScreenState
                             await notifier.loadSubscribers();
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
+                            final freshExpDate2 = fresh?['expiration']?.toString() ?? '';
+                            final freshRemDays2 = _calcRemainingDays(freshExpDate2);
                             await _sendWhatsAppFromTemplate('payment_confirmation',
                               extraVars: {
                                 '{paid_amount}': _formatNumber(payAmount),
                                 '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
                                 '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
-                                '{expiry_date}': fresh?['expiration']?.toString() ?? '',
-                                '{expiration_date}': fresh?['expiration']?.toString() ?? '',
+                                '{expiry_date}': freshExpDate2,
+                                '{expiration_date}': freshExpDate2,
+                                '{remaining_days}': freshRemDays2,
+                                '{days_remaining}': freshRemDays2,
                               });
                             await _offerPrintReceipt(ReceiptData(
                               subscriberName: widget.subscriber.fullName.isNotEmpty ? widget.subscriber.fullName : widget.subscriber.username,
