@@ -53,13 +53,13 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
       _advToDate.isNotEmpty;
 
   Map<String, String> _buildSearchFilters() {
-    final usernameQuery = _searchCtrl.text.trim();
+    final partialUsernameQuery = _searchCtrl.text.trim();
+    final exactUsernameQuery = _advUsername.trim();
 
     return {
-      'search': '',
-      'username': _advUsername.trim().isNotEmpty
-          ? _advUsername.trim()
-          : usernameQuery,
+      // The quick search box should support partial username matches.
+      'search': exactUsernameQuery.isEmpty ? partialUsernameQuery : '',
+      'username': exactUsernameQuery,
       'ip': _advIp.trim(),
       'mac': _advMac.trim(),
     };
@@ -353,7 +353,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                 onSubmitted: (_) => _load(page: 1),
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: 'بحث باسم المستخدم',
+                  hintText: 'ابحث بجزء من اسم المستخدم',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
