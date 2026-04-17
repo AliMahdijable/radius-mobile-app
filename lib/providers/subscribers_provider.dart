@@ -491,7 +491,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
     final userPrice = matched['user_price'];
     final plName = (matched['name'] ?? matched['profile_name'])?.toString();
-    final plPrice = (userPrice ?? matched['price'] ?? matched['sell_price'])?.toString();
+    final plPrice = (matched['sale_price'] ?? matched['sell_price'] ?? userPrice ?? matched['price'])?.toString();
     final resolvedId = sub.profileId
         ?? (matched['id'] is int ? matched['id'] : int.tryParse(matched['id']?.toString() ?? ''));
 
