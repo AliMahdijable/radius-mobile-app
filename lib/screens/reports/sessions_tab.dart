@@ -117,6 +117,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
     String toDate = _advToDate;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(

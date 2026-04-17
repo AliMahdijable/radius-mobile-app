@@ -66,6 +66,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   void _showSortSheet(BuildContext context, String currentSort, String currentDir) {
     final theme = Theme.of(context);
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -206,6 +207,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   void _showOnlineUserSheet(BuildContext context, SubscriberModel sub) {
     final theme = Theme.of(context);
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

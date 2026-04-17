@@ -1,4 +1,5 @@
 import 'dart:developer' as dev;
+import 'package:intl/intl.dart' as intl;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -659,7 +660,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     state = state.copyWith(isSearching: true);
 
     final q = query.toLowerCase().trim();
-    final localResults = state.subscribers.where((s) {
+    bool matchesQuery(SubscriberModel s) {
       return s.username.toLowerCase().contains(q) ||
           s.firstname.toLowerCase().contains(q) ||
           s.lastname.toLowerCase().contains(q) ||
@@ -668,6 +669,35 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           (s.mobile ?? '').contains(q) ||
           (s.profileName ?? '').toLowerCase().contains(q) ||
           (s.parentUsername ?? '').toLowerCase().contains(q);
+    }
+
+    final onlineMap = <String, SubscriberModel>{};
+    for (final o in state.onlineUsers) {
+      onlineMap[o.username.toLowerCase()] = o;
+    }
+
+    final localResults = state.subscribers.where(matchesQuery).map((s) {
+      final online = onlineMap[s.username.toLowerCase()];
+      if (online != null) {
+        return SubscriberModel(
+          idx: s.idx, username: s.username,
+          firstname: s.firstname.isNotEmpty ? s.firstname : online.firstname,
+          lastname: s.lastname.isNotEmpty ? s.lastname : online.lastname,
+          phone: s.phone ?? online.phone, mobile: s.mobile ?? online.mobile,
+          expiration: s.expiration, remainingDays: s.remainingDays,
+          notes: s.notes, debt: s.debt, hasDebtFlag: s.hasDebtFlag,
+          profileName: s.profileName ?? online.profileName,
+          profileId: s.profileId ?? online.profileId,
+          balance: s.balance, price: s.price,
+          parentUsername: s.parentUsername,
+          isOnlineFlag: true, enabled: s.enabled,
+          ipAddress: online.ipAddress, macAddress: online.macAddress,
+          sessionTime: online.sessionTime,
+          downloadBytes: online.downloadBytes, uploadBytes: online.uploadBytes,
+          deviceVendor: online.deviceVendor,
+        );
+      }
+      return s;
     }).toList();
 
     state = state.copyWith(searchResults: localResults, isSearching: false);
@@ -1049,6 +1079,9 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     bool isCash = false,
     bool isPartialCash = false,
     double partialCashAmount = 0,
+    String? packageName,
+    double? originalPrice,
+    double? discountAmount,
   }) async {
     try {
       final currentBalance = double.tryParse(currentNotes) ?? 0;
@@ -1092,31 +1125,39 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       if (isSuccess) {
         await updateUserNotes(userId, newNotes);
 
-        String actionType;
         String paymentLabel;
         if (isCash) {
-          if (isPartialCash) {
-            actionType = 'activate_subscriber_partial_cash';
-            paymentLabel = 'نقدي جزئي';
-          } else {
-            actionType = 'activate_subscriber_cash';
-            paymentLabel = 'نقدي';
-          }
+          paymentLabel = isPartialCash ? 'نقدي جزئي' : 'نقدي';
         } else {
-          actionType = 'activate_subscriber_non_cash';
           paymentLabel = 'غير نقدي';
         }
 
         final subName = _findUsername(userId);
+        final activateAction = isCash
+            ? (isPartialCash ? 'activate_subscriber_partial_cash' : 'activate_subscriber_cash')
+            : 'activate_subscriber_non_cash';
+        final pkgName = packageName ?? '';
+        final priceFormatted = _formatIQD(userPrice);
+        String desc = 'تفعيل المشترك $subName | الباقة: $pkgName | السعر: $priceFormatted IQD | $paymentLabel';
+        if (isPartialCash) {
+          desc += ' (${_formatIQD(partialCashAmount)} IQD)';
+        }
         logActivity(
-          action: actionType,
-          description: 'تفعيل $paymentLabel - المستخدم: $subName | السعر: $userPrice',
+          action: activateAction,
+          description: desc,
           targetId: userId,
           targetName: subName,
           metadata: {
+            'package_name': pkgName,
             'user_price': userPrice,
+            'original_price': originalPrice ?? userPrice,
+            'discount_amount': discountAmount ?? 0,
+            'has_discount': (discountAmount ?? 0) > 0,
+            'amount': userPrice,
+            'price': userPrice,
+            'final_price': userPrice,
             'payment_type': paymentLabel,
-            'partial_cash_amount': isPartialCash ? partialCashAmount : null,
+            'partial_cash_amount': isPartialCash ? partialCashAmount : 0,
             'new_balance': newNotes,
             'previous_balance': double.tryParse(currentNotes) ?? 0,
             'units': activationUnits,
@@ -1268,6 +1309,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
+  static String _formatIQD(double v) {
+    final intl_fmt = intl.NumberFormat('#,###');
+    return intl_fmt.format(v.abs().round());
+  }
+
   String _findUsername(int userId) {
     final match = state.subscribers.where(
       (s) => s.idx == userId.toString(),
@@ -1348,7 +1394,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       if (ok) {
         logActivity(
           action: 'deduct_balance',
-          description: 'تسديد دين ${amount.toStringAsFixed(0)} من المشترك: $username${paymentNotes != null ? ' - $paymentNotes' : ''}',
+          description: 'تسديد دين ${_formatIQD(amount)} IQD من المشترك: $username${paymentNotes != null ? ' - $paymentNotes' : ''}',
           targetId: userId,
           targetName: username,
           metadata: {
@@ -1386,7 +1432,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       if (ok) {
         logActivity(
           action: 'add_balance',
-          description: 'إضافة دين للمشترك: $username${comment != null ? ' - $comment' : ''}',
+          description: 'إضافة دين ${_formatIQD(amount)} IQD للمشترك: $username${comment != null ? ' - $comment' : ''}',
           targetId: userId,
           targetName: username,
           metadata: {

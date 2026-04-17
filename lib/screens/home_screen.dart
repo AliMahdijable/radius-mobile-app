@@ -11,6 +11,7 @@ import '../providers/auth_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/subscribers_provider.dart';
 import '../providers/messages_provider.dart';
+import '../providers/reports_provider.dart';
 import '../core/services/storage_service.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/app_snackbar.dart';
@@ -94,6 +95,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _showAlertsSheet() {
     final dash = ref.read(dashboardProvider);
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
@@ -499,6 +501,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) {
           if (i != 0) _alertsDismissed = false;
+          if (i == 0) {
+            final auth = ref.read(authProvider);
+            if (auth.user != null) {
+              ref.read(dashboardProvider.notifier).loadDashboard(
+                adminId: auth.user!.id,
+                token: auth.user!.token,
+              );
+            }
+          }
+          if (i == 3) {
+            ref.invalidate(reportsProvider);
+          }
           setState(() => _currentIndex = i);
         },
         destinations: [

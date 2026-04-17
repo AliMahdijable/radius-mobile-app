@@ -615,6 +615,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
   void _showElementProperties(int index) {
     final el = _elements[index];
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -635,6 +636,7 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
 
   void _showGlobalSettings() {
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

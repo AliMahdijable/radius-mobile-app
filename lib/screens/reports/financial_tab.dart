@@ -51,6 +51,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     });
   }
 
+
   Future<void> _load() async {
     await ref.read(reportsProvider.notifier).fetchFinancialReport(
           _dateFrom, _dateTo,
@@ -283,6 +284,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   void _showDateFilter() {
     final managers = ref.read(reportsProvider).managers;
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -525,7 +527,7 @@ class _LogRow extends StatelessWidget {
     final theme = Theme.of(context);
     final type = (log['action_type'] ?? log['action_type_ar'] ?? '').toString().toUpperCase();
     final target = log['user_username']?.toString() ?? log['target_name']?.toString() ?? '';
-    final desc = log['action_description']?.toString() ?? '';
+    final desc = AppHelpers.formatNumbersInText(log['action_description']?.toString() ?? '');
     final amount = _parseAmount(log);
     final time = log['created_at']?.toString() ?? '';
     final isDebt = type == 'BALANCE_ADD' || (type == 'SUBSCRIBER_ACTIVATE' && (desc.toLowerCase().contains('غير نقدي')));
@@ -548,14 +550,14 @@ class _LogRow extends StatelessWidget {
               Text(target, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
               if (desc.isNotEmpty)
                 Text(desc, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    maxLines: 3, overflow: TextOverflow.ellipsis),
             ]),
           ),
           Expanded(
             flex: 2,
             child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text('${isDebt ? "-" : "+"}${AppHelpers.formatMoney(amount)}',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isDebt ? Colors.red : Colors.green)),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: isDebt ? Colors.red : Colors.green)),
               Text(formattedTime, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: .4))),
             ]),
           ),
@@ -567,9 +569,17 @@ class _LogRow extends StatelessWidget {
   static double _parseAmount(Map<String, dynamic> log) {
     final raw = log['amount'];
     if (raw is num && raw != 0) return raw.toDouble().abs();
+    if (raw is String && raw.isNotEmpty) {
+      final cleaned = raw.replaceAll(RegExp(r'[^0-9.\-]'), '');
+      final parsed = double.tryParse(cleaned);
+      if (parsed != null && parsed != 0) return parsed.abs();
+    }
     final desc = (log['action_description'] ?? '').toString();
-    final match = RegExp(r'-?\d[\d,]*').firstMatch(desc);
-    if (match != null) return double.tryParse(match.group(0)!.replaceAll(',', ''))?.abs() ?? 0;
+    final match = RegExp(r'[\d,]+').firstMatch(desc.replaceAll(RegExp(r'[^\d,]'), ' '));
+    if (match != null) {
+      final val = double.tryParse(match.group(0)!.replaceAll(',', ''));
+      if (val != null && val > 0) return val;
+    }
     return 0;
   }
 }

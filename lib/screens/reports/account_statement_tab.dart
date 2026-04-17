@@ -471,6 +471,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
 
   void _showFilterSheet() {
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -666,14 +667,16 @@ class _TransactionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final type = (txn['action_type'] ?? '').toString().toUpperCase();
-    final desc = txn['description']?.toString() ??
+    final desc = AppHelpers.formatNumbersInText(
+        txn['description']?.toString() ??
         txn['action_description']?.toString() ??
-        '';
+        '');
     final admin = txn['admin_name']?.toString() ?? '';
     final time = txn['created_at']?.toString() ?? '';
-    final amount = (txn['amount'] is num)
-        ? (txn['amount'] as num).toDouble().abs()
-        : double.tryParse(txn['amount']?.toString() ?? '')?.abs() ?? 0;
+    final rawAmt = txn['amount'];
+    final amount = (rawAmt is num)
+        ? rawAmt.toDouble().abs()
+        : double.tryParse((rawAmt?.toString() ?? '').replaceAll(RegExp(r'[^0-9.\-]'), ''))?.abs() ?? 0;
 
     final isDebt = type == 'BALANCE_ADD' ||
         (type == 'SUBSCRIBER_ACTIVATE' &&

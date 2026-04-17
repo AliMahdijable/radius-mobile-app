@@ -62,6 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _showFeaturesModal() {
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(

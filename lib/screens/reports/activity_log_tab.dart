@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/helpers.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
@@ -253,6 +254,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
   void _showDateFilter() {
     final managers = ref.read(reportsProvider).managers;
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -364,7 +366,7 @@ class _ActivityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final style = _ActivityLogTabState._getActionStyle(activity);
-    final desc = activity['action_description']?.toString() ?? '';
+    final desc = AppHelpers.formatNumbersInText(activity['action_description']?.toString() ?? '');
     final target = activity['target_name']?.toString() ?? '';
     final admin = activity['admin_username']?.toString() ?? '';
     final time = activity['created_at']?.toString() ?? '';

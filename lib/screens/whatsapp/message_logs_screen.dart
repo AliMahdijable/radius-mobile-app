@@ -70,6 +70,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
     String? selectedType = state.typeFilter;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -296,6 +297,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
 
   void _showMessageDetail(MessageLogModel msg) {
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(

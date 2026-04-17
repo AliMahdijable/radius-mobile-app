@@ -31,6 +31,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final adminId = ref.read(authProvider).user?.id ?? '';
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(

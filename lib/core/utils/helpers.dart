@@ -46,6 +46,18 @@ class AppHelpers {
     return '${formatter.format(value.abs())} IQD';
   }
 
+  /// Format numbers in text (e.g. "السعر: -30000 IQD" → "السعر: 30,000 IQD")
+  static String formatNumbersInText(String text) {
+    return text.replaceAllMapped(
+      RegExp(r'-?(\d{4,})'),
+      (m) {
+        final num = int.tryParse(m.group(1)!);
+        if (num == null) return m.group(0)!;
+        return intl.NumberFormat('#,###').format(num);
+      },
+    );
+  }
+
   /// Parse debt from notes field (negative = debt)
   static double parseDebt(String? notes) {
     if (notes == null || notes.isEmpty) return 0;

@@ -91,6 +91,7 @@ class _SubscriberDetailsScreenState
   // ── WhatsApp ──────────────────────────────────────────────────────────
   void _showSendMessageSheet() {
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       builder: (ctx) => Padding(
@@ -222,6 +223,7 @@ class _SubscriberDetailsScreenState
     if (!mounted) return;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -644,6 +646,7 @@ class _SubscriberDetailsScreenState
     if (!mounted) return;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -890,6 +893,7 @@ class _SubscriberDetailsScreenState
     if (!mounted) return;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -1188,6 +1192,9 @@ class _SubscriberDetailsScreenState
                       isCash: isCash,
                       isPartialCash: isPartialCash,
                       partialCashAmount: cashAmount,
+                      packageName: profileName,
+                      originalPrice: originalPrice,
+                      discountAmount: discountAmount > 0 ? discountAmount : 0,
                     );
                     if (mounted) {
                       Navigator.pop(ctx);
@@ -1393,6 +1400,7 @@ class _SubscriberDetailsScreenState
     bool submitting = false;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -1713,6 +1721,7 @@ class _SubscriberDetailsScreenState
     bool submitting = false;
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -2323,6 +2332,7 @@ class _SubscriberDetailsScreenState
     ];
 
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/helpers.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
@@ -228,6 +229,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
   void _showDateFilter() {
     final managers = ref.read(reportsProvider).managers;
     showModalBottomSheet(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -358,7 +360,7 @@ class _ActivationRow extends StatelessWidget {
     final color = isExtend ? AppTheme.warningColor : AppTheme.successColor;
     final icon = isExtend ? Icons.schedule_rounded : Icons.check_circle_rounded;
     final target = record['target_name']?.toString() ?? '';
-    final desc = record['action_description']?.toString() ?? '';
+    final desc = AppHelpers.formatNumbersInText(record['action_description']?.toString() ?? '');
     final admin = record['admin_username']?.toString() ?? '';
     final time = record['created_at']?.toString() ?? '';
     String formattedTime = '';
@@ -392,7 +394,7 @@ class _ActivationRow extends StatelessWidget {
             if (desc.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: 2),
                   child: Text(desc, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
-                      maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      maxLines: 3, overflow: TextOverflow.ellipsis)),
             if (admin.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: 1),
                   child: Text('المدير: $admin', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary.withValues(alpha: .5)))),
