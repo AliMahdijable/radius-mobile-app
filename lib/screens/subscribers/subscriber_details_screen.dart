@@ -1122,6 +1122,7 @@ class _SubscriberDetailsScreenState
                   valueListenable: partialCtrl,
                   builder: (ctx3, partialVal, _) {
                     final livePartial = _parseMoney(partialVal.text);
+                    final partialBalanceDelta = livePartial - userPrice;
                     double liveDebtPreview = currentBalance;
                     if (isCash && !isPartialCash) {
                       liveDebtPreview = currentBalance;
@@ -1165,8 +1166,19 @@ class _SubscriberDetailsScreenState
                           if (isCash && isPartialCash && livePartial > 0) ...[
                             _SummaryRow(label: 'المدفوع نقداً', value: AppHelpers.formatMoney(livePartial),
                                 valueColor: Colors.green),
-                            _SummaryRow(label: 'المتبقي كدين', value: AppHelpers.formatMoney(userPrice - livePartial),
-                                valueColor: Colors.orange),
+                            _SummaryRow(
+                              label: 'صافي العملية على الرصيد',
+                              value: partialBalanceDelta > 0
+                                  ? '+${AppHelpers.formatMoney(partialBalanceDelta)}'
+                                  : partialBalanceDelta < 0
+                                      ? '-${AppHelpers.formatMoney(partialBalanceDelta.abs())}'
+                                      : AppHelpers.formatMoney(0),
+                              valueColor: partialBalanceDelta > 0
+                                  ? Colors.green
+                                  : partialBalanceDelta < 0
+                                      ? Colors.orange
+                                      : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
+                            ),
                           ],
                           if (!isCash)
                             _SummaryRow(label: 'الدفع', value: 'آجل (يضاف كدين)',
