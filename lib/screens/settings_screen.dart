@@ -68,10 +68,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   String? _buildVersionLabel(String version, String buildNumber) {
-    if (version.isNotEmpty && buildNumber.isNotEmpty && buildNumber != version) {
-      return '$version+$buildNumber';
-    }
-    if (version.isNotEmpty) return version;
+    final cleanVersion = version.split('+').first.trim();
+    if (cleanVersion.isNotEmpty) return cleanVersion;
     if (buildNumber.isNotEmpty) return buildNumber;
     return null;
   }
