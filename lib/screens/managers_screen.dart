@@ -938,6 +938,11 @@ class _ManagerListCard extends StatelessWidget {
                     color: AppTheme.infoColor,
                   ),
                   _ManagersMiniStatChip(
+                    icon: Icons.stars_rounded,
+                    label: 'نقاط ${manager.rewardPoints}',
+                    color: AppTheme.secondary,
+                  ),
+                  _ManagersMiniStatChip(
                     icon: Icons.account_balance_wallet_outlined,
                     label: 'رصيد ${_formatCurrency(manager.credit)}',
                     color: AppTheme.successColor,
@@ -1960,6 +1965,11 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                       label: 'الاسم',
                       value: widget.manager.fullName,
                     ),
+                  _SummaryLine(
+                    label: 'النقاط الحالية',
+                    value: '${widget.manager.rewardPoints}',
+                    accent: AppTheme.secondary,
+                  ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _pointsController,

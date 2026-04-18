@@ -123,7 +123,7 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
               .map((e) => ManagerModel.fromJson(Map<String, dynamic>.from(e)))
               .toList()
           : <ManagerModel>[];
-      final enrichedItems = await _attachDebtInfo(items);
+      final enrichedItems = await _enrichManagers(items);
 
       final totalCount = body is Map
           ? _toInt(body['totalCount'] ?? body['total'] ?? enrichedItems.length)
@@ -196,16 +196,28 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
     }
   }
 
-  Future<List<ManagerModel>> _attachDebtInfo(List<ManagerModel> managers) async {
+  Future<List<ManagerModel>> _enrichManagers(List<ManagerModel> managers) async {
     if (managers.isEmpty) return managers;
 
     final enriched = await Future.wait(
       managers.map((manager) async {
-        final debtInfo = await fetchDebtInfo(manager.id);
-        if (debtInfo == null) return manager;
+        final results = await Future.wait<dynamic>([
+          fetchDebtInfo(manager.id),
+          fetchManagerDetails(manager.id),
+        ]);
+        final debtInfo = results[0] as ManagerDebtInfo?;
+        final details = results[1] as ManagerModel?;
+
         return manager.copyWith(
-          totalDebt: debtInfo.totalDebt.abs(),
-          debtForMe: debtInfo.debtForMe.abs(),
+          totalDebt: debtInfo?.totalDebt.abs() ?? manager.totalDebt,
+          debtForMe: debtInfo?.debtForMe.abs() ?? manager.debtForMe,
+          rewardPoints: details?.rewardPoints ?? manager.rewardPoints,
+          mobile: details?.mobile.isNotEmpty == true
+              ? details!.mobile
+              : manager.mobile,
+          company: details?.company.isNotEmpty == true
+              ? details!.company
+              : manager.company,
         );
       }),
     );
@@ -510,10 +522,11 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
             ? notes!.trim()
             : 'إضافة نقاط تشجيعية',
       });
+      final formBody = Uri(queryParameters: {'payload': payload}).query;
 
       await _sas4Dio.post(
         '/manager/${manager.id}/addPoints',
-        data: {'payload': payload},
+        data: formBody,
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
@@ -526,7 +539,14 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       );
       return true;
     } catch (e) {
-      dev.log('addPoints error: $e', name: 'MANAGERS');
+      if (e is DioException) {
+        dev.log(
+          'addPoints error: status=${e.response?.statusCode} data=${e.response?.data}',
+          name: 'MANAGERS',
+        );
+      } else {
+        dev.log('addPoints error: $e', name: 'MANAGERS');
+      }
       return false;
     }
   }

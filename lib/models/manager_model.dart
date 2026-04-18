@@ -17,6 +17,7 @@ class ManagerModel {
   final int? parentId;
   final double totalDebt;
   final double debtForMe;
+  final int rewardPoints;
 
   const ManagerModel({
     required this.id,
@@ -37,6 +38,7 @@ class ManagerModel {
     this.parentId,
     this.totalDebt = 0,
     this.debtForMe = 0,
+    this.rewardPoints = 0,
   });
 
   factory ManagerModel.fromJson(Map<String, dynamic> json) {
@@ -68,6 +70,13 @@ class ManagerModel {
         json['total_debt'] ?? json['debt'] ?? json['total'] ?? 0,
       ),
       debtForMe: _toDouble(json['debt_for_me']),
+      rewardPoints: _toInt(
+        json['reward_points'] ??
+            json['points'] ??
+            json['reward_points_balance'] ??
+            json['points_balance'] ??
+            0,
+      ),
     );
   }
 
@@ -96,6 +105,7 @@ class ManagerModel {
     int? parentId,
     double? totalDebt,
     double? debtForMe,
+    int? rewardPoints,
   }) {
     return ManagerModel(
       id: id ?? this.id,
@@ -116,6 +126,7 @@ class ManagerModel {
       parentId: parentId ?? this.parentId,
       totalDebt: totalDebt ?? this.totalDebt,
       debtForMe: debtForMe ?? this.debtForMe,
+      rewardPoints: rewardPoints ?? this.rewardPoints,
     );
   }
 
