@@ -1,11 +1,13 @@
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
+import '../services/session_events.dart';
 import '../constants/api_constants.dart';
 
 class AuthInterceptor extends Interceptor {
   final StorageService _storage;
   final Dio _dio;
+  static bool _sessionExpiredHandled = false;
 
   AuthInterceptor(this._storage, this._dio);
 
@@ -33,6 +35,7 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
+    _sessionExpiredHandled = false;
     dev.log(
       'RESPONSE: ${response.statusCode} ${response.requestOptions.uri}',
       name: 'HTTP',
@@ -94,6 +97,12 @@ class AuthInterceptor extends Interceptor {
     }
 
     await _storage.clearAll();
+    if (!_sessionExpiredHandled) {
+      _sessionExpiredHandled = true;
+      SessionEvents.emitExpired(
+        reason: 'انتهت الجلسة أو تعذر تحديثها. يرجى تسجيل الدخول مرة أخرى.',
+      );
+    }
     handler.next(err);
   }
 }

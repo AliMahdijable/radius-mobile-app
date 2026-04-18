@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'core/services/expiry_push_service.dart';
+import 'core/services/session_events.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 
@@ -15,6 +17,8 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  StreamSubscription<SessionExpiredEvent>? _sessionExpiredSub;
+
   @override
   void initState() {
     super.initState();
@@ -22,10 +26,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     Future.microtask(() {
       ref.read(authProvider.notifier).checkAuth();
     });
+    _sessionExpiredSub = SessionEvents.stream.listen((event) {
+      ref
+          .read(authProvider.notifier)
+          .handleSessionExpired(reason: event.reason);
+    });
   }
 
   @override
   void dispose() {
+    _sessionExpiredSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -34,6 +44,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ExpiryPushService.runExpiryCheck();
+      ref.read(authProvider.notifier).syncSessionState();
     }
   }
 

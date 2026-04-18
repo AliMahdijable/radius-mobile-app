@@ -192,6 +192,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> syncSessionState() async {
+    final isLoggedIn = await _storage.isLoggedIn();
+    final token = await _storage.getToken();
+    final adminId = await _storage.getAdminId();
+    final username = await _storage.getAdminUsername();
+    final expiry = await _storage.getTokenExpiry();
+
+    if (!isLoggedIn || token == null || adminId == null) {
+      if (state.status == AuthStatus.authenticated) {
+        await handleSessionExpired();
+      } else {
+        state = state.copyWith(
+          status: AuthStatus.unauthenticated,
+          clearError: true,
+        );
+      }
+      return;
+    }
+
+    if (state.status != AuthStatus.authenticated || state.user == null) {
+      await checkAuth();
+      return;
+    }
+
+    final currentUser = state.user!;
+    if (currentUser.token != token ||
+        currentUser.id != adminId ||
+        currentUser.username != (username ?? currentUser.username) ||
+        (expiry != null && currentUser.expiresAt != expiry)) {
+      state = state.copyWith(
+        user: currentUser.copyWith(
+          id: adminId,
+          username: username ?? currentUser.username,
+          token: token,
+          expiresAt: expiry ?? currentUser.expiresAt,
+        ),
+        clearError: true,
+      );
+    }
+  }
+
   Future<bool> login(String username, String password) async {
     final dio = Dio(BaseOptions(
       baseUrl: ApiConstants.backendUrl,
@@ -271,6 +312,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.clearAll();
     _resetSessionScopedProviders();
     state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  Future<void> handleSessionExpired({String? reason}) async {
+    if (state.status == AuthStatus.unauthenticated) return;
+    _socket.disconnect();
+    await FcmService.onLoggedOut();
+    await ExpiryPushService.onLoggedOut();
+    await _storage.clearAll();
+    _resetSessionScopedProviders();
+    state = AuthState(
+      status: AuthStatus.unauthenticated,
+      error: reason ?? 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.',
+    );
   }
 }
 

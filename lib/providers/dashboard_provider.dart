@@ -109,8 +109,10 @@ class DashboardState {
 
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final Dio _sas4Dio;
+  final Dio _backendDio;
 
-  DashboardNotifier(this._sas4Dio) : super(const DashboardState());
+  DashboardNotifier(this._sas4Dio, this._backendDio)
+      : super(const DashboardState());
 
   void updateOfflineCount(int count) {
     state = state.copyWith(offlineCount: count, offlineLoaded: true);
@@ -119,16 +121,25 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   Future<void> refreshCountsOnly() async {
     try {
       final results = await Future.wait([
-        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
+        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => null),
       ]);
-      final total  = _parseWidgetInt(results[0].data);
-      final active = _parseWidgetInt(results[1].data);
-      final expired = _parseWidgetInt(results[2].data);
-      final online = _parseWidgetInt(results[3].data);
-      if (total == 0 && active == 0) return;
+      final total = _parseWidgetIntOrNull(results[0]) ?? state.totalSubscribers;
+      final active =
+          _parseWidgetIntOrNull(results[1]) ?? state.activeSubscribers;
+      final expired =
+          _parseWidgetIntOrNull(results[2]) ?? state.expiredSubscribers;
+      final online = _parseWidgetIntOrNull(results[3]) ?? state.onlineCount;
+
+      if (total == state.totalSubscribers &&
+          active == state.activeSubscribers &&
+          expired == state.expiredSubscribers &&
+          online == state.onlineCount) {
+        return;
+      }
+
       state = state.copyWith(
         totalSubscribers: total,
         activeSubscribers: active,
@@ -171,19 +182,26 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     return diff.inDays <= 3;
   }
 
-  int _parseWidgetInt(dynamic data) {
+  int? _parseWidgetIntOrNull(dynamic responseOrData) {
+    final data = responseOrData is Response ? responseOrData.data : responseOrData;
+    if (data == null) return null;
     if (data is Map && data.containsKey('data')) {
-      return int.tryParse(data['data'].toString()) ?? 0;
+      return int.tryParse(data['data'].toString());
     }
     if (data is int) return data;
-    return int.tryParse(data.toString()) ?? 0;
+    if (data is double) return data.toInt();
+    return int.tryParse(data.toString());
   }
 
-  String _parseWidgetStr(dynamic data) {
+  String? _parseWidgetStrOrNull(dynamic responseOrData) {
+    final data = responseOrData is Response ? responseOrData.data : responseOrData;
+    if (data == null) return null;
     if (data is Map && data.containsKey('data')) {
-      return data['data'].toString();
+      final value = data['data']?.toString();
+      return value == null || value.isEmpty ? null : value;
     }
-    return data?.toString() ?? '0';
+    final value = data.toString();
+    return value.isEmpty ? null : value;
   }
 
   Future<void> loadDashboard({
@@ -191,18 +209,6 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     required String token,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
-
-    final backendDio = Dio(BaseOptions(
-      baseUrl: ApiConstants.backendUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 20),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-        'x-auth-token': token,
-      },
-    ));
 
     try {
       // تشغيل كل الطلبات بالتوازي لتسريع التحميل
@@ -220,40 +226,81 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
       final allResults = await Future.wait([
         // [0-5] SAS4 Widgets
-        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': 0})),
-        _sas4Dio.get(ApiConstants.sas4WdBalance).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': '0'})),
-        _sas4Dio.get(ApiConstants.sas4WdRewardPoints).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': '0'})),
+        _sas4Dio.get(ApiConstants.sas4WdUsersCount).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdActiveCount).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdExpiredCount).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdOnline).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdBalance).catchError((_) => null),
+        _sas4Dio.get(ApiConstants.sas4WdRewardPoints).catchError((_) => null),
         // [6] Backend subscribers
-        backendDio.get('${ApiConstants.subscribersWithPhones}?adminId=$adminId').catchError((_) => Response(requestOptions: RequestOptions(), data: {'success': false})),
+        _backendDio
+            .get('${ApiConstants.subscribersWithPhones}?adminId=$adminId')
+            .catchError((_) => null),
         // [7] Backend daily activations
-        backendDio.get('${ApiConstants.dailyActivations}?admin_id=$adminId').catchError((_) => Response(requestOptions: RequestOptions(), data: {'success': false})),
+        _backendDio
+            .get('${ApiConstants.dailyActivations}?admin_id=$adminId')
+            .catchError((_) => null),
         // [8-9] SAS4 offline + expired counts
-        _sas4Dio.post(ApiConstants.sas4ListUsers, data: {'payload': offlinePayload}, options: Options(contentType: 'application/x-www-form-urlencoded')).catchError((_) => Response(requestOptions: RequestOptions())),
-        _sas4Dio.post(ApiConstants.sas4ListUsers, data: {'payload': expiredPayload}, options: Options(contentType: 'application/x-www-form-urlencoded')).catchError((_) => Response(requestOptions: RequestOptions())),
+        _sas4Dio
+            .post(
+              ApiConstants.sas4ListUsers,
+              data: {'payload': offlinePayload},
+              options: Options(contentType: 'application/x-www-form-urlencoded'),
+            )
+            .catchError((_) => null),
+        _sas4Dio
+            .post(
+              ApiConstants.sas4ListUsers,
+              data: {'payload': expiredPayload},
+              options: Options(contentType: 'application/x-www-form-urlencoded'),
+            )
+            .catchError((_) => null),
       ]);
 
-      final total = _parseWidgetInt(allResults[0].data);
-      final active = _parseWidgetInt(allResults[1].data);
-      final expired = _parseWidgetInt(allResults[2].data);
-      final online = _parseWidgetInt(allResults[3].data);
-      final balance = _parseWidgetStr(allResults[4].data);
-      final points = _parseWidgetStr(allResults[5].data);
+      final hadAnyResult = allResults.any((result) => result != null);
+      if (!hadAnyResult) {
+        state = state.copyWith(
+          isLoading: false,
+          hasLoaded: state.hasLoaded,
+          error: 'تعذر تحديث البيانات حالياً',
+        );
+        return;
+      }
+
+      final total = _parseWidgetIntOrNull(allResults[0]) ?? state.totalSubscribers;
+      final active =
+          _parseWidgetIntOrNull(allResults[1]) ?? state.activeSubscribers;
+      final expired =
+          _parseWidgetIntOrNull(allResults[2]) ?? state.expiredSubscribers;
+      final online = _parseWidgetIntOrNull(allResults[3]) ?? state.onlineCount;
+      final balance =
+          _parseWidgetStrOrNull(allResults[4]) ?? state.managerBalance;
+      final points =
+          _parseWidgetStrOrNull(allResults[5]) ?? state.managerPoints;
 
       dev.log('Widgets: total=$total active=$active expired=$expired online=$online', name: 'DASH');
 
       // معالجة بيانات المشتركين
-      int debtors = 0;
-      double totalDebt = 0;
-      int nearExpiry = 0, expiredToday = 0, expiredOverdue = 0;
-      List<Map<String, dynamic>> nearExpiryList = [];
-      List<Map<String, dynamic>> expiredTodayList = [];
-      List<Map<String, dynamic>> expiredOverdueList = [];
+      int debtors = state.debtors;
+      double totalDebt = state.totalDebt;
+      int nearExpiry = state.nearExpiryCount;
+      int expiredToday = state.expiredTodayCount;
+      int expiredOverdue = state.expiredOverdueCount;
+      List<Map<String, dynamic>> nearExpiryList = state.nearExpiryList;
+      List<Map<String, dynamic>> expiredTodayList = state.expiredTodayList;
+      List<Map<String, dynamic>> expiredOverdueList = state.expiredOverdueList;
 
-      final subsData = allResults[6].data;
+      final subsResponse = allResults[6];
+      final subsData = subsResponse is Response ? subsResponse.data : null;
       if (subsData is Map && subsData['success'] == true) {
+        debtors = 0;
+        totalDebt = 0;
+        nearExpiry = 0;
+        expiredToday = 0;
+        expiredOverdue = 0;
+        nearExpiryList = [];
+        expiredTodayList = [];
+        expiredOverdueList = [];
         final data = subsData['data'] as List? ?? [];
         for (final sub in data) {
           final expStr = sub['expiration']?.toString();
@@ -288,9 +335,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       }
 
       // معالجة التفعيلات اليومية
-      int todayAct = 0, todayExt = 0;
-      List<Map<String, dynamic>> activities = [];
-      final actData = allResults[7].data;
+      int todayAct = state.todayActivations, todayExt = state.todayExtensions;
+      List<Map<String, dynamic>> activities = state.recentActivities;
+      final actResponse = allResults[7];
+      final actData = actResponse is Response ? actResponse.data : null;
       if (actData is Map && actData['success'] == true) {
         final counts = actData['counts'] ?? {};
         todayAct = counts['activations'] ?? counts['activate'] ?? 0;
@@ -301,7 +349,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
       // معالجة عدد المنتهين فقط — الأوفلاين يُحدَّث من المشتركين عبر updateOfflineCount
       int expiredActual = expired;
-      dynamic expParsed = allResults[9].data;
+      dynamic expParsed = allResults[9] is Response ? (allResults[9] as Response).data : null;
       if (expParsed is String) expParsed = EncryptionService.decrypt(expParsed);
       if (expParsed is Map) {
         final tc = expParsed['totalCount'] ?? expParsed['total'] ?? expParsed['count'];
@@ -338,18 +386,23 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     } on DioException catch (e) {
       state = state.copyWith(
         isLoading: false,
-        hasLoaded: true,
+        hasLoaded: state.hasLoaded,
         error: 'خطأ اتصال: ${e.type.name}',
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, hasLoaded: true, error: '$e');
-    } finally {
-      backendDio.close();
+      state = state.copyWith(
+        isLoading: false,
+        hasLoaded: state.hasLoaded,
+        error: '$e',
+      );
     }
   }
 }
 
 final dashboardProvider =
     StateNotifierProvider<DashboardNotifier, DashboardState>((ref) {
-  return DashboardNotifier(ref.read(sas4DioProvider));
+  return DashboardNotifier(
+    ref.read(sas4DioProvider),
+    ref.read(backendDioProvider),
+  );
 });
