@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../constants/api_constants.dart';
 import '../constants/app_constants.dart';
+import '../../models/app_notification_model.dart';
 import 'storage_service.dart';
 
 class FcmEnableResult {
@@ -66,6 +67,20 @@ class FcmService {
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(ch);
+
+      const appAlertsChannel = AndroidNotificationChannel(
+        'mysvcs_app_alerts',
+        'تنبيهات التطبيق المباشرة',
+        description: 'تنبيهات الجرس المباشرة عند فتح التطبيق',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
+      await _fln
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(appAlertsChannel);
     }
 
     // عرض الإشعارات عندما التطبيق مفتوح (foreground)
@@ -92,6 +107,38 @@ class FcmService {
           priority: Priority.high,
         ),
         iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
+
+  static Future<void> showAppNotificationAlert(
+    AppNotificationModel notification,
+  ) async {
+    await init();
+
+    await _fln.show(
+      notification.id > 0 ? notification.id : notification.hashCode,
+      notification.title,
+      notification.body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'mysvcs_app_alerts',
+          'تنبيهات التطبيق المباشرة',
+          channelDescription: 'تنبيهات الجرس المباشرة عند فتح التطبيق',
+          importance: Importance.max,
+          priority: Priority.max,
+          playSound: true,
+          enableVibration: true,
+          ticker: 'MyServices Radius',
+          channelShowBadge: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBanner: true,
+          presentBadge: true,
+          presentList: true,
+          presentSound: true,
+        ),
       ),
     );
   }

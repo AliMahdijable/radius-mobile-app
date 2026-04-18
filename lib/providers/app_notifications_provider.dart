@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/api_constants.dart';
 import '../core/network/dio_client.dart';
+import '../core/services/fcm_service.dart';
 import '../core/services/socket_service.dart';
 import '../core/services/storage_service.dart';
 import '../models/app_notification_model.dart';
@@ -52,10 +53,20 @@ class AppNotificationsNotifier extends StateNotifier<AppNotificationsState> {
     _listenToSocket();
   }
 
+  static const Set<String> _supportedTypes = {
+    'cash_deposit',
+    'loan_deposit',
+    'pay_debt',
+  };
+
+  bool _shouldInclude(AppNotificationModel notification) =>
+      _supportedTypes.contains(notification.type);
+
   void _listenToSocket() {
     _socketSub = _socket.appNotifications.listen((payload) {
       final notification = AppNotificationModel.fromJson(payload);
       if (notification.id <= 0) return;
+      if (!_shouldInclude(notification)) return;
       final existing = state.notifications;
       if (existing.any((item) => item.id == notification.id)) return;
 
@@ -64,6 +75,8 @@ class AppNotificationsNotifier extends StateNotifier<AppNotificationsState> {
         notifications: next.take(50).toList(),
         clearError: true,
       );
+
+      unawaited(FcmService.showAppNotificationAlert(notification));
     });
   }
 
@@ -88,6 +101,7 @@ class AppNotificationsNotifier extends StateNotifier<AppNotificationsState> {
               .whereType<Map>()
               .map((item) =>
                   AppNotificationModel.fromJson(Map<String, dynamic>.from(item)))
+              .where(_shouldInclude)
               .toList()
           : <AppNotificationModel>[];
 
