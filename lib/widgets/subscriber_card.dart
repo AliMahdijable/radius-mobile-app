@@ -543,9 +543,19 @@ class _SplitSubscriberBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final barWidth = size * 0.24;
+    final barHeight = size * 0.62;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withOpacity(0.98),
+            const Color(0xFFF8FAFD),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
           color: borderColor,
@@ -559,30 +569,31 @@ class _SplitSubscriberBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(3),
+      child: Center(
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           textDirection: TextDirection.ltr,
           children: [
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: leftColor,
-                  borderRadius: BorderRadius.circular(1),
-                ),
+            Container(
+              width: barWidth,
+              height: barHeight,
+              decoration: BoxDecoration(
+                color: leftColor,
+                borderRadius: BorderRadius.circular(1.5),
               ),
             ),
             Container(
               width: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
+              height: barHeight,
+              margin: const EdgeInsets.symmetric(horizontal: 1.5),
               color: dividerColor,
             ),
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: rightColor,
-                  borderRadius: BorderRadius.circular(1),
-                ),
+            Container(
+              width: barWidth,
+              height: barHeight,
+              decoration: BoxDecoration(
+                color: rightColor,
+                borderRadius: BorderRadius.circular(1.5),
               ),
             ),
           ],
