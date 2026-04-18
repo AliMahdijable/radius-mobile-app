@@ -45,6 +45,13 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
+    const badgeSize = 30.0;
+    const badgeGap = 10.0;
+    final badgeIndent = badgeSize + badgeGap;
+    final badgeStyle = _resolveBadgeStyle(
+      subscriber,
+      isOnlinePage: showOnlineDetails,
+    );
     final hasProfile = subscriber.profileName != null &&
         subscriber.profileName!.isNotEmpty;
     final hasPhone = subscriber.displayPhone.trim().isNotEmpty;
@@ -80,50 +87,47 @@ class SubscriberCard extends StatelessWidget {
             Row(
               children: [
                 SizedBox(
-                  width: 36, height: 36,
-                  child: Stack(
-                    children: [
-                      Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(
-                          color: isDisabled
-                              ? Colors.grey.withOpacity(0.15)
-                              : daysColor.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: isDisabled
-                              ? const Icon(Icons.block, size: 18, color: Colors.grey)
-                              : Text(
-                                  subscriber.firstname.isNotEmpty
-                                      ? subscriber.firstname[0] : '?',
-                                  style: TextStyle(
-                                    color: daysColor,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                        ),
+                  width: badgeSize,
+                  height: badgeSize,
+                  child: Container(
+                    width: badgeSize,
+                    height: badgeSize,
+                    decoration: BoxDecoration(
+                      color: badgeStyle.fillColor,
+                      gradient: badgeStyle.gradient,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: badgeStyle.borderColor,
+                        width: 1,
                       ),
-                      if (isOnline && !isDisabled)
-                        Positioned(
-                          bottom: -1, left: -1,
-                          child: Container(
-                            width: 10, height: 10,
-                            decoration: BoxDecoration(
-                              color: AppTheme.whatsappGreen,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: theme.scaffoldBackgroundColor,
-                                width: 2,
+                      boxShadow: [
+                        BoxShadow(
+                          color: badgeStyle.borderColor.withOpacity(0.12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: isDisabled
+                          ? Icon(
+                              Icons.block_rounded,
+                              size: 14,
+                              color: badgeStyle.foregroundColor,
+                            )
+                          : Text(
+                              _badgeLabel(subscriber),
+                              style: TextStyle(
+                                color: badgeStyle.foregroundColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                height: 1,
                               ),
                             ),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: badgeGap),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,7 +211,7 @@ class SubscriberCard extends StatelessWidget {
 
             // Row 2: package/price chips
             Padding(
-              padding: const EdgeInsets.only(top: 5, right: 46),
+              padding: EdgeInsets.only(top: 5, right: badgeIndent),
               child: Wrap(
                 spacing: 8,
                 runSpacing: 6,
@@ -250,7 +254,7 @@ class SubscriberCard extends StatelessWidget {
             // Row 3: phone + expiration
             if (hasPhone || hasExpiration)
               Padding(
-                padding: const EdgeInsets.only(top: 6, right: 46),
+                padding: EdgeInsets.only(top: 6, right: badgeIndent),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 6,
@@ -278,7 +282,7 @@ class SubscriberCard extends StatelessWidget {
             // Row 4: debt (red) or credit (green) or balance
             if (subscriber.hasDebt)
               Padding(
-                padding: const EdgeInsets.only(top: 4, right: 46),
+                padding: EdgeInsets.only(top: 4, right: badgeIndent),
                 child: Row(
                   children: [
                     Icon(Icons.credit_card, size: 11, color: Colors.red.withOpacity(0.6)),
@@ -296,7 +300,7 @@ class SubscriberCard extends StatelessWidget {
               )
             else if (subscriber.hasCredit)
               Padding(
-                padding: const EdgeInsets.only(top: 4, right: 46),
+                padding: EdgeInsets.only(top: 4, right: badgeIndent),
                 child: Row(
                   children: [
                     Icon(Icons.account_balance_wallet, size: 11,
@@ -358,6 +362,105 @@ class SubscriberCard extends StatelessWidget {
     return '0 يوم';
   }
 
+  static String _badgeLabel(SubscriberModel sub) {
+    final firstName = sub.firstname.trim();
+    if (firstName.isNotEmpty) return firstName[0];
+    final username = sub.username.trim();
+    if (username.isNotEmpty) return username[0];
+    return '?';
+  }
+
+  static _SubscriberBadgeStyle _resolveBadgeStyle(
+    SubscriberModel sub, {
+    required bool isOnlinePage,
+  }) {
+    if (!sub.isEnabled) {
+      return const _SubscriberBadgeStyle(
+        fillColor: Color(0xFFF1F5F9),
+        borderColor: Color(0xFFD7DEE7),
+        foregroundColor: Color(0xFF94A3B8),
+      );
+    }
+
+    if (isOnlinePage) {
+      if (sub.isExpired && sub.isOnline) {
+        return const _SubscriberBadgeStyle(
+          fillColor: Color(0xFF8B5CF6),
+          borderColor: Color(0xFF7C3AED),
+          foregroundColor: Colors.white,
+          gradient: LinearGradient(
+            colors: [Color(0xFFA78BFA), Color(0xFF7C3AED)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        );
+      }
+
+      if (sub.isOnline) {
+        return const _SubscriberBadgeStyle(
+          fillColor: Color(0xFF16A34A),
+          borderColor: Color(0xFF15803D),
+          foregroundColor: Colors.white,
+          gradient: LinearGradient(
+            colors: [Color(0xFF34D399), Color(0xFF16A34A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        );
+      }
+    }
+
+    if (sub.isExpired && sub.isOnline) {
+      return const _SubscriberBadgeStyle(
+        fillColor: Color(0xFF2563EB),
+        borderColor: Color(0xFFEA580C),
+        foregroundColor: Colors.white,
+        gradient: LinearGradient(
+          colors: [Color(0xFF3B82F6), Color(0xFFF59E0B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+    }
+
+    if (sub.isExpired) {
+      return const _SubscriberBadgeStyle(
+        fillColor: Color(0xFFF59E0B),
+        borderColor: Color(0xFFEA580C),
+        foregroundColor: Colors.white,
+        gradient: LinearGradient(
+          colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+    }
+
+    if (sub.isOnline) {
+      return const _SubscriberBadgeStyle(
+        fillColor: Color(0xFF2563EB),
+        borderColor: Color(0xFF1D4ED8),
+        foregroundColor: Colors.white,
+        gradient: LinearGradient(
+          colors: [Color(0xFF60A5FA), Color(0xFF2563EB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+    }
+
+    return const _SubscriberBadgeStyle(
+      fillColor: Color(0xFF16A34A),
+      borderColor: Color(0xFF15803D),
+      foregroundColor: Colors.white,
+      gradient: LinearGradient(
+        colors: [Color(0xFF4ADE80), Color(0xFF16A34A)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    );
+  }
+
   static Widget _metaChip({
     required ThemeData theme,
     required IconData icon,
@@ -395,6 +498,20 @@ class SubscriberCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SubscriberBadgeStyle {
+  final Color fillColor;
+  final Color borderColor;
+  final Color foregroundColor;
+  final Gradient? gradient;
+
+  const _SubscriberBadgeStyle({
+    required this.fillColor,
+    required this.borderColor,
+    required this.foregroundColor,
+    this.gradient,
+  });
 }
 
 class _OnlineRow extends StatelessWidget {
