@@ -868,69 +868,26 @@ class _ManagerListCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  PopupMenuButton<_ManagerActionType>(
-                    onSelected: onActionSelected,
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: _ManagerActionType.edit,
-                        child: ListTile(
-                          leading: Icon(Icons.edit_outlined),
-                          title: Text('تعديل'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _ManagerActionType.deposit,
-                        child: ListTile(
-                          leading: Icon(Icons.add_card_rounded),
-                          title: Text('إضافة رصيد'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _ManagerActionType.withdraw,
-                        child: ListTile(
-                          leading: Icon(Icons.remove_circle_outline_rounded),
-                          title: Text('سحب رصيد'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _ManagerActionType.payDebt,
-                        child: ListTile(
-                          leading: Icon(Icons.payments_outlined),
-                          title: Text('تسديد دين'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _ManagerActionType.addPoints,
-                        child: ListTile(
-                          leading: Icon(Icons.stars_rounded),
-                          title: Text('إضافة نقاط'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: _ManagerActionType.delete,
-                        child: ListTile(
-                          leading: Icon(Icons.delete_outline_rounded),
-                          title: Text('حذف'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
-                    child: Container(
-                      padding: EdgeInsets.all(compact ? 4 : 6),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: EdgeInsets.all(compact ? 4 : 6),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.10)
+                          : theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: AnimatedRotation(
+                      turns: selected ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
                       child: Icon(
-                        Icons.more_vert_rounded,
+                        Icons.expand_more_rounded,
                         size: compact ? 18 : 20,
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.72),
                       ),
                     ),
                   ),
