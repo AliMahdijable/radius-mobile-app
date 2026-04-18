@@ -43,6 +43,7 @@ class ManagerModel {
 
   factory ManagerModel.fromJson(Map<String, dynamic> json) {
     final aclDetails = json['acl_group_details'];
+    final stats = json['stats'];
     return ManagerModel(
       id: _toInt(json['id'] ?? json['idx']),
       username: (json['username'] ?? '').toString(),
@@ -75,6 +76,15 @@ class ManagerModel {
             json['points'] ??
             json['reward_points_balance'] ??
             json['points_balance'] ??
+            json['rewardPoints'] ??
+            json['points_count'] ??
+            json['bonus_points'] ??
+            (stats is Map
+                ? stats['reward_points'] ??
+                    stats['points'] ??
+                    stats['points_count'] ??
+                    stats['reward_points_balance']
+                : null) ??
             0,
       ),
     );

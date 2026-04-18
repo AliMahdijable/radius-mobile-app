@@ -510,7 +510,7 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
     }
   }
 
-  Future<bool> addPoints({
+  Future<(bool success, String? message)> addPoints({
     required ManagerModel manager,
     required int points,
     String? notes,
@@ -523,12 +523,40 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
             : 'إضافة نقاط تشجيعية',
       });
       final formBody = Uri(queryParameters: {'payload': payload}).query;
+      final token = await _storage.getToken();
 
-      await _sas4Dio.post(
+      final response = await _sas4Dio.post(
         '/manager/${manager.id}/addPoints',
         data: formBody,
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
+        options: Options(
+          contentType: 'application/x-www-form-urlencoded',
+          headers: {
+            if (token != null) 'Authorization': 'Bearer $token',
+            if (token != null) 'X-Auth-Token': token,
+            if (token != null) 'x-auth-token': token,
+            'Accept': 'application/json',
+          },
+          validateStatus: (status) => status != null && status < 500,
+        ),
       );
+      final body = response.data;
+      final success = response.statusCode != null &&
+          response.statusCode! >= 200 &&
+          response.statusCode! < 300 &&
+          (body is! Map ||
+              body['status'] == null ||
+              body['status'] == 200 ||
+              body['success'] == true ||
+              body['ok'] == true);
+
+      if (!success) {
+        final message = _extractResponseMessage(body) ?? 'تعذر إضافة النقاط';
+        dev.log(
+          'addPoints rejected: status=${response.statusCode} data=$body',
+          name: 'MANAGERS',
+        );
+        return (false, message);
+      }
 
       await _logManagerActivity(
         activityType: 'MANAGER_EDIT',
@@ -537,17 +565,21 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
             'تم إضافة $points نقطة للمدير: ${manager.username}${notes != null && notes.trim().isNotEmpty ? ' - ${notes.trim()}' : ''}',
         targetName: manager.username,
       );
-      return true;
+      return (true, _extractResponseMessage(body));
     } catch (e) {
       if (e is DioException) {
+        final message = _extractResponseMessage(e.response?.data) ??
+            e.message ??
+            'تعذر إضافة النقاط';
         dev.log(
           'addPoints error: status=${e.response?.statusCode} data=${e.response?.data}',
           name: 'MANAGERS',
         );
+        return (false, message);
       } else {
         dev.log('addPoints error: $e', name: 'MANAGERS');
+        return (false, 'تعذر إضافة النقاط');
       }
-      return false;
     }
   }
 
@@ -623,6 +655,23 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
   static String _transactionId() {
     final random = Random();
     return '${DateTime.now().millisecondsSinceEpoch}-${random.nextInt(1 << 32)}';
+  }
+
+  static String? _extractResponseMessage(dynamic body) {
+    if (body is Map) {
+      final direct = body['message'] ?? body['error'] ?? body['msg'];
+      if (direct != null && direct.toString().trim().isNotEmpty) {
+        return direct.toString().trim();
+      }
+      final data = body['data'];
+      if (data is Map) {
+        final nested = data['message'] ?? data['error'] ?? data['msg'];
+        if (nested != null && nested.toString().trim().isNotEmpty) {
+          return nested.toString().trim();
+        }
+      }
+    }
+    return null;
   }
 
   static void _flattenManagerTree(

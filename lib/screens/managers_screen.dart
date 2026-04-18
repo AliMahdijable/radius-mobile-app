@@ -1926,7 +1926,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
     }
 
     setState(() => _saving = true);
-    final success = await ref.read(managersProvider.notifier).addPoints(
+    final result = await ref.read(managersProvider.notifier).addPoints(
           manager: widget.manager,
           points: points,
           notes: _notesController.text,
@@ -1936,10 +1936,13 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
 
     setState(() => _saving = false);
 
-    if (success) {
+    if (result.$1) {
       Navigator.of(context).pop(true);
     } else {
-      AppSnackBar.error(context, 'فشل إضافة النقاط');
+      AppSnackBar.error(
+        context,
+        result.$2 ?? 'فشل إضافة النقاط',
+      );
     }
   }
 
