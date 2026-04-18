@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import '../core/router/app_router.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
@@ -19,6 +19,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  static const MethodChannel _appInfoChannel =
+      MethodChannel('com.mysvcs.rad_mysvcs/app_info');
+
   bool _fcmEnabled = false;
   bool _fcmLoaded = false;
   String? _appVersion;
@@ -44,9 +47,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _loadAppVersion() async {
     try {
-      final info = await PackageInfo.fromPlatform();
-      final version = info.version.trim();
-      final buildNumber = info.buildNumber.trim();
+      final info =
+          await _appInfoChannel.invokeMapMethod<String, dynamic>('getAppVersion');
+      final version = (info?['version'] as String? ?? '').trim();
+      final buildNumber = '${info?['buildNumber'] ?? ''}'.trim();
       final versionLabel = _buildVersionLabel(version, buildNumber);
       debugPrint(
         'Loaded app version: version="$version", build="$buildNumber", label="$versionLabel"',

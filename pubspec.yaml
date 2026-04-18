@@ -51,7 +51,6 @@ dependencies:
   pull_to_refresh_flutter3: ^2.0.2
   fluttertoast: ^8.2.10
   file_picker: ^8.1.6
-  package_info_plus: ^8.3.1
 
   # Device notifications (expiry / near-expiry), background check
   flutter_local_notifications: ^18.0.1
