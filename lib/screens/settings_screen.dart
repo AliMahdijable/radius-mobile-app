@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../core/router/app_router.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
@@ -20,6 +21,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _fcmEnabled = false;
   bool _fcmLoaded = false;
+  String? _appVersion;
 
   @override
   void initState() {
@@ -35,6 +37,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         });
       }
     });
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final version = info.version.trim();
+      if (!mounted) return;
+      setState(() {
+        _appVersion = version.isEmpty ? null : version;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _appVersion = null);
+    }
   }
 
   Future<void> _onFcmChanged(bool value) async {
@@ -305,7 +322,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _SettingTile(
           icon: Icons.info_outline,
           title: 'عن التطبيق',
-          subtitle: 'MyServices Radius v1.0.0',
+          subtitle: _appVersion == null
+              ? 'MyServices Radius'
+              : 'MyServices Radius v$_appVersion',
         ),
 
         const SizedBox(height: 20),
