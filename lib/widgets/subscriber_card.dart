@@ -552,30 +552,55 @@ class _SplitSubscriberBadge extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: borderColor.withOpacity(0.08),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+            color: borderColor.withOpacity(0.10),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(4),
-        child: Row(
-          textDirection: TextDirection.ltr,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: ColoredBox(
-                color: leftColor,
-              ),
+            Row(
+              textDirection: TextDirection.ltr,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ColoredBox(
+                    color: leftColor,
+                  ),
+                ),
+                ColoredBox(
+                  color: dividerColor.withOpacity(0.75),
+                  child: const SizedBox(width: 1),
+                ),
+                Expanded(
+                  child: ColoredBox(
+                    color: rightColor,
+                  ),
+                ),
+              ],
             ),
-            ColoredBox(
-              color: dividerColor.withOpacity(0.75),
-              child: const SizedBox(width: 1),
-            ),
-            Expanded(
-              child: ColoredBox(
-                color: rightColor,
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: size * 0.42,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withOpacity(0.18),
+                        Colors.white.withOpacity(0.03),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
