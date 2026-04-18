@@ -341,46 +341,51 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(14),
-                    child: Column(
-                      children: [
-                        Row(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxWidth < 360;
+
+                        return Column(
                           children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                onChanged: _handleSearchChanged,
-                                decoration: InputDecoration(
-                                  hintText: 'بحث باسم المستخدم أو الاسم',
-                                  prefixIcon:
-                                      const Icon(Icons.search_rounded),
-                                  suffixIcon: _searchController.text.isNotEmpty
-                                      ? IconButton(
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            _handleSearchChanged('');
-                                            setState(() {});
-                                          },
-                                          icon: const Icon(Icons.close_rounded),
-                                        )
-                                      : null,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _searchController,
+                                    onChanged: _handleSearchChanged,
+                                    decoration: InputDecoration(
+                                      hintText: 'بحث باسم المستخدم أو الاسم',
+                                      prefixIcon:
+                                          const Icon(Icons.search_rounded),
+                                      suffixIcon:
+                                          _searchController.text.isNotEmpty
+                                              ? IconButton(
+                                                  onPressed: () {
+                                                    _searchController.clear();
+                                                    _handleSearchChanged('');
+                                                    setState(() {});
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.close_rounded,
+                                                  ),
+                                                )
+                                              : null,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 10),
+                                IconButton.filledTonal(
+                                  tooltip: 'تحديث',
+                                  onPressed: state.loading
+                                      ? null
+                                      : () => _reloadManagers(),
+                                  icon: const Icon(Icons.sync_rounded),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            IconButton.filledTonal(
-                              tooltip: 'تحديث',
-                              onPressed: state.loading
-                                  ? null
-                                  : () => _reloadManagers(),
-                              icon: const Icon(Icons.sync_rounded),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
+                            const SizedBox(height: 12),
+                            if (compact) ...[
+                              DropdownButtonFormField<String>(
                                 value: state.sortBy,
                                 decoration: const InputDecoration(
                                   labelText: 'ترتيب حسب',
@@ -413,86 +418,196 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   _reloadManagers(page: 1, sortBy: value);
                                 },
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: 96,
-                              child: DropdownButtonFormField<int>(
-                                value: state.rowsPerPage,
-                                decoration: const InputDecoration(
-                                  labelText: 'العدد',
-                                  prefixIcon:
-                                      Icon(Icons.format_list_numbered_rounded),
-                                ),
-                                items: const [10, 25, 50, 100, 500]
-                                    .map(
-                                      (count) => DropdownMenuItem(
-                                        value: count,
-                                        child: Text('$count'),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<int>(
+                                      value: state.rowsPerPage,
+                                      decoration: const InputDecoration(
+                                        labelText: 'عدد العناصر',
+                                        prefixIcon: Icon(
+                                          Icons.format_list_numbered_rounded,
+                                        ),
                                       ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) {
-                                  if (value == null) return;
-                                  _reloadManagers(page: 1, rowsPerPage: value);
-                                },
+                                      items: const [10, 25, 50, 100, 500]
+                                          .map(
+                                            (count) => DropdownMenuItem(
+                                              value: count,
+                                              child: Text('$count'),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (value) {
+                                        if (value == null) return;
+                                        _reloadManagers(
+                                          page: 1,
+                                          rowsPerPage: value,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  IconButton.filledTonal(
+                                    tooltip: state.direction == 'asc'
+                                        ? 'ترتيب تصاعدي'
+                                        : 'ترتيب تنازلي',
+                                    onPressed: () {
+                                      _reloadManagers(
+                                        page: 1,
+                                        direction: state.direction == 'asc'
+                                            ? 'desc'
+                                            : 'asc',
+                                      );
+                                    },
+                                    icon: Icon(
+                                      state.direction == 'asc'
+                                          ? Icons.arrow_upward_rounded
+                                          : Icons.arrow_downward_rounded,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            IconButton.filledTonal(
-                              tooltip: state.direction == 'asc'
-                                  ? 'تصاعدي'
-                                  : 'تنازلي',
-                              onPressed: () {
-                                _reloadManagers(
-                                  page: 1,
-                                  direction: state.direction == 'asc'
-                                      ? 'desc'
-                                      : 'asc',
-                                );
-                              },
-                              icon: Icon(
-                                state.direction == 'asc'
-                                    ? Icons.arrow_upward_rounded
-                                    : Icons.arrow_downward_rounded,
+                            ] else
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      value: state.sortBy,
+                                      decoration: const InputDecoration(
+                                        labelText: 'ترتيب حسب',
+                                        prefixIcon: Icon(Icons.sort_rounded),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'username',
+                                          child: Text('اسم المستخدم'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'firstname',
+                                          child: Text('الاسم الأول'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'lastname',
+                                          child: Text('الاسم الأخير'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'balance',
+                                          child: Text('الرصيد'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'users_count',
+                                          child: Text('عدد المشتركين'),
+                                        ),
+                                      ],
+                                      onChanged: (value) {
+                                        if (value == null) return;
+                                        _reloadManagers(page: 1, sortBy: value);
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  SizedBox(
+                                    width: 120,
+                                    child: DropdownButtonFormField<int>(
+                                      value: state.rowsPerPage,
+                                      decoration: const InputDecoration(
+                                        labelText: 'العدد',
+                                        prefixIcon: Icon(
+                                          Icons.format_list_numbered_rounded,
+                                        ),
+                                      ),
+                                      items: const [10, 25, 50, 100, 500]
+                                          .map(
+                                            (count) => DropdownMenuItem(
+                                              value: count,
+                                              child: Text('$count'),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (value) {
+                                        if (value == null) return;
+                                        _reloadManagers(
+                                          page: 1,
+                                          rowsPerPage: value,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  IconButton.filledTonal(
+                                    tooltip: state.direction == 'asc'
+                                        ? 'تصاعدي'
+                                        : 'تنازلي',
+                                    onPressed: () {
+                                      _reloadManagers(
+                                        page: 1,
+                                        direction: state.direction == 'asc'
+                                            ? 'desc'
+                                            : 'asc',
+                                      );
+                                    },
+                                    icon: Icon(
+                                      state.direction == 'asc'
+                                          ? Icons.arrow_upward_rounded
+                                          : Icons.arrow_downward_rounded,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ManagersStatCard(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 380;
+                    final statCards = [
+                      _ManagersStatCard(
                         label: 'إجمالي المدراء',
                         value: '${state.totalCount}',
                         icon: Icons.admin_panel_settings_outlined,
                         color: AppTheme.infoColor,
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _ManagersStatCard(
+                      _ManagersStatCard(
                         label: 'أرصدة ظاهرة',
                         value: _formatCurrency(visibleCredit),
                         icon: Icons.account_balance_wallet_outlined,
                         color: AppTheme.successColor,
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _ManagersStatCard(
+                      _ManagersStatCard(
                         label: 'ديون ظاهرة',
                         value: _formatCurrency(visibleDebt),
                         icon: Icons.trending_down_rounded,
                         color: AppTheme.warningColor,
                       ),
-                    ),
-                  ],
+                    ];
+
+                    if (compact) {
+                      return Column(
+                        children: [
+                          for (var i = 0; i < statCards.length; i++) ...[
+                            statCards[i],
+                            if (i != statCards.length - 1)
+                              const SizedBox(height: 10),
+                          ],
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: statCards[0]),
+                        const SizedBox(width: 10),
+                        Expanded(child: statCards[1]),
+                        const SizedBox(width: 10),
+                        Expanded(child: statCards[2]),
+                      ],
+                    );
+                  },
                 ),
                 if (state.error != null) ...[
                   const SizedBox(height: 10),
@@ -648,6 +763,8 @@ class _ManagerListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final showFullName =
+        manager.fullName.isNotEmpty && manager.fullName != manager.username;
     final borderColor = selected
         ? theme.colorScheme.primary
         : theme.colorScheme.outline.withValues(alpha: 0.14);
@@ -716,12 +833,11 @@ class _ManagerListCard extends StatelessWidget {
                           manager.username,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              theme.textTheme.titleMedium?.copyWith(
+                          style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        if (manager.fullName.isNotEmpty) ...[
+                        if (showFullName) ...[
                           const SizedBox(height: 4),
                           Text(
                             manager.fullName,
@@ -837,32 +953,72 @@ class _ManagerListCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ManagerMetricTile(
-                      label: 'المشتركون',
-                      value: '${manager.usersCount}',
-                      color: AppTheme.infoColor,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ManagerMetricTile(
-                      label: 'الرصيد',
-                      value: _formatCurrency(manager.credit),
-                      color: AppTheme.successColor,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ManagerMetricTile(
-                      label: 'الدين',
-                      value: _formatCurrency(manager.debt),
-                      color: AppTheme.warningColor,
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 380;
+
+                  if (compact) {
+                    final tileWidth = (constraints.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        SizedBox(
+                          width: tileWidth,
+                          child: _ManagerMetricTile(
+                            label: 'المشتركون',
+                            value: '${manager.usersCount}',
+                            color: AppTheme.infoColor,
+                          ),
+                        ),
+                        SizedBox(
+                          width: tileWidth,
+                          child: _ManagerMetricTile(
+                            label: 'الرصيد',
+                            value: _formatCurrency(manager.credit),
+                            color: AppTheme.successColor,
+                          ),
+                        ),
+                        SizedBox(
+                          width: tileWidth,
+                          child: _ManagerMetricTile(
+                            label: 'الدين',
+                            value: _formatCurrency(manager.debt),
+                            color: AppTheme.warningColor,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _ManagerMetricTile(
+                          label: 'المشتركون',
+                          value: '${manager.usersCount}',
+                          color: AppTheme.infoColor,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ManagerMetricTile(
+                          label: 'الرصيد',
+                          value: _formatCurrency(manager.credit),
+                          color: AppTheme.successColor,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ManagerMetricTile(
+                          label: 'الدين',
+                          value: _formatCurrency(manager.debt),
+                          color: AppTheme.warningColor,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               AnimatedCrossFade(
                 firstChild: const SizedBox.shrink(),
@@ -2237,12 +2393,17 @@ class _InfoBadge extends StatelessWidget {
         children: [
           Icon(icon, size: 15, color: color),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
           ),
         ],
       ),
