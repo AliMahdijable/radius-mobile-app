@@ -34,6 +34,13 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   int? _selectedManagerId;
+  static const List<(String value, String label, String shortLabel)> _sortItems = [
+    ('username', 'اسم المستخدم', 'المستخدم'),
+    ('firstname', 'الاسم الأول', 'الأول'),
+    ('lastname', 'الاسم الأخير', 'الأخير'),
+    ('balance', 'الرصيد', 'الرصيد'),
+    ('users_count', 'عدد المشتركين', 'المشتركون'),
+  ];
 
   @override
   void initState() {
@@ -94,6 +101,36 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
   int _totalPages(ManagersState state) {
     if (state.totalCount <= 0) return 1;
     return (state.totalCount / state.rowsPerPage).ceil();
+  }
+
+  List<DropdownMenuItem<String>> _buildSortMenuItems() {
+    return _sortItems
+        .map(
+          (item) => DropdownMenuItem<String>(
+            value: item.$1,
+            child: Text(
+              item.$2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  List<Widget> _buildSortSelectedItems(bool compact) {
+    return _sortItems
+        .map(
+          (item) => Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              compact ? item.$3 : item.$2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        )
+        .toList();
   }
 
   Future<void> _openManagerForm({ManagerModel? manager}) async {
@@ -344,6 +381,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final compact = constraints.maxWidth < 360;
+                        final ultraCompact = constraints.maxWidth < 320;
 
                         return Column(
                           children: [
@@ -387,32 +425,14 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                             if (compact) ...[
                               DropdownButtonFormField<String>(
                                 value: state.sortBy,
+                                isDense: true,
+                                isExpanded: true,
+                                selectedItemBuilder: (_) =>
+                                    _buildSortSelectedItems(true),
                                 decoration: const InputDecoration(
-                                  labelText: 'ترتيب حسب',
-                                  prefixIcon: Icon(Icons.sort_rounded),
+                                  labelText: 'الفرز',
                                 ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'username',
-                                    child: Text('اسم المستخدم'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'firstname',
-                                    child: Text('الاسم الأول'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'lastname',
-                                    child: Text('الاسم الأخير'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'balance',
-                                    child: Text('الرصيد'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'users_count',
-                                    child: Text('عدد المشتركين'),
-                                  ),
-                                ],
+                                items: _buildSortMenuItems(),
                                 onChanged: (value) {
                                   if (value == null) return;
                                   _reloadManagers(page: 1, sortBy: value);
@@ -424,11 +444,10 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   Expanded(
                                     child: DropdownButtonFormField<int>(
                                       value: state.rowsPerPage,
+                                      isDense: true,
+                                      isExpanded: true,
                                       decoration: const InputDecoration(
-                                        labelText: 'عدد العناصر',
-                                        prefixIcon: Icon(
-                                          Icons.format_list_numbered_rounded,
-                                        ),
+                                        labelText: 'عدد',
                                       ),
                                       items: const [10, 25, 50, 100, 500]
                                           .map(
@@ -448,22 +467,27 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 10),
-                                  IconButton.filledTonal(
-                                    tooltip: state.direction == 'asc'
-                                        ? 'ترتيب تصاعدي'
-                                        : 'ترتيب تنازلي',
-                                    onPressed: () {
-                                      _reloadManagers(
-                                        page: 1,
-                                        direction: state.direction == 'asc'
-                                            ? 'desc'
-                                            : 'asc',
-                                      );
-                                    },
-                                    icon: Icon(
-                                      state.direction == 'asc'
-                                          ? Icons.arrow_upward_rounded
-                                          : Icons.arrow_downward_rounded,
+                                  SizedBox(
+                                    width: ultraCompact ? 44 : 48,
+                                    height: ultraCompact ? 44 : 48,
+                                    child: IconButton.filledTonal(
+                                      tooltip: state.direction == 'asc'
+                                          ? 'ترتيب تصاعدي'
+                                          : 'ترتيب تنازلي',
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () {
+                                        _reloadManagers(
+                                          page: 1,
+                                          direction: state.direction == 'asc'
+                                              ? 'desc'
+                                              : 'asc',
+                                        );
+                                      },
+                                      icon: Icon(
+                                        state.direction == 'asc'
+                                            ? Icons.arrow_upward_rounded
+                                            : Icons.arrow_downward_rounded,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -474,32 +498,15 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   Expanded(
                                     child: DropdownButtonFormField<String>(
                                       value: state.sortBy,
+                                      isDense: true,
+                                      isExpanded: true,
+                                      selectedItemBuilder: (_) =>
+                                          _buildSortSelectedItems(false),
                                       decoration: const InputDecoration(
                                         labelText: 'ترتيب حسب',
                                         prefixIcon: Icon(Icons.sort_rounded),
                                       ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'username',
-                                          child: Text('اسم المستخدم'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'firstname',
-                                          child: Text('الاسم الأول'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'lastname',
-                                          child: Text('الاسم الأخير'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'balance',
-                                          child: Text('الرصيد'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'users_count',
-                                          child: Text('عدد المشتركين'),
-                                        ),
-                                      ],
+                                      items: _buildSortMenuItems(),
                                       onChanged: (value) {
                                         if (value == null) return;
                                         _reloadManagers(page: 1, sortBy: value);
@@ -508,9 +515,11 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   ),
                                   const SizedBox(width: 10),
                                   SizedBox(
-                                    width: 120,
+                                    width: 112,
                                     child: DropdownButtonFormField<int>(
                                       value: state.rowsPerPage,
+                                      isDense: true,
+                                      isExpanded: true,
                                       decoration: const InputDecoration(
                                         labelText: 'العدد',
                                         prefixIcon: Icon(
@@ -686,56 +695,82 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
               child: Card(
                 child: Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'الصفحة ${state.currentPage} من $totalPages',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'المعروض ${state.managers.length} من أصل ${state.totalCount}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'السابق',
-                        onPressed: state.currentPage > 1 && !state.loading
-                            ? () => _reloadManagers(
-                                  page: state.currentPage - 1,
-                                )
-                            : null,
-                        icon: const Icon(Icons.chevron_right_rounded),
-                      ),
-                      IconButton(
-                        tooltip: 'التالي',
-                        onPressed:
-                            state.currentPage < totalPages && !state.loading
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 340;
+                      final summary = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'الصفحة ${state.currentPage} من $totalPages',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'المعروض ${state.managers.length} من أصل ${state.totalCount}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.6),
+                                ),
+                          ),
+                        ],
+                      );
+
+                      final pager = Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'السابق',
+                            onPressed: state.currentPage > 1 && !state.loading
                                 ? () => _reloadManagers(
-                                      page: state.currentPage + 1,
+                                      page: state.currentPage - 1,
                                     )
                                 : null,
-                        icon: const Icon(Icons.chevron_left_rounded),
-                      ),
-                    ],
+                            icon: const Icon(Icons.chevron_right_rounded),
+                          ),
+                          IconButton(
+                            tooltip: 'التالي',
+                            onPressed:
+                                state.currentPage < totalPages && !state.loading
+                                    ? () => _reloadManagers(
+                                          page: state.currentPage + 1,
+                                        )
+                                    : null,
+                            icon: const Icon(Icons.chevron_left_rounded),
+                          ),
+                        ],
+                      );
+
+                      if (compact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            summary,
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: pager,
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: summary),
+                          pager,
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -765,6 +800,7 @@ class _ManagerListCard extends StatelessWidget {
     final theme = Theme.of(context);
     final showFullName =
         manager.fullName.isNotEmpty && manager.fullName != manager.username;
+    final compact = MediaQuery.sizeOf(context).width < 360;
     final borderColor = selected
         ? theme.colorScheme.primary
         : theme.colorScheme.outline.withValues(alpha: 0.14);
@@ -790,7 +826,7 @@ class _ManagerListCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(compact ? 12 : 16),
           child: Column(
             children: [
               Row(
@@ -798,12 +834,13 @@ class _ManagerListCard extends StatelessWidget {
                   Stack(
                     children: [
                       CircleAvatar(
-                        radius: 24,
+                        radius: compact ? 20 : 24,
                         backgroundColor:
                             AppTheme.primary.withValues(alpha: 0.12),
-                        child: const Icon(
+                        child: Icon(
                           Icons.admin_panel_settings_outlined,
                           color: AppTheme.primary,
+                          size: compact ? 18 : 22,
                         ),
                       ),
                       Positioned(
@@ -824,7 +861,7 @@ class _ManagerListCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: compact ? 10 : 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -835,10 +872,11 @@ class _ManagerListCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
+                            fontSize: compact ? 14 : null,
                           ),
                         ),
                         if (showFullName) ...[
-                          const SizedBox(height: 4),
+                          SizedBox(height: compact ? 2 : 4),
                           Text(
                             manager.fullName,
                             maxLines: 1,
@@ -847,6 +885,7 @@ class _ManagerListCard extends StatelessWidget {
                               color: theme.colorScheme.onSurface
                                   .withValues(alpha: 0.72),
                               fontWeight: FontWeight.w600,
+                              fontSize: compact ? 12 : null,
                             ),
                           ),
                         ],
@@ -907,7 +946,7 @@ class _ManagerListCard extends StatelessWidget {
                       ),
                     ],
                     child: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: EdgeInsets.all(compact ? 6 : 8),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.4),
@@ -920,8 +959,8 @@ class _ManagerListCard extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: compact ? 6 : 8,
+                runSpacing: compact ? 6 : 8,
                 children: [
                   _InfoBadge(
                     icon: manager.isActive
@@ -2275,9 +2314,10 @@ class _ManagersStatCard extends StatelessWidget {
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: color,
+                    fontSize: 16,
                   ),
             ),
           ],
@@ -2317,11 +2357,14 @@ class _ManagerMetricTile extends StatelessWidget {
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                   color: color,
+                  fontSize: 14,
                 ),
           ),
           const SizedBox(height: 4),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
@@ -2358,8 +2401,10 @@ class _ManagerActionButton extends StatelessWidget {
           color: (onPressed == null ? Colors.grey : color)
               .withValues(alpha: 0.28),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        minimumSize: const Size(100, 42),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        minimumSize: const Size(84, 38),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
       ),
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
