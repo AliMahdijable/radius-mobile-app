@@ -1580,9 +1580,9 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
             final canSendWhatsApp = notice.manager.mobile.trim().isNotEmpty;
 
             return AlertDialog(
-              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-              actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              titlePadding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+              contentPadding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+              actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
               title: Row(
                 children: [
                   Icon(
@@ -1599,86 +1599,39 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                 ],
               ),
               content: SizedBox(
-                width: 420,
+                width: 360,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'تمت الإضافة بنجاح. هل تريد إشعار المدير الفرعي بهذه الحركة الآن؟',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      'تمت الإضافة بنجاح. هل تريد إرسال الإشعار الآن؟',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            height: 1.35,
+                          ),
                     ),
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: [
-                          _SummaryLine(
-                            label: 'المدير',
-                            value: notice.manager.username,
-                          ),
-                          _SummaryLine(
-                            label: 'المبلغ',
-                            value: _formatCurrency(notice.amount),
-                            accent: AppTheme.successColor,
-                          ),
-                          _SummaryLine(
-                            label: 'الحالة',
-                            value: notice.accountStatusLabel,
-                            accent: notice.isLoan
-                                ? AppTheme.warningColor
-                                : AppTheme.infoColor,
-                          ),
-                          if (notice.hasPreviousCredit)
-                            _SummaryLine(
-                              label: 'الرصيد السابق',
-                              value: _formatCurrency(notice.previousCredit),
-                              accent: AppTheme.successColor,
-                            ),
-                          _SummaryLine(
-                            label: 'إجمالي الرصيد بعد العملية',
-                            value: _formatCurrency(notice.totalBalanceAfter),
-                            accent: AppTheme.successColor,
-                          ),
-                          if (notice.hasPreviousDebt)
-                            _SummaryLine(
-                              label: 'الديون السابقة',
-                              value: _formatCurrency(notice.previousDebt),
-                              accent: AppTheme.warningColor,
-                            ),
-                          if (notice.isLoan)
-                            _SummaryLine(
-                              label: 'إجمالي الدين بعد العملية',
-                              value: _formatCurrency(notice.totalDebtAfter),
-                              accent: AppTheme.warningColor,
-                            ),
-                          _SummaryLine(
-                            label: 'وصف الحركة',
-                            value: notice.movementDescription,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Text(
                       'معاينة الرسالة',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      constraints: BoxConstraints(
+                        maxHeight:
+                            MediaQuery.of(dialogContext).size.height * 0.28,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerLowest,
                         border: Border.all(
                           color: Theme.of(context)
                               .colorScheme
@@ -1687,14 +1640,18 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                         ),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: SelectableText(
-                        notice.previewMessage,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              height: 1.5,
-                            ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          notice.previewMessage,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    height: 1.5,
+                                    fontSize: 12.5,
+                                  ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     if (!canSendWhatsApp)
                       const _InlineInfoBanner(
                         color: AppTheme.warningColor,
@@ -1703,7 +1660,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                       )
                     else
                       const SizedBox.shrink(),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
@@ -1754,7 +1711,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -1810,7 +1767,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       'إشعار التطبيق يصل فقط إذا كان المدير قد سجّل الدخول في الهاتف وفعّل إشعارات الجهاز.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1819,6 +1776,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                                 .onSurface
                                 .withValues(alpha: 0.65),
                             height: 1.4,
+                            fontSize: 11,
                           ),
                     ),
                   ],
