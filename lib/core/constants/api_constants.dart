@@ -105,6 +105,7 @@ class ApiConstants {
   static const String sas4Profiles = '/index/profile';
   static const String sas4Managers = '/index/manager';
   static const String sas4ManagerTree = '/manager/tree';
+  static const String sas4ManagerAddRewardPoints = '/manager/addRewardPoints';
   static const String sas4UserSessions = '/index/UserSessions';
   static const String sas4Auth = '/auth';
 

@@ -517,16 +517,14 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
   }) async {
     try {
       final payload = EncryptionService.encrypt({
-        'points': points,
-        'notes': notes?.trim().isNotEmpty == true
-            ? notes!.trim()
-            : 'إضافة نقاط تشجيعية',
+        'manager_id': manager.id,
+        'amount': points,
       });
       final formBody = Uri(queryParameters: {'payload': payload}).query;
       final token = await _storage.getToken();
 
       final response = await _sas4Dio.post(
-        '/manager/${manager.id}/addPoints',
+        ApiConstants.sas4ManagerAddRewardPoints,
         data: formBody,
         options: Options(
           contentType: 'application/x-www-form-urlencoded',
