@@ -45,7 +45,7 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
-    const badgeSize = 20.0;
+    const badgeSize = 18.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
     final badgeStyle = _resolveBadgeStyle(subscriber);
@@ -86,7 +86,15 @@ class SubscriberCard extends StatelessWidget {
                 SizedBox(
                   width: badgeSize,
                   height: badgeSize,
-                  child: Container(
+                  child: badgeStyle.isSplit
+                      ? _SplitSubscriberBadge(
+                          size: badgeSize,
+                          leftColor: badgeStyle.primaryColor,
+                          rightColor: badgeStyle.secondaryColor!,
+                          borderColor: badgeStyle.borderColor,
+                          dividerColor: badgeStyle.dividerColor,
+                        )
+                      : Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
@@ -160,15 +168,7 @@ class SubscriberCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            ),
-                          if (badgeStyle.secondaryColor != null)
-                            Center(
-                              child: Container(
-                                width: 1,
-                                margin: const EdgeInsets.symmetric(vertical: 3),
-                                color: badgeStyle.dividerColor,
-                              ),
-                            ),
+                          ),
                           Center(
                             child: Text(
                               _badgeLabel(subscriber),
@@ -438,6 +438,7 @@ class SubscriberCard extends StatelessWidget {
         borderColor: Color(0xFFD4D9E1),
         foregroundColor: Colors.white,
         dividerColor: Color(0xFFF8FAFC),
+        isSplit: true,
       );
     }
 
@@ -513,6 +514,7 @@ class _SubscriberBadgeStyle {
   final Color borderColor;
   final Color foregroundColor;
   final Color dividerColor;
+  final bool isSplit;
 
   const _SubscriberBadgeStyle({
     required this.primaryColor,
@@ -520,7 +522,74 @@ class _SubscriberBadgeStyle {
     required this.borderColor,
     required this.foregroundColor,
     this.dividerColor = const Color(0xFFF8FAFC),
+    this.isSplit = false,
   });
+}
+
+class _SplitSubscriberBadge extends StatelessWidget {
+  final double size;
+  final Color leftColor;
+  final Color rightColor;
+  final Color borderColor;
+  final Color dividerColor;
+
+  const _SplitSubscriberBadge({
+    required this.size,
+    required this.leftColor,
+    required this.rightColor,
+    required this.borderColor,
+    required this.dividerColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: borderColor.withOpacity(0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          textDirection: TextDirection.ltr,
+          children: [
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: leftColor,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+            Container(
+              width: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              color: dividerColor,
+            ),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: rightColor,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OnlineRow extends StatelessWidget {
