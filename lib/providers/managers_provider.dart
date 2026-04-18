@@ -550,11 +550,12 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
               body['ok'] == true);
 
       if (!success) {
-        final message = _extractResponseMessage(body) ?? 'تعذر إضافة النقاط';
-        dev.log(
-          'addPoints rejected: status=${response.statusCode} data=$body',
-          name: 'MANAGERS',
-        );
+        final debugMessage =
+            'addPoints rejected: status=${response.statusCode} data=$body';
+        final message = _extractResponseMessage(body) ??
+            'تعذر إضافة النقاط (HTTP ${response.statusCode ?? 'unknown'})';
+        dev.log(debugMessage, name: 'MANAGERS');
+        print('MANAGERS: $debugMessage');
         return (false, message);
       }
 
@@ -568,16 +569,17 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       return (true, _extractResponseMessage(body));
     } catch (e) {
       if (e is DioException) {
+        final debugMessage =
+            'addPoints error: status=${e.response?.statusCode} type=${e.type.name} data=${e.response?.data}';
         final message = _extractResponseMessage(e.response?.data) ??
             e.message ??
-            'تعذر إضافة النقاط';
-        dev.log(
-          'addPoints error: status=${e.response?.statusCode} data=${e.response?.data}',
-          name: 'MANAGERS',
-        );
+            'تعذر إضافة النقاط (${e.type.name}${e.response?.statusCode != null ? ' / HTTP ${e.response?.statusCode}' : ''})';
+        dev.log(debugMessage, name: 'MANAGERS');
+        print('MANAGERS: $debugMessage');
         return (false, message);
       } else {
         dev.log('addPoints error: $e', name: 'MANAGERS');
+        print('MANAGERS: addPoints error: $e');
         return (false, 'تعذر إضافة النقاط');
       }
     }
