@@ -543,20 +543,10 @@ class _SplitSubscriberBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final barWidth = size * 0.24;
-    final barHeight = size * 0.62;
-
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(5),
+      child: Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white.withOpacity(0.98),
-            const Color(0xFFF8FAFD),
-          ],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: BorderRadius.circular(5),
         border: Border.all(
           color: borderColor,
           width: 1,
@@ -569,36 +559,30 @@ class _SplitSubscriberBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          textDirection: TextDirection.ltr,
-          children: [
-            Container(
-              width: barWidth,
-              height: barHeight,
+      child: Row(
+        textDirection: TextDirection.ltr,
+        children: [
+          Expanded(
+            child: DecoratedBox(
               decoration: BoxDecoration(
                 color: leftColor,
-                borderRadius: BorderRadius.circular(1.5),
               ),
             ),
-            Container(
-              width: 1,
-              height: barHeight,
-              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-              color: dividerColor,
-            ),
-            Container(
-              width: barWidth,
-              height: barHeight,
+          ),
+          Container(
+            width: 1,
+            color: dividerColor.withOpacity(0.7),
+          ),
+          Expanded(
+            child: DecoratedBox(
               decoration: BoxDecoration(
                 color: rightColor,
-                borderRadius: BorderRadius.circular(1.5),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    ),
     );
   }
 }
