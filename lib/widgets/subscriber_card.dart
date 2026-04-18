@@ -45,7 +45,7 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
-    const badgeSize = 30.0;
+    const badgeSize = 28.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
     final badgeStyle = _resolveBadgeStyle(
@@ -96,13 +96,6 @@ class SubscriberCard extends StatelessWidget {
                         color: badgeStyle.borderColor,
                         width: 1,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: badgeStyle.borderColor.withOpacity(0.10),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
@@ -134,29 +127,19 @@ class SubscriberCard extends StatelessWidget {
                                 color: badgeStyle.primaryColor,
                               ),
                             ),
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: badgeSize * 0.42,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withOpacity(0.18),
-                                    Colors.white.withOpacity(0.02),
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
+                          if (badgeStyle.secondaryColor != null)
+                            Center(
+                              child: Container(
+                                width: 0.8,
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                color: badgeStyle.dividerColor,
                               ),
                             ),
-                          ),
                           Center(
                             child: isDisabled
                                 ? Icon(
                                     Icons.block_rounded,
-                                    size: 14,
+                                    size: 13,
                                     color: badgeStyle.foregroundColor,
                                   )
                                 : Text(
@@ -164,7 +147,7 @@ class SubscriberCard extends StatelessWidget {
                                     style: TextStyle(
                                       color: badgeStyle.foregroundColor,
                                       fontWeight: FontWeight.w800,
-                                      fontSize: 12,
+                                      fontSize: 11.5,
                                       height: 1,
                                     ),
                                   ),
@@ -423,8 +406,8 @@ class SubscriberCard extends StatelessWidget {
   }) {
     if (!sub.isEnabled) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFF1F5F9),
-        borderColor: Color(0xFFD7DEE7),
+        primaryColor: Color(0xFFF4F6F8),
+        borderColor: Color(0xFFD9E0E7),
         foregroundColor: Color(0xFF94A3B8),
       );
     }
@@ -432,51 +415,53 @@ class SubscriberCard extends StatelessWidget {
     if (isOnlinePage) {
       if (sub.isExpired && sub.isOnline) {
         return const _SubscriberBadgeStyle(
-          primaryColor: Color(0xFF9F7AEA),
-          borderColor: Color(0xFF8B5CF6),
-          foregroundColor: Colors.white,
+          primaryColor: Color(0xFFEADCFB),
+          borderColor: Color(0xFFA47BDA),
+          foregroundColor: Color(0xFF6331A8),
         );
       }
 
       if (sub.isOnline) {
         return const _SubscriberBadgeStyle(
-          primaryColor: Color(0xFF22A06B),
-          borderColor: Color(0xFF15803D),
-          foregroundColor: Colors.white,
+          primaryColor: Color(0xFFDDF4E7),
+          borderColor: Color(0xFF48A56E),
+          foregroundColor: Color(0xFF1C7A49),
         );
       }
     }
 
     if (sub.isExpired && sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFF59E0B),
-        secondaryColor: Color(0xFF2563EB),
-        borderColor: Color(0xFFEA580C),
-        foregroundColor: Colors.white,
+        primaryColor: Color(0xFFFCE4C1),
+        secondaryColor: Color(0xFFDCE9FE),
+        borderColor: Color(0xFFD89A43),
+        foregroundColor: Color(0xFF6B4E16),
+        dividerColor: Color(0xFFF7F9FC),
       );
     }
 
     if (sub.isExpired) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFE89A29),
-        borderColor: Color(0xFFEA580C),
-        foregroundColor: Colors.white,
+        primaryColor: Color(0xFFFCE4C1),
+        borderColor: Color(0xFFD89A43),
+        foregroundColor: Color(0xFF8A5A14),
       );
     }
 
     if (sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFF22A06B),
-        secondaryColor: Color(0xFF2563EB),
-        borderColor: Color(0xFF1D4ED8),
-        foregroundColor: Colors.white,
+        primaryColor: Color(0xFFDDF4E7),
+        secondaryColor: Color(0xFFDCE9FE),
+        borderColor: Color(0xFF5D97CF),
+        foregroundColor: Color(0xFF245A74),
+        dividerColor: Color(0xFFF7F9FC),
       );
     }
 
     return const _SubscriberBadgeStyle(
-      primaryColor: Color(0xFF22A06B),
-      borderColor: Color(0xFF15803D),
-      foregroundColor: Colors.white,
+      primaryColor: Color(0xFFDDF4E7),
+      borderColor: Color(0xFF48A56E),
+      foregroundColor: Color(0xFF1C7A49),
     );
   }
 
@@ -524,12 +509,14 @@ class _SubscriberBadgeStyle {
   final Color? secondaryColor;
   final Color borderColor;
   final Color foregroundColor;
+  final Color dividerColor;
 
   const _SubscriberBadgeStyle({
     required this.primaryColor,
     this.secondaryColor,
     required this.borderColor,
     required this.foregroundColor,
+    this.dividerColor = const Color(0xFFF8FAFC),
   });
 }
 
