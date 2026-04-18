@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import 'dashboard_provider.dart';
 import 'discounts_provider.dart';
 import 'messages_provider.dart';
+import 'managers_provider.dart';
 import 'print_templates_provider.dart';
 import 'reports_provider.dart';
 import 'schedules_provider.dart';
@@ -126,6 +127,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void _resetSessionScopedProviders() {
     _ref.invalidate(dashboardProvider);
     _ref.invalidate(subscribersProvider);
+    _ref.invalidate(managersProvider);
     _ref.invalidate(whatsappProvider);
     _ref.invalidate(templatesProvider);
     _ref.invalidate(printTemplatesProvider);
