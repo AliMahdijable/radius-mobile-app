@@ -6,6 +6,9 @@ class AppConstants {
   static const String storageTokenExpiry = 'tokenExpiresAt';
   static const String storageAdminId = 'adminId';
   static const String storageAdminUsername = 'adminUsername';
+  static const String storagePermissions = 'permissions';
+  static const String storageCanAccessManagers = 'canAccessManagers';
+  static const String storageCanAccessPackages = 'canAccessPackages';
   static const String storageThemeMode = 'themeMode';
   static const String storageServerUrl = 'serverUrl';
   static const String storageRememberMe = 'rememberMe';

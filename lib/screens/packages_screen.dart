@@ -6,6 +6,7 @@ import '../core/network/dio_client.dart';
 import '../core/services/encryption_service.dart';
 import '../core/services/storage_service.dart';
 import '../core/theme/app_theme.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/app_snackbar.dart';
 
 class _PriceItem {
@@ -98,6 +99,13 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
   Dio get _sas4Dio => ref.read(sas4DioProvider);
 
   Future<void> _fetchManagers() async {
+    final canAccessManagers =
+        ref.read(authProvider).user?.canAccessManagers ?? false;
+    if (!canAccessManagers) {
+      setState(() => _loadingManagers = false);
+      return;
+    }
+
     setState(() => _loadingManagers = true);
     try {
       final res = await _sas4Dio.get(ApiConstants.sas4ManagerTree);
@@ -208,8 +216,42 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canAccessManagers =
+        ref.watch(authProvider).user?.canAccessManagers ?? false;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    if (!canAccessManagers) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('تسعير الباقات',
+              style:
+                  TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline,
+                    size: 46,
+                    color: theme.colorScheme.onSurface.withOpacity(0.35)),
+                const SizedBox(height: 12),
+                Text(
+                  'لا تملك صلاحية الوصول إلى هذا القسم',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

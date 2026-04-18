@@ -10,6 +10,7 @@ import '../../core/constants/api_constants.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/storage_service.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/templates_provider.dart';
@@ -162,6 +163,8 @@ class _SubscriberDetailsScreenState
 
   // ── Edit ───────────────────────────────────────────────────────────────
   void _showEditSheet() async {
+    final canEditExpiration =
+        ref.read(authProvider).user?.canAccessPackages ?? false;
     final id = _subscriberId;
     if (id == null) {
       _showSnack('معرف المشترك غير متوفر', success: false);
@@ -336,11 +339,15 @@ class _SubscriberDetailsScreenState
                   const SizedBox(height: 12),
                   TextField(
                     controller: expCtrl,
+                    readOnly: !canEditExpiration,
                     textDirection: TextDirection.ltr, textAlign: TextAlign.left,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'تاريخ الانتهاء',
                       hintText: 'YYYY-MM-DD HH:MM:SS',
-                      prefixIcon: Icon(Icons.calendar_today, size: 20)),
+                      helperText: canEditExpiration
+                          ? null
+                          : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
+                      prefixIcon: const Icon(Icons.calendar_today, size: 20)),
                   ),
                   const SizedBox(height: 20),
 
@@ -400,7 +407,11 @@ class _SubscriberDetailsScreenState
                         details['firstname'] = fnCtrl.text.trim();
                         details['lastname'] = lnCtrl.text.trim();
                         details['phone'] = phCtrl.text.trim();
-                        details['expiration'] = expCtrl.text.trim();
+                        if (canEditExpiration) {
+                          details['expiration'] = expCtrl.text.trim();
+                        } else {
+                          details.remove('expiration');
+                        }
                         if (pwCtrl.text.isNotEmpty) {
                           details['password'] = pwCtrl.text;
                           details['confirm_password'] = pwCtrl.text;

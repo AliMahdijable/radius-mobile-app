@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../models/subscriber_model.dart';
@@ -586,6 +587,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(subscribersProvider);
     final dash = ref.watch(dashboardProvider);
+    final canAccessManagers =
+        ref.watch(authProvider).user?.canAccessManagers ?? false;
     final theme = Theme.of(context);
 
     final fullList =
@@ -674,7 +677,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ),
 
-        if (!_isSearchMode) ...[
+        if (!_isSearchMode && canAccessManagers) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(

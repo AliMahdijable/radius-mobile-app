@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -18,6 +20,18 @@ import 'templates_provider.dart';
 import 'whatsapp_provider.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
+
+class _PermissionAccess {
+  final List<String> permissions;
+  final bool canAccessManagers;
+  final bool canAccessPackages;
+
+  const _PermissionAccess({
+    this.permissions = const [],
+    this.canAccessManagers = false,
+    this.canAccessPackages = false,
+  });
+}
 
 class AuthState {
   final AuthStatus status;
@@ -51,6 +65,63 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._storage, this._socket, this._ref)
       : super(const AuthState());
+
+  Future<_PermissionAccess> _fetchPermissions(String token) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: ApiConstants.sas4ApiUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 15),
+      headers: {'Accept': 'application/json'},
+    ));
+
+    try {
+      final response = await dio.get(
+        ApiConstants.sas4Auth,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'X-Auth-Token': token,
+          },
+        ),
+      );
+
+      final raw = response.data;
+      final rawPermissions =
+          raw is Map && raw['permissions'] is List ? raw['permissions'] as List : const [];
+      final permissions = rawPermissions
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      final access = _PermissionAccess(
+        permissions: permissions,
+        canAccessManagers: permissions.contains('prm_managers_create'),
+        canAccessPackages: permissions.contains('prm_profiles_create'),
+      );
+
+      dev.log(
+        'Fetched permissions: ${access.permissions.join(', ')} | canAccessManagers=${access.canAccessManagers} | canAccessPackages=${access.canAccessPackages}',
+        name: 'AUTH',
+      );
+
+      await _storage.savePermissions(access.permissions);
+      await _storage.saveCanAccessManagers(access.canAccessManagers);
+      await _storage.saveCanAccessPackages(access.canAccessPackages);
+      return access;
+    } catch (_) {
+      dev.log(
+        'Failed to fetch permissions from SAS4, using cached values instead.',
+        name: 'AUTH',
+      );
+      return _PermissionAccess(
+        permissions: await _storage.getPermissions(),
+        canAccessManagers: await _storage.getCanAccessManagers(),
+        canAccessPackages: await _storage.getCanAccessPackages(),
+      );
+    } finally {
+      dio.close();
+    }
+  }
 
   void _resetSessionScopedProviders() {
     _ref.invalidate(dashboardProvider);
@@ -88,12 +159,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      final access = await _fetchPermissions(token);
       final user = UserModel(
         id: adminId,
         username: username ?? '',
         role: 'admin',
         token: token,
         expiresAt: expiry ?? '',
+        permissions: access.permissions,
+        canAccessManagers: access.canAccessManagers,
+        canAccessPackages: access.canAccessPackages,
       );
       _resetSessionScopedProviders();
       _socket.disconnect();
@@ -137,12 +212,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (response.data['success'] == true) {
         final user = UserModel.fromJson(response.data);
+        final access = await _fetchPermissions(user.token);
 
         await _storage.saveAll(
           token: user.token,
           expiresAt: user.expiresAt,
           adminId: user.id,
           adminUsername: user.username,
+          permissions: access.permissions,
+          canAccessManagers: access.canAccessManagers,
+          canAccessPackages: access.canAccessPackages,
         );
 
         _resetSessionScopedProviders();
@@ -153,7 +232,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
         state = AuthState(
           status: AuthStatus.authenticated,
-          user: user,
+          user: user.copyWith(
+            permissions: access.permissions,
+            canAccessManagers: access.canAccessManagers,
+            canAccessPackages: access.canAccessPackages,
+          ),
           error: null,
         );
         return true;

@@ -38,6 +38,24 @@ class StorageService {
   Future<String?> getAdminUsername() async =>
       (await _sp).getString(AppConstants.storageAdminUsername);
 
+  Future<void> savePermissions(List<String> permissions) async =>
+      (await _sp).setStringList(AppConstants.storagePermissions, permissions);
+
+  Future<List<String>> getPermissions() async =>
+      (await _sp).getStringList(AppConstants.storagePermissions) ?? const [];
+
+  Future<void> saveCanAccessManagers(bool value) async =>
+      (await _sp).setBool(AppConstants.storageCanAccessManagers, value);
+
+  Future<bool> getCanAccessManagers() async =>
+      (await _sp).getBool(AppConstants.storageCanAccessManagers) ?? false;
+
+  Future<void> saveCanAccessPackages(bool value) async =>
+      (await _sp).setBool(AppConstants.storageCanAccessPackages, value);
+
+  Future<bool> getCanAccessPackages() async =>
+      (await _sp).getBool(AppConstants.storageCanAccessPackages) ?? false;
+
   Future<void> saveThemeMode(String mode) async =>
       (await _sp).setString(AppConstants.storageThemeMode, mode);
 
@@ -49,6 +67,9 @@ class StorageService {
     required String expiresAt,
     required String adminId,
     required String adminUsername,
+    List<String> permissions = const [],
+    bool canAccessManagers = false,
+    bool canAccessPackages = false,
   }) async {
     final sp = await _sp;
     await Future.wait([
@@ -56,6 +77,9 @@ class StorageService {
       sp.setString(AppConstants.storageTokenExpiry, expiresAt),
       sp.setString(AppConstants.storageAdminId, adminId),
       sp.setString(AppConstants.storageAdminUsername, adminUsername),
+      sp.setStringList(AppConstants.storagePermissions, permissions),
+      sp.setBool(AppConstants.storageCanAccessManagers, canAccessManagers),
+      sp.setBool(AppConstants.storageCanAccessPackages, canAccessPackages),
     ]);
   }
 
@@ -65,6 +89,9 @@ class StorageService {
     await sp.remove(AppConstants.storageTokenExpiry);
     await sp.remove(AppConstants.storageAdminId);
     await sp.remove(AppConstants.storageAdminUsername);
+    await sp.remove(AppConstants.storagePermissions);
+    await sp.remove(AppConstants.storageCanAccessManagers);
+    await sp.remove(AppConstants.storageCanAccessPackages);
   }
 
   Future<bool> isLoggedIn() async {

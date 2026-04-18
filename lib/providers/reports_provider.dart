@@ -108,6 +108,11 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
 
   // ── Managers Tree ─────────────────────────────────────────────────
   Future<void> fetchManagers() async {
+    final canAccessManagers = await _storage.getCanAccessManagers();
+    if (!canAccessManagers) {
+      state = state.copyWith(managers: const []);
+      return;
+    }
     if (state.managers.isNotEmpty) return;
     try {
       final res = await _sas4Dio.get(ApiConstants.sas4ManagerTree);

@@ -15,6 +15,7 @@ import '../../screens/templates_screen.dart';
 import '../../screens/discounts_screen.dart';
 import '../../screens/debt_export_screen.dart';
 import '../../screens/debt_import_screen.dart';
+import '../../screens/managers_screen.dart';
 import '../../screens/packages_screen.dart';
 import '../../screens/print_templates_screen.dart';
 
@@ -91,6 +92,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/packages',
         builder: (context, state) => const PackagesScreen(),
+      ),
+      GoRoute(
+        path: '/managers',
+        builder: (context, state) => const ManagersScreen(),
       ),
       GoRoute(
         path: '/print-templates',

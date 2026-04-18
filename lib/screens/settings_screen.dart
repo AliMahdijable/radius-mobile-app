@@ -224,7 +224,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
+    final authState = ref.watch(authProvider);
     final theme = Theme.of(context);
+    final canAccessManagers = authState.user?.canAccessManagers ?? false;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -268,12 +270,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'إدارة خصومات المشتركين',
           onTap: () => context.push('/discounts'),
         ),
-        _SettingTile(
-          icon: Icons.price_change_rounded,
-          title: 'تسعير الباقات',
-          subtitle: 'إدارة أسعار الباقات للمدراء',
-          onTap: () => context.push('/packages'),
-        ),
+        if (canAccessManagers)
+          _SettingTile(
+            icon: Icons.admin_panel_settings_outlined,
+            title: 'المدراء الفرعيون',
+            subtitle: 'إظهار وإدارة قسم الأدمنية الفرعية',
+            onTap: () => context.push('/managers'),
+          ),
+        if (canAccessManagers)
+          _SettingTile(
+            icon: Icons.price_change_rounded,
+            title: 'تسعير الباقات',
+            subtitle: 'إدارة أسعار الباقات للمدراء',
+            onTap: () => context.push('/packages'),
+          ),
         _SettingTile(
           icon: Icons.print_rounded,
           title: 'قوالب الطباعة',
