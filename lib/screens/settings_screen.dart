@@ -37,21 +37,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         });
       }
     });
-    _loadAppVersion();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAppVersion();
+    });
   }
 
   Future<void> _loadAppVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
       final version = info.version.trim();
+      final buildNumber = info.buildNumber.trim();
+      final versionLabel = _buildVersionLabel(version, buildNumber);
+      debugPrint(
+        'Loaded app version: version="$version", build="$buildNumber", label="$versionLabel"',
+      );
       if (!mounted) return;
       setState(() {
-        _appVersion = version.isEmpty ? null : version;
+        _appVersion = versionLabel;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Failed to load app version: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       setState(() => _appVersion = null);
     }
+  }
+
+  String? _buildVersionLabel(String version, String buildNumber) {
+    if (version.isNotEmpty && buildNumber.isNotEmpty && buildNumber != version) {
+      return '$version+$buildNumber';
+    }
+    if (version.isNotEmpty) return version;
+    if (buildNumber.isNotEmpty) return buildNumber;
+    return null;
   }
 
   Future<void> _onFcmChanged(bool value) async {
