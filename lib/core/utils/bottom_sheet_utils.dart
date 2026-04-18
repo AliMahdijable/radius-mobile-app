@@ -2,16 +2,21 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+double bottomSheetSystemInset(BuildContext context) {
+  final rootMediaQuery = MediaQueryData.fromView(View.of(context));
+  return math.max(
+    rootMediaQuery.viewPadding.bottom,
+    rootMediaQuery.padding.bottom,
+  );
+}
+
 double bottomSheetBottomInset(
   BuildContext context, {
   double extra = 16,
 }) {
-  final mediaQuery = MediaQuery.of(context);
-  final systemBottom = math.max(
-    mediaQuery.viewPadding.bottom,
-    mediaQuery.padding.bottom,
-  );
-  return mediaQuery.viewInsets.bottom + systemBottom + extra;
+  return MediaQuery.of(context).viewInsets.bottom +
+      bottomSheetSystemInset(context) +
+      extra;
 }
 
 EdgeInsets bottomSheetContentPadding(

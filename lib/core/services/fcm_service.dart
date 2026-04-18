@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -36,6 +37,8 @@ class FcmService {
   FcmService._();
 
   static bool _initialized = false;
+  static bool _tokenRefreshListenerAttached = false;
+  static bool _deferredRegistrationRunning = false;
   static final FlutterLocalNotificationsPlugin _fln =
       FlutterLocalNotificationsPlugin();
 
@@ -130,6 +133,48 @@ class FcmService {
     } catch (error) {
       debugPrint('FCM: getToken failed: $error');
       return null;
+    }
+  }
+
+  static void _ensureTokenRefreshListener() {
+    if (_tokenRefreshListenerAttached) return;
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      unawaited(registerToken(newToken));
+    });
+    _tokenRefreshListenerAttached = true;
+  }
+
+  static Future<bool> _registerCurrentTokenOnce() async {
+    final fcmToken = await _tryGetFcmToken();
+    if (fcmToken == null || fcmToken.isEmpty) return false;
+    return registerToken(fcmToken);
+  }
+
+  static void _scheduleDeferredRegistration() {
+    if (_deferredRegistrationRunning) return;
+    _deferredRegistrationRunning = true;
+    unawaited(_runDeferredRegistration());
+  }
+
+  static Future<void> _runDeferredRegistration() async {
+    const retryDelays = <Duration>[
+      Duration(seconds: 3),
+      Duration(seconds: 10),
+      Duration(seconds: 25),
+    ];
+
+    try {
+      for (final delay in retryDelays) {
+        await Future<void>.delayed(delay);
+        final ok = await _registerCurrentTokenOnce();
+        if (ok) {
+          debugPrint('FCM: deferred token registration succeeded');
+          return;
+        }
+      }
+      debugPrint('FCM: deferred token registration exhausted');
+    } finally {
+      _deferredRegistrationRunning = false;
     }
   }
 
@@ -229,30 +274,18 @@ class FcmService {
     }
 
     await storage.setFcmEnabled(true);
+    _ensureTokenRefreshListener();
 
-    final fcmToken = await _tryGetFcmToken();
-    if (fcmToken == null || fcmToken.isEmpty) {
-      return const FcmEnableResult(
-        enabled: true,
-        pushLinked: false,
-        osPermissionGranted: true,
-        message:
-            'تم تفعيل إشعارات الجهاز، لكن تعذر ربط التنبيهات الفورية على هذا الجهاز حاليًا.',
-      );
+    final ok = await _registerCurrentTokenOnce();
+    if (!ok) {
+      _scheduleDeferredRegistration();
     }
-
-    final ok = await registerToken(fcmToken);
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      registerToken(newToken);
-    });
 
     return FcmEnableResult(
       enabled: true,
       pushLinked: ok,
       osPermissionGranted: true,
-      message: ok
-          ? 'تم تفعيل إشعارات الجهاز'
-          : 'تم تفعيل إشعارات الجهاز، لكن تعذر ربط التنبيهات الفورية على هذا الجهاز حاليًا.',
+      message: 'تم تفعيل إشعارات الجهاز',
     );
   }
 
@@ -270,12 +303,10 @@ class FcmService {
       return;
     }
     await init();
-    final fcmToken = await _tryGetFcmToken();
-    if (fcmToken != null) {
-      await registerToken(fcmToken);
-      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-        registerToken(newToken);
-      });
+    _ensureTokenRefreshListener();
+    final ok = await _registerCurrentTokenOnce();
+    if (!ok) {
+      _scheduleDeferredRegistration();
     }
   }
 

@@ -93,15 +93,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ExpiryPushService.setEnabled(storage, true);
       if (!mounted) return;
       setState(() => _fcmEnabled = true);
-      if (result.pushLinked) {
-        AppSnackBar.success(context, 'تم تفعيل إشعارات الجهاز');
-      } else {
-        AppSnackBar.info(
-          context,
-          result.message ??
-              'تم تفعيل إشعارات الجهاز، لكن التنبيهات الفورية قد لا تعمل على هذا الجهاز.',
-        );
-      }
+      AppSnackBar.success(context, 'تم تفعيل إشعارات الجهاز');
     } else {
       await FcmService.disable(storage);
       await ExpiryPushService.setEnabled(storage, false);
