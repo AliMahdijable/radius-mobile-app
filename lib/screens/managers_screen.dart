@@ -29,6 +29,7 @@ class _ManagerDepositNoticeData {
   final double amount;
   final bool isLoan;
   final String notes;
+  final double previousCredit;
   final double previousDebt;
 
   const _ManagerDepositNoticeData({
@@ -36,13 +37,21 @@ class _ManagerDepositNoticeData {
     required this.amount,
     required this.isLoan,
     required this.notes,
+    required this.previousCredit,
     required this.previousDebt,
   });
 
   String get accountStatusLabel => isLoan ? 'دين' : 'نقدي';
 
+  bool get hasPreviousCredit => previousCredit > 0;
+  bool get hasPreviousDebt => previousDebt > 0;
+  double get totalBalanceAfter => previousCredit + amount;
+  double get totalDebtAfter => previousDebt + (isLoan ? amount : 0);
+
   String get movementDescription =>
-      notes.trim().isNotEmpty ? notes.trim() : (isLoan ? 'إضافة رصيد آجل' : 'إضافة رصيد نقدي');
+      notes.trim().isNotEmpty
+          ? notes.trim()
+          : (isLoan ? 'إضافة رصيد آجل' : 'إضافة رصيد نقدي');
 
   String get previewMessage {
     final lines = <String>[
@@ -50,7 +59,10 @@ class _ManagerDepositNoticeData {
       '',
       'تم إيداع مبلغ في حسابك قدره: ${_formatCurrency(amount)}',
       'حالة الحساب: $accountStatusLabel',
-      if (previousDebt > 0) 'ديون سابقة: ${_formatCurrency(previousDebt)}',
+      if (hasPreviousCredit) 'الرصيد السابق: ${_formatCurrency(previousCredit)}',
+      'إجمالي الرصيد بعد العملية: ${_formatCurrency(totalBalanceAfter)}',
+      if (hasPreviousDebt) 'ديون سابقة: ${_formatCurrency(previousDebt)}',
+      if (isLoan) 'إجمالي الدين بعد العملية: ${_formatCurrency(totalDebtAfter)}',
       'وصف الحركة: $movementDescription',
     ];
     return lines.join('\n');
@@ -1625,10 +1637,27 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                                 ? AppTheme.warningColor
                                 : AppTheme.infoColor,
                           ),
-                          if (notice.previousDebt > 0)
+                          if (notice.hasPreviousCredit)
+                            _SummaryLine(
+                              label: 'الرصيد السابق',
+                              value: _formatCurrency(notice.previousCredit),
+                              accent: AppTheme.successColor,
+                            ),
+                          _SummaryLine(
+                            label: 'إجمالي الرصيد بعد العملية',
+                            value: _formatCurrency(notice.totalBalanceAfter),
+                            accent: AppTheme.successColor,
+                          ),
+                          if (notice.hasPreviousDebt)
                             _SummaryLine(
                               label: 'الديون السابقة',
                               value: _formatCurrency(notice.previousDebt),
+                              accent: AppTheme.warningColor,
+                            ),
+                          if (notice.isLoan)
+                            _SummaryLine(
+                              label: 'إجمالي الدين بعد العملية',
+                              value: _formatCurrency(notice.totalDebtAfter),
                               accent: AppTheme.warningColor,
                             ),
                           _SummaryLine(
@@ -1739,6 +1768,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                                       manager: notice.manager,
                                       amount: notice.amount,
                                       isLoan: notice.isLoan,
+                                      previousCredit: notice.previousCredit,
                                       previousDebt: notice.previousDebt,
                                       notes: notice.notes,
                                     );
@@ -1852,6 +1882,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
             amount: amount,
             isLoan: _isLoan,
             notes: _notesController.text.trim(),
+            previousCredit: widget.manager.credit,
             previousDebt: widget.manager.debt,
           ),
         );
