@@ -351,7 +351,7 @@ Future<void> _showManagerFinancialNoticeDialog({
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'إشعار التطبيق يصل فقط إذا كان المدير قد سجّل الدخول في الهاتف وفعّل إشعارات الجهاز.',
+                    'إشعار الجرس داخل التطبيق يُسجَّل تلقائيًا. هذا الزر يحاول أيضًا إرسال تنبيه الجهاز إذا كان هاتف المدير يدعمه.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context)
                               .colorScheme
