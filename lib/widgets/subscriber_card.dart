@@ -45,7 +45,7 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
-    const badgeSize = 22.0;
+    const badgeSize = 20.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
     final badgeStyle = _resolveBadgeStyle(subscriber);
@@ -88,7 +88,7 @@ class SubscriberCard extends StatelessWidget {
                   height: badgeSize,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(7),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color: badgeStyle.borderColor,
                         width: 1,
@@ -102,7 +102,7 @@ class SubscriberCard extends StatelessWidget {
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(5),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -113,34 +113,14 @@ class SubscriberCard extends StatelessWidget {
                                 Expanded(
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          _tintColor(
-                                            badgeStyle.primaryColor,
-                                            0.18,
-                                          ),
-                                          badgeStyle.primaryColor,
-                                        ],
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                      ),
+                                      color: badgeStyle.primaryColor,
                                     ),
                                   ),
                                 ),
                                 Expanded(
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          _tintColor(
-                                            badgeStyle.secondaryColor!,
-                                            0.18,
-                                          ),
-                                          badgeStyle.secondaryColor!,
-                                        ],
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                      ),
+                                      color: badgeStyle.secondaryColor!,
                                     ),
                                   ),
                                 ),
@@ -162,29 +142,30 @@ class SubscriberCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: badgeSize * 0.45,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withOpacity(0.20),
-                                    Colors.white.withOpacity(0.03),
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
+                          if (badgeStyle.secondaryColor == null)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: badgeSize * 0.45,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.white.withOpacity(0.20),
+                                      Colors.white.withOpacity(0.03),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                           if (badgeStyle.secondaryColor != null)
                             Center(
                               child: Container(
-                                width: 0.8,
-                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                width: 1,
+                                margin: const EdgeInsets.symmetric(vertical: 3),
                                 color: badgeStyle.dividerColor,
                               ),
                             ),
@@ -192,7 +173,7 @@ class SubscriberCard extends StatelessWidget {
                             child: isDisabled
                                 ? Icon(
                                     Icons.block_rounded,
-                                    size: 11,
+                                    size: 10,
                                     color: badgeStyle.foregroundColor,
                                   )
                                 : Text(
@@ -200,7 +181,7 @@ class SubscriberCard extends StatelessWidget {
                                     style: TextStyle(
                                       color: badgeStyle.foregroundColor,
                                       fontWeight: FontWeight.w800,
-                                      fontSize: 10,
+                                      fontSize: 9,
                                       height: 1,
                                     ),
                                   ),
@@ -466,9 +447,9 @@ class SubscriberCard extends StatelessWidget {
 
     if (sub.isExpired && sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFF2563EB),
-        secondaryColor: Color(0xFFF59E0B),
-        borderColor: Color(0xFF8A8F98),
+        primaryColor: Color(0xFFF59E0B),
+        secondaryColor: Color(0xFF2563EB),
+        borderColor: Color(0xFFD4D9E1),
         foregroundColor: Colors.white,
         dividerColor: Color(0xFFF8FAFC),
       );
