@@ -543,10 +543,9 @@ class _SplitSubscriberBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(5),
-      child: Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(5),
         border: Border.all(
           color: borderColor,
           width: 1,
@@ -559,30 +558,29 @@ class _SplitSubscriberBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        textDirection: TextDirection.ltr,
-        children: [
-          Expanded(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Row(
+          textDirection: TextDirection.ltr,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ColoredBox(
                 color: leftColor,
               ),
             ),
-          ),
-          Container(
-            width: 1,
-            color: dividerColor.withOpacity(0.7),
-          ),
-          Expanded(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
+            ColoredBox(
+              color: dividerColor.withOpacity(0.75),
+              child: const SizedBox(width: 1),
+            ),
+            Expanded(
+              child: ColoredBox(
                 color: rightColor,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
