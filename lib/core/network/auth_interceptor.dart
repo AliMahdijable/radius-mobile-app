@@ -1,8 +1,8 @@
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
+import '../services/session_refresh_service.dart';
 import '../services/session_events.dart';
-import '../constants/api_constants.dart';
 
 class AuthInterceptor extends Interceptor {
   final StorageService _storage;
@@ -16,6 +16,10 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    if (!options.path.contains('/api/auth/')) {
+      await SessionRefreshService.ensureValidSession(_storage);
+    }
+
     final token = await _storage.getToken();
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -60,34 +64,15 @@ class AuthInterceptor extends Interceptor {
     }
 
     try {
-      final adminId = await _storage.getAdminId();
-      if (adminId == null) {
-        return handler.next(err);
-      }
-
-      dev.log('Attempting token refresh for adminId: $adminId', name: 'HTTP');
-
-      final refreshDio = Dio(BaseOptions(
-        baseUrl: ApiConstants.backendUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-      ));
-
-      final response = await refreshDio.post(
-        ApiConstants.refreshToken,
-        data: {'adminId': adminId},
+      final refreshResult = await SessionRefreshService.ensureValidSession(
+        _storage,
+        forceRefresh: true,
       );
 
-      if (response.data['success'] == true) {
-        final newToken = response.data['token'] as String;
-        final expiresAt = response.data['expiresAt'] as String;
-
-        await _storage.saveToken(newToken);
-        await _storage.saveTokenExpiry(expiresAt);
-
+      if (refreshResult != null) {
         final retryOptions = err.requestOptions;
-        retryOptions.headers['Authorization'] = 'Bearer $newToken';
-        retryOptions.headers['x-auth-token'] = newToken;
+        retryOptions.headers['Authorization'] = 'Bearer ${refreshResult.token}';
+        retryOptions.headers['x-auth-token'] = refreshResult.token;
 
         final retryResponse = await _dio.fetch(retryOptions);
         return handler.resolve(retryResponse);

@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
+import '../core/services/session_refresh_service.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/socket_service.dart';
 import '../core/services/expiry_push_service.dart';
@@ -140,18 +141,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> checkAuth() async {
     try {
-      final isLoggedIn = await _storage.isLoggedIn();
-      if (!isLoggedIn) {
-        state = state.copyWith(
-          status: AuthStatus.unauthenticated,
-          clearError: true,
-        );
-        return;
-      }
-      final token = await _storage.getToken();
+      final session = await SessionRefreshService.ensureValidSession(_storage);
+      final token = session?.token;
       final adminId = await _storage.getAdminId();
       final username = await _storage.getAdminUsername();
-      final expiry = await _storage.getTokenExpiry();
+      final expiry = session?.expiresAt ?? await _storage.getTokenExpiry();
 
       if (token == null || adminId == null) {
         state = state.copyWith(
@@ -193,13 +187,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> syncSessionState() async {
-    final isLoggedIn = await _storage.isLoggedIn();
-    final token = await _storage.getToken();
+    final session = await SessionRefreshService.ensureValidSession(_storage);
+    final token = session?.token;
     final adminId = await _storage.getAdminId();
     final username = await _storage.getAdminUsername();
-    final expiry = await _storage.getTokenExpiry();
+    final expiry = session?.expiresAt ?? await _storage.getTokenExpiry();
 
-    if (!isLoggedIn || token == null || adminId == null) {
+    if (token == null || adminId == null) {
       if (state.status == AuthStatus.authenticated) {
         await handleSessionExpired();
       } else {
