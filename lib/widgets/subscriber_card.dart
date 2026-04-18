@@ -45,7 +45,7 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
-    const badgeSize = 28.0;
+    const badgeSize = 24.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
     final badgeStyle = _resolveBadgeStyle(
@@ -91,19 +91,20 @@ class SubscriberCard extends StatelessWidget {
                   height: badgeSize,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(7),
                       border: Border.all(
                         color: badgeStyle.borderColor,
                         width: 1,
                       ),
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
                           if (badgeStyle.secondaryColor != null)
                             Row(
+                              textDirection: TextDirection.ltr,
                               children: [
                                 Expanded(
                                   child: DecoratedBox(
@@ -139,7 +140,7 @@ class SubscriberCard extends StatelessWidget {
                             child: isDisabled
                                 ? Icon(
                                     Icons.block_rounded,
-                                    size: 13,
+                                    size: 11,
                                     color: badgeStyle.foregroundColor,
                                   )
                                 : Text(
@@ -147,7 +148,7 @@ class SubscriberCard extends StatelessWidget {
                                     style: TextStyle(
                                       color: badgeStyle.foregroundColor,
                                       fontWeight: FontWeight.w800,
-                                      fontSize: 11.5,
+                                      fontSize: 10,
                                       height: 1,
                                     ),
                                   ),
@@ -412,56 +413,36 @@ class SubscriberCard extends StatelessWidget {
       );
     }
 
-    if (isOnlinePage) {
-      if (sub.isExpired && sub.isOnline) {
-        return const _SubscriberBadgeStyle(
-          primaryColor: Color(0xFFEADCFB),
-          borderColor: Color(0xFFA47BDA),
-          foregroundColor: Color(0xFF6331A8),
-        );
-      }
-
-      if (sub.isOnline) {
-        return const _SubscriberBadgeStyle(
-          primaryColor: Color(0xFFDDF4E7),
-          borderColor: Color(0xFF48A56E),
-          foregroundColor: Color(0xFF1C7A49),
-        );
-      }
-    }
-
     if (sub.isExpired && sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFFCE4C1),
-        secondaryColor: Color(0xFFDCE9FE),
-        borderColor: Color(0xFFD89A43),
-        foregroundColor: Color(0xFF6B4E16),
-        dividerColor: Color(0xFFF7F9FC),
+        primaryColor: Color(0xFF2F6BFF),
+        secondaryColor: Color(0xFFF49A33),
+        borderColor: Color(0xFF7C899B),
+        foregroundColor: Colors.white,
+        dividerColor: Color(0xFFF8FAFC),
       );
     }
 
     if (sub.isExpired) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFFCE4C1),
-        borderColor: Color(0xFFD89A43),
-        foregroundColor: Color(0xFF8A5A14),
+        primaryColor: Color(0xFFF49A33),
+        borderColor: Color(0xFFE07D12),
+        foregroundColor: Colors.white,
       );
     }
 
     if (sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFDDF4E7),
-        secondaryColor: Color(0xFFDCE9FE),
-        borderColor: Color(0xFF5D97CF),
-        foregroundColor: Color(0xFF245A74),
-        dividerColor: Color(0xFFF7F9FC),
+        primaryColor: Color(0xFF2F6BFF),
+        borderColor: Color(0xFF2155D6),
+        foregroundColor: Colors.white,
       );
     }
 
     return const _SubscriberBadgeStyle(
-      primaryColor: Color(0xFFDDF4E7),
-      borderColor: Color(0xFF48A56E),
-      foregroundColor: Color(0xFF1C7A49),
+      primaryColor: Color(0xFF22A06B),
+      borderColor: Color(0xFF19784E),
+      foregroundColor: Colors.white,
     );
   }
 
