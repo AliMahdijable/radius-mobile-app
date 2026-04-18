@@ -82,6 +82,8 @@ class ApiConstants {
   // FCM
   static const String fcmRegister = '/api/fcm/register';
   static const String fcmUnregister = '/api/fcm/unregister';
+  static const String fcmSendManagerBalanceUpdate =
+      '/api/fcm/send-manager-balance-update';
 
   // Settings
   static const String settingsTheme = '/api/settings/theme';

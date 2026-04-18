@@ -9,6 +9,7 @@ import '../core/theme/app_theme.dart';
 import '../models/manager_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/managers_provider.dart';
+import '../providers/whatsapp_provider.dart';
 import '../widgets/app_snackbar.dart';
 import '../widgets/loading_overlay.dart';
 
@@ -22,6 +23,39 @@ enum _ManagerActionType {
 }
 
 enum _ManagerBalanceActionType { deposit, withdraw }
+
+class _ManagerDepositNoticeData {
+  final ManagerModel manager;
+  final double amount;
+  final bool isLoan;
+  final String notes;
+  final double previousDebt;
+
+  const _ManagerDepositNoticeData({
+    required this.manager,
+    required this.amount,
+    required this.isLoan,
+    required this.notes,
+    required this.previousDebt,
+  });
+
+  String get accountStatusLabel => isLoan ? 'دين' : 'نقدي';
+
+  String get movementDescription =>
+      notes.trim().isNotEmpty ? notes.trim() : (isLoan ? 'إضافة رصيد آجل' : 'إضافة رصيد نقدي');
+
+  String get previewMessage {
+    final lines = <String>[
+      'عزيزي المدير ${manager.fullName.isNotEmpty ? manager.fullName : manager.username}،',
+      '',
+      'تم إيداع مبلغ في حسابك قدره: ${_formatCurrency(amount)}',
+      'حالة الحساب: $accountStatusLabel',
+      if (previousDebt > 0) 'ديون سابقة: ${_formatCurrency(previousDebt)}',
+      'وصف الحركة: $movementDescription',
+    ];
+    return lines.join('\n');
+  }
+}
 
 class ManagersScreen extends ConsumerStatefulWidget {
   const ManagersScreen({super.key});
@@ -1491,6 +1525,291 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
     super.dispose();
   }
 
+  Future<({bool success, String? error})> _sendWhatsAppNotification(
+    String message,
+  ) async {
+    final phone = widget.manager.mobile.trim();
+    if (phone.isEmpty) {
+      return (success: false, error: 'لا يوجد رقم هاتف محفوظ لهذا المدير');
+    }
+
+    try {
+      var waState = ref.read(whatsappProvider);
+      if (!waState.status.connected) {
+        await ref.read(whatsappProvider.notifier).reconnect();
+        await Future.delayed(const Duration(seconds: 3));
+        await ref.read(whatsappProvider.notifier).fetchStatus();
+        waState = ref.read(whatsappProvider);
+        if (!waState.status.connected) {
+          return (
+            success: false,
+            error: 'واتساب غير متصل. يرجى الاتصال به أولًا من الإعدادات.',
+          );
+        }
+      }
+
+      return ref.read(whatsappProvider.notifier).sendMessage(phone, message);
+    } catch (_) {
+      return (success: false, error: 'حدث خطأ غير متوقع أثناء إرسال واتساب');
+    }
+  }
+
+  Future<void> _showPostDepositActions(_ManagerDepositNoticeData notice) async {
+    var sendingWhatsApp = false;
+    var sendingPush = false;
+    var whatsappSent = false;
+    var pushSent = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final canSendWhatsApp = notice.manager.mobile.trim().isNotEmpty;
+
+            return AlertDialog(
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+              actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.mark_chat_read_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'إشعار المدير الفرعي',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'تمت الإضافة بنجاح. هل تريد إشعار المدير الفرعي بهذه الحركة الآن؟',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        children: [
+                          _SummaryLine(
+                            label: 'المدير',
+                            value: notice.manager.username,
+                          ),
+                          _SummaryLine(
+                            label: 'المبلغ',
+                            value: _formatCurrency(notice.amount),
+                            accent: AppTheme.successColor,
+                          ),
+                          _SummaryLine(
+                            label: 'الحالة',
+                            value: notice.accountStatusLabel,
+                            accent: notice.isLoan
+                                ? AppTheme.warningColor
+                                : AppTheme.infoColor,
+                          ),
+                          if (notice.previousDebt > 0)
+                            _SummaryLine(
+                              label: 'الديون السابقة',
+                              value: _formatCurrency(notice.previousDebt),
+                              accent: AppTheme.warningColor,
+                            ),
+                          _SummaryLine(
+                            label: 'وصف الحركة',
+                            value: notice.movementDescription,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'معاينة الرسالة',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withValues(alpha: 0.18),
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: SelectableText(
+                        notice.previewMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              height: 1.5,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (!canSendWhatsApp)
+                      const _InlineInfoBanner(
+                        color: AppTheme.warningColor,
+                        icon: Icons.phone_disabled_outlined,
+                        text: 'لا يمكن إرسال واتساب لأن رقم هاتف المدير غير محفوظ.',
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: !canSendWhatsApp || sendingWhatsApp || whatsappSent
+                            ? null
+                            : () async {
+                                setDialogState(() => sendingWhatsApp = true);
+                                final result =
+                                    await _sendWhatsAppNotification(
+                                  notice.previewMessage,
+                                );
+                                if (!mounted) return;
+                                setDialogState(() {
+                                  sendingWhatsApp = false;
+                                  whatsappSent = result.success;
+                                });
+                                if (result.success) {
+                                  AppSnackBar.whatsapp(
+                                    context,
+                                    'تم إرسال الرسالة إلى المدير',
+                                  );
+                                } else {
+                                  AppSnackBar.whatsappError(
+                                    context,
+                                    'فشل إرسال الرسالة',
+                                    detail: result.error,
+                                  );
+                                }
+                              },
+                        icon: sendingWhatsApp
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Icon(
+                                whatsappSent
+                                    ? Icons.check_circle_rounded
+                                    : Icons.message_outlined,
+                              ),
+                        label: Text(
+                          whatsappSent
+                              ? 'تم إرسال واتساب'
+                              : 'إرسال واتساب للمدير',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: sendingPush || pushSent
+                            ? null
+                            : () async {
+                                setDialogState(() => sendingPush = true);
+                                final result = await ref
+                                    .read(managersProvider.notifier)
+                                    .sendManagerBalanceUpdateNotification(
+                                      manager: notice.manager,
+                                      amount: notice.amount,
+                                      isLoan: notice.isLoan,
+                                      previousDebt: notice.previousDebt,
+                                      notes: notice.notes,
+                                    );
+                                if (!mounted) return;
+                                setDialogState(() {
+                                  sendingPush = false;
+                                  pushSent = result.$1;
+                                });
+                                if (result.$1) {
+                                  AppSnackBar.success(
+                                    context,
+                                    result.$2 ?? 'تم إرسال إشعار التطبيق',
+                                  );
+                                } else {
+                                  AppSnackBar.warning(
+                                    context,
+                                    result.$2 ??
+                                        'المدير لم يفعّل إشعارات التطبيق بعد',
+                                  );
+                                }
+                              },
+                        icon: sendingPush
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                pushSent
+                                    ? Icons.notifications_active_rounded
+                                    : Icons.notifications_outlined,
+                              ),
+                        label: Text(
+                          pushSent
+                              ? 'تم إرسال إشعار التطبيق'
+                              : 'إرسال إشعار التطبيق',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'إشعار التطبيق يصل فقط إذا كان المدير قد سجّل الدخول في الهاتف وفعّل إشعارات الجهاز.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.65),
+                            height: 1.4,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('إنهاء'),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -1526,6 +1845,18 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
     setState(() => _saving = false);
 
     if (success) {
+      if (_isDeposit) {
+        await _showPostDepositActions(
+          _ManagerDepositNoticeData(
+            manager: widget.manager,
+            amount: amount,
+            isLoan: _isLoan,
+            notes: _notesController.text.trim(),
+            previousDebt: widget.manager.debt,
+          ),
+        );
+        if (!mounted) return;
+      }
       Navigator.of(context).pop(true);
     } else {
       AppSnackBar.error(

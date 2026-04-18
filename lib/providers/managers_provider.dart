@@ -583,6 +583,49 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
     }
   }
 
+  Future<(bool success, String? message)> sendManagerBalanceUpdateNotification({
+    required ManagerModel manager,
+    required double amount,
+    required bool isLoan,
+    required double previousDebt,
+    String? notes,
+  }) async {
+    try {
+      final response = await _backendDio.post(
+        ApiConstants.fcmSendManagerBalanceUpdate,
+        data: {
+          'targetAdminId': manager.id.toString(),
+          'amount': amount,
+          'isLoan': isLoan,
+          'previousDebt': previousDebt,
+          'notes': notes?.trim() ?? '',
+          'managerUsername': manager.username,
+        },
+      );
+
+      final body = response.data;
+      final success = body is Map ? body['success'] == true : false;
+      final message = _extractResponseMessage(body) ??
+          (success ? 'تم إرسال الإشعار بنجاح' : 'تعذر إرسال الإشعار');
+
+      return (success, message);
+    } catch (e) {
+      dev.log(
+        'sendManagerBalanceUpdateNotification error: $e',
+        name: 'MANAGERS',
+      );
+      if (e is DioException) {
+        return (
+          false,
+          _extractResponseMessage(e.response?.data) ??
+              e.message ??
+              'تعذر إرسال إشعار التطبيق',
+        );
+      }
+      return (false, 'تعذر إرسال إشعار التطبيق');
+    }
+  }
+
   Future<(bool success, String? message)> deleteManager(
       ManagerModel manager) async {
     try {
