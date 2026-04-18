@@ -92,6 +92,16 @@ class StorageService {
     await sp.remove(AppConstants.storagePermissions);
     await sp.remove(AppConstants.storageCanAccessManagers);
     await sp.remove(AppConstants.storageCanAccessPackages);
+    final appNotificationKeys = sp
+        .getKeys()
+        .where(
+          (key) =>
+              key.startsWith(AppConstants.storageAppNotificationLastSeenPrefix),
+        )
+        .toList();
+    for (final key in appNotificationKeys) {
+      await sp.remove(key);
+    }
   }
 
   Future<bool> isLoggedIn() async {
@@ -144,4 +154,16 @@ class StorageService {
 
   Future<bool> getFcmEnabled() async =>
       (await _sp).getBool(AppConstants.storageFcmEnabled) ?? false;
+
+  Future<void> saveLastSeenAppNotificationId(String adminId, int id) async =>
+      (await _sp).setInt(
+        '${AppConstants.storageAppNotificationLastSeenPrefix}$adminId',
+        id,
+      );
+
+  Future<int> getLastSeenAppNotificationId(String adminId) async =>
+      (await _sp).getInt(
+        '${AppConstants.storageAppNotificationLastSeenPrefix}$adminId',
+      ) ??
+      0;
 }

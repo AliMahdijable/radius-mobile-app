@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -159,12 +158,11 @@ class ExpiryPushService {
     }
     await prefs.setInt(AppConstants.storagePushLastFetchMs, nowMs);
 
-    const secure = FlutterSecureStorage();
-    final token = await secure.read(key: AppConstants.storageToken);
-    final adminId = await secure.read(key: AppConstants.storageAdminId);
+    final token = prefs.getString(AppConstants.storageToken);
+    final adminId = prefs.getString(AppConstants.storageAdminId);
     if (token == null || adminId == null) return;
 
-    final exp = await secure.read(key: AppConstants.storageTokenExpiry);
+    final exp = prefs.getString(AppConstants.storageTokenExpiry);
     if (exp != null) {
       final expDt = DateTime.tryParse(exp);
       if (expDt != null && !expDt.isAfter(DateTime.now().toUtc())) {

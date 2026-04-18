@@ -14,6 +14,7 @@ import '../../widgets/app_snackbar.dart';
 import '../../widgets/add_subscriber_sheet.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 
 class SubscribersScreen extends ConsumerStatefulWidget {
   const SubscribersScreen({super.key});
@@ -78,7 +79,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                12,
+                20,
+                bottomSheetBottomInset(ctx, extra: 24),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +319,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               Flexible(
                 child: ListView(
                   shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    12,
+                    20,
+                    bottomSheetBottomInset(ctx, extra: 8),
+                  ),
                   children: [
                     // Connection info section
                     _sheetSection(theme, 'معلومات الاتصال', Icons.wifi_rounded),

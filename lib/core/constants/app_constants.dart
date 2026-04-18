@@ -25,6 +25,8 @@ class AppConstants {
       'pushLastOverdueNotifDay';
   static const String storagePushLastFetchMs = 'pushLastFetchMs';
   static const String storageFcmEnabled = 'fcmEnabled';
+  static const String storageAppNotificationLastSeenPrefix =
+      'appNotificationLastSeen:';
 
   static const String baghdadTimezone = 'Asia/Baghdad';
   static const int baghdadUtcOffset = 3;

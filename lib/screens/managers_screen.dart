@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../core/theme/app_theme.dart';
+import '../core/utils/bottom_sheet_utils.dart';
 import '../models/manager_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/managers_provider.dart';
@@ -2365,10 +2366,13 @@ class _SheetScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 10, 16, bottomInset + 20),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        bottomSheetBottomInset(context, extra: 20),
+      ),
       child: LoadingOverlay(
         isLoading: isLoading,
         child: SingleChildScrollView(

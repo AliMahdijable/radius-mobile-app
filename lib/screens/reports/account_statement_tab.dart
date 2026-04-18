@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/pdf_statement.dart';
 import '../../providers/reports_provider.dart';
 import '../../providers/whatsapp_provider.dart';
@@ -485,7 +486,12 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: bottomSheetContentPadding(
+                ctx,
+                horizontal: 20,
+                top: 20,
+                extraBottom: 16,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -808,4 +814,3 @@ class _SmallBtn extends StatelessWidget {
     return btn;
   }
 }
-

@@ -10,11 +10,13 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 import '../providers/whatsapp_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/app_notifications_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/subscribers_provider.dart';
 import '../providers/messages_provider.dart';
 import '../providers/reports_provider.dart';
 import '../core/services/storage_service.dart';
+import '../models/app_notification_model.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/app_snackbar.dart';
 import '../core/theme/app_theme.dart';
@@ -70,6 +72,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadAlertsPref();
+    Future.microtask(() {
+      ref.read(appNotificationsProvider.notifier).loadNotifications();
+    });
   }
 
   @override
@@ -84,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       Future.microtask(() {
         if (!mounted) return;
         ref.read(dashboardProvider.notifier).refreshCountsOnly();
+        ref.read(appNotificationsProvider.notifier).loadNotifications(silent: true);
         final subs = ref.read(subscribersProvider);
         if (subs.subscribers.isNotEmpty && !subs.isLoading) {
           ref.read(subscribersProvider.notifier).loadSubscribers();
@@ -117,242 +123,273 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   void _showAlertsSheet() {
     final dash = ref.read(dashboardProvider);
+    ref.read(appNotificationsProvider.notifier).markAllSeen();
     showModalBottomSheet(
       useSafeArea: true,
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            final theme = Theme.of(ctx);
-            return DraggableScrollableSheet(
-              initialChildSize: 0.6,
-              maxChildSize: 0.9,
-              minChildSize: 0.3,
-              expand: false,
-              builder: (_, scrollController) {
-                return Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-                      decoration: BoxDecoration(
-                        color: theme.cardTheme.color ?? Colors.white,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(24)),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
+        return Consumer(
+          builder: (ctx, ref, _) {
+            final appNotifications = ref.watch(appNotificationsProvider);
+            final appNotificationCount = appNotifications.notifications.length;
+            return StatefulBuilder(
+              builder: (ctx, setSheetState) {
+                final theme = Theme.of(ctx);
+                final showSubscriptionAlerts = _alertsEnabled;
+                final hasAppNotifications = appNotificationCount > 0;
+
+                return DraggableScrollableSheet(
+                  initialChildSize: 0.6,
+                  maxChildSize: 0.9,
+                  minChildSize: 0.3,
+                  expand: false,
+                  builder: (_, scrollController) {
+                    return Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                          decoration: BoxDecoration(
+                            color: theme.cardTheme.color ?? Colors.white,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(24),
+                            ),
+                          ),
+                          child: Column(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(
-                                    Icons.notifications_active,
-                                    color: Colors.orange,
-                                    size: 22),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'تنبيهات الاشتراك (${dash.totalAlerts})',
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(fontWeight: FontWeight.w700),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primary.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    Text(
-                                      'قريب الانتهاء · انتهى اليوم',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.5),
+                                    child: const Icon(
+                                      Icons.notifications_active,
+                                      color: AppTheme.primary,
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'الإشعارات',
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        Text(
+                                          'تطبيق $appNotificationCount · اشتراك ${dash.totalAlerts}',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 20),
+                                    onPressed: () => Navigator.pop(ctx),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => _toggleAlerts(
+                                        !_alertsEnabled,
+                                        setSheetState,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Switch(
+                                            value: _alertsEnabled,
+                                            onChanged: (v) => _toggleAlerts(
+                                              v,
+                                              setSheetState,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _alertsEnabled
+                                                ? 'تنبيهات الاشتراك مفعلة'
+                                                : 'تنبيهات الاشتراك معطلة',
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: _alertsEnabled
+                                                  ? Colors.orange
+                                                  : theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.4),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  if (dash.totalAlerts > 0)
+                                    TextButton.icon(
+                                      onPressed: () => _clearAlerts(ctx),
+                                      icon: const Icon(
+                                        Icons.clear_all,
+                                        size: 18,
+                                      ),
+                                      label: const Text(
+                                        'مسح تنبيهات الاشتراك',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: theme
+                                            .colorScheme.onSurface
+                                            .withValues(alpha: 0.5),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 20),
-                                onPressed: () => Navigator.pop(ctx),
-                              ),
+                              const SizedBox(height: 4),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Row(
+                        ),
+                        Expanded(
+                          child: ListView(
+                            controller: scrollController,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             children: [
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _toggleAlerts(
-                                      !_alertsEnabled, setSheetState),
-                                  child: Row(
+                              if (hasAppNotifications) ...[
+                                _AlertSectionHeader(
+                                  title: 'إشعارات التطبيق',
+                                  count: appNotificationCount,
+                                  color: AppTheme.primary,
+                                  icon: Icons.notifications_rounded,
+                                ),
+                                ...appNotifications.notifications.map(
+                                  (notification) => _AppNotificationItem(
+                                    notification: notification,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (showSubscriptionAlerts &&
+                                  dash.expiredTodayList.isNotEmpty) ...[
+                                _AlertSectionHeader(
+                                  title: 'انتهى اليوم',
+                                  count: dash.expiredTodayCount,
+                                  color: Colors.red,
+                                  icon: Icons.error_outline,
+                                ),
+                                ...dash.expiredTodayList.map(
+                                  (sub) => _AlertItem(
+                                    name:
+                                        '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
+                                            .trim(),
+                                    username:
+                                        sub['username']?.toString() ?? '',
+                                    detail: 'انتهى الاشتراك اليوم',
+                                    color: Colors.red,
+                                    icon: Icons.timer_off_rounded,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (showSubscriptionAlerts &&
+                                  dash.nearExpiryList.isNotEmpty) ...[
+                                _AlertSectionHeader(
+                                  title: 'قريب الانتهاء',
+                                  count: dash.nearExpiryCount,
+                                  color: Colors.orange,
+                                  icon: Icons.warning_amber_rounded,
+                                ),
+                                ...dash.nearExpiryList.map((sub) {
+                                  final detail = _formatRemaining(
+                                    sub['expiration']?.toString(),
+                                  );
+                                  return _AlertItem(
+                                    name:
+                                        '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
+                                            .trim(),
+                                    username:
+                                        sub['username']?.toString() ?? '',
+                                    detail: detail,
+                                    color: Colors.orange,
+                                    icon: Icons.schedule,
+                                  );
+                                }),
+                                const SizedBox(height: 12),
+                              ],
+                              if (!hasAppNotifications &&
+                                  !showSubscriptionAlerts)
+                                Padding(
+                                  padding: const EdgeInsets.all(40),
+                                  child: Column(
                                     children: [
-                                      Switch(
-                                        value: _alertsEnabled,
-                                        onChanged: (v) => _toggleAlerts(
-                                            v, setSheetState),
+                                      Icon(
+                                        Icons.notifications_off_outlined,
+                                        size: 48,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.3),
                                       ),
-                                      const SizedBox(width: 6),
+                                      const SizedBox(height: 12),
                                       Text(
-                                        _alertsEnabled
-                                            ? 'التنبيهات مفعلة'
-                                            : 'التنبيهات معطلة',
-                                        style: theme.textTheme.bodySmall
+                                        'تنبيهات الاشتراك معطلة',
+                                        style: theme.textTheme.titleSmall
                                             ?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          color: _alertsEnabled
-                                              ? Colors.orange
-                                              : theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.4),
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.5),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ),
-                              if (dash.totalAlerts > 0)
-                                TextButton.icon(
-                                  onPressed: () => _clearAlerts(ctx),
-                                  icon: const Icon(Icons.clear_all,
-                                      size: 18),
-                                  label: const Text('مسح الكل',
-                                      style: TextStyle(fontSize: 12)),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: theme
-                                        .colorScheme.onSurface
-                                        .withValues(alpha: 0.5),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: !_alertsEnabled
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(40),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.notifications_off_outlined,
+                              if (!hasAppNotifications &&
+                                  showSubscriptionAlerts &&
+                                  dash.totalAlerts == 0)
+                                Padding(
+                                  padding: const EdgeInsets.all(40),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle_outline,
                                         size: 48,
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.3)),
-                                    const SizedBox(height: 12),
-                                    Text('التنبيهات معطلة',
+                                        color: Colors.green.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'لا توجد إشعارات جديدة',
                                         style: theme.textTheme.titleSmall
                                             ?.copyWith(
-                                              color: theme
-                                                  .colorScheme.onSurface
-                                                  .withValues(alpha: 0.5),
-                                            )),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                        'تنبيهات قرب انتهاء الاشتراك وانتهائه اليوم',
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme.onSurface
-                                                  .withValues(alpha: 0.3),
-                                            )),
-                                  ],
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            )
-                          : ListView(
-                              controller: scrollController,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16),
-                              children: [
-                                if (dash
-                                    .expiredTodayList.isNotEmpty) ...[
-                                  _AlertSectionHeader(
-                                    title: 'انتهى اليوم',
-                                    count: dash.expiredTodayCount,
-                                    color: Colors.red,
-                                    icon: Icons.error_outline,
-                                  ),
-                                  ...dash.expiredTodayList
-                                      .map((sub) => _AlertItem(
-                                            name:
-                                                '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
-                                                    .trim(),
-                                            username:
-                                                sub['username']
-                                                        ?.toString() ??
-                                                    '',
-                                            detail:
-                                                'انتهى الاشتراك اليوم',
-                                            color: Colors.red,
-                                            icon:
-                                                Icons.timer_off_rounded,
-                                          )),
-                                  const SizedBox(height: 12),
-                                ],
-                                if (dash
-                                    .nearExpiryList.isNotEmpty) ...[
-                                  _AlertSectionHeader(
-                                    title: 'قريب الانتهاء',
-                                    count: dash.nearExpiryCount,
-                                    color: Colors.orange,
-                                    icon: Icons.warning_amber_rounded,
-                                  ),
-                                  ...dash.nearExpiryList.map((sub) {
-                                    final detail = _formatRemaining(
-                                        sub['expiration']?.toString());
-                                    return _AlertItem(
-                                      name:
-                                          '${sub['firstname'] ?? ''} ${sub['lastname'] ?? ''}'
-                                              .trim(),
-                                      username:
-                                          sub['username']
-                                                  ?.toString() ??
-                                              '',
-                                      detail: detail,
-                                      color: Colors.orange,
-                                      icon: Icons.schedule,
-                                    );
-                                  }),
-                                  const SizedBox(height: 12),
-                                ],
-                                if (dash.totalAlerts == 0)
-                                  Padding(
-                                    padding: const EdgeInsets.all(40),
-                                    child: Column(
-                                      children: [
-                                        Icon(
-                                            Icons.check_circle_outline,
-                                            size: 48,
-                                            color: Colors.green
-                                                .withValues(alpha: 0.5)),
-                                        const SizedBox(height: 12),
-                                        Text('لا توجد تنبيهات',
-                                            style: theme
-                                                .textTheme.titleSmall
-                                                ?.copyWith(
-                                              color: theme.colorScheme
-                                                  .onSurface
-                                                  .withValues(
-                                                      alpha: 0.5),
-                                            )),
-                                      ],
-                                    ),
-                                  ),
-                                const SizedBox(height: 20),
-                              ],
-                            ),
-                    ),
-                  ],
+                              const SizedBox(height: 20),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             );
@@ -366,6 +403,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     final wa = ref.watch(whatsappProvider);
     final authState = ref.watch(authProvider);
+    final appNotifications = ref.watch(appNotificationsProvider);
     final dash = ref.watch(dashboardProvider);
     final msgState = ref.watch(messagesProvider);
     final theme = Theme.of(context);
@@ -389,8 +427,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     }
 
     final managerName = authState.user?.username ?? '';
-    final showAlertBadge =
-        _alertsEnabled && !_alertsDismissed && dash.totalAlerts > 0;
+    final totalBellCount =
+        appNotifications.unreadCount +
+        (_alertsEnabled && !_alertsDismissed ? dash.totalAlerts : 0);
+    final showAlertBadge = totalBellCount > 0;
 
     return PopScope(
       canPop: false,
@@ -450,7 +490,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               onPressed: _showAlertsSheet,
               icon: showAlertBadge
                   ? Badge(
-                      label: Text('${dash.totalAlerts}',
+                      label: Text('$totalBellCount',
                           style: const TextStyle(fontSize: 9)),
                       child: Icon(Icons.notifications_outlined,
                           color: Colors.orange.shade700, size: 22),
@@ -591,6 +631,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   }
 }
 
+String _formatNotificationTime(String? value) {
+  if (value == null || value.isEmpty) return 'الآن';
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return 'الآن';
+  final now = DateTime.now().toUtc();
+  final diff = now.difference(parsed.toUtc());
+  if (diff.inMinutes < 1) return 'الآن';
+  if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} دقيقة';
+  if (diff.inHours < 24) return 'منذ ${diff.inHours} ساعة';
+  if (diff.inDays < 7) return 'منذ ${diff.inDays} يوم';
+  return '${parsed.year}/${parsed.month.toString().padLeft(2, '0')}/${parsed.day.toString().padLeft(2, '0')}';
+}
+
 class _AlertSectionHeader extends StatelessWidget {
   final String title;
   final int count;
@@ -618,6 +671,86 @@ class _AlertSectionHeader extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: color,
                 ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppNotificationItem extends StatelessWidget {
+  final AppNotificationModel notification;
+
+  const _AppNotificationItem({required this.notification});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = switch (notification.type) {
+      'cash_deposit' => AppTheme.successColor,
+      'loan_deposit' => Colors.orange,
+      'withdraw_balance' => Colors.red,
+      'pay_debt' => AppTheme.infoColor,
+      'add_points' => Colors.purple,
+      _ => AppTheme.primary,
+    };
+    final icon = switch (notification.type) {
+      'cash_deposit' => Icons.account_balance_wallet_rounded,
+      'loan_deposit' => Icons.request_quote_rounded,
+      'withdraw_balance' => Icons.remove_circle_outline_rounded,
+      'pay_debt' => Icons.paid_rounded,
+      'add_points' => Icons.stars_rounded,
+      _ => Icons.notifications_rounded,
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: accent, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  notification.title,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  notification.body,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _formatNotificationTime(notification.createdAt),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/subscriber_model.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/api_constants.dart';
 import 'package:dio/dio.dart';
@@ -233,8 +234,7 @@ class _SubscriberDetailsScreenState
       builder: (sheetCtx) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom +
-                MediaQuery.of(sheetCtx).padding.bottom,
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
           ),
           child: StatefulBuilder(builder: (ctx, setSheet) {
             final packages = ref.read(subscribersProvider).packages;
@@ -674,7 +674,7 @@ class _SubscriberDetailsScreenState
         return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
             padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              bottom: bottomSheetBottomInset(ctx, extra: 0),
               left: 20, right: 20, top: 16,
             ),
             child: Column(
@@ -940,7 +940,7 @@ class _SubscriberDetailsScreenState
       builder: (sheetCtx) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
             left: 20, right: 20, top: 16,
           ),
           child: StatefulBuilder(builder: (ctx, setSheet) {
@@ -1530,7 +1530,7 @@ class _SubscriberDetailsScreenState
       builder: (sheetCtx) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
             left: 20, right: 20, top: 16,
           ),
           child: StatefulBuilder(builder: (ctx, setSheet) {
@@ -1864,7 +1864,7 @@ class _SubscriberDetailsScreenState
       builder: (sheetCtx) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + MediaQuery.of(sheetCtx).padding.bottom,
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
             left: 20, right: 20, top: 16,
           ),
           child: StatefulBuilder(builder: (ctx, setSheet) {
@@ -2509,8 +2509,12 @@ class _SubscriberDetailsScreenState
       builder: (ctx) {
         return SafeArea(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16,
-                16 + MediaQuery.of(ctx).padding.bottom),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              bottomSheetBottomInset(ctx, extra: 16),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

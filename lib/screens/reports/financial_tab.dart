@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
@@ -299,7 +300,12 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: bottomSheetContentPadding(
+                ctx,
+                horizontal: 20,
+                top: 20,
+                extraBottom: 16,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,

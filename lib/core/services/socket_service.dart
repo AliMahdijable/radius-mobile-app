@@ -20,6 +20,8 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _connectionEventController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _appNotificationController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get whatsappStatus =>
       _whatsappStatusController.stream;
@@ -28,6 +30,8 @@ class SocketService {
       _broadcastController.stream;
   Stream<Map<String, dynamic>> get connectionEvents =>
       _connectionEventController.stream;
+  Stream<Map<String, dynamic>> get appNotifications =>
+      _appNotificationController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -124,6 +128,10 @@ class SocketService {
       });
     });
 
+    _socket!.on('app-notification', (data) {
+      _appNotificationController.add(Map<String, dynamic>.from(data));
+    });
+
     _socket!.connect();
   }
 
@@ -143,5 +151,6 @@ class SocketService {
     _qrCodeController.close();
     _broadcastController.close();
     _connectionEventController.close();
+    _appNotificationController.close();
   }
 }

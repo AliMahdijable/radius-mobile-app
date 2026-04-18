@@ -12,6 +12,20 @@ import '../constants/api_constants.dart';
 import '../constants/app_constants.dart';
 import 'storage_service.dart';
 
+class FcmEnableResult {
+  final bool enabled;
+  final bool pushLinked;
+  final bool osPermissionGranted;
+  final String? message;
+
+  const FcmEnableResult({
+    required this.enabled,
+    required this.pushLinked,
+    required this.osPermissionGranted,
+    this.message,
+  });
+}
+
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -79,33 +93,56 @@ class FcmService {
     );
   }
 
-  /// طلب إذن الإشعارات وإرجاع FCM token
-  static Future<String?> requestPermissionAndGetToken() async {
-    // Android 13+ يحتاج طلب إذن POST_NOTIFICATIONS بشكل runtime
-    if (Platform.isAndroid) {
-      final status = await Permission.notification.request();
-      if (!status.isGranted) {
-        debugPrint('FCM: OS notification permission denied');
-        return null;
-      }
+  static Future<bool> _ensureOsPermission() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final current = await Permission.notification.status;
+      if (current.isGranted) return true;
+      final requested = await Permission.notification.request();
+      return requested.isGranted;
     }
+    return true;
+  }
 
-    final messaging = FirebaseMessaging.instance;
-    final settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+  static Future<bool> hasOsPermission() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final status = await Permission.notification.status;
+      return status.isGranted;
+    }
+    return true;
+  }
 
-    if (settings.authorizationStatus != AuthorizationStatus.authorized &&
-        settings.authorizationStatus != AuthorizationStatus.provisional) {
-      debugPrint('FCM: Firebase permission denied');
+  static Future<String?> _tryGetFcmToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      try {
+        await messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } catch (error) {
+        debugPrint('FCM: requestPermission warning: $error');
+      }
+
+      final token = await messaging.getToken();
+      debugPrint('FCM token: $token');
+      return token;
+    } catch (error) {
+      debugPrint('FCM: getToken failed: $error');
       return null;
     }
+  }
 
-    final token = await messaging.getToken();
-    debugPrint('FCM token: $token');
-    return token;
+  static Future<bool> isEnabled(StorageService storage) async {
+    final stored = await storage.getFcmEnabled();
+    if (!stored) return false;
+
+    final granted = await hasOsPermission();
+    if (!granted) {
+      await storage.setFcmEnabled(false);
+      return false;
+    }
+    return true;
   }
 
   /// تسجيل التوكن في السيرفر
@@ -178,21 +215,45 @@ class FcmService {
   }
 
   /// تفعيل FCM: طلب إذن + تسجيل التوكن
-  static Future<bool> enable(StorageService storage) async {
+  static Future<FcmEnableResult> enable(StorageService storage) async {
     await init();
-    final fcmToken = await requestPermissionAndGetToken();
-    if (fcmToken == null) return false;
+    final granted = await _ensureOsPermission();
+    if (!granted) {
+      await storage.setFcmEnabled(false);
+      return const FcmEnableResult(
+        enabled: false,
+        pushLinked: false,
+        osPermissionGranted: false,
+        message: 'لم يتم منح إذن إشعارات الجهاز',
+      );
+    }
+
+    await storage.setFcmEnabled(true);
+
+    final fcmToken = await _tryGetFcmToken();
+    if (fcmToken == null || fcmToken.isEmpty) {
+      return const FcmEnableResult(
+        enabled: true,
+        pushLinked: false,
+        osPermissionGranted: true,
+        message:
+            'تم تفعيل إشعارات الجهاز، لكن تعذر ربط التنبيهات الفورية على هذا الجهاز حاليًا.',
+      );
+    }
 
     final ok = await registerToken(fcmToken);
-    if (ok) {
-      await storage.setFcmEnabled(true);
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      registerToken(newToken);
+    });
 
-      // الاستماع لتحديث التوكن
-      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-        registerToken(newToken);
-      });
-    }
-    return ok;
+    return FcmEnableResult(
+      enabled: true,
+      pushLinked: ok,
+      osPermissionGranted: true,
+      message: ok
+          ? 'تم تفعيل إشعارات الجهاز'
+          : 'تم تفعيل إشعارات الجهاز، لكن تعذر ربط التنبيهات الفورية على هذا الجهاز حاليًا.',
+    );
   }
 
   /// تعطيل FCM: حذف التوكن
@@ -204,8 +265,12 @@ class FcmService {
   /// عند تسجيل الدخول: إعادة تسجيل التوكن إذا كان FCM مفعل
   static Future<void> onLoggedIn(StorageService storage) async {
     if (!await storage.getFcmEnabled()) return;
+    if (!await hasOsPermission()) {
+      await storage.setFcmEnabled(false);
+      return;
+    }
     await init();
-    final fcmToken = await FirebaseMessaging.instance.getToken();
+    final fcmToken = await _tryGetFcmToken();
     if (fcmToken != null) {
       await registerToken(fcmToken);
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {

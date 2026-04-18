@@ -11,6 +11,7 @@ import '../core/services/fcm_service.dart';
 import '../models/user_model.dart';
 import 'dashboard_provider.dart';
 import 'discounts_provider.dart';
+import 'app_notifications_provider.dart';
 import 'messages_provider.dart';
 import 'managers_provider.dart';
 import 'print_templates_provider.dart';
@@ -133,10 +134,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.invalidate(templatesProvider);
     _ref.invalidate(printTemplatesProvider);
     _ref.invalidate(messagesProvider);
+    _ref.invalidate(appNotificationsProvider);
     _ref.invalidate(reportsProvider);
     _ref.invalidate(discountsProvider);
     _ref.invalidate(settingsProvider);
     _ref.invalidate(schedulesProvider);
+  }
+
+  Future<void> _syncNotificationServices() async {
+    final notificationsEnabled = await _storage.getFcmEnabled();
+    if (!notificationsEnabled) return;
+
+    if (!await _storage.getPushExpiryOutsideEnabled()) {
+      await _storage.setPushExpiryOutsideEnabled(true);
+    }
+
+    await ExpiryPushService.onLoggedIn(_storage);
+    await FcmService.onLoggedIn(_storage);
   }
 
   Future<void> checkAuth() async {
@@ -175,8 +189,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: null,
       );
       Future.microtask(() {
-        ExpiryPushService.onLoggedIn(_storage);
-        FcmService.onLoggedIn(_storage);
+        _syncNotificationServices();
       });
     } catch (e) {
       state = state.copyWith(
@@ -264,8 +277,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _resetSessionScopedProviders();
         _socket.disconnect();
         _socket.connect(user.id);
-        await ExpiryPushService.onLoggedIn(_storage);
-        FcmService.onLoggedIn(_storage);
+        await _syncNotificationServices();
 
         state = AuthState(
           status: AuthStatus.authenticated,

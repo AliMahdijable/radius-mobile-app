@@ -9,6 +9,8 @@ import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/fcm_service.dart';
+import '../core/services/expiry_push_service.dart';
+import '../core/utils/bottom_sheet_utils.dart';
 import '../widgets/app_snackbar.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -31,17 +33,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.initState();
     Future.microtask(() async {
       ref.read(settingsProvider.notifier).loadFeatures();
-      final storage = ref.read(storageServiceProvider);
-      final fcm = await storage.getFcmEnabled();
-      if (mounted) {
-        setState(() {
-          _fcmEnabled = fcm;
-          _fcmLoaded = true;
-        });
-      }
+      await _loadNotificationState();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAppVersion();
+    });
+  }
+
+  Future<void> _loadNotificationState() async {
+    final storage = ref.read(storageServiceProvider);
+    final enabled = await FcmService.isEnabled(storage);
+    if (!mounted) return;
+    setState(() {
+      _fcmEnabled = enabled;
+      _fcmLoaded = true;
     });
   }
 
@@ -77,23 +82,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _onFcmChanged(bool value) async {
     final storage = ref.read(storageServiceProvider);
     if (value) {
-      final ok = await FcmService.enable(storage);
-      if (!ok && mounted) {
-        AppSnackBar.error(context,
-            'لم يُمنح إذن الإشعارات أو فشل التسجيل. تحقق من إعدادات الجهاز.');
+      final result = await FcmService.enable(storage);
+      if (!result.enabled && mounted) {
+        AppSnackBar.error(
+          context,
+          result.message ?? 'لم يُمنح إذن الإشعارات. تحقق من إعدادات الجهاز.',
+        );
         return;
+      }
+      await ExpiryPushService.setEnabled(storage, true);
+      if (!mounted) return;
+      setState(() => _fcmEnabled = true);
+      if (result.pushLinked) {
+        AppSnackBar.success(context, 'تم تفعيل إشعارات الجهاز');
+      } else {
+        AppSnackBar.info(
+          context,
+          result.message ??
+              'تم تفعيل إشعارات الجهاز، لكن التنبيهات الفورية قد لا تعمل على هذا الجهاز.',
+        );
       }
     } else {
       await FcmService.disable(storage);
-    }
-    if (mounted) {
-      setState(() => _fcmEnabled = value);
-      AppSnackBar.success(
-        context,
-        value
-            ? 'تم تفعيل إشعارات الجهاز'
-            : 'تم إيقاف إشعارات الجهاز',
-      );
+      await ExpiryPushService.setEnabled(storage, false);
+      if (!mounted) return;
+      setState(() => _fcmEnabled = false);
+      AppSnackBar.success(context, 'تم إيقاف إشعارات الجهاز');
     }
   }
 
@@ -111,11 +125,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           final theme = Theme.of(ctx);
 
           return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              left: 20,
-              right: 20,
+            padding: bottomSheetContentPadding(
+              ctx,
+              horizontal: 20,
               top: 16,
+              extraBottom: 12,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -246,7 +260,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           icon: Icons.notifications_active_outlined,
           title: 'إشعارات الجهاز',
           subtitle:
-              'استقبال تنبيهات فورية عند انتهاء أو قرب انتهاء اشتراكات المشتركين، حتى عند إغلاق التطبيق.',
+              'استقبال تنبيهات الجهاز للاشتراكات، مع ربط التنبيهات الفورية داخل التطبيق عندما يدعم الجهاز ذلك.',
           trailing: !_fcmLoaded
               ? const SizedBox(
                   width: 24,

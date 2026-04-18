@@ -6,6 +6,7 @@ import '../../providers/messages_provider.dart';
 import '../../models/message_log_model.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/loading_overlay.dart';
@@ -78,11 +79,11 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 20,
-            right: 20,
+          padding: bottomSheetContentPadding(
+            ctx,
+            horizontal: 20,
             top: 16,
+            extraBottom: 12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -864,4 +865,3 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
-

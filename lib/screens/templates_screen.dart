@@ -4,6 +4,7 @@ import '../providers/templates_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/template_model.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/bottom_sheet_utils.dart';
 import '../widgets/app_snackbar.dart';
 
 class TemplatesScreen extends ConsumerStatefulWidget {
@@ -41,7 +42,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             final keyboardH = MediaQuery.of(ctx).viewInsets.bottom;
-            final safeBottom = MediaQuery.of(ctx).padding.bottom;
+            final safeBottom = bottomSheetBottomInset(ctx, extra: 0) - keyboardH;
             final screenH = MediaQuery.of(ctx).size.height;
             final keyboardOpen = keyboardH > 50;
 

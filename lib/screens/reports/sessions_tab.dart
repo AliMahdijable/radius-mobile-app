@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/utils/csv_export.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/report_controls.dart';
@@ -154,9 +155,11 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
-              padding: EdgeInsets.only(
-                left: 20, right: 20, top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              padding: bottomSheetContentPadding(
+                ctx,
+                horizontal: 20,
+                top: 20,
+                extraBottom: 20,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

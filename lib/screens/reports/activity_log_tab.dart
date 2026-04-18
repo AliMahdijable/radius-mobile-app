@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
@@ -378,7 +379,12 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: bottomSheetContentPadding(
+                ctx,
+                horizontal: 20,
+                top: 20,
+                extraBottom: 16,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
