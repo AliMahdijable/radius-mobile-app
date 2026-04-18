@@ -15,6 +15,8 @@ class ManagerModel {
   final String address;
   final String notes;
   final int? parentId;
+  final double totalDebt;
+  final double debtForMe;
 
   const ManagerModel({
     required this.id,
@@ -33,6 +35,8 @@ class ManagerModel {
     this.address = '',
     this.notes = '',
     this.parentId,
+    this.totalDebt = 0,
+    this.debtForMe = 0,
   });
 
   factory ManagerModel.fromJson(Map<String, dynamic> json) {
@@ -60,6 +64,10 @@ class ManagerModel {
       address: (json['address'] ?? '').toString(),
       notes: (json['notes'] ?? '').toString(),
       parentId: json['parent_id'] != null ? _toInt(json['parent_id']) : null,
+      totalDebt: _toDouble(
+        json['total_debt'] ?? json['debt'] ?? json['total'] ?? 0,
+      ),
+      debtForMe: _toDouble(json['debt_for_me']),
     );
   }
 
@@ -67,7 +75,49 @@ class ManagerModel {
 
   double get credit => balance > 0 ? balance : 0;
 
-  double get debt => balance < 0 ? balance.abs() : 0;
+  double get debt => totalDebt > 0 ? totalDebt : (balance < 0 ? balance.abs() : 0);
+
+  ManagerModel copyWith({
+    int? id,
+    String? username,
+    String? firstname,
+    String? lastname,
+    double? balance,
+    int? usersCount,
+    String? aclName,
+    int? aclId,
+    bool? isActive,
+    String? email,
+    String? mobile,
+    String? company,
+    String? city,
+    String? address,
+    String? notes,
+    int? parentId,
+    double? totalDebt,
+    double? debtForMe,
+  }) {
+    return ManagerModel(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      firstname: firstname ?? this.firstname,
+      lastname: lastname ?? this.lastname,
+      balance: balance ?? this.balance,
+      usersCount: usersCount ?? this.usersCount,
+      aclName: aclName ?? this.aclName,
+      aclId: aclId ?? this.aclId,
+      isActive: isActive ?? this.isActive,
+      email: email ?? this.email,
+      mobile: mobile ?? this.mobile,
+      company: company ?? this.company,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      notes: notes ?? this.notes,
+      parentId: parentId ?? this.parentId,
+      totalDebt: totalDebt ?? this.totalDebt,
+      debtForMe: debtForMe ?? this.debtForMe,
+    );
+  }
 
   static int _toInt(dynamic value) {
     if (value is int) return value;

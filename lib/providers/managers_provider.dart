@@ -123,14 +123,15 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
               .map((e) => ManagerModel.fromJson(Map<String, dynamic>.from(e)))
               .toList()
           : <ManagerModel>[];
+      final enrichedItems = await _attachDebtInfo(items);
 
       final totalCount = body is Map
-          ? _toInt(body['totalCount'] ?? body['total'] ?? items.length)
-          : items.length;
+          ? _toInt(body['totalCount'] ?? body['total'] ?? enrichedItems.length)
+          : enrichedItems.length;
 
       state = state.copyWith(
         loading: false,
-        managers: items,
+        managers: enrichedItems,
         totalCount: totalCount,
       );
     } catch (e) {
@@ -193,6 +194,23 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       dev.log('fetchDebtInfo error: $e', name: 'MANAGERS');
       return null;
     }
+  }
+
+  Future<List<ManagerModel>> _attachDebtInfo(List<ManagerModel> managers) async {
+    if (managers.isEmpty) return managers;
+
+    final enriched = await Future.wait(
+      managers.map((manager) async {
+        final debtInfo = await fetchDebtInfo(manager.id);
+        if (debtInfo == null) return manager;
+        return manager.copyWith(
+          totalDebt: debtInfo.totalDebt.abs(),
+          debtForMe: debtInfo.debtForMe.abs(),
+        );
+      }),
+    );
+
+    return enriched;
   }
 
   Future<bool> createManager({
