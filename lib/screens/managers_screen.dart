@@ -34,6 +34,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   int? _selectedManagerId;
+  bool _showAdvancedFilters = false;
   static const List<(String value, String label, String shortLabel)> _sortItems = [
     ('username', 'اسم المستخدم', 'المستخدم'),
     ('firstname', 'الاسم الأول', 'الأول'),
@@ -131,6 +132,15 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           ),
         )
         .toList();
+  }
+
+  String _labelForSort(String value, {bool compact = false}) {
+    for (final item in _sortItems) {
+      if (item.$1 == value) {
+        return compact ? item.$3 : item.$2;
+      }
+    }
+    return value;
   }
 
   Future<void> _openManagerForm({ManagerModel? manager}) async {
@@ -362,26 +372,26 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton.small(
         onPressed: () => _openManagerForm(),
-        icon: const Icon(Icons.person_add_alt_1_rounded),
-        label: const Text('إضافة مدير'),
+        tooltip: 'إضافة مدير',
+        child: const Icon(Icons.person_add_alt_1_rounded),
       ),
       body: Column(
         children: [
           if (state.loading && state.managers.isNotEmpty)
             const LinearProgressIndicator(minHeight: 2),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Column(
               children: [
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(10),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final compact = constraints.maxWidth < 360;
-                        final ultraCompact = constraints.maxWidth < 320;
+                        final compact = constraints.maxWidth < 380;
+                        final ultraCompact = constraints.maxWidth < 330;
 
                         return Column(
                           children: [
@@ -392,7 +402,13 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     controller: _searchController,
                                     onChanged: _handleSearchChanged,
                                     decoration: InputDecoration(
-                                      hintText: 'بحث باسم المستخدم أو الاسم',
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      hintText: 'بحث...',
                                       prefixIcon:
                                           const Icon(Icons.search_rounded),
                                       suffixIcon:
@@ -403,6 +419,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                                     _handleSearchChanged('');
                                                     setState(() {});
                                                   },
+                                                  padding: EdgeInsets.zero,
                                                   icon: const Icon(
                                                     Icons.close_rounded,
                                                   ),
@@ -411,24 +428,47 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                IconButton.filledTonal(
-                                  tooltip: 'تحديث',
-                                  onPressed: state.loading
-                                      ? null
-                                      : () => _reloadManagers(),
-                                  icon: const Icon(Icons.sync_rounded),
+                                const SizedBox(width: 8),
+                                SizedBox.square(
+                                  dimension: ultraCompact ? 38 : 40,
+                                  child: IconButton.filledTonal(
+                                    tooltip: 'الفلاتر',
+                                    padding: EdgeInsets.zero,
+                                    onPressed: () {
+                                      setState(() {
+                                        _showAdvancedFilters =
+                                            !_showAdvancedFilters;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _showAdvancedFilters
+                                          ? Icons.tune_rounded
+                                          : Icons.tune_outlined,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox.square(
+                                  dimension: ultraCompact ? 38 : 40,
+                                  child: IconButton.filledTonal(
+                                    tooltip: 'تحديث',
+                                    padding: EdgeInsets.zero,
+                                    onPressed: state.loading
+                                        ? null
+                                        : () => _reloadManagers(),
+                                    icon: const Icon(Icons.sync_rounded),
+                                  ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            if (compact) ...[
+                            if (_showAdvancedFilters) ...[
+                              const SizedBox(height: 8),
                               DropdownButtonFormField<String>(
                                 value: state.sortBy,
                                 isDense: true,
                                 isExpanded: true,
                                 selectedItemBuilder: (_) =>
-                                    _buildSortSelectedItems(true),
+                                    _buildSortSelectedItems(compact),
                                 decoration: const InputDecoration(
                                   labelText: 'الفرز',
                                 ),
@@ -438,7 +478,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   _reloadManagers(page: 1, sortBy: value);
                                 },
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 8),
                               Row(
                                 children: [
                                   Expanded(
@@ -466,10 +506,10 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       },
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
                                   SizedBox(
-                                    width: ultraCompact ? 44 : 48,
-                                    height: ultraCompact ? 44 : 48,
+                                    width: ultraCompact ? 36 : 40,
+                                    height: ultraCompact ? 36 : 40,
                                     child: IconButton.filledTonal(
                                       tooltip: state.direction == 'asc'
                                           ? 'ترتيب تصاعدي'
@@ -492,131 +532,62 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   ),
                                 ],
                               ),
-                            ] else
-                              Row(
+                            ] else ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
                                 children: [
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      value: state.sortBy,
-                                      isDense: true,
-                                      isExpanded: true,
-                                      selectedItemBuilder: (_) =>
-                                          _buildSortSelectedItems(false),
-                                      decoration: const InputDecoration(
-                                        labelText: 'ترتيب حسب',
-                                        prefixIcon: Icon(Icons.sort_rounded),
-                                      ),
-                                      items: _buildSortMenuItems(),
-                                      onChanged: (value) {
-                                        if (value == null) return;
-                                        _reloadManagers(page: 1, sortBy: value);
-                                      },
-                                    ),
+                                  _ManagersMiniStatChip(
+                                    icon: Icons.sort_rounded,
+                                    label:
+                                        'فرز: ${_labelForSort(state.sortBy, compact: true)}',
+                                    color: AppTheme.infoColor,
                                   ),
-                                  const SizedBox(width: 10),
-                                  SizedBox(
-                                    width: 112,
-                                    child: DropdownButtonFormField<int>(
-                                      value: state.rowsPerPage,
-                                      isDense: true,
-                                      isExpanded: true,
-                                      decoration: const InputDecoration(
-                                        labelText: 'العدد',
-                                        prefixIcon: Icon(
-                                          Icons.format_list_numbered_rounded,
-                                        ),
-                                      ),
-                                      items: const [10, 25, 50, 100, 500]
-                                          .map(
-                                            (count) => DropdownMenuItem(
-                                              value: count,
-                                              child: Text('$count'),
-                                            ),
-                                          )
-                                          .toList(),
-                                      onChanged: (value) {
-                                        if (value == null) return;
-                                        _reloadManagers(
-                                          page: 1,
-                                          rowsPerPage: value,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  IconButton.filledTonal(
-                                    tooltip: state.direction == 'asc'
+                                  _ManagersMiniStatChip(
+                                    icon: state.direction == 'asc'
+                                        ? Icons.arrow_upward_rounded
+                                        : Icons.arrow_downward_rounded,
+                                    label: state.direction == 'asc'
                                         ? 'تصاعدي'
                                         : 'تنازلي',
-                                    onPressed: () {
-                                      _reloadManagers(
-                                        page: 1,
-                                        direction: state.direction == 'asc'
-                                            ? 'desc'
-                                            : 'asc',
-                                      );
-                                    },
-                                    icon: Icon(
-                                      state.direction == 'asc'
-                                          ? Icons.arrow_upward_rounded
-                                          : Icons.arrow_downward_rounded,
-                                    ),
+                                    color: AppTheme.primary,
+                                  ),
+                                  _ManagersMiniStatChip(
+                                    icon: Icons.format_list_numbered_rounded,
+                                    label: '${state.rowsPerPage} عنصر',
+                                    color: AppTheme.warningColor,
                                   ),
                                 ],
                               ),
+                            ],
                           ],
                         );
                       },
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 380;
-                    final statCards = [
-                      _ManagersStatCard(
-                        label: 'إجمالي المدراء',
-                        value: '${state.totalCount}',
-                        icon: Icons.admin_panel_settings_outlined,
-                        color: AppTheme.infoColor,
-                      ),
-                      _ManagersStatCard(
-                        label: 'أرصدة ظاهرة',
-                        value: _formatCurrency(visibleCredit),
-                        icon: Icons.account_balance_wallet_outlined,
-                        color: AppTheme.successColor,
-                      ),
-                      _ManagersStatCard(
-                        label: 'ديون ظاهرة',
-                        value: _formatCurrency(visibleDebt),
-                        icon: Icons.trending_down_rounded,
-                        color: AppTheme.warningColor,
-                      ),
-                    ];
-
-                    if (compact) {
-                      return Column(
-                        children: [
-                          for (var i = 0; i < statCards.length; i++) ...[
-                            statCards[i],
-                            if (i != statCards.length - 1)
-                              const SizedBox(height: 10),
-                          ],
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      children: [
-                        Expanded(child: statCards[0]),
-                        const SizedBox(width: 10),
-                        Expanded(child: statCards[1]),
-                        const SizedBox(width: 10),
-                        Expanded(child: statCards[2]),
-                      ],
-                    );
-                  },
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _ManagersMiniStatChip(
+                      icon: Icons.admin_panel_settings_outlined,
+                      label: 'المدراء ${state.totalCount}',
+                      color: AppTheme.infoColor,
+                    ),
+                    _ManagersMiniStatChip(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'رصيد ${_formatCurrency(visibleCredit)}',
+                      color: AppTheme.successColor,
+                    ),
+                    _ManagersMiniStatChip(
+                      icon: Icons.trending_down_rounded,
+                      label: 'دين ${_formatCurrency(visibleDebt)}',
+                      color: AppTheme.warningColor,
+                    ),
+                  ],
                 ),
                 if (state.error != null) ...[
                   const SizedBox(height: 10),
@@ -635,7 +606,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                 : state.managers.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 24, 16, 120),
+                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 96),
                         children: [
                           EmptyState(
                             icon: Icons.manage_accounts_outlined,
@@ -664,10 +635,10 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                         onRefresh: () => _reloadManagers(),
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
                           itemCount: state.managers.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final manager = state.managers[index];
                             final selected = manager.id == _selectedManagerId;
@@ -691,11 +662,11 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
               child: Card(
                 child: Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final compact = constraints.maxWidth < 340;
@@ -704,10 +675,9 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                         children: [
                           Text(
                             'الصفحة ${state.currentPage} من $totalPages',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -720,6 +690,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       .colorScheme
                                       .onSurface
                                       .withValues(alpha: 0.6),
+                                  fontSize: 11,
                                 ),
                           ),
                         ],
@@ -799,8 +770,10 @@ class _ManagerListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final showFullName =
-        manager.fullName.isNotEmpty && manager.fullName != manager.username;
-    final compact = MediaQuery.sizeOf(context).width < 360;
+        manager.fullName.isNotEmpty &&
+        manager.fullName != manager.username &&
+        !manager.fullName.contains(manager.username);
+    final compact = MediaQuery.sizeOf(context).width < 390;
     final borderColor = selected
         ? theme.colorScheme.primary
         : theme.colorScheme.outline.withValues(alpha: 0.14);
@@ -812,21 +785,21 @@ class _ManagerListCard extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
-          padding: EdgeInsets.all(compact ? 12 : 16),
+          padding: EdgeInsets.all(compact ? 10 : 12),
           child: Column(
             children: [
               Row(
@@ -834,13 +807,13 @@ class _ManagerListCard extends StatelessWidget {
                   Stack(
                     children: [
                       CircleAvatar(
-                        radius: compact ? 20 : 24,
+                        radius: compact ? 18 : 20,
                         backgroundColor:
                             AppTheme.primary.withValues(alpha: 0.12),
                         child: Icon(
                           Icons.admin_panel_settings_outlined,
                           color: AppTheme.primary,
-                          size: compact ? 18 : 22,
+                          size: compact ? 16 : 18,
                         ),
                       ),
                       Positioned(
@@ -861,7 +834,7 @@ class _ManagerListCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(width: compact ? 10 : 12),
+                  SizedBox(width: compact ? 8 : 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -872,7 +845,7 @@ class _ManagerListCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
-                            fontSize: compact ? 14 : null,
+                            fontSize: compact ? 13 : 14,
                           ),
                         ),
                         if (showFullName) ...[
@@ -885,7 +858,7 @@ class _ManagerListCard extends StatelessWidget {
                               color: theme.colorScheme.onSurface
                                   .withValues(alpha: 0.72),
                               fontWeight: FontWeight.w600,
-                              fontSize: compact ? 12 : null,
+                              fontSize: compact ? 11 : 12,
                             ),
                           ),
                         ],
@@ -946,18 +919,21 @@ class _ManagerListCard extends StatelessWidget {
                       ),
                     ],
                     child: Container(
-                      padding: EdgeInsets.all(compact ? 6 : 8),
+                      padding: EdgeInsets.all(compact ? 4 : 6),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.more_vert_rounded),
+                      child: Icon(
+                        Icons.more_vert_rounded,
+                        size: compact ? 18 : 20,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: compact ? 8 : 10),
               Wrap(
                 spacing: compact ? 6 : 8,
                 runSpacing: compact ? 6 : 8,
@@ -977,13 +953,13 @@ class _ManagerListCard extends StatelessWidget {
                       label: manager.aclName!,
                       color: AppTheme.infoColor,
                     ),
-                  if (manager.mobile.isNotEmpty)
+                  if (selected && manager.mobile.isNotEmpty)
                     _InfoBadge(
                       icon: Icons.phone_outlined,
                       label: manager.mobile,
                       color: AppTheme.primary,
                     ),
-                  if (manager.company.isNotEmpty)
+                  if (selected && manager.company.isNotEmpty)
                     _InfoBadge(
                       icon: Icons.business_outlined,
                       label: manager.company,
@@ -991,84 +967,38 @@ class _ManagerListCard extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 14),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 380;
-
-                  if (compact) {
-                    final tileWidth = (constraints.maxWidth - 10) / 2;
-                    return Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        SizedBox(
-                          width: tileWidth,
-                          child: _ManagerMetricTile(
-                            label: 'المشتركون',
-                            value: '${manager.usersCount}',
-                            color: AppTheme.infoColor,
-                          ),
-                        ),
-                        SizedBox(
-                          width: tileWidth,
-                          child: _ManagerMetricTile(
-                            label: 'الرصيد',
-                            value: _formatCurrency(manager.credit),
-                            color: AppTheme.successColor,
-                          ),
-                        ),
-                        SizedBox(
-                          width: tileWidth,
-                          child: _ManagerMetricTile(
-                            label: 'الدين',
-                            value: _formatCurrency(manager.debt),
-                            color: AppTheme.warningColor,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(
-                        child: _ManagerMetricTile(
-                          label: 'المشتركون',
-                          value: '${manager.usersCount}',
-                          color: AppTheme.infoColor,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _ManagerMetricTile(
-                          label: 'الرصيد',
-                          value: _formatCurrency(manager.credit),
-                          color: AppTheme.successColor,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _ManagerMetricTile(
-                          label: 'الدين',
-                          value: _formatCurrency(manager.debt),
-                          color: AppTheme.warningColor,
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              SizedBox(height: compact ? 8 : 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _ManagersMiniStatChip(
+                    icon: Icons.people_outline_rounded,
+                    label: 'مشتركون ${manager.usersCount}',
+                    color: AppTheme.infoColor,
+                  ),
+                  _ManagersMiniStatChip(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: 'رصيد ${_formatCurrency(manager.credit)}',
+                    color: AppTheme.successColor,
+                  ),
+                  _ManagersMiniStatChip(
+                    icon: Icons.trending_down_rounded,
+                    label: 'دين ${_formatCurrency(manager.debt)}',
+                    color: AppTheme.warningColor,
+                  ),
+                ],
               ),
               AnimatedCrossFade(
                 firstChild: const SizedBox.shrink(),
                 secondChild: Column(
                   children: [
-                    const SizedBox(height: 14),
+                    SizedBox(height: compact ? 8 : 10),
                     const Divider(height: 1),
-                    const SizedBox(height: 14),
+                    SizedBox(height: compact ? 8 : 10),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
                         _ManagerActionButton(
                           icon: Icons.edit_outlined,
@@ -2327,50 +2257,39 @@ class _ManagersStatCard extends StatelessWidget {
   }
 }
 
-class _ManagerMetricTile extends StatelessWidget {
+class _ManagersMiniStatChip extends StatelessWidget {
+  final IconData icon;
   final String label;
-  final String value;
   final Color color;
 
-  const _ManagerMetricTile({
+  const _ManagersMiniStatChip({
+    required this.icon,
     required this.label,
-    required this.value,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: 0.12)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                  fontSize: 14,
-                ),
-          ),
-          const SizedBox(height: 4),
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
           Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.6),
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                  fontSize: 11,
                 ),
           ),
         ],
@@ -2401,10 +2320,15 @@ class _ManagerActionButton extends StatelessWidget {
           color: (onPressed == null ? Colors.grey : color)
               .withValues(alpha: 0.28),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        minimumSize: const Size(84, 38),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: const Size(68, 32),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
+        textStyle: const TextStyle(
+          fontFamily: AppTheme.fontFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
@@ -2427,19 +2351,19 @@ class _InfoBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 150),
+            constraints: const BoxConstraints(maxWidth: 120),
             child: Text(
               label,
               maxLines: 1,
@@ -2447,6 +2371,7 @@ class _InfoBadge extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: color,
                     fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
                   ),
             ),
           ),
