@@ -170,21 +170,15 @@ class SubscriberCard extends StatelessWidget {
                               ),
                             ),
                           Center(
-                            child: isDisabled
-                                ? Icon(
-                                    Icons.block_rounded,
-                                    size: 10,
-                                    color: badgeStyle.foregroundColor,
-                                  )
-                                : Text(
-                                    _badgeLabel(subscriber),
-                                    style: TextStyle(
-                                      color: badgeStyle.foregroundColor,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 9,
-                                      height: 1,
-                                    ),
-                                  ),
+                            child: Text(
+                              _badgeLabel(subscriber),
+                              style: TextStyle(
+                                color: badgeStyle.foregroundColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 9,
+                                height: 1,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -437,14 +431,6 @@ class SubscriberCard extends StatelessWidget {
   static _SubscriberBadgeStyle _resolveBadgeStyle(
     SubscriberModel sub,
   ) {
-    if (!sub.isEnabled) {
-      return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFF4F6F8),
-        borderColor: Color(0xFFD9E0E7),
-        foregroundColor: Color(0xFF94A3B8),
-      );
-    }
-
     if (sub.isExpired && sub.isOnline) {
       return const _SubscriberBadgeStyle(
         primaryColor: Color(0xFFF59E0B),
