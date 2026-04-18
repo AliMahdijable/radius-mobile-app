@@ -543,6 +543,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     label:
                                         'فرز: ${_labelForSort(state.sortBy, compact: true)}',
                                     color: AppTheme.infoColor,
+                                    neutral: true,
                                   ),
                                   _ManagersMiniStatChip(
                                     icon: state.direction == 'asc'
@@ -552,11 +553,13 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                         ? 'تصاعدي'
                                         : 'تنازلي',
                                     color: AppTheme.primary,
+                                    neutral: true,
                                   ),
                                   _ManagersMiniStatChip(
                                     icon: Icons.format_list_numbered_rounded,
                                     label: '${state.rowsPerPage} عنصر',
                                     color: AppTheme.warningColor,
+                                    neutral: true,
                                   ),
                                 ],
                               ),
@@ -1529,7 +1532,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final amount = double.tryParse(_amountController.text.trim());
+    final amount = _parseFormattedAmount(_amountController.text);
     if (amount == null || amount <= 0) {
       AppSnackBar.warning(context, 'أدخل مبلغًا صحيحًا');
       return;
@@ -1621,12 +1624,9 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                 children: [
                   TextFormField(
                     controller: _amountController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: TextInputType.number,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[\d.]'),
-                      ),
+                      _ThousandsSeparatorInputFormatter(),
                     ],
                     decoration: InputDecoration(
                       labelText: _isDeposit
@@ -1635,7 +1635,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                       prefixIcon: const Icon(Icons.currency_exchange_rounded),
                     ),
                     validator: (value) {
-                      final amount = double.tryParse((value ?? '').trim());
+                      final amount = _parseFormattedAmount(value ?? '');
                       if (amount == null || amount <= 0) {
                         return 'أدخل مبلغًا صحيحًا';
                       }
@@ -2261,26 +2261,39 @@ class _ManagersMiniStatChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+  final bool neutral;
 
   const _ManagersMiniStatChip({
     required this.icon,
     required this.label,
     required this.color,
+    this.neutral = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final resolvedColor = neutral
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.72)
+        : color;
+    final backgroundColor = neutral
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42)
+        : color.withValues(alpha: 0.08);
+    final borderColor = neutral
+        ? theme.colorScheme.outline.withValues(alpha: 0.16)
+        : color.withValues(alpha: 0.12);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.12)),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
+          Icon(icon, size: 14, color: resolvedColor),
           const SizedBox(width: 6),
           Text(
             label,
@@ -2288,7 +2301,7 @@ class _ManagersMiniStatChip extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: color,
+                  color: resolvedColor,
                   fontSize: 11,
                 ),
           ),
@@ -2474,4 +2487,39 @@ String _formatCurrency(num value) {
   if (absolute == 0) return '0 IQD';
   final formatter = intl.NumberFormat('#,##0.##', 'en_US');
   return '${formatter.format(absolute)} IQD';
+}
+
+double? _parseFormattedAmount(String value) {
+  final normalized = value.replaceAll(',', '').trim();
+  if (normalized.isEmpty) return null;
+  return double.tryParse(normalized);
+}
+
+class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
+  _ThousandsSeparatorInputFormatter()
+      : _numberFormatter = intl.NumberFormat('#,##0', 'en_US');
+
+  final intl.NumberFormat _numberFormatter;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isEmpty) {
+      return const TextEditingValue(text: '');
+    }
+
+    final parsed = int.tryParse(digitsOnly);
+    if (parsed == null) {
+      return oldValue;
+    }
+
+    final formatted = _numberFormatter.format(parsed);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
 }
