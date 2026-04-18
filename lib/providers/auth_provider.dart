@@ -238,6 +238,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         clearError: true,
       );
     }
+
+    await _syncNotificationServices();
   }
 
   Future<bool> login(String username, String password) async {

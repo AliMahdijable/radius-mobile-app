@@ -197,6 +197,29 @@ class FcmService {
     return registerToken(fcmToken);
   }
 
+  static Future<bool> _registerCurrentTokenWithRecovery() async {
+    final firstToken = await _tryGetFcmToken();
+    if (firstToken != null &&
+        firstToken.isNotEmpty &&
+        await registerToken(firstToken)) {
+      return true;
+    }
+
+    debugPrint('FCM: token registration failed, forcing token refresh');
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (error) {
+      debugPrint('FCM: deleteToken failed during recovery: $error');
+    }
+
+    final refreshedToken = await _tryGetFcmToken();
+    if (refreshedToken == null || refreshedToken.isEmpty) {
+      return false;
+    }
+
+    return registerToken(refreshedToken);
+  }
+
   static void _scheduleDeferredRegistration() {
     if (_deferredRegistrationRunning) return;
     _deferredRegistrationRunning = true;
@@ -213,7 +236,7 @@ class FcmService {
     try {
       for (final delay in retryDelays) {
         await Future<void>.delayed(delay);
-        final ok = await _registerCurrentTokenOnce();
+        final ok = await _registerCurrentTokenWithRecovery();
         if (ok) {
           debugPrint('FCM: deferred token registration succeeded');
           return;
@@ -265,7 +288,11 @@ class FcmService {
         'deviceInfo': Platform.isAndroid ? 'Android' : 'iOS',
       });
       debugPrint('FCM register response: ${res.data}');
-      return res.data?['success'] == true;
+      final success = res.data?['success'] == true;
+      if (!success) {
+        debugPrint('FCM register rejected: ${res.data}');
+      }
+      return success;
     } catch (e) {
       debugPrint('FCM register error: $e');
       return false;
@@ -323,7 +350,7 @@ class FcmService {
     await storage.setFcmEnabled(true);
     _ensureTokenRefreshListener();
 
-    final ok = await _registerCurrentTokenOnce();
+    final ok = await _registerCurrentTokenWithRecovery();
     if (!ok) {
       _scheduleDeferredRegistration();
     }
@@ -351,7 +378,7 @@ class FcmService {
     }
     await init();
     _ensureTokenRefreshListener();
-    final ok = await _registerCurrentTokenOnce();
+    final ok = await _registerCurrentTokenWithRecovery();
     if (!ok) {
       _scheduleDeferredRegistration();
     }
