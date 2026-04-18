@@ -651,6 +651,9 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
     required bool isLoan,
     required double previousCredit,
     required double previousDebt,
+    required double currentCredit,
+    required double currentDebt,
+    required String actionKind,
     String? notes,
   }) async {
     try {
@@ -662,6 +665,9 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
           'isLoan': isLoan,
           'previousCredit': previousCredit,
           'previousDebt': previousDebt,
+          'currentCredit': currentCredit,
+          'currentDebt': currentDebt,
+          'actionKind': actionKind,
           'notes': notes?.trim() ?? '',
           'managerUsername': manager.username,
         },
