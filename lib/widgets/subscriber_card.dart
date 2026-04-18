@@ -90,11 +90,7 @@ class SubscriberCard extends StatelessWidget {
                   width: badgeSize,
                   height: badgeSize,
                   child: Container(
-                    width: badgeSize,
-                    height: badgeSize,
                     decoration: BoxDecoration(
-                      color: badgeStyle.fillColor,
-                      gradient: badgeStyle.gradient,
                       borderRadius: BorderRadius.circular(9),
                       border: Border.all(
                         color: badgeStyle.borderColor,
@@ -102,28 +98,79 @@ class SubscriberCard extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: badgeStyle.borderColor.withOpacity(0.12),
+                          color: badgeStyle.borderColor.withOpacity(0.10),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: isDisabled
-                          ? Icon(
-                              Icons.block_rounded,
-                              size: 14,
-                              color: badgeStyle.foregroundColor,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (badgeStyle.secondaryColor != null)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: badgeStyle.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: badgeStyle.secondaryColor!,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             )
-                          : Text(
-                              _badgeLabel(subscriber),
-                              style: TextStyle(
-                                color: badgeStyle.foregroundColor,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                                height: 1,
+                          else
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: badgeStyle.primaryColor,
                               ),
                             ),
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: badgeSize * 0.42,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.white.withOpacity(0.18),
+                                    Colors.white.withOpacity(0.02),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Center(
+                            child: isDisabled
+                                ? Icon(
+                                    Icons.block_rounded,
+                                    size: 14,
+                                    color: badgeStyle.foregroundColor,
+                                  )
+                                : Text(
+                                    _badgeLabel(subscriber),
+                                    style: TextStyle(
+                                      color: badgeStyle.foregroundColor,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      height: 1,
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -376,7 +423,7 @@ class SubscriberCard extends StatelessWidget {
   }) {
     if (!sub.isEnabled) {
       return const _SubscriberBadgeStyle(
-        fillColor: Color(0xFFF1F5F9),
+        primaryColor: Color(0xFFF1F5F9),
         borderColor: Color(0xFFD7DEE7),
         foregroundColor: Color(0xFF94A3B8),
       );
@@ -385,79 +432,51 @@ class SubscriberCard extends StatelessWidget {
     if (isOnlinePage) {
       if (sub.isExpired && sub.isOnline) {
         return const _SubscriberBadgeStyle(
-          fillColor: Color(0xFF8B5CF6),
-          borderColor: Color(0xFF7C3AED),
+          primaryColor: Color(0xFF9F7AEA),
+          borderColor: Color(0xFF8B5CF6),
           foregroundColor: Colors.white,
-          gradient: LinearGradient(
-            colors: [Color(0xFFA78BFA), Color(0xFF7C3AED)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
         );
       }
 
       if (sub.isOnline) {
         return const _SubscriberBadgeStyle(
-          fillColor: Color(0xFF16A34A),
+          primaryColor: Color(0xFF22A06B),
           borderColor: Color(0xFF15803D),
           foregroundColor: Colors.white,
-          gradient: LinearGradient(
-            colors: [Color(0xFF34D399), Color(0xFF16A34A)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
         );
       }
     }
 
     if (sub.isExpired && sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        fillColor: Color(0xFF2563EB),
+        primaryColor: Color(0xFFF59E0B),
+        secondaryColor: Color(0xFF2563EB),
         borderColor: Color(0xFFEA580C),
         foregroundColor: Colors.white,
-        gradient: LinearGradient(
-          colors: [Color(0xFF3B82F6), Color(0xFFF59E0B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
       );
     }
 
     if (sub.isExpired) {
       return const _SubscriberBadgeStyle(
-        fillColor: Color(0xFFF59E0B),
+        primaryColor: Color(0xFFE89A29),
         borderColor: Color(0xFFEA580C),
         foregroundColor: Colors.white,
-        gradient: LinearGradient(
-          colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
       );
     }
 
     if (sub.isOnline) {
       return const _SubscriberBadgeStyle(
-        fillColor: Color(0xFF2563EB),
+        primaryColor: Color(0xFF22A06B),
+        secondaryColor: Color(0xFF2563EB),
         borderColor: Color(0xFF1D4ED8),
         foregroundColor: Colors.white,
-        gradient: LinearGradient(
-          colors: [Color(0xFF60A5FA), Color(0xFF2563EB)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
       );
     }
 
     return const _SubscriberBadgeStyle(
-      fillColor: Color(0xFF16A34A),
+      primaryColor: Color(0xFF22A06B),
       borderColor: Color(0xFF15803D),
       foregroundColor: Colors.white,
-      gradient: LinearGradient(
-        colors: [Color(0xFF4ADE80), Color(0xFF16A34A)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
     );
   }
 
@@ -501,16 +520,16 @@ class SubscriberCard extends StatelessWidget {
 }
 
 class _SubscriberBadgeStyle {
-  final Color fillColor;
+  final Color primaryColor;
+  final Color? secondaryColor;
   final Color borderColor;
   final Color foregroundColor;
-  final Gradient? gradient;
 
   const _SubscriberBadgeStyle({
-    required this.fillColor,
+    required this.primaryColor,
+    this.secondaryColor,
     required this.borderColor,
     required this.foregroundColor,
-    this.gradient,
   });
 }
 
