@@ -48,7 +48,10 @@ class SubscriberCard extends StatelessWidget {
     const badgeSize = 18.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
-    final badgeStyle = _resolveBadgeStyle(subscriber);
+    final badgeStyle = _resolveBadgeStyle(
+      subscriber,
+      isOnlinePage: showOnlineDetails,
+    );
     final hasProfile = subscriber.profileName != null &&
         subscriber.profileName!.isNotEmpty;
     final hasPhone = subscriber.displayPhone.trim().isNotEmpty;
@@ -429,8 +432,17 @@ class SubscriberCard extends StatelessWidget {
   }
 
   static _SubscriberBadgeStyle _resolveBadgeStyle(
-    SubscriberModel sub,
-  ) {
+    SubscriberModel sub, {
+    required bool isOnlinePage,
+  }) {
+    if (isOnlinePage && sub.isExpired && sub.isOnline) {
+      return const _SubscriberBadgeStyle(
+        primaryColor: Color(0xFF8B5CF6),
+        borderColor: Color(0xFF7C3AED),
+        foregroundColor: Colors.white,
+      );
+    }
+
     if (sub.isExpired && sub.isOnline) {
       return const _SubscriberBadgeStyle(
         primaryColor: Color(0xFFF59E0B),
