@@ -292,11 +292,23 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
 
       if (ok) {
         await _logManagerActivity(
-          activityType: 'MANAGER_ADD',
-          action: 'إضافة مدير',
+          activityType: 'managers',
+          actionType: 'MANAGER_ADD',
+          action: 'manager_add',
           description:
               'تم إضافة مدير جديد: $username - الاسم: ${firstname.trim()} ${lastname.trim()}',
+          targetId: response.data is Map
+              ? _toInt(response.data['id'] ?? response.data['data']?['id'])
+              : 0,
           targetName: username,
+          metadata: {
+            'manager_action': 'create_manager',
+            'firstname': firstname.trim(),
+            'lastname': lastname.trim(),
+            'acl_group_id': aclGroupId,
+            'parent_id': parentId,
+            'enabled': enabled,
+          },
         );
       }
 
@@ -383,10 +395,22 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       }
 
       await _logManagerActivity(
-        activityType: 'MANAGER_EDIT',
-        action: 'تعديل مدير',
+        activityType: 'managers',
+        actionType: 'MANAGER_EDIT',
+        action: 'manager_edit',
         description: 'تم تعديل بيانات المدير: ${original.username}',
+        targetId: managerId,
         targetName: trimmedUsername.isNotEmpty ? trimmedUsername : original.username,
+        metadata: {
+          'manager_action': 'edit_manager',
+          'manager_id': managerId,
+          'firstname': firstname.trim(),
+          'lastname': lastname.trim(),
+          'username': trimmedUsername.isNotEmpty ? trimmedUsername : original.username,
+          'acl_group_id': aclId,
+          'enabled': isActive,
+          'has_password_change': password != null && password.trim().isNotEmpty,
+        },
       );
 
       return true;
@@ -421,11 +445,23 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       );
 
       await _logManagerActivity(
-        activityType: 'BALANCE_ADD',
-        action: 'إضافة رصيد',
+        activityType: 'managers',
+        actionType: 'BALANCE_ADD',
+        action: 'manager_balance_add',
         description:
             'تم إضافة ${amount.toStringAsFixed(0)} IQD للمدير: ${manager.username}${notes != null && notes.trim().isNotEmpty ? ' - ${notes.trim()}' : ''}',
+        targetId: manager.id,
         targetName: manager.username,
+        metadata: {
+          'manager_action': isLoan ? 'loan_deposit' : 'cash_deposit',
+          'amount': amount,
+          'payment_type': isLoan ? 'loan' : 'cash',
+          'previous_balance': manager.balance,
+          'new_balance': manager.balance + amount,
+          'previous_debt': manager.totalDebt,
+          'new_debt': isLoan ? manager.totalDebt + amount : manager.totalDebt,
+          'notes': notes?.trim(),
+        },
       );
       return true;
     } catch (e) {
@@ -458,11 +494,20 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       );
 
       await _logManagerActivity(
-        activityType: 'BALANCE_DEDUCT',
-        action: 'سحب رصيد',
+        activityType: 'managers',
+        actionType: 'BALANCE_DEDUCT',
+        action: 'manager_balance_deduct',
         description:
             'تم سحب ${amount.toStringAsFixed(0)} IQD من المدير: ${manager.username}${notes != null && notes.trim().isNotEmpty ? ' - ${notes.trim()}' : ''}',
+        targetId: manager.id,
         targetName: manager.username,
+        metadata: {
+          'manager_action': 'withdraw_balance',
+          'amount': amount,
+          'previous_balance': manager.balance,
+          'new_balance': manager.balance - amount,
+          'notes': notes?.trim(),
+        },
       );
       return true;
     } catch (e) {
@@ -497,11 +542,21 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       );
 
       await _logManagerActivity(
-        activityType: 'DEBT_PAY',
-        action: 'تسديد دين',
+        activityType: 'managers',
+        actionType: 'DEBT_PAY',
+        action: 'manager_debt_pay',
         description:
             'تم تسديد ${amount.toStringAsFixed(0)} IQD من دين المدير: ${manager.username}${notes != null && notes.trim().isNotEmpty ? ' - ${notes.trim()}' : ''}',
+        targetId: manager.id,
         targetName: manager.username,
+        metadata: {
+          'manager_action': 'pay_debt',
+          'amount': amount,
+          'previous_balance': totalDebt,
+          'new_balance': totalDebt - amount,
+          'debt_for_me': debtForMe,
+          'notes': notes?.trim(),
+        },
       );
       return true;
     } catch (e) {
@@ -558,11 +613,18 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       }
 
       await _logManagerActivity(
-        activityType: 'MANAGER_EDIT',
-        action: 'إضافة نقاط',
+        activityType: 'managers',
+        actionType: 'MANAGER_EDIT',
+        action: 'manager_add_points',
         description:
             'تم إضافة $points نقطة للمدير: ${manager.username}${notes != null && notes.trim().isNotEmpty ? ' - ${notes.trim()}' : ''}',
+        targetId: manager.id,
         targetName: manager.username,
+        metadata: {
+          'manager_action': 'add_points',
+          'points': points,
+          'notes': notes?.trim(),
+        },
       );
       return (true, _extractResponseMessage(body));
     } catch (e) {
@@ -640,11 +702,18 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
 
       if (success) {
         await _logManagerActivity(
-          activityType: 'MANAGER_DELETE',
-          action: 'حذف مدير',
+          activityType: 'managers',
+          actionType: 'MANAGER_DELETE',
+          action: 'manager_delete',
           description:
               'تم حذف المدير: ${manager.username} - ${manager.fullName}',
+          targetId: manager.id,
           targetName: manager.username,
+          metadata: {
+            'manager_action': 'delete_manager',
+            'manager_id': manager.id,
+            'fullname': manager.fullName,
+          },
         );
       }
 
@@ -663,19 +732,25 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
 
   Future<void> _logManagerActivity({
     required String activityType,
+    required String actionType,
     required String action,
     required String description,
+    required int targetId,
     required String targetName,
+    Map<String, dynamic>? metadata,
   }) async {
     try {
       await _backendDio.post(
         '/api/activities/log',
         data: {
           'activity_type': activityType,
+          'action_type': actionType,
           'action': action,
           'description': description,
           'target_type': 'manager',
+          'target_id': targetId > 0 ? targetId.toString() : null,
           'target_name': targetName,
+          'metadata': metadata,
           'status': 'success',
           'adminId': await _storage.getAdminId(),
           'adminUsername': await _storage.getAdminUsername(),

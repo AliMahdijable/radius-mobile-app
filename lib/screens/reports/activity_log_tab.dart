@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -58,7 +60,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         'limit': '500',
       };
       if (_search.isNotEmpty) params['search'] = _search;
-      if (_activityType != 'all') params['activity_type'] = _activityType;
       if (_managerId != 'all') {
         params['user_ids'] = _managerId;
       } else if (adminId != null) {
@@ -75,6 +76,10 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
               final url = log['request_url']?.toString() ?? '';
               return !action.contains('verify-token') && !url.contains('verify-token');
             })
+            .where((log) => _matchesActivityBucket(
+                  Map<String, dynamic>.from(log),
+                  _activityType,
+                ))
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
         setState(() { _activities = list; _page = 1; });
@@ -87,7 +92,33 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
 
   static _ActionStyle _getActionStyle(Map<String, dynamic> log) {
     final type = (log['action_type'] ?? '').toString().toUpperCase().trim();
+    final targetType = (log['target_type'] ?? '').toString().toUpperCase().trim();
+    final actionData = _extractActionData(log);
+    final managerAction =
+        (actionData['manager_action'] ?? actionData['action'] ?? '')
+            .toString()
+            .toLowerCase()
+            .trim();
+    final paymentType =
+        (actionData['payment_type'] ?? '').toString().toLowerCase().trim();
     switch (type) {
+      case 'MANAGER_ADD':
+        return _ActionStyle(
+          'إضافة مدير',
+          Icons.person_add_alt_1_rounded,
+          Colors.blue,
+        );
+      case 'MANAGER_EDIT':
+        if (targetType == 'MANAGER' && managerAction == 'add_points') {
+          return _ActionStyle(
+            'إضافة نقاط للمدير',
+            Icons.stars_rounded,
+            Colors.teal,
+          );
+        }
+        return _ActionStyle('تعديل مدير', Icons.manage_accounts_rounded, Colors.indigo);
+      case 'MANAGER_DELETE':
+        return _ActionStyle('حذف مدير', Icons.person_remove_rounded, Colors.red);
       case 'SUBSCRIBER_ACTIVATE':
         return _ActionStyle('تفعيل مشترك', Icons.check_circle_rounded, Colors.green);
       case 'SUBSCRIBER_EXTEND':
@@ -99,11 +130,26 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
       case 'SUBSCRIBER_DELETE':
         return _ActionStyle('حذف مشترك', Icons.person_remove_rounded, Colors.red);
       case 'BALANCE_ADD':
+        if (targetType == 'MANAGER') {
+          return _ActionStyle(
+            paymentType == 'loan' ? 'إضافة دين مدير' : 'إيداع للمدير',
+            paymentType == 'loan'
+                ? Icons.account_balance_wallet_rounded
+                : Icons.savings_rounded,
+            paymentType == 'loan' ? Colors.deepOrange : Colors.green,
+          );
+        }
         return _ActionStyle('إضافة دين', Icons.add_circle_rounded, Colors.red);
       case 'BALANCE_DEDUCT':
+        if (targetType == 'MANAGER') {
+          return _ActionStyle('سحب من المدير', Icons.remove_circle_outline_rounded, Colors.orange);
+        }
         return _ActionStyle('تسديد دين', Icons.remove_circle_rounded, Colors.green);
       case 'PAYMENT_ADD':
       case 'DEBT_PAY':
+        if (targetType == 'MANAGER') {
+          return _ActionStyle('تسديد دين مدير', Icons.account_balance_wallet_rounded, Colors.green);
+        }
         return _ActionStyle('تسديد دين', Icons.account_balance_wallet_rounded, Colors.green);
       case 'LOGIN':
         return _ActionStyle('تسجيل دخول', Icons.login_rounded, Colors.indigo);
@@ -111,6 +157,72 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         return _ActionStyle('رسالة واتساب', Icons.chat_rounded, AppTheme.whatsappGreen);
       default:
         return _ActionStyle(type.isNotEmpty ? type : 'أخرى', Icons.settings_rounded, Colors.grey);
+    }
+  }
+
+  static Map<String, dynamic> _extractActionData(Map<String, dynamic> log) {
+    final raw = log['action_data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {}
+    }
+    return const {};
+  }
+
+  static bool _matchesActivityBucket(Map<String, dynamic> log, String bucket) {
+    if (bucket == 'all') return true;
+
+    final type = (log['action_type'] ?? '').toString().toUpperCase().trim();
+    final targetType = (log['target_type'] ?? '').toString().toUpperCase().trim();
+
+    const subscriberTypes = {
+      'SUBSCRIBER_ADD',
+      'SUBSCRIBER_EDIT',
+      'SUBSCRIBER_DELETE',
+      'SUBSCRIBER_ACTIVATE',
+      'SUBSCRIBER_EXTEND',
+      'SUBSCRIBER_DISCONNECT',
+      'SUBSCRIBER_VIEW',
+    };
+    const systemTypes = {
+      'LOGIN',
+      'LOGOUT',
+      'LOGIN_FAILED',
+      'SETTINGS_CHANGE',
+      'DATABASE_BACKUP',
+      'DATABASE_RESTORE',
+      'SYSTEM_ERROR',
+    };
+    const paymentTypes = {
+      'PAYMENT_ADD',
+      'DEBT_PAY',
+      'BALANCE_ADD',
+      'BALANCE_DEDUCT',
+    };
+
+    switch (bucket) {
+      case 'users':
+        return subscriberTypes.contains(type) || targetType == 'SUBSCRIBER';
+      case 'managers':
+        return type == 'MANAGER_ADD' ||
+            type == 'MANAGER_EDIT' ||
+            type == 'MANAGER_DELETE' ||
+            (targetType == 'MANAGER' && paymentTypes.contains(type));
+      case 'payments':
+        return paymentTypes.contains(type);
+      case 'system':
+        return systemTypes.contains(type);
+      default:
+        return true;
     }
   }
 
