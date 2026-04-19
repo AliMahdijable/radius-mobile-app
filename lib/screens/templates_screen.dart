@@ -547,6 +547,53 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                                       .toggleTemplate(tmpl.templateType, v);
                                 },
                               ),
+                              IconButton(
+                                icon: Icon(Icons.delete_outline,
+                                    color: theme.colorScheme.error, size: 20),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 34, minHeight: 34),
+                                tooltip: 'حذف القالب',
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (dCtx) => AlertDialog(
+                                      title: const Text('حذف القالب'),
+                                      content: Text(
+                                          'هل تريد حذف القالب "${tmpl.templateName}"؟'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(dCtx, false),
+                                          child: const Text('إلغاء'),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                theme.colorScheme.error,
+                                          ),
+                                          onPressed: () =>
+                                              Navigator.pop(dCtx, true),
+                                          child: const Text('حذف'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm != true) return;
+                                  final ok = await ref
+                                      .read(templatesProvider.notifier)
+                                      .deleteTemplate(tmpl.templateType);
+                                  if (!context.mounted) return;
+                                  if (ok) {
+                                    AppSnackBar.success(
+                                        context, 'تم حذف القالب');
+                                  } else {
+                                    AppSnackBar.error(
+                                        context, 'فشل حذف القالب');
+                                  }
+                                },
+                              ),
                             ],
                           ),
                         ),

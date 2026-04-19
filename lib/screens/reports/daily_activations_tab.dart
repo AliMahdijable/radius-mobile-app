@@ -33,6 +33,14 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
       await ref.read(reportsProvider.notifier).fetchManagers();
       _load();
     });
+    ref.listenManual(
+      reportsProvider.select((s) => s.refreshEpoch),
+      (prev, next) {
+        if (prev == null || prev == next) return;
+        if (!mounted) return;
+        _load();
+      },
+    );
   }
 
   Future<void> _load() async {

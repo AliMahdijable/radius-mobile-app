@@ -8,6 +8,7 @@ import '../core/services/storage_service.dart';
 import '../core/services/encryption_service.dart';
 import '../models/subscriber_model.dart';
 import 'dashboard_provider.dart';
+import 'reports_provider.dart';
 
 class SubscribersState {
   final List<SubscriberModel> subscribers;
@@ -1496,6 +1497,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           description: desc,
           targetId: userId,
           targetName: subName,
+          refreshDashboard: true,
           metadata: {
             'package_name': pkgName,
             'user_price': userPrice,
@@ -1550,6 +1552,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           description: 'تمديد اشتراك المشترك: $subName',
           targetId: userId,
           targetName: subName,
+          refreshDashboard: true,
           metadata: {
             'package_id': profileId,
             'extension_type': method == 'reward_points' ? 'نقاط' : 'رصيد',
@@ -1677,6 +1680,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     dynamic targetId,
     String? targetName,
     Map<String, dynamic>? metadata,
+    bool refreshDashboard = false,
   }) async {
     try {
       final adminId = await _storage.getAdminId();
@@ -1694,6 +1698,16 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           'metadata': metadata,
         },
       );
+      if (refreshDashboard) {
+        try {
+          await _ref
+              .read(dashboardProvider.notifier)
+              .refreshDailyActivations(adminId);
+        } catch (_) {}
+        try {
+          _ref.read(reportsProvider.notifier).triggerRefresh();
+        } catch (_) {}
+      }
     } catch (e) {
       dev.log('logActivity error: $e', name: 'SUBS');
     }

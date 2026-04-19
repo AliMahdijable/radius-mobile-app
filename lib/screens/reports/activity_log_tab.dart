@@ -45,6 +45,14 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
       await ref.read(reportsProvider.notifier).fetchManagers();
       _fetchActivities();
     });
+    ref.listenManual(
+      reportsProvider.select((s) => s.refreshEpoch),
+      (prev, next) {
+        if (prev == null || prev == next) return;
+        if (!mounted) return;
+        _fetchActivities();
+      },
+    );
   }
 
   Future<void> _fetchActivities() async {

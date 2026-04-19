@@ -41,6 +41,11 @@ class ReportsState {
   final Map<String, dynamic>? subscriberInfo;
   final Map<String, dynamic> statementSummary;
 
+  /// Incremented whenever the user navigates to the Reports tab or an action
+  /// (activate/extend) should invalidate previously loaded report data.
+  /// Each tab watches this and re-fetches when the epoch changes.
+  final int refreshEpoch;
+
   const ReportsState({
     this.loading = false,
     this.error,
@@ -57,6 +62,7 @@ class ReportsState {
     this.transactions = const [],
     this.subscriberInfo,
     this.statementSummary = const {},
+    this.refreshEpoch = 0,
   });
 
   ReportsState copyWith({
@@ -75,6 +81,7 @@ class ReportsState {
     List<Map<String, dynamic>>? transactions,
     Map<String, dynamic>? subscriberInfo,
     Map<String, dynamic>? statementSummary,
+    int? refreshEpoch,
   }) {
     return ReportsState(
       loading: loading ?? this.loading,
@@ -92,6 +99,7 @@ class ReportsState {
       transactions: transactions ?? this.transactions,
       subscriberInfo: subscriberInfo ?? this.subscriberInfo,
       statementSummary: statementSummary ?? this.statementSummary,
+      refreshEpoch: refreshEpoch ?? this.refreshEpoch,
     );
   }
 }
@@ -105,6 +113,13 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       : super(const ReportsState());
 
   Future<String?> _getAdminId() => _storage.getAdminId();
+
+  /// Bump the refresh epoch. Each tab listens to this and re-fetches its own
+  /// data when it changes, so navigating back to Reports (or logging an
+  /// activation) shows fresh numbers without requiring pull-to-refresh.
+  void triggerRefresh() {
+    state = state.copyWith(refreshEpoch: state.refreshEpoch + 1);
+  }
 
   // ── Managers Tree ─────────────────────────────────────────────────
   Future<void> fetchManagers() async {

@@ -30,7 +30,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     _autoRefresh = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) ref.read(dashboardProvider.notifier).refreshCountsOnly();
+      if (!mounted) return;
+      ref.read(dashboardProvider.notifier).refreshCountsOnly();
+      final adminId = ref.read(authProvider).user?.id;
+      if (adminId != null) {
+        ref
+            .read(dashboardProvider.notifier)
+            .refreshDailyActivations(adminId);
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAndLoad());
   }

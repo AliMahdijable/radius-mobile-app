@@ -50,6 +50,14 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
     _dateTo = intl.DateFormat('yyyy-MM-dd').format(now);
     _dateFrom = intl.DateFormat('yyyy-MM-dd')
         .format(now.subtract(const Duration(days: 30)));
+    ref.listenManual(
+      reportsProvider.select((s) => s.refreshEpoch),
+      (prev, next) {
+        if (prev == null || prev == next) return;
+        if (!mounted) return;
+        if (_selectedSub != null) _reload();
+      },
+    );
   }
 
   @override

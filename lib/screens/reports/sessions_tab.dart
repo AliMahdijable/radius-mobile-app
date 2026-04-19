@@ -38,6 +38,14 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
     super.initState();
     _lastAdminId = ref.read(authProvider).user?.id;
     Future.microtask(() => _load());
+    ref.listenManual(
+      reportsProvider.select((s) => s.refreshEpoch),
+      (prev, next) {
+        if (prev == null || prev == next) return;
+        if (!mounted) return;
+        _load();
+      },
+    );
   }
 
   bool get _hasAdvancedFilters =>

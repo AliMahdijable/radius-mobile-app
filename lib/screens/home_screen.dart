@@ -608,6 +608,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               );
             }
           }
+          if (i == 3) {
+            ref.read(reportsProvider.notifier).triggerRefresh();
+          }
           setState(() => _currentIndex = i);
         },
         destinations: [

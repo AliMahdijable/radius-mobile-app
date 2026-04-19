@@ -50,6 +50,14 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
       await ref.read(reportsProvider.notifier).fetchManagers();
       _load();
     });
+    ref.listenManual(
+      reportsProvider.select((s) => s.refreshEpoch),
+      (prev, next) {
+        if (prev == null || prev == next) return;
+        if (!mounted) return;
+        _load();
+      },
+    );
   }
 
 

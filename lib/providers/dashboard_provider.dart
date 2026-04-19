@@ -118,6 +118,29 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     state = state.copyWith(offlineCount: count, offlineLoaded: true);
   }
 
+  /// Lightweight refresh of today's activation/extension counts and the
+  /// recent-activities list without touching the heavy SAS4 widgets.
+  /// Called after a local activate/extend so the dashboard reflects the
+  /// action immediately instead of waiting for the next full reload.
+  Future<void> refreshDailyActivations(String adminId) async {
+    try {
+      final response = await _backendDio
+          .get('${ApiConstants.dailyActivations}?admin_id=$adminId');
+      final data = response.data;
+      if (data is! Map || data['success'] != true) return;
+      final counts = data['counts'] ?? {};
+      final list = data['data'] as List? ?? [];
+      state = state.copyWith(
+        todayActivations: counts['activations'] ?? counts['activate'] ?? 0,
+        todayExtensions: counts['extensions'] ?? counts['extend'] ?? 0,
+        recentActivities:
+            list.map((e) => Map<String, dynamic>.from(e)).toList(),
+      );
+    } catch (e) {
+      dev.log('refreshDailyActivations error: $e', name: 'DASH');
+    }
+  }
+
   Future<void> refreshCountsOnly() async {
     try {
       final results = await Future.wait([
