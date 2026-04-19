@@ -198,8 +198,9 @@ class _WhatsAppConnectionScreenState
   }
 
   Widget _buildQrTab(ThemeData theme, bool isDark, WhatsAppState wa) {
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
       children: [
         _buildStatusCard(theme, wa, isDark),
         const SizedBox(height: 24),
@@ -304,8 +305,9 @@ class _WhatsAppConnectionScreenState
 
   Widget _buildPairCodeTab(ThemeData theme, WhatsAppState wa) {
     final chars = (wa.pairCode ?? '').replaceAll('-', '').split('');
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
       children: [
         Container(
           padding: const EdgeInsets.all(18),
@@ -474,8 +476,9 @@ class _WhatsAppConnectionScreenState
 
   Widget _buildConnectedView(ThemeData theme, WhatsAppState wa) {
     final isDark = theme.brightness == Brightness.dark;
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
       children: [
         _buildStatusCard(theme, wa, isDark),
         const SizedBox(height: 24),
