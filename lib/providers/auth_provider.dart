@@ -182,6 +182,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      // ✅ تفعيل الإشعارات بشكل افتراضي عند التحقق من الجلسة
+      await _storage.setFcmEnabled(true);
+
       final access = await _fetchPermissions(token);
       final user = UserModel(
         id: adminId,
@@ -279,6 +282,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (response.data['success'] == true) {
         final user = UserModel.fromJson(response.data);
         final access = await _fetchPermissions(user.token);
+
+        // ✅ تفعيل الإشعارات بشكل افتراضي عند تسجيل الدخول
+        await _storage.setFcmEnabled(true);
 
         await _storage.saveAll(
           token: user.token,
