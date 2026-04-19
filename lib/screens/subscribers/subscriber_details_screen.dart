@@ -123,30 +123,8 @@ class _SubscriberDetailsScreenState
     }
   }
 
-  Future<void> _offerPrintReceipt(ReceiptData data) async {
+  Future<void> _printReceiptNow(ReceiptData data) async {
     if (!mounted) return;
-    final shouldPrint = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('طباعة وصل', style: TextStyle(fontFamily: 'Cairo')),
-        content: const Text('هل تريد طباعة وصل لهذه العملية؟',
-            style: TextStyle(fontFamily: 'Cairo')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('لا'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.print_rounded, size: 18),
-            label: const Text('طباعة'),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
-          ),
-        ],
-      ),
-    );
-    if (shouldPrint != true || !mounted) return;
-
     try {
       final ptState = ref.read(printTemplatesProvider);
       if (ptState.templates.isEmpty) {
@@ -157,7 +135,7 @@ class _SubscriberDetailsScreenState
         data: data,
         htmlTemplate: activeTemplate?.content,
       );
-    } catch (e) {
+    } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
     }
   }
@@ -670,6 +648,7 @@ class _SubscriberDetailsScreenState
             : int.tryParse(pkgId?.toString() ?? '') ?? 0;
         String? pkgPrice;
         bool submitting = false;
+        bool printReceipt = true;
 
         return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
@@ -788,7 +767,12 @@ class _SubscriberDetailsScreenState
                   const SizedBox(height: 8),
                   _InfoChip(label: 'تكلفة التمديد', value: AppHelpers.formatMoney(pkgPrice)),
                 ],
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                _PrintReceiptCheckbox(
+                  value: printReceipt,
+                  onChanged: (v) => setSheet(() => printReceipt = v),
+                ),
+                const SizedBox(height: 12),
                 SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     setSheet(() => submitting = true);
@@ -824,17 +808,19 @@ class _SubscriberDetailsScreenState
                             '{remaining_days}': remDays,
                           });
                         final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
-                        await _offerPrintReceipt(ReceiptData(
-                          subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                          phoneNumber: currentSub.displayPhone,
-                          packageName: currentSub.profileName ?? '',
-                          packagePrice: extPrice,
-                          paidAmount: method == 'credit' ? extPrice : 0,
-                          debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                          remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                          expiryDate: expDate,
-                          operationType: 'activation',
-                        ));
+                        if (printReceipt) {
+                          await _printReceiptNow(ReceiptData(
+                            subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                            phoneNumber: currentSub.displayPhone,
+                            packageName: currentSub.profileName ?? '',
+                            packagePrice: extPrice,
+                            paidAmount: method == 'credit' ? extPrice : 0,
+                            debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            expiryDate: expDate,
+                            operationType: 'activation',
+                          ));
+                        }
                         if (mounted) context.pop();
                       }
                     }
@@ -927,6 +913,7 @@ class _SubscriberDetailsScreenState
     bool isCash = false;
     bool isPartialCash = false;
     bool submitting = false;
+    bool printReceipt = true;
 
     if (!mounted) return;
 
@@ -1269,7 +1256,12 @@ class _SubscriberDetailsScreenState
                     );
                   },
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 10),
+                _PrintReceiptCheckbox(
+                  value: printReceipt,
+                  onChanged: (v) => setSheet(() => printReceipt = v),
+                ),
+                const SizedBox(height: 12),
 
                 SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
@@ -1335,17 +1327,19 @@ class _SubscriberDetailsScreenState
                           '{remaining_days}': freshRemDays,
                           '{days_remaining}': freshRemDays,
                         });
-                        await _offerPrintReceipt(ReceiptData(
-                          subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                          phoneNumber: currentSub.displayPhone,
-                          packageName: profileName,
-                          packagePrice: userPrice,
-                          paidAmount: actualPaidAmount,
-                          debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                          remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                          expiryDate: fresh?['expiration']?.toString() ?? '',
-                          operationType: 'activation',
-                        ));
+                        if (printReceipt) {
+                          await _printReceiptNow(ReceiptData(
+                            subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                            phoneNumber: currentSub.displayPhone,
+                            packageName: profileName,
+                            packagePrice: userPrice,
+                            paidAmount: actualPaidAmount,
+                            debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            expiryDate: fresh?['expiration']?.toString() ?? '',
+                            operationType: 'activation',
+                          ));
+                        }
                         if (mounted) context.pop();
                       }
                     }
@@ -1519,6 +1513,7 @@ class _SubscriberDetailsScreenState
     final amountFocusPay = FocusNode();
     bool payAll = false;
     bool submitting = false;
+    bool printReceipt = true;
 
     showModalBottomSheet(
       useSafeArea: true,
@@ -1740,7 +1735,12 @@ class _SubscriberDetailsScreenState
                     );
                   },
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 10),
+                _PrintReceiptCheckbox(
+                  value: printReceipt,
+                  onChanged: (v) => setSheet(() => printReceipt = v),
+                ),
+                const SizedBox(height: 12),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
@@ -1786,17 +1786,19 @@ class _SubscriberDetailsScreenState
                                 '{remaining_days}': freshRemDays2,
                                 '{days_remaining}': freshRemDays2,
                               });
-                            await _offerPrintReceipt(ReceiptData(
-                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                              phoneNumber: currentSub.displayPhone,
-                              packageName: currentSub.profileName ?? '',
-                              packagePrice: 0,
-                              paidAmount: payAmount,
-                              debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                              remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                              expiryDate: fresh?['expiration']?.toString() ?? '',
-                              operationType: 'debt_payment',
-                            ));
+                            if (printReceipt) {
+                              await _printReceiptNow(ReceiptData(
+                                subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                phoneNumber: currentSub.displayPhone,
+                                packageName: currentSub.profileName ?? '',
+                                packagePrice: 0,
+                                paidAmount: payAmount,
+                                debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                                remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                                expiryDate: fresh?['expiration']?.toString() ?? '',
+                                operationType: 'debt_payment',
+                              ));
+                            }
                             if (mounted) context.pop();
                           }
                         }
@@ -1853,6 +1855,7 @@ class _SubscriberDetailsScreenState
     final commentCtrl = TextEditingController();
     final amountFocusAdd = FocusNode();
     bool submitting = false;
+    bool printReceipt = true;
 
     showModalBottomSheet(
       useSafeArea: true,
@@ -2022,7 +2025,12 @@ class _SubscriberDetailsScreenState
                     );
                   },
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 10),
+                _PrintReceiptCheckbox(
+                  value: printReceipt,
+                  onChanged: (v) => setSheet(() => printReceipt = v),
+                ),
+                const SizedBox(height: 12),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: amountCtrl,
                   builder: (ctx2, val, _) {
@@ -2069,14 +2077,16 @@ class _SubscriberDetailsScreenState
                               await notifier.refreshSubscriberAfterOperation(id);
                             }
                             final currentSub = _readCurrentSubscriber();
-                            await _offerPrintReceipt(ReceiptData(
-                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                              phoneNumber: currentSub.displayPhone,
-                              packageName: currentSub.profileName ?? '',
-                              debtAmount: btnAmount,
-                              remainingAmount: btnAmount,
-                              operationType: 'debt_add',
-                            ));
+                            if (printReceipt) {
+                              await _printReceiptNow(ReceiptData(
+                                subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                phoneNumber: currentSub.displayPhone,
+                                packageName: currentSub.profileName ?? '',
+                                debtAmount: btnAmount,
+                                remainingAmount: btnAmount,
+                                operationType: 'debt_add',
+                              ));
+                            }
                             if (mounted) context.pop();
                           }
                         }
@@ -3082,4 +3092,52 @@ String _formatNumber(double value) {
     buf.write(intStr[i]);
   }
   return buf.toString();
+}
+
+class _PrintReceiptCheckbox extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _PrintReceiptCheckbox({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: value,
+                onChanged: (v) => onChanged(v ?? false),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                activeColor: primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(Icons.print_rounded, size: 18, color: primary),
+            const SizedBox(width: 6),
+            const Text(
+              'طباعة وصل تلقائياً',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
