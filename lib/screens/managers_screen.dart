@@ -8,8 +8,10 @@ import 'package:intl/intl.dart' as intl;
 import '../core/theme/app_theme.dart';
 import '../core/utils/bottom_sheet_utils.dart';
 import '../models/manager_model.dart';
+import '../models/template_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/managers_provider.dart';
+import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../widgets/app_snackbar.dart';
 import '../widgets/loading_overlay.dart';
@@ -73,6 +75,33 @@ class _ManagerFinancialNoticeData {
               _ManagerFinancialNoticeKind.loanDeposit => 'إضافة رصيد آجل',
               _ManagerFinancialNoticeKind.debtPayment => 'تسديد دين مدير',
             };
+
+  String get actionTypeLabel => switch (kind) {
+        _ManagerFinancialNoticeKind.cashDeposit => 'إيداع نقدي',
+        _ManagerFinancialNoticeKind.loanDeposit => 'إيداع دين',
+        _ManagerFinancialNoticeKind.debtPayment => 'تسديد دين',
+      };
+
+  String applyTemplate(String raw) {
+    final managerName =
+        manager.fullName.isNotEmpty ? manager.fullName : manager.username;
+    final replacements = <String, String>{
+      '{manager_name}': managerName,
+      '{manager_username}': manager.username,
+      '{amount}': _formatCurrency(amount),
+      '{action_type}': actionTypeLabel,
+      '{previous_credit}': _formatCurrency(previousCredit),
+      '{current_credit}': _formatCurrency(currentCredit),
+      '{previous_debt}': _formatCurrency(previousDebt),
+      '{current_debt}': _formatCurrency(currentDebt),
+      '{movement_description}': movementDescription,
+    };
+    var result = raw;
+    replacements.forEach((key, value) {
+      result = result.replaceAll(key, value);
+    });
+    return result;
+  }
 
   String get previewMessage {
     final managerName =
@@ -150,6 +179,21 @@ Future<void> _showManagerFinancialNoticeDialog({
   var whatsappSent = false;
   var pushSent = false;
 
+  final templatesState = ref.read(templatesProvider);
+  if (templatesState.templates.isEmpty && !templatesState.isLoading) {
+    await ref.read(templatesProvider.notifier).loadTemplates();
+  }
+  final managerTemplates = ref
+      .read(templatesProvider)
+      .templates
+      .where((t) => t.templateType == 'manager_agent' && t.isActive)
+      .toList();
+  final TemplateModel? managerTemplate =
+      managerTemplates.isEmpty ? null : managerTemplates.first;
+  final resolvedMessage = managerTemplate != null
+      ? notice.applyTemplate(managerTemplate.messageContent)
+      : notice.previewMessage;
+
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
@@ -220,7 +264,7 @@ Future<void> _showManagerFinancialNoticeDialog({
                     ),
                     child: SingleChildScrollView(
                       child: SelectableText(
-                        notice.previewMessage,
+                        resolvedMessage,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               height: 1.5,
                               fontSize: 12.5,
@@ -249,7 +293,7 @@ Future<void> _showManagerFinancialNoticeDialog({
                                   await _sendManagerWhatsAppNotification(
                                 ref: ref,
                                 manager: notice.manager,
-                                message: notice.previewMessage,
+                                message: resolvedMessage,
                               );
                               if (!context.mounted) return;
                               setDialogState(() {

@@ -31,9 +31,28 @@ class TemplateModel {
         return 'تأكيد تسديد';
       case 'welcome_message':
         return 'رسالة ترحيب';
+      case 'manager_agent':
+        return 'قالب الوكيل';
       default:
         return type;
     }
+  }
+
+  static const List<String> managerAgentVariables = [
+    '{manager_name}',
+    '{manager_username}',
+    '{amount}',
+    '{action_type}',
+    '{previous_credit}',
+    '{current_credit}',
+    '{previous_debt}',
+    '{current_debt}',
+    '{movement_description}',
+  ];
+
+  static List<String> variablesForType(String type) {
+    if (type == 'manager_agent') return managerAgentVariables;
+    return availableVariables;
   }
 
   static const List<String> availableVariables = [
@@ -66,6 +85,15 @@ class TemplateModel {
     '{paid_amount}':      'المبلغ المدفوع',
     '{discount_amount}':  'قيمة الخصم',
     '{discounted_price}': 'السعر بعد الخصم',
+    '{manager_name}':        'اسم المدير',
+    '{manager_username}':    'معرّف المدير',
+    '{amount}':              'المبلغ',
+    '{action_type}':         'نوع الحركة',
+    '{previous_credit}':     'الرصيد السابق',
+    '{current_credit}':      'الرصيد الحالي',
+    '{previous_debt}':       'الدين السابق',
+    '{current_debt}':        'الدين الحالي',
+    '{movement_description}': 'وصف الحركة',
   };
 
   static const Map<String, String> variableIcons = {
@@ -82,6 +110,15 @@ class TemplateModel {
     '{paid_amount}':      '✅',
     '{discount_amount}':  '🏷️',
     '{discounted_price}': '🏷️',
+    '{manager_name}':        '👤',
+    '{manager_username}':    '🔑',
+    '{amount}':              '💰',
+    '{action_type}':         '🧾',
+    '{previous_credit}':     '💳',
+    '{current_credit}':      '💳',
+    '{previous_debt}':       '💸',
+    '{current_debt}':        '💸',
+    '{movement_description}': '📝',
   };
 
   factory TemplateModel.fromJson(Map<String, dynamic> json) {

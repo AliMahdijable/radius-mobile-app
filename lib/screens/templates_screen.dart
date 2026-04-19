@@ -29,7 +29,15 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final contentController =
         TextEditingController(text: template?.messageContent ?? '');
     String selectedType = template?.templateType ?? 'debt_reminder';
-    final adminId = ref.read(authProvider).user?.id ?? '';
+    final authUser = ref.read(authProvider).user;
+    final adminId = authUser?.id ?? '';
+    final canManageManagers = authUser?.canAccessManagers ?? false;
+    final typeOptions = <String>[
+      'debt_reminder', 'expiry_warning', 'service_end',
+      'activation_notice', 'renewal', 'payment_confirmation',
+      'welcome_message',
+      if (canManageManagers) 'manager_agent',
+    ];
 
     showModalBottomSheet(
       useSafeArea: true,
@@ -139,11 +147,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                           fontFamily: 'Cairo',
                           color: Theme.of(ctx).colorScheme.onSurface,
                         ),
-                        items: [
-                          'debt_reminder', 'expiry_warning', 'service_end',
-                          'activation_notice', 'renewal', 'payment_confirmation',
-                          'welcome_message',
-                        ].map((t) => DropdownMenuItem(
+                        items: typeOptions.map((t) => DropdownMenuItem(
                           value: t,
                           child: Text(
                             TemplateModel.getArabicType(t),
@@ -225,15 +229,18 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                             Container(width: 1, height: 24,
                               color: Theme.of(ctx).colorScheme.primary.withOpacity(0.15)),
                             Expanded(
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 6),
-                                itemCount: TemplateModel.availableVariables.length,
-                                itemBuilder: (_, i) => varChip(
-                                  TemplateModel.availableVariables[i],
-                                  compact: true,
-                                ),
-                              ),
+                              child: Builder(builder: (_) {
+                                final vars = TemplateModel.variablesForType(selectedType);
+                                return ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  itemCount: vars.length,
+                                  itemBuilder: (_, i) => varChip(
+                                    vars[i],
+                                    compact: true,
+                                  ),
+                                );
+                              }),
                             ),
                           ],
                         ),
@@ -254,7 +261,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
-                        children: TemplateModel.availableVariables
+                        children: TemplateModel.variablesForType(selectedType)
                             .map((v) => varChip(v))
                             .toList(),
                       ),

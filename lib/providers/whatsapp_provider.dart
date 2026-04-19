@@ -10,12 +10,14 @@ import '../models/whatsapp_status_model.dart';
 class WhatsAppState {
   final WhatsAppStatusModel status;
   final String? qrCode;
+  final String? pairCode;
   final bool isConnecting;
   final String? error;
 
   const WhatsAppState({
     this.status = const WhatsAppStatusModel(),
     this.qrCode,
+    this.pairCode,
     this.isConnecting = false,
     this.error,
   });
@@ -23,12 +25,15 @@ class WhatsAppState {
   WhatsAppState copyWith({
     WhatsAppStatusModel? status,
     String? qrCode,
+    String? pairCode,
     bool? isConnecting,
     String? error,
+    bool clearPairCode = false,
   }) {
     return WhatsAppState(
       status: status ?? this.status,
       qrCode: qrCode ?? this.qrCode,
+      pairCode: clearPairCode ? null : (pairCode ?? this.pairCode),
       isConnecting: isConnecting ?? this.isConnecting,
       error: error,
     );
@@ -60,6 +65,7 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
           ),
           isConnecting: false,
           qrCode: null,
+          clearPairCode: true,
         );
       } else if (event == 'disconnected') {
         state = state.copyWith(
@@ -129,6 +135,44 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
       });
     } catch (e) {
       state = state.copyWith(isConnecting: false, error: 'فشل إعادة الاتصال');
+    }
+  }
+
+  Future<({bool success, String? code, String? error})> requestPairCode(
+    String phone,
+  ) async {
+    final adminId = await _getAdminId();
+    final username = await _getUsername();
+    if (adminId == null) {
+      return (success: false, code: null, error: 'لم يتم العثور على معرف المدير');
+    }
+    state = state.copyWith(isConnecting: true, error: null, clearPairCode: true);
+    try {
+      final response = await _dio.post(
+        ApiConstants.waRequestPairCode,
+        data: {
+          'adminId': adminId,
+          'adminUsername': username ?? '',
+          'phone': phone,
+        },
+      );
+      if (response.data['success'] == true) {
+        final code = response.data['code']?.toString();
+        state = state.copyWith(pairCode: code);
+        return (success: true, code: code, error: null);
+      }
+      final msg = response.data['message']?.toString() ?? 'فشل توليد رمز الربط';
+      state = state.copyWith(isConnecting: false, error: msg);
+      return (success: false, code: null, error: msg);
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message']?.toString() ??
+          e.message ??
+          'فشل الاتصال بالخادم';
+      state = state.copyWith(isConnecting: false, error: msg);
+      return (success: false, code: null, error: msg);
+    } catch (_) {
+      state = state.copyWith(isConnecting: false, error: 'خطأ غير متوقع');
+      return (success: false, code: null, error: 'خطأ غير متوقع');
     }
   }
 
