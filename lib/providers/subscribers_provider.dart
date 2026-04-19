@@ -1127,29 +1127,14 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         return;
       }
 
-      // Step 1: ALWAYS load priceList (guaranteed to work)
+      // Step 1: load priceList (works for root managers — empty for sub-managers)
       await _loadPriceList(adminId);
       dev.log('priceMap has ${_priceMap.length} entries', name: 'PKG');
 
-      // Step 2: Build packages from priceList
-      final packages = <PackageModel>[];
-      for (final entry in _priceMap.entries) {
-        if (entry.key <= 0) continue;
-        final item = entry.value;
-        final name = (item['name'] ?? item['profile_name'] ?? '').toString();
-        if (name.isEmpty) continue;
-        packages.add(PackageModel(
-          idx: entry.key,
-          name: name,
-          price: (item['price'] ?? item['profile_price'])?.toString(),
-          userPrice: item['user_price']?.toString(),
-        ));
-      }
-      dev.log('Built ${packages.length} packages from priceList', name: 'PKG');
-
-      // Step 3: GET /list/profile/5 — returns only regular profiles (no extensions)
+      // Step 2: GET /list/profile/5 — authoritative list of assignable profiles
+      //         for the current admin (works for both managers and sub-managers).
       //         Response: {status: 200, data: [{id: 134, name: "..."}, ...]}
-      Set<int> regularIds = {};
+      final listProfileItems = <Map<String, dynamic>>[];
       try {
         final response = await _sas4Dio.get(ApiConstants.sas4ListProfile);
         var resData = response.data;
@@ -1163,20 +1148,48 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         }
 
         for (final raw in items) {
-          if (raw is! Map<String, dynamic>) continue;
-          final rawId = raw['id'];
-          final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0;
-          if (id > 0) regularIds.add(id);
+          if (raw is Map<String, dynamic>) listProfileItems.add(raw);
         }
-        dev.log('/list/profile/5 returned ${regularIds.length} IDs: $regularIds', name: 'PKG');
+        dev.log('/list/profile/5 returned ${listProfileItems.length} items', name: 'PKG');
       } catch (e) {
-        dev.log('/list/profile/5 failed (will show all): $e', name: 'PKG');
+        dev.log('/list/profile/5 failed: $e', name: 'PKG');
       }
 
-      // Step 4: Filter to only regular profiles (removes extensions like 1-day)
-      if (regularIds.isNotEmpty) {
-        packages.removeWhere((p) => !regularIds.contains(p.idx));
-        dev.log('Filtered to ${packages.length} regular packages', name: 'PKG');
+      // Step 3: Build packages.
+      //   - If /list/profile/5 returned items → use them as the source (covers sub-managers)
+      //     and enrich prices from _priceMap when the id matches.
+      //   - Otherwise fall back to _priceMap entries (covers old/permissive APIs).
+      final packages = <PackageModel>[];
+      if (listProfileItems.isNotEmpty) {
+        for (final item in listProfileItems) {
+          final rawId = item['id'] ?? item['profile_id'];
+          final id = rawId is int
+              ? rawId
+              : int.tryParse(rawId?.toString() ?? '') ?? 0;
+          if (id <= 0) continue;
+          final name = (item['name'] ?? item['profile_name'] ?? '').toString();
+          if (name.isEmpty) continue;
+          final priced = _priceMap[id];
+          packages.add(PackageModel(
+            idx: id,
+            name: name,
+            price: (priced?['price'] ?? priced?['profile_price'] ?? item['price'])?.toString(),
+            userPrice: (priced?['user_price'] ?? item['user_price'])?.toString(),
+          ));
+        }
+      } else {
+        for (final entry in _priceMap.entries) {
+          if (entry.key <= 0) continue;
+          final item = entry.value;
+          final name = (item['name'] ?? item['profile_name'] ?? '').toString();
+          if (name.isEmpty) continue;
+          packages.add(PackageModel(
+            idx: entry.key,
+            name: name,
+            price: (item['price'] ?? item['profile_price'])?.toString(),
+            userPrice: item['user_price']?.toString(),
+          ));
+        }
       }
 
       dev.log('=== FINAL: ${packages.length} packages ===', name: 'PKG');
