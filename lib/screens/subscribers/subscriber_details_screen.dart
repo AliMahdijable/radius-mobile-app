@@ -77,6 +77,16 @@ class _SubscriberDetailsScreenState
     }
   }
 
+  Future<void> _launchIpInBrowser(String ip) async {
+    final trimmed = ip.trim();
+    if (trimmed.isEmpty) return;
+    final uri = Uri.parse('http://$trimmed');
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      AppSnackBar.error(context, 'تعذّر فتح المتصفح');
+    }
+  }
+
   Future<void> _launchPhoneCall() async {
     final sub = _readCurrentSubscriber();
     final rawPhone = sub.displayPhone.trim();
@@ -2302,14 +2312,12 @@ class _SubscriberDetailsScreenState
                           ? AppHelpers.formatMoney(sub.price)
                           : '—',
                     ),
-                    _DetailRow(
-                      icon: Icons.toggle_on_outlined,
-                      label: 'الحالة',
-                      value: isEnabled ? 'مفعّل' : 'معطّل',
-                      valueColor: isEnabled
-                          ? AppTheme.successColor
-                          : AppTheme.dangerColor,
-                    ),
+                    _StatusRow(sub: sub),
+                    if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
+                      _IpDetailRow(
+                        ip: sub.ipAddress!.trim(),
+                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                      ),
                   ],
                 ),
 
@@ -2855,6 +2863,182 @@ class _SummaryRow extends StatelessWidget {
           Text(value, style: TextStyle(fontSize: 12,
             fontWeight: FontWeight.w600,
             color: valueColor ?? Theme.of(context).colorScheme.onSurface)),
+        ],
+      ),
+    );
+  }
+}
+
+class _IpDetailRow extends StatelessWidget {
+  final String ip;
+  final VoidCallback onTap;
+  const _IpDetailRow({required this.ip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.lan_rounded,
+              size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Text('عنوان IP',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              )),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    textDirection: TextDirection.ltr,
+                    children: [
+                      Text(
+                        ip,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.open_in_new_rounded,
+                        size: 14,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  final SubscriberModel sub;
+  const _StatusRow({required this.sub});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isEnabled = sub.isEnabled;
+    final isExpired = !sub.isActive;
+    final isOnline = sub.isOnline;
+
+    // الحالة الرئيسية: معطّل/منتهي/مفعّل
+    final String statusText;
+    final Color statusColor;
+    final IconData statusIcon;
+    if (!isEnabled) {
+      statusText = 'معطّل';
+      statusColor = AppTheme.dangerColor;
+      statusIcon = Icons.block_rounded;
+    } else if (isExpired) {
+      statusText = 'منتهي';
+      statusColor = AppTheme.warningColor;
+      statusIcon = Icons.schedule_rounded;
+    } else {
+      statusText = 'مفعّل';
+      statusColor = AppTheme.successColor;
+      statusIcon = Icons.check_circle_rounded;
+    }
+
+    // الاتصال: متصل/غير متصل — لا نعرضه للمعطّل (بلا معنى)
+    final showConnection = isEnabled;
+    final connText = isOnline ? 'متصل' : 'غير متصل';
+    final connColor = isOnline ? AppTheme.successColor : Colors.grey;
+    final connIcon = isOnline
+        ? Icons.wifi_rounded
+        : Icons.wifi_off_rounded;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.toggle_on_outlined,
+              size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Text('الحالة',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              )),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _StatusBadge(
+                    icon: statusIcon, text: statusText, color: statusColor),
+                if (showConnection)
+                  _StatusBadge(
+                      icon: connIcon, text: connText, color: connColor),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+  const _StatusBadge({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

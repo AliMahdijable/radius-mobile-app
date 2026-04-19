@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../providers/auth_provider.dart';
@@ -203,6 +204,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ],
                     ),
                   ),
+
+                // Quick Search
+                _QuickSearchBar(
+                  subscribers: subsState.subscribers,
+                  onEnsureLoaded: _ensureSubscribersLoaded,
+                ),
+                const SizedBox(height: 12),
 
                 // Subscribers Ring Card
                 _SubscribersRingCard(
@@ -1240,6 +1248,214 @@ class _TodayStatItem extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _QuickSearchBar extends StatefulWidget {
+  final List<SubscriberModel> subscribers;
+  final VoidCallback onEnsureLoaded;
+
+  const _QuickSearchBar({
+    required this.subscribers,
+    required this.onEnsureLoaded,
+  });
+
+  @override
+  State<_QuickSearchBar> createState() => _QuickSearchBarState();
+}
+
+class _QuickSearchBarState extends State<_QuickSearchBar> {
+  final TextEditingController _ctrl = TextEditingController();
+  String _q = '';
+  bool _focused = false;
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      setState(() => _focused = _focus.hasFocus);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  List<SubscriberModel> get _results {
+    final q = _q.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final digits = q.replaceAll(RegExp(r'[^0-9]'), '');
+    final matches = widget.subscribers.where((s) {
+      if (s.username.toLowerCase().contains(q)) return true;
+      if (s.fullName.toLowerCase().contains(q)) return true;
+      if (digits.isNotEmpty) {
+        final phoneDigits =
+            s.displayPhone.replaceAll(RegExp(r'[^0-9]'), '');
+        if (phoneDigits.contains(digits)) return true;
+      }
+      return false;
+    }).toList();
+    // أولوية: تطابق تام مع username > اسم > هاتف
+    matches.sort((a, b) {
+      int rank(SubscriberModel s) {
+        if (s.username.toLowerCase() == q) return 0;
+        if (s.username.toLowerCase().startsWith(q)) return 1;
+        if (s.fullName.toLowerCase().startsWith(q)) return 2;
+        return 3;
+      }
+      return rank(a).compareTo(rank(b));
+    });
+    return matches.take(30).toList();
+  }
+
+  void _openSubscriber(BuildContext context, SubscriberModel s) {
+    _focus.unfocus();
+    _ctrl.clear();
+    setState(() => _q = '');
+    context.push('/subscriber/${s.username}', extra: s);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final results = _results;
+    final showResults = _q.trim().isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _focused
+                  ? theme.colorScheme.primary.withOpacity(0.45)
+                  : Colors.transparent,
+              width: 1.2,
+            ),
+          ),
+          child: TextField(
+            controller: _ctrl,
+            focusNode: _focus,
+            onTap: widget.onEnsureLoaded,
+            onChanged: (v) => setState(() => _q = v),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'ابحث بالاسم أو المعرّف أو رقم الهاتف…',
+              hintStyle: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+              prefixIcon: Icon(Icons.search_rounded,
+                  color: theme.colorScheme.primary),
+              suffixIcon: _q.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () {
+                        _ctrl.clear();
+                        setState(() => _q = '');
+                      },
+                    ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+        ),
+        if (showResults) ...[
+          const SizedBox(height: 8),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 320),
+            decoration: BoxDecoration(
+              color: theme.cardTheme.color,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: theme.colorScheme.outline.withOpacity(0.15),
+              ),
+            ),
+            child: results.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(
+                      widget.subscribers.isEmpty
+                          ? 'جاري تحميل المشتركين…'
+                          : 'لا توجد نتائج',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: results.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: theme.colorScheme.outline.withOpacity(0.08),
+                    ),
+                    itemBuilder: (_, i) {
+                      final s = results[i];
+                      final isExpired = !s.isActive;
+                      final dotColor = !s.isEnabled
+                          ? AppTheme.dangerColor
+                          : isExpired
+                              ? AppTheme.warningColor
+                              : (s.isOnline
+                                  ? AppTheme.successColor
+                                  : Colors.grey);
+                      return ListTile(
+                        dense: true,
+                        onTap: () => _openSubscriber(context, s),
+                        leading: Container(
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.only(top: 6),
+                          decoration: BoxDecoration(
+                            color: dotColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        title: Text(
+                          s.fullName.isNotEmpty ? s.fullName : s.username,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        subtitle: Text(
+                          [
+                            s.username,
+                            if (s.displayPhone.isNotEmpty) s.displayPhone,
+                          ].join(' • '),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color:
+                                theme.colorScheme.onSurface.withOpacity(0.55),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_left_rounded,
+                          color: theme.colorScheme.primary,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ],
     );
   }
 }
