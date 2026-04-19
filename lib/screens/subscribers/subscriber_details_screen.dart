@@ -2330,7 +2330,7 @@ class _SubscriberDetailsScreenState
                     _DetailRow(
                       icon: Icons.calendar_today,
                       label: 'تاريخ الانتهاء',
-                      value: sub.expiration ?? '—',
+                      value: AppHelpers.formatExpiration(sub.expiration),
                     ),
                     _DetailRow(
                       icon: Icons.credit_card,

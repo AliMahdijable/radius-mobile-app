@@ -52,7 +52,12 @@ class ReceiptPrinter {
         .replaceAll('{package_price}', AppHelpers.formatMoney(data.packagePrice))
         .replaceAll('{paid_amount}', AppHelpers.formatMoney(data.paidAmount))
         .replaceAll('{remaining_amount}', AppHelpers.formatMoney(data.remainingAmount))
-        .replaceAll('{expiry_date}', data.expiryDate.isNotEmpty ? data.expiryDate : '-')
+        .replaceAll(
+          '{expiry_date}',
+          data.expiryDate.isNotEmpty
+              ? AppHelpers.formatExpiration(data.expiryDate)
+              : '-',
+        )
         .replaceAll('{debt_amount}', AppHelpers.formatMoney(data.debtAmount));
   }
 
@@ -145,7 +150,12 @@ $filledHtml
               if (data.packagePrice > 0)
                 _receiptRow('سعر الباقة', AppHelpers.formatMoney(data.packagePrice), boldStyle, baseStyle),
               if (data.expiryDate.isNotEmpty)
-                _receiptRow('تاريخ الانتهاء', data.expiryDate, boldStyle, baseStyle),
+                _receiptRow(
+                  'تاريخ الانتهاء',
+                  AppHelpers.formatExpiration(data.expiryDate),
+                  boldStyle,
+                  baseStyle,
+                ),
 
               pw.SizedBox(height: 6),
               pw.Divider(color: PdfColors.grey300),

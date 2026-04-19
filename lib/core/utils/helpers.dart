@@ -10,13 +10,30 @@ class AppHelpers {
     return utcTime.add(const Duration(hours: AppConstants.baghdadUtcOffset));
   }
 
-  /// Format date to Arabic-friendly format
+  /// Format date to Arabic-friendly format (24h)
   static String formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '—';
     final date = DateTime.tryParse(dateStr);
     if (date == null) return dateStr;
     final baghdad = toBaghdadTime(date);
     return intl.DateFormat('yyyy/MM/dd HH:mm').format(baghdad);
+  }
+
+  /// Format expiration / due date in 12-hour style with Arabic AM/PM.
+  /// Example: "2026/04/25 ‏05:59 مساءً"
+  static String formatExpiration(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '—';
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return dateStr;
+    final baghdad = toBaghdadTime(date);
+    final datePart = intl.DateFormat('yyyy/MM/dd').format(baghdad);
+    final hour24 = baghdad.hour;
+    final hour12 = hour24 == 0
+        ? 12
+        : (hour24 > 12 ? hour24 - 12 : hour24);
+    final minute = baghdad.minute.toString().padLeft(2, '0');
+    final meridiem = hour24 < 12 ? 'صباحاً' : 'مساءً';
+    return '$datePart  ${hour12.toString().padLeft(2, '0')}:$minute $meridiem';
   }
 
   /// Format date relative (e.g., "منذ 5 دقائق")

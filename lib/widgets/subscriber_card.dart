@@ -324,7 +324,7 @@ class SubscriberCard extends StatelessWidget {
                       _metaChip(
                         theme: theme,
                         icon: Icons.event_outlined,
-                        text: AppHelpers.formatDate(subscriber.expiration),
+                        text: AppHelpers.formatExpiration(subscriber.expiration),
                         iconColor: isDisabled ? Colors.grey : daysColor,
                         isLtr: true,
                       ),

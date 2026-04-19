@@ -410,7 +410,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         theme,
                         icon: Icons.event_rounded,
                         label: 'تاريخ الانتهاء',
-                        value: AppHelpers.formatDate(sub.expiration),
+                        value: AppHelpers.formatExpiration(sub.expiration),
                         isLtr: true,
                       ),
                     _sheetInfoTile(
