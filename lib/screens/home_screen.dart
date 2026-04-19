@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dashboard_screen.dart';
 import 'subscribers/subscribers_screen.dart';
-import 'add_subscriber_screen.dart';
+import '../widgets/add_subscriber_sheet.dart';
+import '../core/utils/bottom_sheet_utils.dart';
 import 'managers_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
@@ -121,6 +122,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   void _navigateToSubscribers(String filter) {
     setState(() => _currentIndex = 1);
+  }
+
+  Future<void> _openAddSubscriberSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0) +
+                MediaQuery.of(sheetCtx).viewInsets.bottom,
+            top: 10,
+            left: 16,
+            right: 16,
+          ),
+          child: SingleChildScrollView(
+            child: const AddSubscriberSheet(),
+          ),
+        );
+      },
+    );
   }
 
   void _showAlertsSheet() {
@@ -559,7 +585,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         children: [
           DashboardScreen(onCardTapped: _navigateToSubscribers),
           const SubscribersScreen(),
-          const AddSubscriberScreen(),
+          const SizedBox.shrink(), // الفهرس 2 مخصص كـ "إضافة" عبر bottom sheet
           const ReportsScreen(),
           const SettingsScreen(),
         ],
@@ -568,6 +594,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) {
           if (i != 0) _alertsDismissed = false;
+          if (i == 2) {
+            // بدل التنقل لصفحة "إضافة"، نفتح bottom sheet مثل مودل التعديل
+            _openAddSubscriberSheet();
+            return;
+          }
           if (i == 0) {
             final auth = ref.read(authProvider);
             if (auth.user != null) {
