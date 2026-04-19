@@ -171,8 +171,11 @@ class _SubscriberDetailsScreenState
 
   // ── Edit ───────────────────────────────────────────────────────────────
   void _showEditSheet() async {
+    // أي مدير ليس sub-manager (يملك إدارة مدراء أو باقات) يستطيع تعديل التاريخ.
+    final _authUser = ref.read(authProvider).user;
     final canEditExpiration =
-        ref.read(authProvider).user?.canAccessPackages ?? false;
+        (_authUser?.canAccessManagers ?? false) ||
+            (_authUser?.canAccessPackages ?? false);
     final id = _subscriberId;
     if (id == null) {
       _showSnack('معرف المشترك غير متوفر', success: false);

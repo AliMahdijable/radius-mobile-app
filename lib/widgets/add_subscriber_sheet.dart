@@ -9,6 +9,11 @@ import '../models/subscriber_model.dart';
 import 'app_snackbar.dart';
 import 'contact_picker.dart';
 
+/// Add-subscriber sheet — styled exactly like the edit-subscriber modal:
+/// same icon header, same "معلومات المشترك" / "بيانات الدخول" section labels,
+/// same input decorations, same expiration date-time picker gated by the
+/// canAccessManagers || canAccessPackages permission, and the same package
+/// DropdownButtonFormField used in the edit sheet.
 class AddSubscriberSheet extends ConsumerStatefulWidget {
   const AddSubscriberSheet({super.key});
 
@@ -23,11 +28,10 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   final _firstnameCtrl = TextEditingController();
   final _lastnameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _expCtrl = TextEditingController();
   int? _selectedPackageId;
-  DateTime? _expiration; // null = الافتراضي (الآن)
   bool _isLoading = false;
   bool _loadingPackages = false;
-  bool _showPassword = false;
 
   @override
   void initState() {
@@ -52,33 +56,36 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     _firstnameCtrl.dispose();
     _lastnameCtrl.dispose();
     _phoneCtrl.dispose();
+    _expCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _pickExpiration() async {
     final now = DateTime.now();
-    final current = _expiration ?? now;
-    final picked = await showDatePicker(
+    final current = DateTime.tryParse(_expCtrl.text.trim()) ?? now;
+    final date = await showDatePicker(
       context: context,
       initialDate: current,
       firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now.add(const Duration(days: 365 * 3)),
+      lastDate: now.add(const Duration(days: 365 * 5)),
       locale: const Locale('ar'),
     );
-    if (picked == null || !mounted) return;
+    if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(current),
     );
     if (!mounted) return;
+    final combined = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time?.hour ?? current.hour,
+      time?.minute ?? current.minute,
+    );
     setState(() {
-      _expiration = DateTime(
-        picked.year,
-        picked.month,
-        picked.day,
-        time?.hour ?? current.hour,
-        time?.minute ?? current.minute,
-      );
+      _expCtrl.text =
+          intl.DateFormat('yyyy-MM-dd HH:mm:ss').format(combined);
     });
   }
 
@@ -91,18 +98,22 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
 
     setState(() => _isLoading = true);
 
-    final expirationToSend = _expiration ?? DateTime.now();
-    final expStr = intl.DateFormat('yyyy-MM-dd HH:mm:ss').format(expirationToSend);
+    DateTime expirationToSend;
+    final raw = _expCtrl.text.trim();
+    final parsed = DateTime.tryParse(raw);
+    expirationToSend = parsed ?? DateTime.now();
+    final expStr =
+        intl.DateFormat('yyyy-MM-dd HH:mm:ss').format(expirationToSend);
 
     final success = await ref.read(subscribersProvider.notifier).createSubscriber(
-      username: _usernameCtrl.text.trim(),
-      password: _passwordCtrl.text.trim(),
-      profileId: _selectedPackageId!,
-      firstname: _firstnameCtrl.text.trim(),
-      lastname: _lastnameCtrl.text.trim(),
-      phone: _phoneCtrl.text.trim(),
-      expiration: expStr,
-    );
+          username: _usernameCtrl.text.trim(),
+          password: _passwordCtrl.text.trim(),
+          profileId: _selectedPackageId!,
+          firstname: _firstnameCtrl.text.trim(),
+          lastname: _lastnameCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim(),
+          expiration: expStr,
+        );
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -113,14 +124,13 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
       _firstnameCtrl.clear();
       _lastnameCtrl.clear();
       _phoneCtrl.clear();
-      setState(() {
-        _selectedPackageId = null;
-        _expiration = null;
-      });
+      _expCtrl.clear();
+      setState(() => _selectedPackageId = null);
 
       if (!mounted) return;
       AppSnackBar.success(context, 'تم إنشاء المشترك بنجاح');
       await ref.read(subscribersProvider.notifier).loadSubscribers();
+      if (mounted) Navigator.of(context).maybePop();
     } else {
       AppSnackBar.error(context, 'فشل إنشاء المشترك');
     }
@@ -130,11 +140,12 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   Widget build(BuildContext context) {
     final packages = ref.watch(subscribersProvider).packages;
     final theme = Theme.of(context);
-    // أي مدير ليس sub-manager — أي يملك إدارة مدراء أو باقات — يستطيع
-    // تحديد تاريخ الانتهاء يدوياً. السب-مانجر فقط يُحرم من الحقل.
-    final user = ref.watch(authProvider).user;
-    final canPickExpiration =
-        (user?.canAccessManagers ?? false) || (user?.canAccessPackages ?? false);
+    final authUser = ref.watch(authProvider).user;
+    // أي مدير يملك صلاحية إدارة المدراء أو الباقات يستطيع تحديد تاريخ الانتهاء.
+    // المدير الفرعي العادي فقط يُحرم من هذا الحقل.
+    final canEditExpiration =
+        (authUser?.canAccessManagers ?? false) ||
+            (authUser?.canAccessPackages ?? false);
 
     final seen = <int>{};
     final uniquePkgs = packages.where((p) {
@@ -149,62 +160,84 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Handle — نفس مقبض مودل التعديل
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Header بأيقونة وعنوان — مثل "تعديل بيانات المشترك"
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.teal600, AppTheme.teal900]),
+                  color: AppTheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.person_add_alt_1,
-                    color: Colors.white, size: 18),
+                    color: AppTheme.primary, size: 20),
               ),
               const SizedBox(width: 10),
-              Text('إضافة مشترك جديد',
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w800, fontSize: 14)),
+              Text('إضافة بيانات مشترك',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
 
-          // الاسم الأول + الاسم الأخير
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _firstnameCtrl,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: _dense('الاسم الأول', Icons.person_outline),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'مطلوب' : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _lastnameCtrl,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: _dense('الاسم الأخير', null),
-                ),
-              ),
-            ],
-          ),
+          // قسم: معلومات المشترك
+          Text('معلومات المشترك',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              )),
           const SizedBox(height: 10),
-
-          // رقم الهاتف — زر جهات الاتصال في الـ suffix
+          Row(children: [
+            Expanded(
+              child: TextFormField(
+                controller: _firstnameCtrl,
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
+                decoration: const InputDecoration(
+                  labelText: 'الاسم الأول',
+                  prefixIcon: Icon(Icons.person_outline, size: 20),
+                ),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'مطلوب' : null,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: _lastnameCtrl,
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
+                decoration:
+                    const InputDecoration(labelText: 'الاسم الأخير'),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
           TextFormField(
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.left,
-            style: const TextStyle(fontSize: 13),
-            decoration: _dense('رقم الهاتف', Icons.phone_outlined).copyWith(
-              hintText: '07xxxxxxxxx',
+            decoration: InputDecoration(
+              labelText: 'رقم الهاتف',
+              prefixIcon: const Icon(Icons.phone_outlined, size: 20),
               suffixIcon: IconButton(
                 tooltip: 'اختر من جهات الاتصال',
-                icon: const Icon(Icons.contacts_rounded, size: 18),
+                icon: const Icon(Icons.contacts_rounded, size: 20),
                 onPressed: () async {
                   final phone = await pickContactPhone(context);
                   if (phone != null && phone.isNotEmpty) {
@@ -214,99 +247,131 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
 
-          _sectionLabel(theme, 'بيانات الدخول'),
-          const SizedBox(height: 6),
-
-          // اسم المستخدم + كلمة المرور في صف واحد
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _usernameCtrl,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: _dense('اسم المستخدم', Icons.alternate_email)
-                      .copyWith(hintText: 'user@domain'),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'مطلوب' : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _passwordCtrl,
-                  textDirection: TextDirection.ltr,
-                  textAlign: TextAlign.left,
-                  obscureText: !_showPassword,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: _dense('كلمة المرور', Icons.lock_outline).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _showPassword ? Icons.visibility_off : Icons.visibility,
-                        size: 18,
-                      ),
-                      onPressed: () =>
-                          setState(() => _showPassword = !_showPassword),
-                    ),
-                  ),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'مطلوب' : null,
-                ),
-              ),
-            ],
+          // قسم: بيانات الدخول
+          Text('بيانات الدخول',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              )),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _usernameCtrl,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            decoration: const InputDecoration(
+              labelText: 'اسم المستخدم',
+              prefixIcon: Icon(Icons.alternate_email, size: 20),
+              hintText: 'user@domain',
+            ),
+            validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _passwordCtrl,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            decoration: const InputDecoration(
+              labelText: 'كلمة المرور',
+              prefixIcon: Icon(Icons.lock_outline, size: 20),
+            ),
+            validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+          ),
+          const SizedBox(height: 12),
 
-          _sectionLabel(theme, 'الباقة'),
-          const SizedBox(height: 6),
+          // تاريخ الانتهاء (date-picker تفاعلي) — مُحكم بنفس صلاحيات التعديل
+          TextField(
+            controller: _expCtrl,
+            readOnly: true,
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+            onTap: !canEditExpiration ? null : _pickExpiration,
+            decoration: InputDecoration(
+              labelText: 'تاريخ الانتهاء',
+              hintText: canEditExpiration
+                  ? 'اضغط لاختيار التاريخ والوقت'
+                  : 'يبدأ الآن تلقائياً',
+              helperText: canEditExpiration
+                  ? 'اختياري — إن لم يُحدَّد يبدأ من الآن'
+                  : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
+              prefixIcon: const Icon(Icons.calendar_today, size: 20),
+              suffixIcon: canEditExpiration
+                  ? const Icon(Icons.edit_calendar_rounded, size: 18)
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 20),
 
+          // قسم: الباقة — نفس Dropdown مودل التعديل
           if (_loadingPackages)
-            const SizedBox(
-              height: 50,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 10),
+                  Text('جاري تحميل الباقات...',
+                      style: TextStyle(fontSize: 13)),
+                ],
               ),
             )
           else if (uniquePkgs.isEmpty)
             GestureDetector(
               onTap: _ensurePackagesLoaded,
               child: Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.orange.withOpacity(0.2)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.refresh, size: 16, color: Colors.orange),
-                    SizedBox(width: 6),
+                    Icon(Icons.refresh, size: 18, color: Colors.orange),
+                    SizedBox(width: 8),
                     Text('لا توجد باقات — اضغط لإعادة التحميل',
-                        style: TextStyle(fontSize: 12, color: Colors.orange)),
+                        style: TextStyle(fontSize: 13, color: Colors.orange)),
                   ],
                 ),
               ),
             )
-          else
+          else ...[
+            Text('الباقة',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                )),
+            const SizedBox(height: 8),
             DropdownButtonFormField<int>(
-              value: _selectedPackageId,
+              value: _selectedPackageId != null &&
+                      uniquePkgs.any((p) => p.idx == _selectedPackageId)
+                  ? _selectedPackageId
+                  : null,
               isExpanded: true,
               style: TextStyle(
                 fontSize: 13,
                 fontFamily: 'Cairo',
                 color: theme.colorScheme.onSurface,
               ),
-              dropdownColor: theme.cardTheme.color ?? theme.colorScheme.surface,
+              dropdownColor:
+                  theme.cardTheme.color ?? theme.colorScheme.surface,
               iconEnabledColor: theme.colorScheme.onSurface.withOpacity(0.7),
-              decoration: _dense('اختر الباقة', Icons.wifi_rounded),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.wifi_rounded, size: 18),
+                hintText: 'اختر الباقة',
+              ),
               items: uniquePkgs
                   .map((pkg) => DropdownMenuItem<int>(
                         value: pkg.idx,
@@ -325,7 +390,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                             const SizedBox(width: 6),
                             Text(
                               AppHelpers.formatMoney(pkg.displayPrice),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppTheme.teal600,
@@ -338,56 +403,23 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
               onChanged: (v) => setState(() => _selectedPackageId = v),
               validator: (v) => v == null ? 'مطلوب' : null,
             ),
-          const SizedBox(height: 14),
-
-          // تاريخ الانتهاء — يظهر فقط لمن يملك صلاحية canAccessPackages
-          if (canPickExpiration) ...[
-            _sectionLabel(theme, 'تاريخ الانتهاء (اختياري)'),
-            const SizedBox(height: 6),
-            InkWell(
-              onTap: _pickExpiration,
-              borderRadius: BorderRadius.circular(8),
-              child: InputDecorator(
-                decoration: _dense(
-                  _expiration == null ? 'الافتراضي: الآن' : 'تاريخ الانتهاء',
-                  Icons.event_rounded,
-                ).copyWith(
-                  suffixIcon: _expiration == null
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 16),
-                          onPressed: () =>
-                              setState(() => _expiration = null),
-                        ),
-                ),
-                child: Text(
-                  _expiration == null
-                      ? ''
-                      : intl.DateFormat('yyyy-MM-dd HH:mm')
-                          .format(_expiration!),
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
-                  textDirection: TextDirection.ltr,
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
           ],
+          const SizedBox(height: 24),
 
+          // زر الحفظ — نفس تصميم زر مودل التعديل
           SizedBox(
-            height: 46,
+            height: AppTheme.actionButtonHeight,
             child: ElevatedButton.icon(
               onPressed: _isLoading ? null : _submit,
               icon: _isLoading
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.add, size: 18),
-              label: Text(_isLoading ? 'جاري الإنشاء...' : 'إنشاء المشترك',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  : const Icon(Icons.save_rounded),
+              label: Text(_isLoading ? 'جاري الإنشاء...' : 'حفظ المشترك'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.successColor,
               ),
@@ -395,27 +427,6 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           ),
           const SizedBox(height: 16),
         ],
-      ),
-    );
-  }
-
-  InputDecoration _dense(String label, IconData? icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: icon == null ? null : Icon(icon, size: 18),
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      labelStyle: const TextStyle(fontSize: 12),
-    );
-  }
-
-  Widget _sectionLabel(ThemeData theme, String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 11.5,
-        fontWeight: FontWeight.w700,
-        color: theme.colorScheme.onSurface.withOpacity(0.55),
       ),
     );
   }
