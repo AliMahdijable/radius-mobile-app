@@ -453,10 +453,119 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       );
 
       loadLastPayments();
+      // لا ننتظر — تخصيب IP للمشتركين المتصلين يجري بالخلفية
+      loadOnlineIps();
     } catch (e) {
       dev.log('loadSubscribers error: $e', name: 'SUBS');
       state = state.copyWith(isLoading: false, error: 'خطأ في تحميل البيانات');
     }
+  }
+
+  /// يجلب الجلسات المفتوحة (acctstoptime فارغ) من SAS4 ويملأ حقل ipAddress
+  /// للمشتركين المتصلين الذين لم يُرجع لهم admin_list أي framedipaddress.
+  Future<void> loadOnlineIps() async {
+    try {
+      // جلب صفحة كبيرة من الجلسات الأخيرة، ونصفّي الـ open ones محلياً
+      final payload = EncryptionService.encrypt({
+        'page': 1,
+        'count': 1000,
+        'sortBy': 'acctstarttime',
+        'direction': 'desc',
+        'search': '',
+        'columns': [
+          'username',
+          'acctstarttime',
+          'acctstoptime',
+          'framedipaddress',
+        ],
+        'framedipaddress': '',
+        'username': '',
+        'mac': '',
+        'start_date': '',
+        'end_date': '',
+      });
+
+      final res = await _sas4Dio.post(
+        ApiConstants.sas4UserSessions,
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+      dynamic data = res.data;
+      if (data is String) data = EncryptionService.decrypt(data);
+
+      List rows = const [];
+      if (data is Map && data['data'] is List) rows = data['data'] as List;
+      else if (data is Map && data['sessions'] is List) rows = data['sessions'] as List;
+      else if (data is List) rows = data;
+
+      final ipByUser = <String, String>{};
+      for (final r in rows) {
+        if (r is! Map) continue;
+        final stop = r['acctstoptime']?.toString().trim() ?? '';
+        // جلسة مفتوحة: لا يوجد stop time (null / فارغ / '-')
+        final isOpen = stop.isEmpty || stop == '-' || stop.toLowerCase() == 'null';
+        if (!isOpen) continue;
+        final uname = r['username']?.toString().trim().toLowerCase();
+        final ip = r['framedipaddress']?.toString().trim();
+        if (uname == null || uname.isEmpty) continue;
+        if (ip == null || ip.isEmpty || ip == '-') continue;
+        // تفضيل أحدث جلسة (المدخلة أولاً بحسب ترتيب desc)
+        ipByUser.putIfAbsent(uname, () => ip);
+      }
+
+      if (ipByUser.isEmpty) return;
+
+      final current = state.subscribers;
+      var changed = 0;
+      final updated = <SubscriberModel>[];
+      for (final s in current) {
+        final key = s.username.toLowerCase();
+        final newIp = ipByUser[key];
+        if (newIp != null && newIp != (s.ipAddress ?? '')) {
+          updated.add(_copyWithIp(s, newIp));
+          changed++;
+        } else {
+          updated.add(s);
+        }
+      }
+      if (changed > 0) {
+        dev.log('loadOnlineIps: enriched $changed subscribers with IP', name: 'SUBS');
+        state = state.copyWith(subscribers: updated);
+      }
+    } catch (e) {
+      dev.log('loadOnlineIps error: $e', name: 'SUBS');
+    }
+  }
+
+  SubscriberModel _copyWithIp(SubscriberModel s, String ip) {
+    return SubscriberModel(
+      idx: s.idx,
+      username: s.username,
+      firstname: s.firstname,
+      lastname: s.lastname,
+      phone: s.phone,
+      mobile: s.mobile,
+      expiration: s.expiration,
+      remainingDays: s.remainingDays,
+      notes: s.notes,
+      debt: s.debt,
+      hasDebtFlag: s.hasDebtFlag,
+      profileName: s.profileName,
+      profileId: s.profileId,
+      balance: s.balance,
+      price: s.price,
+      parentUsername: s.parentUsername,
+      // علامة online تُستمد من الجلسة المفتوحة إن وُجدت — نمرّر true لكي يظهر
+      // chip الـ IP حتى لو لم يكن admin_list قد علّمه كـ online بعد.
+      isOnlineFlag: true,
+      enabled: s.enabled,
+      ipAddress: ip,
+      macAddress: s.macAddress,
+      sessionTime: s.sessionTime,
+      uploadBytes: s.uploadBytes,
+      downloadBytes: s.downloadBytes,
+      deviceVendor: s.deviceVendor,
+    );
   }
 
   Future<void> loadLastPayments() async {
