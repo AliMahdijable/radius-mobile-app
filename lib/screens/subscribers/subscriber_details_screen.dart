@@ -2300,14 +2300,6 @@ class _SubscriberDetailsScreenState
                 _DetailSection(
                   title: 'معلومات الحساب',
                   children: [
-                    // الحالة + IP أولاً لأنها الأهم للمدير عند الفتح
-                    _StatusRow(sub: sub),
-                    if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
-                      _IpDetailRow(
-                        ip: sub.ipAddress!.trim(),
-                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
-                      ),
-                    const _DetailDivider(),
                     _DetailRow(
                       icon: Icons.person_outline,
                       label: 'اسم المستخدم',
@@ -2323,7 +2315,6 @@ class _SubscriberDetailsScreenState
                         _launchWhatsAppChat();
                       },
                     ),
-                    const _DetailDivider(),
                     _DetailRow(
                       icon: Icons.wifi,
                       label: 'الباقة',
@@ -2336,6 +2327,12 @@ class _SubscriberDetailsScreenState
                           ? AppHelpers.formatMoney(sub.price)
                           : '—',
                     ),
+                    _StatusRow(sub: sub),
+                    if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
+                      _IpDetailRow(
+                        ip: sub.ipAddress!.trim(),
+                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                      ),
                   ],
                 ),
 
