@@ -532,7 +532,14 @@ class _LogRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final type = (log['action_type'] ?? log['action_type_ar'] ?? '').toString().toUpperCase();
-    final target = log['user_username']?.toString() ?? log['target_name']?.toString() ?? '';
+    final firstname = log['user_firstname']?.toString().trim() ?? '';
+    final lastname = log['user_lastname']?.toString().trim() ?? '';
+    final fullname = [firstname, lastname].where((s) => s.isNotEmpty).join(' ');
+    final username = log['user_username']?.toString().trim() ?? '';
+    final targetName = log['target_name']?.toString().trim() ?? '';
+    final title = fullname.isNotEmpty ? fullname : (username.isNotEmpty ? username : targetName);
+    // عرض اسم المستخدم تحت العنوان فقط إن اختلف عن العنوان
+    final subtitle = (username.isNotEmpty && username != title) ? username : '';
     final desc = AppHelpers.formatNumbersInText(log['action_description']?.toString() ?? '');
     final amount = _parseAmount(log);
     final time = log['created_at']?.toString() ?? '';
@@ -553,10 +560,22 @@ class _LogRow extends StatelessWidget {
           Expanded(
             flex: 3,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(target, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+              Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+              if (subtitle.isNotEmpty)
+                Text(subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: .5),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textDirection: TextDirection.ltr,
+                    overflow: TextOverflow.ellipsis),
               if (desc.isNotEmpty)
-                Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
-                    maxLines: 3, overflow: TextOverflow.ellipsis),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
+                      maxLines: 3, overflow: TextOverflow.ellipsis),
+                ),
             ]),
           ),
           Expanded(
