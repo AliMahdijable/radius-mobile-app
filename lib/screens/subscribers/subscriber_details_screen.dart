@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart' as intl;
 import '../../models/subscriber_model.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
@@ -356,15 +357,51 @@ class _SubscriberDetailsScreenState
                   const SizedBox(height: 12),
                   TextField(
                     controller: expCtrl,
-                    readOnly: !canEditExpiration,
+                    readOnly: true,
                     textDirection: TextDirection.ltr, textAlign: TextAlign.left,
+                    onTap: !canEditExpiration
+                        ? null
+                        : () async {
+                            final current =
+                                DateTime.tryParse(expCtrl.text.trim()) ??
+                                    DateTime.now();
+                            final date = await showDatePicker(
+                              context: ctx,
+                              initialDate: current,
+                              firstDate: DateTime.now()
+                                  .subtract(const Duration(days: 365 * 2)),
+                              lastDate: DateTime.now()
+                                  .add(const Duration(days: 365 * 5)),
+                              locale: const Locale('ar'),
+                            );
+                            if (date == null) return;
+                            final time = await showTimePicker(
+                              context: ctx,
+                              initialTime: TimeOfDay.fromDateTime(current),
+                            );
+                            final combined = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              time?.hour ?? current.hour,
+                              time?.minute ?? current.minute,
+                            );
+                            expCtrl.text = intl.DateFormat(
+                                    'yyyy-MM-dd HH:mm:ss')
+                                .format(combined);
+                            setSheet(() {});
+                          },
                     decoration: InputDecoration(
                       labelText: 'تاريخ الانتهاء',
-                      hintText: 'YYYY-MM-DD HH:MM:SS',
+                      hintText: 'اضغط لاختيار التاريخ والوقت',
                       helperText: canEditExpiration
-                          ? null
+                          ? 'اضغط لتغيير التاريخ والوقت'
                           : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
-                      prefixIcon: const Icon(Icons.calendar_today, size: 20)),
+                      prefixIcon: const Icon(Icons.calendar_today, size: 20),
+                      suffixIcon: canEditExpiration
+                          ? const Icon(Icons.edit_calendar_rounded, size: 18)
+                          : null,
+                    ),
                   ),
                   const SizedBox(height: 20),
 
