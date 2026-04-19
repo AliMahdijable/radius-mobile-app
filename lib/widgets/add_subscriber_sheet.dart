@@ -406,23 +406,20 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           ],
           const SizedBox(height: 24),
 
-          // زر الحفظ — نفس تصميم زر مودل التعديل
+          // زر الحفظ — نفس تصميم زر مودل التعديل (لون الثيم الافتراضي)
           SizedBox(
             height: AppTheme.actionButtonHeight,
             child: ElevatedButton.icon(
               onPressed: _isLoading ? null : _submit,
               icon: _isLoading
                   ? const SizedBox(
-                      width: 18,
-                      height: 18,
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.save_rounded),
-              label: Text(_isLoading ? 'جاري الإنشاء...' : 'حفظ المشترك'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.successColor,
-              ),
+                  : const Icon(Icons.save),
+              label: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ المشترك'),
             ),
           ),
           const SizedBox(height: 16),
