@@ -430,13 +430,78 @@ class _SubscriberDetailsScreenState
                         ],
                       ),
                     )
-                  else ..._buildEditPackageGroups(
-                    uniquePkgs, selectedProfileId, originalProfileId,
-                    currentPkgName, showAllPackages,
-                    (v) => setSheet(() => selectedProfileId = v),
-                    () => setSheet(() => showAllPackages = !showAllPackages),
-                    Theme.of(ctx),
-                  ),
+                  else ...[
+                    Text('الباقة', style: TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      value: selectedProfileId != null &&
+                              uniquePkgs.any((p) => p.idx == selectedProfileId)
+                          ? selectedProfileId
+                          : null,
+                      isExpanded: true,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'Cairo',
+                        color: Theme.of(ctx).colorScheme.onSurface,
+                      ),
+                      dropdownColor:
+                          Theme.of(ctx).cardTheme.color ??
+                              Theme.of(ctx).colorScheme.surface,
+                      iconEnabledColor:
+                          Theme.of(ctx).colorScheme.onSurface.withOpacity(0.7),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.wifi_rounded, size: 18),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 10),
+                        hintText: currentPkgName ?? 'اختر الباقة',
+                      ),
+                      items: uniquePkgs
+                          .map((pkg) => DropdownMenuItem<int>(
+                                value: pkg.idx,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        pkg.name,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Theme.of(ctx)
+                                              .colorScheme
+                                              .onSurface,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      AppHelpers.formatMoney(pkg.displayPrice),
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.teal600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setSheet(() => selectedProfileId = v),
+                    ),
+                    if (currentPkgName != null && currentPkgName.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'الحالية: $currentPkgName',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.45),
+                          ),
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 24),
 
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
