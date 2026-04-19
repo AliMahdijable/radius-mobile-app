@@ -1437,7 +1437,7 @@ class _SubscriberDetailsScreenState
       final parts = <String>[];
       if (days > 0) parts.add('$days يوم');
       if (hours > 0) parts.add('$hours ساعة');
-      if (minutes > 0 && days == 0) parts.add('$minutes دقيقة');
+      if (minutes > 0) parts.add('$minutes دقيقة');
       if (parts.isEmpty) return 'أقل من دقيقة';
       return parts.join(' و ');
     } catch (_) {
