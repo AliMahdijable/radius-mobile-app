@@ -69,6 +69,9 @@ class FcmService {
         'إشعارات التطبيق',
         description: 'إشعارات Firebase Cloud Messaging',
         importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
       );
       await _fln
           .resolvePlatformSpecificImplementation<
