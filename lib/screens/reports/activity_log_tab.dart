@@ -485,7 +485,14 @@ class _ActivityRow extends StatelessWidget {
     final theme = Theme.of(context);
     final style = _ActivityLogTabState._getActionStyle(activity);
     final desc = AppHelpers.formatNumbersInText(activity['action_description']?.toString() ?? '');
-    final target = activity['target_name']?.toString() ?? '';
+    final firstname = (activity['user_firstname'] ?? '').toString().trim();
+    final lastname = (activity['user_lastname'] ?? '').toString().trim();
+    final fullname = [firstname, lastname].where((s) => s.isNotEmpty).join(' ');
+    final username = (activity['user_username'] ?? activity['target_name'] ?? '')
+        .toString()
+        .trim();
+    final target = fullname.isNotEmpty ? fullname : username;
+    final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final admin = activity['admin_username']?.toString() ?? '';
     final time = activity['created_at']?.toString() ?? '';
 
@@ -516,8 +523,16 @@ class _ActivityRow extends StatelessWidget {
               ]),
               if (target.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 3),
-                    child: Text(target, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(alpha: .85)))),
+                    child: Text(target, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface.withValues(alpha: .9)))),
+              if (subtitle.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 2),
+                    child: Text(subtitle,
+                        textDirection: TextDirection.ltr,
+                        style: TextStyle(fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(alpha: .5),
+                            fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis)),
               if (desc.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 3),
                     child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),

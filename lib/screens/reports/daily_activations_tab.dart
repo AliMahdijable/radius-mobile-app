@@ -283,7 +283,14 @@ class _ActivationRow extends StatelessWidget {
     final label = isExtend ? 'تمديد' : 'تفعيل';
     final color = isExtend ? AppTheme.warningColor : AppTheme.successColor;
     final icon = isExtend ? Icons.schedule_rounded : Icons.check_circle_rounded;
-    final target = record['target_name']?.toString() ?? '';
+    final firstname = (record['user_firstname'] ?? '').toString().trim();
+    final lastname = (record['user_lastname'] ?? '').toString().trim();
+    final fullname = [firstname, lastname].where((s) => s.isNotEmpty).join(' ');
+    final username = (record['user_username'] ?? record['target_name'] ?? '')
+        .toString()
+        .trim();
+    final target = fullname.isNotEmpty ? fullname : username;
+    final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final desc = AppHelpers.formatNumbersInText(record['action_description']?.toString() ?? '');
     final time = record['created_at']?.toString() ?? '';
     String formattedTime = '';
@@ -310,9 +317,17 @@ class _ActivationRow extends StatelessWidget {
             Row(children: [
               Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color)),
               const SizedBox(width: 6),
-              Expanded(child: Text(target, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600,
+              Expanded(child: Text(target, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700,
                   color: theme.colorScheme.onSurface.withValues(alpha: .9)), overflow: TextOverflow.ellipsis)),
             ]),
+            if (subtitle.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(top: 2),
+                  child: Text(subtitle,
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: .5),
+                          fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis)),
             if (desc.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: 3),
                   child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
