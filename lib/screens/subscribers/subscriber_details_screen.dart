@@ -18,6 +18,7 @@ import '../../providers/templates_provider.dart';
 import '../../providers/print_templates_provider.dart';
 import '../../core/utils/receipt_printer.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/contact_picker.dart';
 import '../../widgets/quick_amount_chips.dart';
 
 class SubscriberDetailsScreen extends ConsumerStatefulWidget {
@@ -288,9 +289,20 @@ class _SubscriberDetailsScreenState
                     controller: phCtrl,
                     keyboardType: TextInputType.phone,
                     textDirection: TextDirection.ltr, textAlign: TextAlign.left,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'رقم الهاتف',
-                      prefixIcon: Icon(Icons.phone_outlined, size: 20)),
+                      prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                      suffixIcon: IconButton(
+                        tooltip: 'اختر من جهات الاتصال',
+                        icon: const Icon(Icons.contacts_rounded, size: 20),
+                        onPressed: () async {
+                          final phone = await pickContactPhone(context);
+                          if (phone != null && phone.isNotEmpty) {
+                            phCtrl.text = phone;
+                          }
+                        },
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -1367,14 +1379,11 @@ class _SubscriberDetailsScreenState
   }
 
   List<double> _buildPartialQuickAmounts(double price) {
-    final amounts = <double>[];
-    final quarter = (price * 0.25).roundToDouble();
-    final half = (price * 0.5).roundToDouble();
-    final threeQ = (price * 0.75).roundToDouble();
-    for (final v in [quarter, half, threeQ]) {
-      if (v > 0 && v < price) amounts.add(v);
-    }
-    return amounts;
+    // نفس اختصارات الأسعار الموحّدة في باقي الشاشات (إضافة/تسديد دين)
+    const presets = <double>[
+      5000, 10000, 15000, 25000, 35000, 50000,
+    ];
+    return [for (final v in presets) if (v < price) v];
   }
 
   double _toDouble(dynamic v) {

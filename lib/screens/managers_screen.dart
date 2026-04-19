@@ -14,6 +14,7 @@ import '../providers/managers_provider.dart';
 import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/contact_picker.dart';
 import '../widgets/loading_overlay.dart';
 import '../widgets/quick_amount_chips.dart';
 
@@ -1656,9 +1657,19 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                         TextFormField(
                           controller: _mobileController,
                           keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'رقم الهاتف',
-                            prefixIcon: Icon(Icons.phone_outlined),
+                            prefixIcon: const Icon(Icons.phone_outlined),
+                            suffixIcon: IconButton(
+                              tooltip: 'اختر من جهات الاتصال',
+                              icon: const Icon(Icons.contacts_rounded, size: 20),
+                              onPressed: () async {
+                                final phone = await pickContactPhone(context);
+                                if (phone != null && phone.isNotEmpty) {
+                                  _mobileController.text = phone;
+                                }
+                              },
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),

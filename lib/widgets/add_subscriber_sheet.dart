@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
 import '../models/subscriber_model.dart';
 import 'app_snackbar.dart';
+import 'contact_picker.dart';
 
 class AddSubscriberSheet extends ConsumerStatefulWidget {
   const AddSubscriberSheet({super.key});
@@ -207,10 +208,20 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             keyboardType: TextInputType.phone,
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.left,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'رقم الهاتف',
-              prefixIcon: Icon(Icons.phone_outlined, size: 20),
+              prefixIcon: const Icon(Icons.phone_outlined, size: 20),
               hintText: '07xxxxxxxxx',
+              suffixIcon: IconButton(
+                tooltip: 'اختر من جهات الاتصال',
+                icon: const Icon(Icons.contacts_rounded, size: 20),
+                onPressed: () async {
+                  final phone = await pickContactPhone(context);
+                  if (phone != null && phone.isNotEmpty) {
+                    _phoneCtrl.text = phone;
+                  }
+                },
+              ),
             ),
           ),
           const SizedBox(height: 20),
