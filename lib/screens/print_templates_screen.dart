@@ -445,6 +445,204 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
     _elements = _defaultElements();
   }
 
+  // القوالب الجاهزة للاختيار من زر "✨" أعلى الشاشة
+  static const _presetLayouts = <({String id, String title, String subtitle, IconData icon})>[
+    (
+      id: 'full_invoice',
+      title: 'فاتورة كاملة',
+      subtitle: 'رأس + بيانات المشترك + المبالغ + التذييل',
+      icon: Icons.description_rounded,
+    ),
+    (
+      id: 'pos_receipt',
+      title: 'وصل حراري (POS)',
+      subtitle: 'مختصر ومضغوط — مناسب للطابعة الحرارية 80mm',
+      icon: Icons.receipt_long_rounded,
+    ),
+    (
+      id: 'payment_receipt',
+      title: 'وصل تسديد',
+      subtitle: 'يركّز على المدفوع والمتبقّي والدين',
+      icon: Icons.payments_rounded,
+    ),
+    (
+      id: 'activation_simple',
+      title: 'تفعيل مبسَّط',
+      subtitle: 'الاسم + الباقة + السعر + تاريخ الانتهاء',
+      icon: Icons.check_circle_rounded,
+    ),
+  ];
+
+  void _showPresetPicker() {
+    final bool hasExisting = _elements.isNotEmpty;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, color: AppTheme.primary),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('توليد قالب جاهز',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'اختر قالباً مُصمَّماً جاهزاً — سيستبدل العناصر الحالية.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ..._presetLayouts.map((p) => _PresetTile(
+                      icon: p.icon,
+                      title: p.title,
+                      subtitle: p.subtitle,
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        if (hasExisting) {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (dCtx) => AlertDialog(
+                              title: const Text('استبدال التصميم؟'),
+                              content: const Text(
+                                  'التصميم الحالي سيُستبدَل بالقالب الجاهز.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dCtx, false),
+                                  child: const Text('إلغاء'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(dCtx, true),
+                                  child: const Text('استبدال'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm != true) return;
+                        }
+                        setState(() {
+                          _elements = _presetElements(p.id);
+                          if (p.id == 'pos_receipt') _layoutType = 'pos';
+                        });
+                      },
+                    )),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<_InvoiceElement> _presetElements(String id) {
+    switch (id) {
+      case 'pos_receipt':
+        return [
+          _InvoiceElement(id: 'header', type: 'header', label: 'العنوان',
+              content: 'وصل استلام', fontSize: '22px', color: '#10b981', align: 'center', order: 0),
+          _InvoiceElement(id: 'invoice_number', type: 'field', label: 'رقم',
+              variable: '{invoice_number}', fontSize: '12px', color: '#6b7280', align: 'center', order: 1),
+          _InvoiceElement(id: 'date', type: 'field', label: 'التاريخ',
+              variable: '{date}', fontSize: '12px', color: '#6b7280', align: 'center', order: 2),
+          _InvoiceElement(id: 'divider1', type: 'divider', label: 'خط',
+              dividerStyle: 'dashed', color: '#9ca3af', order: 3),
+          _InvoiceElement(id: 'subscriber_name', type: 'field', label: 'المشترك',
+              variable: '{subscriber_name}', fontSize: '14px', color: '#1f2937', align: 'right', order: 4),
+          _InvoiceElement(id: 'package_name', type: 'field', label: 'الباقة',
+              variable: '{package_name}', fontSize: '12px', color: '#374151', align: 'right', order: 5),
+          _InvoiceElement(id: 'divider2', type: 'divider', label: 'خط',
+              dividerStyle: 'dashed', color: '#9ca3af', order: 6),
+          _InvoiceElement(id: 'package_price', type: 'field', label: 'السعر',
+              variable: '{package_price} IQD', fontSize: '14px', color: '#1f2937', align: 'right', order: 7),
+          _InvoiceElement(id: 'paid_amount', type: 'field', label: 'المدفوع',
+              variable: '{paid_amount} IQD', fontSize: '14px', color: '#047857', align: 'right', order: 8),
+          _InvoiceElement(id: 'remaining_amount', type: 'field', label: 'المتبقي',
+              variable: '{remaining_amount} IQD', fontSize: '14px', color: '#dc2626', align: 'right', order: 9),
+          _InvoiceElement(id: 'divider3', type: 'divider', label: 'خط',
+              dividerStyle: 'dashed', color: '#9ca3af', order: 10),
+          _InvoiceElement(id: 'footer', type: 'footer', label: 'الذيل',
+              content: 'شكراً لتعاملكم معنا', fontSize: '11px', color: '#6b7280', align: 'center', order: 11),
+        ];
+      case 'payment_receipt':
+        return [
+          _InvoiceElement(id: 'header', type: 'header', label: 'العنوان',
+              content: 'وصل تسديد', fontSize: '28px', color: '#10b981', align: 'center', order: 0),
+          _InvoiceElement(id: 'invoice_number', type: 'field', label: 'رقم الوصل',
+              variable: '{invoice_number}', fontSize: '14px', color: '#6b7280', align: 'center', order: 1),
+          _InvoiceElement(id: 'date', type: 'field', label: 'التاريخ',
+              variable: '{date}', fontSize: '14px', color: '#6b7280', align: 'center', order: 2),
+          _InvoiceElement(id: 'divider1', type: 'divider', label: 'خط فاصل',
+              dividerStyle: 'solid', color: '#e5e7eb', order: 3),
+          _InvoiceElement(id: 'subscriber_name', type: 'field', label: 'اسم المشترك',
+              variable: '{subscriber_name}', fontSize: '16px', color: '#1f2937', align: 'right', order: 4),
+          _InvoiceElement(id: 'phone_number', type: 'field', label: 'رقم الهاتف',
+              variable: '{phone_number}', fontSize: '14px', color: '#374151', align: 'right', order: 5),
+          _InvoiceElement(id: 'divider2', type: 'divider', label: 'خط فاصل',
+              dividerStyle: 'solid', color: '#e5e7eb', order: 6),
+          _InvoiceElement(id: 'paid_amount', type: 'field', label: 'المبلغ المدفوع',
+              variable: '{paid_amount} IQD', fontSize: '16px', color: '#047857', align: 'right', order: 7),
+          _InvoiceElement(id: 'debt_amount', type: 'field', label: 'الدين المتبقي',
+              variable: '{debt_amount} IQD', fontSize: '15px', color: '#dc2626', align: 'right', order: 8),
+          _InvoiceElement(id: 'remaining_amount', type: 'field', label: 'الإجمالي المتبقي',
+              variable: '{remaining_amount} IQD', fontSize: '15px', color: '#374151', align: 'right', order: 9),
+          _InvoiceElement(id: 'divider3', type: 'divider', label: 'خط فاصل',
+              dividerStyle: 'solid', color: '#10b981', order: 10),
+          _InvoiceElement(id: 'footer', type: 'footer', label: 'الذيل',
+              content: 'شكراً لكم على التسديد 🙏', fontSize: '14px', color: '#6b7280', align: 'center', order: 11),
+        ];
+      case 'activation_simple':
+        return [
+          _InvoiceElement(id: 'header', type: 'header', label: 'العنوان',
+              content: 'تم التفعيل ✅', fontSize: '28px', color: '#10b981', align: 'center', order: 0),
+          _InvoiceElement(id: 'date', type: 'field', label: 'التاريخ',
+              variable: '{date}', fontSize: '13px', color: '#6b7280', align: 'center', order: 1),
+          _InvoiceElement(id: 'divider1', type: 'divider', label: 'خط فاصل',
+              dividerStyle: 'solid', color: '#e5e7eb', order: 2),
+          _InvoiceElement(id: 'subscriber_name', type: 'field', label: 'المشترك',
+              variable: '{subscriber_name}', fontSize: '17px', color: '#1f2937', align: 'right', order: 3),
+          _InvoiceElement(id: 'package_name', type: 'field', label: 'الباقة',
+              variable: '{package_name}', fontSize: '15px', color: '#374151', align: 'right', order: 4),
+          _InvoiceElement(id: 'package_price', type: 'field', label: 'السعر',
+              variable: '{package_price} IQD', fontSize: '15px', color: '#1f2937', align: 'right', order: 5),
+          _InvoiceElement(id: 'expiry_date', type: 'field', label: 'تاريخ الانتهاء',
+              variable: '{expiry_date}', fontSize: '14px', color: '#374151', align: 'right', order: 6),
+          _InvoiceElement(id: 'divider2', type: 'divider', label: 'خط فاصل',
+              dividerStyle: 'solid', color: '#10b981', order: 7),
+          _InvoiceElement(id: 'footer', type: 'footer', label: 'الذيل',
+              content: 'نتمنى لك تجربة ممتازة 🌐', fontSize: '13px', color: '#6b7280', align: 'center', order: 8),
+        ];
+      case 'full_invoice':
+      default:
+        return _defaultElements();
+    }
+  }
+
   List<_InvoiceElement> _defaultElements() {
     return [
       _InvoiceElement(id: 'header', type: 'header', label: 'العنوان',
@@ -768,6 +966,11 @@ class _InvoiceBuilderPageState extends ConsumerState<_InvoiceBuilderPage>
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            onPressed: _showPresetPicker,
+            icon: const Icon(Icons.auto_awesome_rounded),
+            tooltip: 'توليد قالب جاهز',
+          ),
           IconButton(
             onPressed: _showGlobalSettings,
             icon: const Icon(Icons.settings_rounded),
@@ -1487,5 +1690,73 @@ class _HtmlPreviewWidget extends StatelessWidget {
     } catch (_) {
       return const Color(0xFF1f2937);
     }
+  }
+}
+
+class _PresetTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _PresetTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: accent.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withOpacity(0.16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: accent, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(subtitle,
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: theme.colorScheme.onSurface.withOpacity(0.55))),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_left_rounded,
+                    color: accent, size: 22),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
