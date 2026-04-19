@@ -193,11 +193,15 @@ class FcmService {
 
   static Future<void> _saveLastSuccessfulRegistration(String fcmToken) async {
     final prefs = await SharedPreferences.getInstance();
+    final adminId = prefs.getString(AppConstants.storageAdminId);
     await prefs.setInt(
       AppConstants.storageFcmLastSyncMs,
       DateTime.now().millisecondsSinceEpoch,
     );
     await prefs.setString(AppConstants.storageFcmLastToken, fcmToken);
+    if (adminId != null && adminId.isNotEmpty) {
+      await prefs.setString(AppConstants.storageFcmLastAdminId, adminId);
+    }
   }
 
   static Future<void> _clearLastSuccessfulRegistration() async {
@@ -209,6 +213,11 @@ class FcmService {
   static Future<int> _getLastSyncMs() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(AppConstants.storageFcmLastSyncMs) ?? 0;
+  }
+
+  static Future<String?> _getLastRegisteredAdminId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(AppConstants.storageFcmLastAdminId);
   }
 
   static void _ensureTokenRefreshListener() {
@@ -399,7 +408,15 @@ class FcmService {
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final lastSyncMs = await _getLastSyncMs();
-    if (!force && now - lastSyncMs < _softResyncWindow.inMilliseconds) {
+    final currentAdminId = await storage.getAdminId();
+    final lastRegisteredAdminId = await _getLastRegisteredAdminId();
+    final adminChanged = currentAdminId != null &&
+        currentAdminId.isNotEmpty &&
+        currentAdminId != lastRegisteredAdminId;
+
+    if (!force &&
+        !adminChanged &&
+        now - lastSyncMs < _softResyncWindow.inMilliseconds) {
       return;
     }
 
@@ -478,16 +495,12 @@ class FcmService {
 
     await storage.setFcmEnabled(true);
     _ensureTokenRefreshListener();
-
-    final ok = await _registerCurrentTokenWithRecovery();
     await registerPeriodicSyncTask();
-    if (!ok) {
-      _scheduleDeferredRegistration();
-    }
+    unawaited(syncRegistrationIfNeeded(storage, force: true));
 
     return FcmEnableResult(
       enabled: true,
-      pushLinked: ok,
+      pushLinked: true,
       osPermissionGranted: true,
       message: 'تم تفعيل إشعارات الجهاز',
     );

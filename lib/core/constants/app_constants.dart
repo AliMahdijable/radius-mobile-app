@@ -27,6 +27,7 @@ class AppConstants {
   static const String storageFcmEnabled = 'fcmEnabled';
   static const String storageFcmLastSyncMs = 'fcmLastSyncMs';
   static const String storageFcmLastToken = 'fcmLastToken';
+  static const String storageFcmLastAdminId = 'fcmLastAdminId';
   static const String storageAppNotificationLastSeenPrefix =
       'appNotificationLastSeen:';
 

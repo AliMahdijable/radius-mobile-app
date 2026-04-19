@@ -141,7 +141,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.invalidate(schedulesProvider);
   }
 
-  Future<void> _syncNotificationServices() async {
+  Future<void> _syncNotificationServices({bool forcePushSync = false}) async {
     final notificationsEnabled = await _storage.getFcmEnabled();
     if (!notificationsEnabled) return;
 
@@ -150,7 +150,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     await ExpiryPushService.onLoggedIn(_storage);
-    await FcmService.syncRegistrationIfNeeded(_storage);
+    await FcmService.syncRegistrationIfNeeded(
+      _storage,
+      force: forcePushSync,
+    );
   }
 
   Future<void> checkAuth() async {
@@ -189,7 +192,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: null,
       );
       Future.microtask(() {
-        _syncNotificationServices();
+        _syncNotificationServices(forcePushSync: true);
       });
     } catch (e) {
       state = state.copyWith(
@@ -279,7 +282,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _resetSessionScopedProviders();
         _socket.disconnect();
         _socket.connect(user.id);
-        await _syncNotificationServices();
+        await _syncNotificationServices(forcePushSync: true);
 
         state = AuthState(
           status: AuthStatus.authenticated,
