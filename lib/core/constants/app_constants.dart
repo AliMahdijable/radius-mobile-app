@@ -25,6 +25,8 @@ class AppConstants {
       'pushLastOverdueNotifDay';
   static const String storagePushLastFetchMs = 'pushLastFetchMs';
   static const String storageFcmEnabled = 'fcmEnabled';
+  static const String storageFcmLastSyncMs = 'fcmLastSyncMs';
+  static const String storageFcmLastToken = 'fcmLastToken';
   static const String storageAppNotificationLastSeenPrefix =
       'appNotificationLastSeen:';
 

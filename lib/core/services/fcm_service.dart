@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../constants/api_constants.dart';
 import '../constants/app_constants.dart';
@@ -37,6 +38,11 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
 class FcmService {
   FcmService._();
 
+  static const String periodicSyncUniqueName = 'mysvcs_fcm_sync_v1';
+  static const String periodicSyncTaskName = 'fcmTokenSync';
+  static const Duration _periodicSyncFrequency = Duration(hours: 3);
+  static const Duration _softResyncWindow = Duration(minutes: 30);
+
   static bool _initialized = false;
   static bool _tokenRefreshListenerAttached = false;
   static bool _deferredRegistrationRunning = false;
@@ -47,6 +53,7 @@ class FcmService {
     if (_initialized) return;
 
     await Firebase.initializeApp();
+    await FirebaseMessaging.instance.setAutoInitEnabled(true);
     FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
     // إعداد local notifications لعرض الإشعارات في foreground
@@ -164,6 +171,7 @@ class FcmService {
   static Future<String?> _tryGetFcmToken() async {
     try {
       final messaging = FirebaseMessaging.instance;
+      await messaging.setAutoInitEnabled(true);
       try {
         await messaging.requestPermission(
           alert: true,
@@ -183,41 +191,96 @@ class FcmService {
     }
   }
 
+  static Future<void> _saveLastSuccessfulRegistration(String fcmToken) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      AppConstants.storageFcmLastSyncMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    await prefs.setString(AppConstants.storageFcmLastToken, fcmToken);
+  }
+
+  static Future<void> _clearLastSuccessfulRegistration() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(AppConstants.storageFcmLastSyncMs);
+    await prefs.remove(AppConstants.storageFcmLastToken);
+  }
+
+  static Future<int> _getLastSyncMs() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(AppConstants.storageFcmLastSyncMs) ?? 0;
+  }
+
   static void _ensureTokenRefreshListener() {
     if (_tokenRefreshListenerAttached) return;
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      unawaited(registerToken(newToken));
+      unawaited(_registerSpecificToken(newToken));
     });
     _tokenRefreshListenerAttached = true;
+  }
+
+  static Future<bool> _registerSpecificToken(String fcmToken) async {
+    final ok = await registerToken(fcmToken);
+    if (ok) {
+      await _saveLastSuccessfulRegistration(fcmToken);
+    }
+    return ok;
   }
 
   static Future<bool> _registerCurrentTokenOnce() async {
     final fcmToken = await _tryGetFcmToken();
     if (fcmToken == null || fcmToken.isEmpty) return false;
-    return registerToken(fcmToken);
+    return _registerSpecificToken(fcmToken);
+  }
+
+  static Future<bool> _forceRefreshAndRegister({String? previousToken}) async {
+    final delays = <Duration>[
+      Duration.zero,
+      const Duration(seconds: 2),
+      const Duration(seconds: 5),
+    ];
+
+    String? lastSeenToken = previousToken;
+    for (final delay in delays) {
+      if (delay > Duration.zero) {
+        await Future<void>.delayed(delay);
+      }
+
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (error) {
+        debugPrint('FCM: deleteToken failed during recovery: $error');
+      }
+
+      final refreshedToken = await _tryGetFcmToken();
+      if (refreshedToken == null || refreshedToken.isEmpty) {
+        continue;
+      }
+
+      if (lastSeenToken != null && refreshedToken == lastSeenToken) {
+        debugPrint('FCM: refreshed token unchanged, retrying recovery');
+      }
+
+      if (await _registerSpecificToken(refreshedToken)) {
+        return true;
+      }
+
+      lastSeenToken = refreshedToken;
+    }
+
+    return false;
   }
 
   static Future<bool> _registerCurrentTokenWithRecovery() async {
     final firstToken = await _tryGetFcmToken();
     if (firstToken != null &&
         firstToken.isNotEmpty &&
-        await registerToken(firstToken)) {
+        await _registerSpecificToken(firstToken)) {
       return true;
     }
 
     debugPrint('FCM: token registration failed, forcing token refresh');
-    try {
-      await FirebaseMessaging.instance.deleteToken();
-    } catch (error) {
-      debugPrint('FCM: deleteToken failed during recovery: $error');
-    }
-
-    final refreshedToken = await _tryGetFcmToken();
-    if (refreshedToken == null || refreshedToken.isEmpty) {
-      return false;
-    }
-
-    return registerToken(refreshedToken);
+    return _forceRefreshAndRegister(previousToken: firstToken);
   }
 
   static void _scheduleDeferredRegistration() {
@@ -301,6 +364,72 @@ class FcmService {
     }
   }
 
+  static Future<void> registerPeriodicSyncTask() async {
+    try {
+      await Workmanager().registerPeriodicTask(
+        periodicSyncUniqueName,
+        periodicSyncTaskName,
+        frequency: _periodicSyncFrequency,
+        constraints: Constraints(networkType: NetworkType.connected),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      );
+    } catch (error) {
+      debugPrint('FCM periodic sync register warning: $error');
+    }
+  }
+
+  static Future<void> cancelPeriodicSyncTask() async {
+    try {
+      await Workmanager().cancelByUniqueName(periodicSyncUniqueName);
+    } catch (error) {
+      debugPrint('FCM periodic sync cancel warning: $error');
+    }
+  }
+
+  static Future<void> syncRegistrationIfNeeded(
+    StorageService storage, {
+    bool force = false,
+  }) async {
+    if (!await storage.getFcmEnabled()) return;
+    if (!await hasOsPermission()) {
+      await storage.setFcmEnabled(false);
+      await cancelPeriodicSyncTask();
+      return;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastSyncMs = await _getLastSyncMs();
+    if (!force && now - lastSyncMs < _softResyncWindow.inMilliseconds) {
+      return;
+    }
+
+    await init();
+    _ensureTokenRefreshListener();
+
+    final ok = await _registerCurrentTokenWithRecovery();
+    await registerPeriodicSyncTask();
+    if (!ok) {
+      _scheduleDeferredRegistration();
+    }
+  }
+
+  @pragma('vm:entry-point')
+  static Future<void> runBackgroundTokenSync() async {
+    final storage = StorageService();
+    if (!await storage.getFcmEnabled()) return;
+    if (!await hasOsPermission()) {
+      await storage.setFcmEnabled(false);
+      await cancelPeriodicSyncTask();
+      return;
+    }
+
+    await init();
+    final ok = await _registerCurrentTokenWithRecovery();
+    if (!ok) {
+      debugPrint('FCM: background token sync failed');
+    }
+  }
+
   /// حذف التوكن من السيرفر
   static Future<void> unregisterToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -351,6 +480,7 @@ class FcmService {
     _ensureTokenRefreshListener();
 
     final ok = await _registerCurrentTokenWithRecovery();
+    await registerPeriodicSyncTask();
     if (!ok) {
       _scheduleDeferredRegistration();
     }
@@ -367,25 +497,19 @@ class FcmService {
   static Future<void> disable(StorageService storage) async {
     await unregisterToken();
     await storage.setFcmEnabled(false);
+    await cancelPeriodicSyncTask();
+    await _clearLastSuccessfulRegistration();
   }
 
   /// عند تسجيل الدخول: إعادة تسجيل التوكن إذا كان FCM مفعل
   static Future<void> onLoggedIn(StorageService storage) async {
-    if (!await storage.getFcmEnabled()) return;
-    if (!await hasOsPermission()) {
-      await storage.setFcmEnabled(false);
-      return;
-    }
-    await init();
-    _ensureTokenRefreshListener();
-    final ok = await _registerCurrentTokenWithRecovery();
-    if (!ok) {
-      _scheduleDeferredRegistration();
-    }
+    await syncRegistrationIfNeeded(storage, force: true);
   }
 
   /// عند تسجيل الخروج: حذف التوكن
   static Future<void> onLoggedOut() async {
     await unregisterToken();
+    await cancelPeriodicSyncTask();
+    await _clearLastSuccessfulRegistration();
   }
 }

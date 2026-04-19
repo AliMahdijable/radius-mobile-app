@@ -10,6 +10,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../constants/api_constants.dart';
 import '../constants/app_constants.dart';
+import 'fcm_service.dart';
 import 'storage_service.dart';
 
 const String _wmUniqueName = 'mysvcs_expiry_v1';
@@ -37,6 +38,14 @@ void expiryPushCallbackDispatcher() {
         await ExpiryPushService.runExpiryCheck();
       } catch (e, st) {
         debugPrint('ExpiryPushService background: $e\n$st');
+      }
+    }
+    if (task == FcmService.periodicSyncTaskName ||
+        task == FcmService.periodicSyncUniqueName) {
+      try {
+        await FcmService.runBackgroundTokenSync();
+      } catch (e, st) {
+        debugPrint('FcmService background sync: $e\n$st');
       }
     }
     return Future.value(true);

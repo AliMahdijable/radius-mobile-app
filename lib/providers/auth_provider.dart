@@ -150,7 +150,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     await ExpiryPushService.onLoggedIn(_storage);
-    await FcmService.onLoggedIn(_storage);
+    await FcmService.syncRegistrationIfNeeded(_storage);
   }
 
   Future<void> checkAuth() async {
