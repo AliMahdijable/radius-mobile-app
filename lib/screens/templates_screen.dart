@@ -23,6 +23,78 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     });
   }
 
+  // قوالب جاهزة لكل نوع — النقر على زر "توليد" يُعبِّئ محتوى الرسالة بهذه النصوص
+  // مع المتغيرات المدعومة حتى يكتمل النص تلقائياً عند الإرسال.
+  String _generateTemplate(String type) {
+    switch (type) {
+      case 'debt_reminder':
+        return 'عزيزي {firstname} 🙏\n'
+            'نود تذكيركم بوجود مبلغ دين قدره {debt_amount} IQD على حسابكم.\n'
+            'الباقة: {package_name}\n'
+            'تاريخ الانتهاء: {expiry_date}\n'
+            'المتبقي: {remaining_days}\n\n'
+            'يرجى التواصل معنا للتسديد. شكراً لتعاونكم 💚';
+      case 'expiry_warning':
+        return 'تنبيه — اشتراكك على وشك الانتهاء ⏰\n\n'
+            'عزيزي {firstname}،\n'
+            'باقتكم ({package_name}) ستنتهي خلال {remaining_days}.\n'
+            'تاريخ الانتهاء: {expiry_date}\n'
+            'سعر التجديد: {package_price} IQD\n\n'
+            'يرجى التجديد قبل الانقطاع.';
+      case 'service_end':
+        return 'انتهاء الاشتراك 🚫\n\n'
+            'عزيزي {firstname}،\n'
+            'انتهت صلاحية اشتراكك في باقة {package_name} بتاريخ {expiry_date}.\n'
+            'سعر التجديد: {package_price} IQD\n\n'
+            'نرجو التواصل لتجديد الخدمة.';
+      case 'activation_notice':
+        return 'تم التفعيل بنجاح ✅\n\n'
+            'أهلاً {firstname}،\n'
+            'تم تفعيل اشتراكك في {package_name}.\n'
+            'السعر: {package_price} IQD\n'
+            'المبلغ المدفوع: {paid_amount} IQD\n'
+            'تاريخ الانتهاء: {expiry_date}\n'
+            'المتبقي: {remaining_days}\n\n'
+            'نتمنى لك تجربة ممتازة 🌐';
+      case 'renewal':
+        return 'تم التجديد 🔄\n\n'
+            'عزيزي {firstname}،\n'
+            'تم تجديد اشتراكك في {package_name}.\n'
+            'السعر: {package_price} IQD\n'
+            'المبلغ المدفوع: {paid_amount} IQD\n'
+            'تاريخ الانتهاء الجديد: {expiry_date}\n'
+            'المتبقي: {remaining_days}\n\n'
+            'شكراً لاستمراركم معنا 💚';
+      case 'payment_confirmation':
+        return 'تم استلام تسديد 💳\n\n'
+            'عزيزي {firstname}،\n'
+            'استلمنا منكم مبلغ {paid_amount} IQD.\n'
+            'الدين الحالي: {debt_amount} IQD\n'
+            'الرصيد الحالي: {credit_amount} IQD\n\n'
+            'شكراً لكم 🙏';
+      case 'welcome_message':
+        return 'أهلاً بك في خدماتنا 🎉\n\n'
+            'مرحباً {firstname}،\n'
+            'الباقة: {package_name}\n'
+            'اسم المستخدم: {username}\n'
+            'رقم الهاتف: {phone}\n'
+            'تاريخ الانتهاء: {expiry_date}\n\n'
+            'نتمنى لك تجربة رائعة 🌐';
+      case 'manager_agent':
+        return 'عزيزي المدير {manager_name} 👋\n\n'
+            'تم تسجيل حركة مالية على حسابك:\n'
+            'النوع: {action_type}\n'
+            'المبلغ: {amount} IQD\n'
+            'الوصف: {movement_description}\n\n'
+            'الرصيد السابق: {previous_credit} IQD\n'
+            'الرصيد الحالي: {current_credit} IQD\n'
+            'الدين السابق: {previous_debt} IQD\n'
+            'الدين الحالي: {current_debt} IQD';
+      default:
+        return '';
+    }
+  }
+
   void _showEditSheet(TemplateModel? template) {
     final nameController =
         TextEditingController(text: template?.templateName ?? '');
@@ -178,6 +250,69 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                     ),
                     const SizedBox(height: 10),
 
+                    // زر توليد القالب الجاهز
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'محتوى الرسالة',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            final preset = _generateTemplate(selectedType);
+                            if (preset.isEmpty) return;
+                            final current = contentController.text.trim();
+                            if (current.isNotEmpty) {
+                              showDialog<bool>(
+                                context: ctx,
+                                builder: (dCtx) => AlertDialog(
+                                  title: const Text('استبدال المحتوى؟'),
+                                  content: const Text(
+                                    'المحتوى الحالي سيُستبدل بالقالب الجاهز. هل تريد المتابعة؟',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(dCtx, false),
+                                      child: const Text('إلغاء'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(dCtx, true),
+                                      child: const Text('استبدال'),
+                                    ),
+                                  ],
+                                ),
+                              ).then((confirm) {
+                                if (confirm == true) {
+                                  contentController.text = preset;
+                                  setSheetState(() {});
+                                }
+                              });
+                            } else {
+                              contentController.text = preset;
+                              setSheetState(() {});
+                            }
+                          },
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                          label: const Text(
+                            'توليد قالب جاهز',
+                            style: TextStyle(fontSize: 11.5),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+
                     // محتوى الرسالة - يتمدد ليملأ المساحة
                     Expanded(
                       child: TextField(
@@ -191,7 +326,6 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                           fontSize: 14, height: 1.6, fontFamily: 'Cairo',
                         ),
                         decoration: const InputDecoration(
-                          labelText: 'محتوى الرسالة',
                           hintText: 'مرحبا {firstname}...',
                           alignLabelWithHint: true,
                           border: OutlineInputBorder(),
