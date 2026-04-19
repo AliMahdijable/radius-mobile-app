@@ -691,7 +691,7 @@ class _TransactionRow extends StatelessWidget {
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
     if (dt != null) {
-      formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
+      formattedTime = AppHelpers.formatReportDateTime(time);
     }
 
     String typeLabel = _typeLabelStatic(type);

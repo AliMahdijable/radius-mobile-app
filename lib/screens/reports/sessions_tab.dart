@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/utils/csv_export.dart';
+import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
@@ -103,9 +104,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
 
   String _formatSessionTime(dynamic time) {
     if (time == null || time.toString().isEmpty) return '—';
-    final dt = DateTime.tryParse(time.toString());
-    if (dt == null) return time.toString();
-    return intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
+    return AppHelpers.formatReportDateTime(time.toString());
   }
 
   Future<void> _exportCsv() async {

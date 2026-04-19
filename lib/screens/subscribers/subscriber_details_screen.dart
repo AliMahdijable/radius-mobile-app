@@ -35,6 +35,21 @@ class _SubscriberDetailsScreenState
     extends ConsumerState<SubscriberDetailsScreen> {
   bool _isProcessing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // حقول SAS4 admin_list لا تعيد دائماً framedipaddress/macAddress.
+    // نعيد تحميل التفاصيل الدقيقة عند فتح الصفحة لنكشف عن الـ IP الحالي عند الاتصال.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final id = _subscriberId;
+      if (id == null || !mounted) return;
+      ref
+          .read(subscribersProvider.notifier)
+          .refreshSubscriberAfterOperation(id)
+          .catchError((_) {});
+    });
+  }
+
   int? get _subscriberId =>
       int.tryParse(widget.subscriber.idx ?? '');
 

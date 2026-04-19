@@ -491,7 +491,7 @@ class _ActivityRow extends StatelessWidget {
 
     String formattedTime = time;
     final dt = DateTime.tryParse(time);
-    if (dt != null) formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
+    if (dt != null) formattedTime = AppHelpers.formatReportDateTime(time);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -510,21 +510,21 @@ class _ActivityRow extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(style.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: style.color)),
+                Text(style.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: style.color)),
                 const Spacer(),
-                Text(formattedTime, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4))),
+                Text(formattedTime, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55))),
               ]),
               if (target.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(top: 2),
-                    child: Text(target, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface.withValues(alpha: .7)))),
+                Padding(padding: const EdgeInsets.only(top: 3),
+                    child: Text(target, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withValues(alpha: .85)))),
               if (desc.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(top: 2),
-                    child: Text(desc, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                Padding(padding: const EdgeInsets.only(top: 3),
+                    child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                         maxLines: 2, overflow: TextOverflow.ellipsis)),
               if (admin.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 2),
-                    child: Text('المدير: $admin', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary.withValues(alpha: .6)))),
+                    child: Text('المدير: $admin', style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .7)))),
             ]),
           ),
         ],

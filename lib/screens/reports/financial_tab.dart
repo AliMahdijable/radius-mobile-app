@@ -540,7 +540,7 @@ class _LogRow extends StatelessWidget {
 
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
-    if (dt != null) formattedTime = intl.DateFormat('MM/dd HH:mm').format(dt.toLocal());
+    if (dt != null) formattedTime = AppHelpers.formatReportDateTime(time);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
@@ -553,9 +553,9 @@ class _LogRow extends StatelessWidget {
           Expanded(
             flex: 3,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(target, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+              Text(target, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
               if (desc.isNotEmpty)
-                Text(desc, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                     maxLines: 3, overflow: TextOverflow.ellipsis),
             ]),
           ),
@@ -563,8 +563,8 @@ class _LogRow extends StatelessWidget {
             flex: 2,
             child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text('${isDebt ? "-" : "+"}${AppHelpers.formatMoney(amount)}',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: isDebt ? Colors.red : Colors.green)),
-              Text(formattedTime, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: .4))),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDebt ? Colors.red : Colors.green)),
+              Text(formattedTime, style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: .55))),
             ]),
           ),
         ],

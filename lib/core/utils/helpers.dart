@@ -27,13 +27,36 @@ class AppHelpers {
     if (date == null) return dateStr;
     final baghdad = toBaghdadTime(date);
     final datePart = intl.DateFormat('yyyy/MM/dd').format(baghdad);
-    final hour24 = baghdad.hour;
-    final hour12 = hour24 == 0
-        ? 12
-        : (hour24 > 12 ? hour24 - 12 : hour24);
-    final minute = baghdad.minute.toString().padLeft(2, '0');
+    return '$datePart  ${_twelveHourTime(baghdad)}';
+  }
+
+  /// Shorter 12-hour variant for report rows (MM/dd hh:mm صباحاً/مساءً).
+  /// Accepts either an ISO string (UTC → Baghdad conversion) or a local
+  /// DateTime parsable string. Defaults to '—' when empty/invalid.
+  static String formatReportDateTime(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '—';
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return dateStr;
+    final baghdad = date.isUtc ? toBaghdadTime(date) : date;
+    final datePart = intl.DateFormat('MM/dd').format(baghdad);
+    return '$datePart  ${_twelveHourTime(baghdad)}';
+  }
+
+  /// 12h-only (hh:mm صباحاً/مساءً) for report rows that already show the date
+  /// in a separate column.
+  static String formatReportTime(DateTime? dt) {
+    if (dt == null) return '—';
+    final local = dt.isUtc ? toBaghdadTime(dt) : dt;
+    return _twelveHourTime(local);
+  }
+
+  static String _twelveHourTime(DateTime dt) {
+    final hour24 = dt.hour;
+    final hour12 =
+        hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    final minute = dt.minute.toString().padLeft(2, '0');
     final meridiem = hour24 < 12 ? 'صباحاً' : 'مساءً';
-    return '$datePart  ${hour12.toString().padLeft(2, '0')}:$minute $meridiem';
+    return '${hour12.toString().padLeft(2, '0')}:$minute $meridiem';
   }
 
   /// Format date relative (e.g., "منذ 5 دقائق")

@@ -19,6 +19,7 @@ import '../core/services/storage_service.dart';
 import '../models/app_notification_model.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/subscriber_search_sheet.dart';
 import '../core/theme/app_theme.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -55,6 +56,7 @@ String _formatRemaining(String? expiration) {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
+  DateTime? _lastBackPress;
   bool _alertsEnabled = true;
   bool _alertsDismissed = false;
   String? _lastBroadcastEvent;
@@ -440,31 +442,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           setState(() => _currentIndex = 0);
           return;
         }
-        final shouldExit = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('الخروج من التطبيق'),
-            content: const Text('هل تريد الخروج؟'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('لا'),
+        // نمط "اضغط مرة أخرى للخروج" — ضغطتان خلال ثانيتين للخروج
+        final now = DateTime.now();
+        final last = _lastBackPress;
+        if (last == null ||
+            now.difference(last) > const Duration(seconds: 2)) {
+          _lastBackPress = now;
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('اضغط مرة أخرى للخروج'),
+                duration: Duration(milliseconds: 1800),
+                behavior: SnackBarBehavior.floating,
               ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('خروج', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
-        );
-        if (shouldExit == true) {
-          // Clean exit: close all resources and exit cleanly
-          WidgetsBinding.instance.removeObserver(this);
-          Future.delayed(const Duration(milliseconds: 200), () {
-            SystemNavigator.pop();
-          });
+            );
+          }
+          return;
         }
+        // ضغطة ثانية خلال النافذة → خروج نظيف
+        WidgetsBinding.instance.removeObserver(this);
+        Future.delayed(const Duration(milliseconds: 150), () {
+          SystemNavigator.pop();
+        });
       },
       child: Scaffold(
       appBar: AppBar(
@@ -626,6 +626,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           ),
         ],
       ),
+      floatingActionButton: _currentIndex == 0
+          ? FloatingActionButton(
+              heroTag: 'dashboard_search',
+              backgroundColor: theme.colorScheme.primary,
+              onPressed: () => showSubscriberSearchSheet(context),
+              tooltip: 'بحث عن مشترك',
+              child: const Icon(Icons.search_rounded, color: Colors.white),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     ),
     );
   }
