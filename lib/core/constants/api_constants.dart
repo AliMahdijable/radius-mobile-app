@@ -25,7 +25,6 @@ class ApiConstants {
   static const String waConnectionStatus = '/api/whatsapp/connection-status';
   static const String waPendingQr = '/api/whatsapp/pending-qr';
   static const String waGetQr = '/api/whatsapp/get-qr';
-  static const String waRequestPairCode = '/api/whatsapp/request-pair-code';
 
   // WhatsApp Messaging
   static const String waSendMessage = '/api/whatsapp/send-message';
