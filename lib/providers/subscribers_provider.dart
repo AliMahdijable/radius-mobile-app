@@ -461,14 +461,13 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// يجلب الجلسات المفتوحة (acctstoptime فارغ) من SAS4 ويملأ حقل ipAddress
-  /// للمشتركين المتصلين الذين لم يُرجع لهم admin_list أي framedipaddress.
+  /// يجلب أحدث الجلسات من SAS4 ويملأ حقل ipAddress لكل مشترك متصل
+  /// (يشمل المنتهي صلاحيته الذي ما زالت جلسته الراديوسية مفتوحة).
   Future<void> loadOnlineIps() async {
     try {
-      // جلب صفحة كبيرة من الجلسات الأخيرة، ونصفّي الـ open ones محلياً
       final payload = EncryptionService.encrypt({
         'page': 1,
-        'count': 1000,
+        'count': 2000,
         'sortBy': 'acctstarttime',
         'direction': 'desc',
         'search': '',
@@ -498,46 +497,71 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       else if (data is Map && data['sessions'] is List) rows = data['sessions'] as List;
       else if (data is List) rows = data;
 
-      final ipByUser = <String, String>{};
+      // IP من الجلسات المفتوحة فقط (acctstoptime فارغ) — إشارة على اتصال حي الآن
+      final openIpByUser = <String, String>{};
+      // IP من أي جلسة حديثة (مفتوحة أو مغلقة) — للاحتياط
+      final recentIpByUser = <String, String>{};
       for (final r in rows) {
         if (r is! Map) continue;
-        final stop = r['acctstoptime']?.toString().trim() ?? '';
-        // جلسة مفتوحة: لا يوجد stop time (null / فارغ / '-')
-        final isOpen = stop.isEmpty || stop == '-' || stop.toLowerCase() == 'null';
-        if (!isOpen) continue;
         final uname = r['username']?.toString().trim().toLowerCase();
         final ip = r['framedipaddress']?.toString().trim();
         if (uname == null || uname.isEmpty) continue;
         if (ip == null || ip.isEmpty || ip == '-') continue;
-        // تفضيل أحدث جلسة (المدخلة أولاً بحسب ترتيب desc)
-        ipByUser.putIfAbsent(uname, () => ip);
+        final stop = r['acctstoptime']?.toString().trim() ?? '';
+        final isOpen = stop.isEmpty || stop == '-' || stop.toLowerCase() == 'null';
+        if (isOpen) {
+          openIpByUser.putIfAbsent(uname, () => ip);
+        }
+        recentIpByUser.putIfAbsent(uname, () => ip);
       }
-
-      if (ipByUser.isEmpty) return;
 
       final current = state.subscribers;
       var changed = 0;
       final updated = <SubscriberModel>[];
       for (final s in current) {
         final key = s.username.toLowerCase();
-        final newIp = ipByUser[key];
-        if (newIp != null && newIp != (s.ipAddress ?? '')) {
-          updated.add(_copyWithIp(s, newIp));
+        final openIp = openIpByUser[key];
+        final recentIp = recentIpByUser[key];
+
+        // 1) جلسة مفتوحة → online مع IP (تتجاوز الحالة المنتهية)
+        if (openIp != null && openIp != (s.ipAddress ?? '')) {
+          updated.add(_copyWithIp(s, openIp, markOnline: true));
           changed++;
-        } else {
-          updated.add(s);
+          continue;
         }
+        // 2) لم توجد جلسة مفتوحة لكن admin_list علّمه online → استخدم آخر IP معروف
+        if (openIp == null && s.isOnline && (s.ipAddress ?? '').isEmpty && recentIp != null) {
+          updated.add(_copyWithIp(s, recentIp, markOnline: true));
+          changed++;
+          continue;
+        }
+        updated.add(s);
       }
       if (changed > 0) {
-        dev.log('loadOnlineIps: enriched $changed subscribers with IP', name: 'SUBS');
+        dev.log('loadOnlineIps: enriched $changed subscribers (open=${openIpByUser.length}, recent=${recentIpByUser.length})', name: 'SUBS');
         state = state.copyWith(subscribers: updated);
+      }
+
+      // fallback: لأي مشترك online بدون IP بعد، نجلب تفاصيله من /subscriber/:id
+      // (يحدث أحياناً لمشتركين منتهين حالياً متصلين لم يظهروا في UserSessions)
+      final stillMissing = state.subscribers
+          .where((s) => s.isOnline && (s.ipAddress ?? '').trim().isEmpty && s.idx != null)
+          .take(10) // حدّ أعلى للإنصاف
+          .toList();
+      for (final s in stillMissing) {
+        final id = int.tryParse(s.idx ?? '');
+        if (id == null) continue;
+        try {
+          // refreshSubscriberAfterOperation يستدعي /subscriber/:id ويدمج framedipaddress
+          await refreshSubscriberAfterOperation(id);
+        } catch (_) { /* تجاهل */ }
       }
     } catch (e) {
       dev.log('loadOnlineIps error: $e', name: 'SUBS');
     }
   }
 
-  SubscriberModel _copyWithIp(SubscriberModel s, String ip) {
+  SubscriberModel _copyWithIp(SubscriberModel s, String ip, {bool markOnline = false}) {
     return SubscriberModel(
       idx: s.idx,
       username: s.username,
@@ -555,9 +579,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       balance: s.balance,
       price: s.price,
       parentUsername: s.parentUsername,
-      // علامة online تُستمد من الجلسة المفتوحة إن وُجدت — نمرّر true لكي يظهر
-      // chip الـ IP حتى لو لم يكن admin_list قد علّمه كـ online بعد.
-      isOnlineFlag: true,
+      isOnlineFlag: markOnline ? true : s.isOnlineFlag,
       enabled: s.enabled,
       ipAddress: ip,
       macAddress: s.macAddress,

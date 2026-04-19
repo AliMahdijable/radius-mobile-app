@@ -2892,34 +2892,34 @@ class _IpDetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.lan_rounded,
-              size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: 10),
-          Text('عنوان IP',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              )),
-          const SizedBox(width: 12),
+          Icon(Icons.lan_rounded, size: 16, color: accent),
+          const SizedBox(width: 8),
+          Text(
+            'IP',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.55),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withOpacity(0.3),
-                    ),
+                    color: accent.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: accent.withOpacity(0.22)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -2929,17 +2929,15 @@ class _IpDetailRow extends StatelessWidget {
                         ip,
                         style: TextStyle(
                           fontFamily: 'monospace',
-                          fontSize: 13,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.primary,
+                          color: accent,
+                          letterSpacing: 0,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.open_in_new_rounded,
-                        size: 14,
-                        color: theme.colorScheme.primary,
-                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.open_in_new_rounded,
+                          size: 11, color: accent),
                     ],
                   ),
                 ),
