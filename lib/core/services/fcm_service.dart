@@ -405,10 +405,12 @@ class FcmService {
     bool force = false,
   }) async {
     if (!await storage.getFcmEnabled()) return;
-    if (!await hasOsPermission()) {
-      await storage.setFcmEnabled(false);
-      await cancelPeriodicSyncTask();
-      return;
+
+    final osPermissionGranted = await hasOsPermission();
+    if (!osPermissionGranted) {
+      debugPrint(
+        'FCM sync: OS notification permission is not confirmed, but token registration will continue.',
+      );
     }
 
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -439,10 +441,12 @@ class FcmService {
   static Future<void> runBackgroundTokenSync() async {
     final storage = StorageService();
     if (!await storage.getFcmEnabled()) return;
-    if (!await hasOsPermission()) {
-      await storage.setFcmEnabled(false);
-      await cancelPeriodicSyncTask();
-      return;
+
+    final osPermissionGranted = await hasOsPermission();
+    if (!osPermissionGranted) {
+      debugPrint(
+        'FCM background sync: OS notification permission is not confirmed, continuing token registration.',
+      );
     }
 
     await init();
