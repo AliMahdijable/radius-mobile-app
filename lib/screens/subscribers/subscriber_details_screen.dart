@@ -1445,14 +1445,8 @@ class _SubscriberDetailsScreenState
     }
   }
 
-  /// تحقّق من تفعيل الميزة المقابلة لنوع القالب قبل الإرسال التلقائي.
-  /// لو الميزة مُطفأة (مثلاً sendOnActivation=false) نُلغي الإرسال صامتاً.
-  Future<bool> _isFeatureEnabledForTemplate(String templateType) async {
-    // نُحمّل الميزات مرة واحدة عند الحاجة
-    final snapshot = ref.read(settingsProvider);
-    if (!snapshot.hasLoaded && !snapshot.isLoading) {
-      await ref.read(settingsProvider.notifier).loadFeatures();
-    }
+  /// الميزة المقابلة لنوع القالب في إعدادات الواتساب (أو null لو لا flag).
+  bool? _featureValueForTemplate(String templateType) {
     final features = ref.read(settingsProvider).features;
     switch (templateType) {
       case 'activation_notice':
@@ -1467,17 +1461,48 @@ class _SubscriberDetailsScreenState
         return features.serviceEndNotification;
       case 'debt_reminder':
         return features.debtReminder;
-      // payment_confirmation: لا يوجد flag مخصّص في الإعدادات → مسموح دائماً.
       default:
-        return true;
+        return null; // بلا flag مخصّص
+    }
+  }
+
+  String _featureArabicNameForTemplate(String templateType) {
+    switch (templateType) {
+      case 'activation_notice':
+        return 'إشعار عند التفعيل';
+      case 'renewal':
+        return 'إشعار عند التمديد';
+      case 'welcome_message':
+        return 'رسالة الترحيب';
+      case 'expiry_warning':
+        return 'تنبيه قرب الانتهاء';
+      case 'service_end':
+        return 'تنبيه انتهاء الخدمة';
+      case 'debt_reminder':
+        return 'تذكير الدين';
+      default:
+        return templateType;
     }
   }
 
   Future<void> _sendWhatsAppFromTemplate(String templateType, {
     Map<String, String>? extraVars,
   }) async {
-    // 1) احترام toggles ميزات الواتساب — إن كانت الميزة مُطفأة نلغي بصمت.
-    if (!await _isFeatureEnabledForTemplate(templateType)) {
+    // 1) احترام toggles ميزات الواتساب — إن مُطفأة، نُنبّه المدير.
+    final settingsSnapshot = ref.read(settingsProvider);
+    if (!settingsSnapshot.hasLoaded && !settingsSnapshot.isLoading) {
+      await ref.read(settingsProvider.notifier).loadFeatures();
+    }
+    final featureEnabled = _featureValueForTemplate(templateType);
+    if (featureEnabled == false) {
+      if (mounted) {
+        AppSnackBar.warning(
+          context,
+          'لم يُرسل واتساب — الميزة مُعطَّلة',
+          detail:
+              'فعّل "${_featureArabicNameForTemplate(templateType)}" من إعدادات الواتساب لبدء الإرسال التلقائي.',
+        );
+      }
       return;
     }
 
@@ -1509,13 +1534,26 @@ class _SubscriberDetailsScreenState
         await ref.read(templatesProvider.notifier).loadTemplates();
       }
       final allTemplates = ref.read(templatesProvider).templates;
-      final match = allTemplates.where(
-        (t) => t.templateType == templateType && t.isActive,
-      );
+      final typeMatches = allTemplates
+          .where((t) => t.templateType == templateType)
+          .toList();
+      final match = typeMatches.where((t) => t.isActive).toList();
       if (match.isEmpty) {
         if (mounted) {
-          AppSnackBar.warning(context, 'القالب غير متوفر أو معطل',
-              detail: 'لا يوجد قالب "$templateType" مفعّل');
+          final arabic = _featureArabicNameForTemplate(templateType);
+          if (typeMatches.isEmpty) {
+            AppSnackBar.warning(
+              context,
+              'لم يُرسل واتساب — لا يوجد قالب',
+              detail: 'أضف قالب "$arabic" من شاشة قوالب الواتساب ثم حاول مجدداً.',
+            );
+          } else {
+            AppSnackBar.warning(
+              context,
+              'لم يُرسل واتساب — القالب مُعطَّل',
+              detail: 'فعّل قالب "$arabic" من شاشة قوالب الواتساب.',
+            );
+          }
         }
         return;
       }
