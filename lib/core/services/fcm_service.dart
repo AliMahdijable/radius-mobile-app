@@ -337,6 +337,7 @@ class FcmService {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(AppConstants.storageToken);
     final adminId = prefs.getString(AppConstants.storageAdminId);
+    final adminUsername = prefs.getString(AppConstants.storageAdminUsername);
     if (token == null || adminId == null) {
       debugPrint('FCM register: no auth token or adminId in storage');
       return false;
@@ -354,8 +355,12 @@ class FcmService {
     ));
 
     try {
+      debugPrint(
+        'FCM register request: adminId=$adminId, adminUsername=${adminUsername ?? '-'}',
+      );
       final res = await dio.post(ApiConstants.fcmRegister, data: {
         'adminId': adminId,
+        'adminUsername': adminUsername,
         'token': fcmToken,
         'deviceInfo': Platform.isAndroid ? 'Android' : 'iOS',
       });
@@ -452,6 +457,7 @@ class FcmService {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(AppConstants.storageToken);
     final adminId = prefs.getString(AppConstants.storageAdminId);
+    final adminUsername = prefs.getString(AppConstants.storageAdminUsername);
     if (token == null || adminId == null) return;
 
     String? fcmToken;
@@ -473,6 +479,7 @@ class FcmService {
     try {
       await dio.post(ApiConstants.fcmUnregister, data: {
         'adminId': adminId,
+        'adminUsername': adminUsername,
         'token': fcmToken,
       });
     } catch (_) {}

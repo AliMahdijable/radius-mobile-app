@@ -141,6 +141,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.invalidate(schedulesProvider);
   }
 
+  void _schedulePushResyncRetry() {
+    Future<void>.delayed(const Duration(seconds: 4), () async {
+      try {
+        await _syncNotificationServices(forcePushSync: true);
+      } catch (_) {
+        // نخلي المحاولة الثانية صامتة حتى لا تربك المستخدم
+      }
+    });
+  }
+
   Future<void> _syncNotificationServices({bool forcePushSync = false}) async {
     final notificationsEnabled = await _storage.getFcmEnabled();
     if (!notificationsEnabled) return;
@@ -194,6 +204,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       Future.microtask(() {
         _syncNotificationServices(forcePushSync: true);
       });
+      _schedulePushResyncRetry();
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -293,6 +304,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ),
           error: null,
         );
+        _schedulePushResyncRetry();
         return true;
       }
 
