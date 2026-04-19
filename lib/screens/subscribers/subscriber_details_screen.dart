@@ -18,6 +18,7 @@ import '../../providers/templates_provider.dart';
 import '../../providers/print_templates_provider.dart';
 import '../../core/utils/receipt_printer.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/quick_amount_chips.dart';
 
 class SubscriberDetailsScreen extends ConsumerStatefulWidget {
   final SubscriberModel subscriber;
@@ -1106,13 +1107,15 @@ class _SubscriberDetailsScreenState
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _QuickAmountChips(
+                  QuickAmountChips(
                     amounts: _buildPartialQuickAmounts(userPrice),
                     selectedAmount: _parseMoney(partialCtrl.text),
                     enabled: true,
                     onSelected: (v) {
                       partialFocus.unfocus();
-                      partialCtrl.text = _formatNumber(v);
+                      partialCtrl.text = _formatNumber(
+                        _parseMoney(partialCtrl.text) + v,
+                      );
                       setSheet(() {});
                     },
                   ),
@@ -1629,13 +1632,15 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 10),
 
-                _QuickAmountChips(
+                QuickAmountChips(
                   amounts: _buildPayDebtQuickAmounts(currentDebt),
                   selectedAmount: payAll ? currentDebt : _parseMoney(amountCtrl.text),
                   enabled: !payAll,
                   onSelected: (v) {
                     amountFocusPay.unfocus();
-                    amountCtrl.text = _formatNumber(v);
+                    amountCtrl.text = _formatNumber(
+                      _parseMoney(amountCtrl.text) + v,
+                    );
                     setSheet(() {});
                   },
                 ),
@@ -1949,13 +1954,15 @@ class _SubscriberDetailsScreenState
                 ),
                 const SizedBox(height: 10),
 
-                _QuickAmountChips(
+                QuickAmountChips(
                   amounts: const [5000.0, 10000.0, 15000.0, 25000.0, 35000.0, 50000.0],
                   selectedAmount: _parseMoney(amountCtrl.text),
                   enabled: true,
                   onSelected: (v) {
                     amountFocusAdd.unfocus();
-                    amountCtrl.text = _formatNumber(v);
+                    amountCtrl.text = _formatNumber(
+                      _parseMoney(amountCtrl.text) + v,
+                    );
                     setSheet(() {});
                   },
                 ),
@@ -2744,63 +2751,6 @@ class _MethodBtn extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _QuickAmountChips extends StatelessWidget {
-  final List<double> amounts;
-  final double selectedAmount;
-  final bool enabled;
-  final ValueChanged<double> onSelected;
-
-  const _QuickAmountChips({
-    required this.amounts,
-    required this.selectedAmount,
-    required this.enabled,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (amounts.isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: amounts.map((v) {
-        final isSelected = (selectedAmount - v).abs() < 0.5;
-        return GestureDetector(
-          onTap: enabled ? () => onSelected(v) : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? theme.colorScheme.primary.withOpacity(0.15)
-                  : theme.colorScheme.surfaceContainerHighest.withOpacity(enabled ? 0.5 : 0.25),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isSelected
-                    ? theme.colorScheme.primary.withOpacity(0.4)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Text(
-              AppHelpers.formatMoney(v),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: !enabled
-                    ? theme.colorScheme.onSurface.withOpacity(0.3)
-                    : isSelected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withOpacity(0.7),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }

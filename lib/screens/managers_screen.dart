@@ -15,6 +15,7 @@ import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../widgets/app_snackbar.dart';
 import '../widgets/loading_overlay.dart';
+import '../widgets/quick_amount_chips.dart';
 
 enum _ManagerActionType {
   edit,
@@ -1929,13 +1930,42 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                           ? 'المبلغ المراد إضافته'
                           : 'المبلغ المراد سحبه',
                       prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                      suffixIcon: _amountController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _amountController.clear();
+                                setState(() {});
+                              },
+                            ),
                     ),
+                    onChanged: (_) => setState(() {}),
                     validator: (value) {
                       final amount = _parseFormattedAmount(value ?? '');
                       if (amount == null || amount <= 0) {
                         return 'أدخل مبلغًا صحيحًا';
                       }
                       return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  QuickAmountChips(
+                    amounts: const [
+                      10000.0, 25000.0, 50000.0, 100000.0, 250000.0, 500000.0,
+                    ],
+                    selectedAmount:
+                        _parseFormattedAmount(_amountController.text) ?? 0,
+                    enabled: true,
+                    onSelected: (v) {
+                      FocusScope.of(context).unfocus();
+                      final current =
+                          _parseFormattedAmount(_amountController.text) ?? 0;
+                      final total = current + v;
+                      final formatter =
+                          intl.NumberFormat('#,##0', 'en_US');
+                      _amountController.text = formatter.format(total);
+                      setState(() {});
                     },
                   ),
                   const SizedBox(height: 12),
