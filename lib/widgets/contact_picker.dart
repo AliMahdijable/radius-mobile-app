@@ -13,7 +13,8 @@ import 'app_snackbar.dart';
 /// contacts-permission review.
 Future<String?> pickContactPhone(BuildContext context) async {
   final picker = FlutterNativeContactPicker();
-  Contact? contact;
+
+  dynamic contact;
   try {
     contact = await picker.selectContact();
   } catch (_) {
@@ -25,7 +26,11 @@ Future<String?> pickContactPhone(BuildContext context) async {
 
   if (contact == null) return null;
 
-  final phones = contact.phoneNumbers ?? const <String>[];
+  final dynamic rawPhones = contact.phoneNumbers;
+  final List<String> phones = (rawPhones is List)
+      ? rawPhones.map((e) => e.toString()).toList()
+      : const <String>[];
+
   if (phones.isEmpty) {
     if (context.mounted) {
       AppSnackBar.warning(context, 'جهة الاتصال المختارة لا تحتوي على رقم');
@@ -36,10 +41,12 @@ Future<String?> pickContactPhone(BuildContext context) async {
   if (phones.length == 1) return phones.first;
 
   if (!context.mounted) return null;
+
+  final name = _readName(contact);
   return showDialog<String>(
     context: context,
     builder: (dCtx) => SimpleDialog(
-      title: Text(contact?.fullName ?? 'اختر رقماً'),
+      title: Text(name ?? 'اختر رقماً'),
       children: phones
           .map(
             (p) => SimpleDialogOption(
@@ -50,4 +57,15 @@ Future<String?> pickContactPhone(BuildContext context) async {
           .toList(),
     ),
   );
+}
+
+String? _readName(dynamic contact) {
+  try {
+    final dynamic name = contact.fullName;
+    if (name == null) return null;
+    final s = name.toString().trim();
+    return s.isEmpty ? null : s;
+  } catch (_) {
+    return null;
+  }
 }
