@@ -8,22 +8,26 @@ import '../core/services/storage_service.dart';
 class SettingsState {
   final FeaturesModel features;
   final bool isLoading;
+  final bool hasLoaded;
   final String? error;
 
   const SettingsState({
     this.features = const FeaturesModel(),
     this.isLoading = false,
+    this.hasLoaded = false,
     this.error,
   });
 
   SettingsState copyWith({
     FeaturesModel? features,
     bool? isLoading,
+    bool? hasLoaded,
     String? error,
   }) {
     return SettingsState(
       features: features ?? this.features,
       isLoading: isLoading ?? this.isLoading,
+      hasLoaded: hasLoaded ?? this.hasLoaded,
       error: error,
     );
   }
@@ -50,7 +54,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
             Map<String, dynamic>.from(features),
           ),
           isLoading: false,
+          hasLoaded: true,
         );
+      } else {
+        state = state.copyWith(isLoading: false, hasLoaded: true);
       }
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'فشل تحميل الإعدادات');

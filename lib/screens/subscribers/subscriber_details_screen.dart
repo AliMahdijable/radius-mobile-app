@@ -16,6 +16,7 @@ import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/templates_provider.dart';
 import '../../providers/print_templates_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../core/utils/receipt_printer.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/contact_picker.dart';
@@ -1444,9 +1445,42 @@ class _SubscriberDetailsScreenState
     }
   }
 
+  /// تحقّق من تفعيل الميزة المقابلة لنوع القالب قبل الإرسال التلقائي.
+  /// لو الميزة مُطفأة (مثلاً sendOnActivation=false) نُلغي الإرسال صامتاً.
+  Future<bool> _isFeatureEnabledForTemplate(String templateType) async {
+    // نُحمّل الميزات مرة واحدة عند الحاجة
+    final snapshot = ref.read(settingsProvider);
+    if (!snapshot.hasLoaded && !snapshot.isLoading) {
+      await ref.read(settingsProvider.notifier).loadFeatures();
+    }
+    final features = ref.read(settingsProvider).features;
+    switch (templateType) {
+      case 'activation_notice':
+        return features.sendOnActivation;
+      case 'renewal':
+        return features.sendOnExtension;
+      case 'welcome_message':
+        return features.welcomeMessage;
+      case 'expiry_warning':
+        return features.expiryReminder;
+      case 'service_end':
+        return features.serviceEndNotification;
+      case 'debt_reminder':
+        return features.debtReminder;
+      // payment_confirmation: لا يوجد flag مخصّص في الإعدادات → مسموح دائماً.
+      default:
+        return true;
+    }
+  }
+
   Future<void> _sendWhatsAppFromTemplate(String templateType, {
     Map<String, String>? extraVars,
   }) async {
+    // 1) احترام toggles ميزات الواتساب — إن كانت الميزة مُطفأة نلغي بصمت.
+    if (!await _isFeatureEnabledForTemplate(templateType)) {
+      return;
+    }
+
     final sub = _readCurrentSubscriber();
     final phone = sub.displayPhone;
     if (phone.isEmpty) {
