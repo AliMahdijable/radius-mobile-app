@@ -130,8 +130,11 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   Widget build(BuildContext context) {
     final packages = ref.watch(subscribersProvider).packages;
     final theme = Theme.of(context);
+    // أي مدير ليس sub-manager — أي يملك إدارة مدراء أو باقات — يستطيع
+    // تحديد تاريخ الانتهاء يدوياً. السب-مانجر فقط يُحرم من الحقل.
+    final user = ref.watch(authProvider).user;
     final canPickExpiration =
-        ref.watch(authProvider).user?.canAccessPackages ?? false;
+        (user?.canAccessManagers ?? false) || (user?.canAccessPackages ?? false);
 
     final seen = <int>{};
     final uniquePkgs = packages.where((p) {
@@ -296,7 +299,13 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             DropdownButtonFormField<int>(
               value: _selectedPackageId,
               isExpanded: true,
-              style: const TextStyle(fontSize: 13, fontFamily: 'Cairo'),
+              style: TextStyle(
+                fontSize: 13,
+                fontFamily: 'Cairo',
+                color: theme.colorScheme.onSurface,
+              ),
+              dropdownColor: theme.cardTheme.color ?? theme.colorScheme.surface,
+              iconEnabledColor: theme.colorScheme.onSurface.withOpacity(0.7),
               decoration: _dense('اختر الباقة', Icons.wifi_rounded),
               items: uniquePkgs
                   .map((pkg) => DropdownMenuItem<int>(
@@ -306,7 +315,10 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                             Expanded(
                               child: Text(
                                 pkg.name,
-                                style: const TextStyle(fontSize: 13),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: theme.colorScheme.onSurface,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
