@@ -828,7 +828,7 @@ class _SubscriberDetailsScreenState
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
-                        final remDays = fresh?['remaining_days']?.toString() ?? '';
+                        final remDays = _calcRemainingDays(expDate);
                         // حساب المبلغ المسدد بناءً على طريقة التمديد
                         final paidAmountForMsg = method == 'credit'
                           ? _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0)
@@ -1429,8 +1429,16 @@ class _SubscriberDetailsScreenState
       }
       if (exp == null) return '0';
       final diff = exp.difference(DateTime.now());
-      if (diff.isNegative) return '0';
-      return '${diff.inDays}';
+      if (diff.isNegative) return 'منتهي';
+      final days = diff.inDays;
+      final hours = diff.inHours % 24;
+      final minutes = diff.inMinutes % 60;
+      final parts = <String>[];
+      if (days > 0) parts.add('$days يوم');
+      if (hours > 0) parts.add('$hours ساعة');
+      if (minutes > 0 && days == 0) parts.add('$minutes دقيقة');
+      if (parts.isEmpty) return 'أقل من دقيقة';
+      return parts.join(' و ');
     } catch (_) {
       return '0';
     }
@@ -1489,8 +1497,8 @@ class _SubscriberDetailsScreenState
         '{firstname}': sub.firstname.isNotEmpty ? sub.firstname : sub.username,
         '{lastname}': sub.lastname,
         '{phone}': sub.displayPhone,
-        '{remaining_days}': '${sub.remainingDays ?? 0}',
-        '{days_remaining}': '${sub.remainingDays ?? 0}',
+        '{remaining_days}': _calcRemainingDays(sub.expiration),
+        '{days_remaining}': _calcRemainingDays(sub.expiration),
         '{expiration_date}': sub.expiration ?? '',
         '{expiry_date}': sub.expiration ?? '',
         '{package_name}': sub.profileName ?? '',
