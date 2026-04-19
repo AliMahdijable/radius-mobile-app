@@ -15,6 +15,7 @@ import '../../widgets/add_subscriber_sheet.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
+import '../../core/services/fcm_service.dart';
 
 class SubscribersScreen extends ConsumerStatefulWidget {
   const SubscribersScreen({super.key});
@@ -49,13 +50,32 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     Future.microtask(() {
       ref.read(subscribersProvider.notifier).loadSubscribers();
     });
+    FcmService.pendingSubscriberSearch.addListener(_consumePendingSearch);
+    if (FcmService.pendingSubscriberSearch.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _consumePendingSearch();
+      });
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _debounce?.cancel();
+    FcmService.pendingSubscriberSearch.removeListener(_consumePendingSearch);
     super.dispose();
+  }
+
+  void _consumePendingSearch() {
+    final username = FcmService.pendingSubscriberSearch.value;
+    if (username == null || username.isEmpty || !mounted) return;
+    setState(() {
+      _searchController.text = username;
+      _isSearchMode = true;
+      _currentPage = 0;
+    });
+    ref.read(subscribersProvider.notifier).searchSubscribers(username);
+    FcmService.pendingSubscriberSearch.value = null;
   }
 
   void _onSearch(String query) {

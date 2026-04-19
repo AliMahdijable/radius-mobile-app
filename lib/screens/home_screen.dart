@@ -17,6 +17,7 @@ import '../providers/subscribers_provider.dart';
 import '../providers/messages_provider.dart';
 import '../providers/reports_provider.dart';
 import '../core/services/storage_service.dart';
+import '../core/services/fcm_service.dart';
 import '../models/app_notification_model.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/app_snackbar.dart';
@@ -78,12 +79,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     Future.microtask(() {
       ref.read(appNotificationsProvider.notifier).loadNotifications();
     });
+    FcmService.pendingSubscriberSearch.addListener(_onPendingSubscriberSearch);
+    if (FcmService.pendingSubscriberSearch.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onPendingSubscriberSearch();
+      });
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    FcmService.pendingSubscriberSearch.removeListener(_onPendingSubscriberSearch);
     super.dispose();
+  }
+
+  void _onPendingSubscriberSearch() {
+    if (!mounted) return;
+    if (FcmService.pendingSubscriberSearch.value == null) return;
+    if (_currentIndex != 1) {
+      setState(() => _currentIndex = 1);
+    }
   }
 
   @override

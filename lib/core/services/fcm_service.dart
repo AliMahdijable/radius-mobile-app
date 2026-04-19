@@ -38,6 +38,13 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
 class FcmService {
   FcmService._();
 
+  /// When the user taps an expiry FCM notification (or it cold-starts the
+  /// app), the username from the data payload lands here. UI screens
+  /// (HomeScreen switches to the subscribers tab, SubscribersScreen runs
+  /// the search) listen on this notifier and consume the value once handled.
+  static final ValueNotifier<String?> pendingSubscriberSearch =
+      ValueNotifier<String?>(null);
+
   static const String periodicSyncUniqueName = 'mysvcs_fcm_sync_v1';
   static const String periodicSyncTaskName = 'fcmTokenSync';
   static const Duration _periodicSyncFrequency = Duration(hours: 3);
@@ -61,6 +68,7 @@ class FcmService {
     const iosInit = DarwinInitializationSettings();
     await _fln.initialize(
       const InitializationSettings(android: androidInit, iOS: iosInit),
+      onDidReceiveNotificationResponse: _handleLocalNotificationTap,
     );
 
     if (Platform.isAndroid) {
@@ -96,13 +104,56 @@ class FcmService {
     // عرض الإشعارات عندما التطبيق مفتوح (foreground)
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
+    // التعامل مع نقر الإشعار عند إعادة فتح التطبيق من الخلفية
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpen);
+
+    // التعامل مع نقر الإشعار الذي أدى إلى تشغيل التطبيق من حالة الإغلاق
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationOpen(initialMessage);
+    }
+
     _initialized = true;
     debugPrint('✅ FCM Service initialized');
+  }
+
+  /// Routes the app to the relevant subscriber when an expiry-related FCM
+  /// notification is tapped. Reads the username/type out of the data payload
+  /// and pushes it onto [pendingSubscriberSearch] so UI screens can react.
+  static void _handleNotificationOpen(RemoteMessage message) {
+    final type = message.data['type']?.toString() ?? '';
+    final username = message.data['username']?.toString() ?? '';
+    if (username.isEmpty) return;
+    if (type != 'expiry_warning' && type != 'service_end') return;
+    debugPrint('FCM tap → switching to subscriber: $username (type=$type)');
+    pendingSubscriberSearch.value = username;
+  }
+
+  /// Same routing path as [_handleNotificationOpen] but triggered from a
+  /// tap on a foreground-shown local notification (where the data is carried
+  /// through the payload string we set in [_handleForegroundMessage]).
+  static void _handleLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    final parts = payload.split('|');
+    if (parts.length < 2) return;
+    final type = parts[0];
+    final username = parts[1];
+    if (username.isEmpty) return;
+    if (type != 'expiry_warning' && type != 'service_end') return;
+    debugPrint('FCM local tap → switching to subscriber: $username (type=$type)');
+    pendingSubscriberSearch.value = username;
   }
 
   static void _handleForegroundMessage(RemoteMessage message) {
     final notification = message.notification;
     if (notification == null) return;
+
+    final type = message.data['type']?.toString() ?? '';
+    final username = message.data['username']?.toString() ?? '';
+    final payload = (type.isNotEmpty || username.isNotEmpty)
+        ? '$type|$username'
+        : null;
 
     _fln.show(
       notification.hashCode,
@@ -118,6 +169,7 @@ class FcmService {
         ),
         iOS: DarwinNotificationDetails(),
       ),
+      payload: payload,
     );
   }
 
