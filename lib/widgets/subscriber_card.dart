@@ -312,8 +312,8 @@ class SubscriberCard extends StatelessWidget {
               ),
             ),
 
-            // Row 3: phone + expiration + IP (when online)
-            if (hasPhone || hasExpiration || _hasIp(subscriber))
+            // Row 3: phone + expiration
+            if (hasPhone || hasExpiration)
               Padding(
                 padding: EdgeInsets.only(top: 6, right: badgeIndent),
                 child: Wrap(
@@ -335,11 +335,6 @@ class SubscriberCard extends StatelessWidget {
                         text: AppHelpers.formatPhone(subscriber.displayPhone),
                         iconColor: AppTheme.infoColor,
                         isLtr: true,
-                      ),
-                    if (_hasIp(subscriber) && subscriber.isOnline)
-                      _ipChip(
-                        theme: theme,
-                        ip: subscriber.ipAddress!.trim(),
                       ),
                   ],
                 ),
@@ -479,55 +474,6 @@ class SubscriberCard extends StatelessWidget {
       primaryColor: Color(0xFF22A06B),
       borderColor: Color(0xFF19784E),
       foregroundColor: Colors.white,
-    );
-  }
-
-  static bool _hasIp(SubscriberModel s) {
-    final ip = s.ipAddress;
-    return ip != null && ip.trim().isNotEmpty;
-  }
-
-  static Widget _ipChip({
-    required ThemeData theme,
-    required String ip,
-  }) {
-    final accent = theme.colorScheme.primary;
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () async {
-        final uri = Uri.parse('http://$ip');
-        try {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } catch (_) {}
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: accent.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: accent.withOpacity(0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          textDirection: TextDirection.ltr,
-          children: [
-            Icon(Icons.lan_rounded, size: 12, color: accent),
-            const SizedBox(width: 5),
-            Text(
-              ip,
-              textDirection: TextDirection.ltr,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: accent,
-                fontFamily: 'monospace',
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.open_in_new_rounded, size: 10, color: accent),
-          ],
-        ),
-      ),
     );
   }
 

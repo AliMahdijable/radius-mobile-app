@@ -686,7 +686,7 @@ class _SubscriberDetailsScreenState
             : int.tryParse(pkgId?.toString() ?? '') ?? 0;
         String? pkgPrice;
         bool submitting = false;
-        bool printReceipt = true;
+        bool printReceipt = false;
 
         return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
@@ -951,7 +951,7 @@ class _SubscriberDetailsScreenState
     bool isCash = false;
     bool isPartialCash = false;
     bool submitting = false;
-    bool printReceipt = true;
+    bool printReceipt = false;
 
     if (!mounted) return;
 
@@ -1550,7 +1550,7 @@ class _SubscriberDetailsScreenState
     final amountFocusPay = FocusNode();
     bool payAll = false;
     bool submitting = false;
-    bool printReceipt = true;
+    bool printReceipt = false;
 
     showModalBottomSheet(
       useSafeArea: true,
@@ -1894,7 +1894,7 @@ class _SubscriberDetailsScreenState
     final commentCtrl = TextEditingController();
     final amountFocusAdd = FocusNode();
     bool submitting = false;
-    bool printReceipt = true;
+    bool printReceipt = false;
 
     showModalBottomSheet(
       useSafeArea: true,
@@ -2300,6 +2300,14 @@ class _SubscriberDetailsScreenState
                 _DetailSection(
                   title: 'معلومات الحساب',
                   children: [
+                    // الحالة + IP أولاً لأنها الأهم للمدير عند الفتح
+                    _StatusRow(sub: sub),
+                    if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
+                      _IpDetailRow(
+                        ip: sub.ipAddress!.trim(),
+                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                      ),
+                    const _DetailDivider(),
                     _DetailRow(
                       icon: Icons.person_outline,
                       label: 'اسم المستخدم',
@@ -2315,6 +2323,7 @@ class _SubscriberDetailsScreenState
                         _launchWhatsAppChat();
                       },
                     ),
+                    const _DetailDivider(),
                     _DetailRow(
                       icon: Icons.wifi,
                       label: 'الباقة',
@@ -2327,12 +2336,6 @@ class _SubscriberDetailsScreenState
                           ? AppHelpers.formatMoney(sub.price)
                           : '—',
                     ),
-                    _StatusRow(sub: sub),
-                    if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
-                      _IpDetailRow(
-                        ip: sub.ipAddress!.trim(),
-                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
-                      ),
                   ],
                 ),
 
@@ -2879,6 +2882,22 @@ class _SummaryRow extends StatelessWidget {
             fontWeight: FontWeight.w600,
             color: valueColor ?? Theme.of(context).colorScheme.onSurface)),
         ],
+      ),
+    );
+  }
+}
+
+class _DetailDivider extends StatelessWidget {
+  const _DetailDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: Theme.of(context).colorScheme.outline.withOpacity(0.12),
       ),
     );
   }
