@@ -149,10 +149,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetCtx) {
+        // bottomSheetBottomInset already includes MediaQuery.viewInsets.bottom
+        // (i.e. the keyboard height). Previously we added viewInsets.bottom a
+        // second time on top of it, which doubled the keyboard offset and
+        // squeezed the form into a tiny strip when the user started typing.
         return Padding(
           padding: EdgeInsets.only(
-            bottom: bottomSheetBottomInset(sheetCtx, extra: 0) +
-                MediaQuery.of(sheetCtx).viewInsets.bottom,
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
             top: 10,
             left: 16,
             right: 16,
