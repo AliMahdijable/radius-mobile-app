@@ -134,53 +134,87 @@ class SchedulesNotifier extends StateNotifier<SchedulesState> {
     }
   }
 
-  Future<bool> toggleSchedule(String scheduleType, bool isEnabled) async {
+  /// Returns `null` on success or an Arabic error message on failure, so the
+  /// UI can surface the actual reason (e.g. "واتساب غير متصل") via a snackbar
+  /// instead of silently reverting the switch.
+  Future<String?> toggleSchedule(String scheduleType, bool isEnabled) async {
     final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return false;
+    if (_adminId == null) return 'معرّف المدير غير متوفر';
     try {
-      await _dio.patch(
+      final response = await _dio.patch(
         ApiConstants.waScheduleToggle,
         data: {
           'adminId': _adminId,
           'scheduleType': scheduleType,
           'isEnabled': isEnabled,
         },
+        options: Options(validateStatus: (_) => true),
       );
-      await loadSchedules();
-      return true;
+      final body = _asJsonMap(_decodeResponseData(response.data));
+      final ok = response.statusCode == 200 && body?['success'] == true;
+      if (ok) {
+        try { await loadSchedules(); } catch (_) {}
+        return null;
+      }
+      final msg = body?['message']?.toString() ??
+          body?['error']?.toString() ??
+          'فشل في تحديث الجدولة';
+      // Re-sync from server so the switch shows the real saved state.
+      try { await loadSchedules(); } catch (_) {}
+      return msg;
+    } on DioException catch (e) {
+      final map = _asJsonMap(_decodeResponseData(e.response?.data));
+      return map?['message']?.toString() ??
+          map?['error']?.toString() ??
+          e.message ??
+          'فشل في تحديث الجدولة';
     } catch (_) {
-      return false;
+      return 'فشل في تحديث الجدولة';
     }
   }
 
-  Future<bool> deleteSchedule(String scheduleType) async {
+  Future<String?> deleteSchedule(String scheduleType) async {
     final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return false;
+    if (_adminId == null) return 'معرّف المدير غير متوفر';
     try {
-      await _dio.delete(
+      final response = await _dio.delete(
         '${ApiConstants.waSchedule}/$_adminId/$scheduleType',
+        options: Options(validateStatus: (_) => true),
       );
-      await loadSchedules();
-      return true;
+      final body = _asJsonMap(_decodeResponseData(response.data));
+      final ok = response.statusCode == 200 && body?['success'] == true;
+      if (ok) {
+        try { await loadSchedules(); } catch (_) {}
+        return null;
+      }
+      return body?['message']?.toString() ??
+          body?['error']?.toString() ??
+          'فشل في حذف الجدولة';
     } catch (_) {
-      return false;
+      return 'فشل في حذف الجدولة';
     }
   }
 
-  Future<bool> triggerSchedule(String scheduleType) async {
+  Future<String?> triggerSchedule(String scheduleType) async {
     final _adminId = await _storage.getAdminId();
-    if (_adminId == null) return false;
+    if (_adminId == null) return 'معرّف المدير غير متوفر';
     try {
-      await _dio.post(
+      final response = await _dio.post(
         ApiConstants.waTriggerSchedule,
         data: {
           'adminId': _adminId,
           'scheduleType': scheduleType,
         },
+        options: Options(validateStatus: (_) => true),
       );
-      return true;
+      final body = _asJsonMap(_decodeResponseData(response.data));
+      final ok = response.statusCode == 200 && body?['success'] == true;
+      if (ok) return null;
+      return body?['message']?.toString() ??
+          body?['error']?.toString() ??
+          'فشل في تشغيل الجدولة الآن';
     } catch (_) {
-      return false;
+      return 'فشل في تشغيل الجدولة الآن';
     }
   }
 }

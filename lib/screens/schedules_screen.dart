@@ -151,10 +151,19 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                       accentColor: AppTheme.warningColor,
                       title: 'تنبيه قرب انتهاء الاشتراك',
                       isEnabled: expirySchedule?.isEnabled ?? false,
-                      onToggle: (v) {
-                        ref
+                      onToggle: (v) async {
+                        final err = await ref
                             .read(schedulesProvider.notifier)
                             .toggleSchedule('expiry_warning', v);
+                        if (!mounted) return;
+                        if (err == null) {
+                          AppSnackBar.success(
+                            context,
+                            v ? 'تم تفعيل الجدولة' : 'تم تعطيل الجدولة',
+                          );
+                        } else {
+                          AppSnackBar.error(context, err);
+                        }
                       },
                       time: _expiryTime,
                       onTimeTap: () => _pickTime(_expiryTime, (t) {
@@ -180,10 +189,19 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                       accentColor: AppTheme.infoColor,
                       title: 'تذكير بالديون المستحقة',
                       isEnabled: debtSchedule?.isEnabled ?? false,
-                      onToggle: (v) {
-                        ref
+                      onToggle: (v) async {
+                        final err = await ref
                             .read(schedulesProvider.notifier)
                             .toggleSchedule('debt_reminder', v);
+                        if (!mounted) return;
+                        if (err == null) {
+                          AppSnackBar.success(
+                            context,
+                            v ? 'تم تفعيل الجدولة' : 'تم تعطيل الجدولة',
+                          );
+                        } else {
+                          AppSnackBar.error(context, err);
+                        }
                       },
                       time: _debtTime,
                       onTimeTap: () => _pickTime(_debtTime, (t) {
