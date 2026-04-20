@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1027,7 +1028,60 @@ class _SubscriberDetailsScreenState
       return;
     }
 
-    final originalPrice = _toDouble(activationData['user_price']);
+    // SAS4's /user/activationData can return user_price=0 for managers whose
+    // priceList isn't configured at their level (sub-managers without
+    // prm_profiles_create). Fall back through the other sale-price sources
+    // we know about before deciding the package is free, otherwise the
+    // activation WhatsApp message ends up with "المبلغ المدفوع: 0".
+    double _pickFirstPositive(List<dynamic> candidates) {
+      for (final c in candidates) {
+        final d = _toDouble(c);
+        if (d > 0) return d;
+      }
+      return 0;
+    }
+
+    final subProfileId = sub.profileId;
+    final matchingPackage = subProfileId != null
+        ? ref
+            .read(subscribersProvider)
+            .packages
+            .where((p) => p.idx == subProfileId)
+            .toList()
+        : const [];
+    final packageUserPrice = matchingPackage.isNotEmpty
+        ? matchingPackage.first.userPrice
+        : null;
+    final packageBasePrice = matchingPackage.isNotEmpty
+        ? matchingPackage.first.price
+        : null;
+
+    final userProfileDetails = userData?['profile_details'];
+    final userProfileDetailsMap =
+        userProfileDetails is Map ? userProfileDetails : null;
+
+    final originalPrice = _pickFirstPositive([
+      activationData['user_price'],
+      activationData['sale_price'],
+      activationData['sell_price'],
+      packageUserPrice,
+      userProfileDetailsMap?['user_price'],
+      userProfileDetailsMap?['sale_price'],
+      userProfileDetailsMap?['sell_price'],
+      userData?['user_price'],
+      userData?['sale_price'],
+      userData?['sell_price'],
+      // Last-resort: base price from the package / subscriber record.
+      // Only used when no explicit sale price anywhere.
+      packageBasePrice,
+      sub.price,
+    ]);
+    dev.log(
+      'Activation userPrice resolved=$originalPrice '
+      '(activationData.user_price=${activationData['user_price']}, '
+      'packageUserPrice=$packageUserPrice, sub.price=${sub.price})',
+      name: 'ACTIVATE',
+    );
     final discountAmount = discountData != null
         ? _toDouble(discountData['discount_amount'])
         : 0.0;
