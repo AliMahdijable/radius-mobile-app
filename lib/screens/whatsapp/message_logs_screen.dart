@@ -342,13 +342,25 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          msg.recipientUsername ?? '—',
+                          msg.displayName.isNotEmpty
+                              ? msg.displayName
+                              : (msg.recipientUsername ?? '—'),
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontWeight: FontWeight.w700,
                             fontSize: 16,
                           ),
                         ),
+                        if (msg.hasArabicName &&
+                            (msg.recipientUsername ?? '').isNotEmpty)
+                          Text(
+                            msg.recipientUsername!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: 'Cairo',
+                              color: theme.colorScheme.onSurface.withOpacity(0.55),
+                            ),
+                          ),
                         if (msg.recipientPhone != null)
                           Text(
                             msg.recipientPhone!,
@@ -680,7 +692,9 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                                   ),
                                 ),
                                 title: Text(
-                                  msg.recipientUsername ?? '—',
+                                  msg.displayName.isNotEmpty
+                                      ? msg.displayName
+                                      : (msg.recipientUsername ?? '—'),
                                   style: const TextStyle(
                                     fontFamily: 'Cairo',
                                     fontWeight: FontWeight.w600,
@@ -690,6 +704,19 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    if (msg.hasArabicName &&
+                                        (msg.recipientUsername ?? '').isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        msg.recipientUsername!,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontFamily: 'Cairo',
+                                          color: theme.colorScheme.onSurface
+                                              .withOpacity(0.55),
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(height: 4),
                                     Text(
                                       msg.messageContent ?? '',

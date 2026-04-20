@@ -2,6 +2,8 @@ class MessageLogModel {
   final int id;
   final String adminId;
   final String? recipientUsername;
+  final String? recipientFirstname;
+  final String? recipientLastname;
   final String? recipientPhone;
   final String? messageContent;
   final String messageType;
@@ -16,6 +18,8 @@ class MessageLogModel {
     required this.id,
     required this.adminId,
     this.recipientUsername,
+    this.recipientFirstname,
+    this.recipientLastname,
     this.recipientPhone,
     this.messageContent,
     required this.messageType,
@@ -30,13 +34,32 @@ class MessageLogModel {
   bool get canRetry =>
       status == 'failed' && (maxRetries == null || retryCount < maxRetries!);
 
+  /// "الاسم الأول [الاسم الثاني]" if available, otherwise falls back to the
+  /// recipient_name extracted from the message body (عزيزي X،), otherwise
+  /// the username so the log row always has a human-readable title.
+  String get displayName {
+    final parts = [recipientFirstname, recipientLastname]
+        .where((p) => p != null && p!.trim().isNotEmpty)
+        .map((p) => p!.trim())
+        .toList();
+    if (parts.isNotEmpty) return parts.join(' ');
+    return recipientUsername ?? '';
+  }
+
+  bool get hasArabicName =>
+      (recipientFirstname != null && recipientFirstname!.trim().isNotEmpty) ||
+      (recipientLastname != null && recipientLastname!.trim().isNotEmpty);
+
   factory MessageLogModel.fromJson(Map<String, dynamic> json) {
     return MessageLogModel(
       id: json['id'] is int
           ? json['id']
           : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
       adminId: (json['admin_id'] ?? '').toString(),
-      recipientUsername: (json['recipient_username'] ?? json['recipient_name'])?.toString(),
+      recipientUsername: json['recipient_username']?.toString(),
+      recipientFirstname:
+          (json['recipient_firstname'] ?? json['recipient_name'])?.toString(),
+      recipientLastname: json['recipient_lastname']?.toString(),
       recipientPhone: json['recipient_phone']?.toString(),
       messageContent: (json['message_content'] ?? json['message_preview'])?.toString(),
       messageType: (json['message_type'] ?? 'manual').toString(),
