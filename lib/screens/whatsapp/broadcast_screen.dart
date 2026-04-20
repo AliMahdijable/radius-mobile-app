@@ -85,6 +85,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
   final _selectedUsernames = <_TabType, Set<String>>{};
   final _searchQueries = <_TabType, String>{};
   bool _subscribersLoaded = false;
+  bool _submitting = false;
 
   static const _tabOrder = [
     _TabType.general,
@@ -177,6 +178,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
   }
 
   Future<void> _startBroadcast(_TabType tab) async {
+    if (_submitting) return;
     final config = _tabs[tab]!;
     final message = _messageControllers[tab]?.text.trim() ?? '';
 
@@ -227,17 +229,22 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
         ? (_selectedUsernames[tab] ?? {}).toList()
         : null;
 
-    final ok = await ref.read(messagesProvider.notifier).startBroadcast(
-          message: config.hasCustomMessage ? message : '',
-          type: config.apiType,
-          targetUsernames: targetUsernames,
-        );
+    setState(() => _submitting = true);
+    try {
+      final ok = await ref.read(messagesProvider.notifier).startBroadcast(
+            message: config.hasCustomMessage ? message : '',
+            type: config.apiType,
+            targetUsernames: targetUsernames,
+          );
 
-    if (!mounted) return;
-    if (ok) {
-      AppSnackBar.success(context, 'تم بدء البث بنجاح');
-    } else {
-      AppSnackBar.error(context, 'فشل بدء البث');
+      if (!mounted) return;
+      if (ok) {
+        AppSnackBar.success(context, 'تم بدء البث بنجاح');
+      } else {
+        AppSnackBar.error(context, 'فشل بدء البث');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -340,11 +347,23 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
         SizedBox(
           height: AppTheme.actionButtonHeight,
           child: ElevatedButton.icon(
-            onPressed: isActive ? null : () => _startBroadcast(tab),
-            icon: const Icon(Icons.campaign),
-            label: const Text(
-              'بدء البث',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.w700),
+            onPressed: (isActive || _submitting) ? null : () => _startBroadcast(tab),
+            icon: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.campaign),
+            label: Text(
+              _submitting ? 'جاري الإرسال...' : 'بدء البث',
+              style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700),
             ),
           ),
         ),
