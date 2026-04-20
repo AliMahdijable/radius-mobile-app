@@ -56,6 +56,17 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'تاريخ الانتهاء: {expiry_date}\n'
             'المتبقي: {remaining_days}\n\n'
             'نتمنى لك تجربة ممتازة 🌐';
+      case 'renewal':
+        return 'تم تمديد الاشتراك 🔄\n\n'
+            'عزيزي: {firstname}\n'
+            '{username}\n\n'
+            'تم تمديد اشتراكك في {package_name}.\n'
+            'تاريخ الانتهاء الجديد: {expiry_date}\n'
+            'المتبقي: {remaining_days}\n'
+            'السعر: {package_price} IQD\n'
+            'المبلغ المدفوع: {paid_amount} IQD\n'
+            'الدين الحالي: {debt_amount} IQD\n\n'
+            'شكراً لاستمراركم معنا 💚';
       case 'payment_confirmation':
         return 'تم استلام تسديد 💳\n\n'
             'عزيزي {firstname}،\n'
@@ -87,8 +98,10 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
   }
 
   void _showEditSheet(TemplateModel? template) {
-    final nameController =
-        TextEditingController(text: template?.templateName ?? '');
+    // Template name is no longer user-entered — it's always the Arabic
+    // label of the selected type (مثلاً "إشعار تفعيل"). We keep a controller
+    // around only so _saveTemplate has a string to pass, but the UI doesn't
+    // render a name field anymore.
     final contentController =
         TextEditingController(text: template?.messageContent ?? '');
     String selectedType = template?.templateType ?? 'debt_reminder';
@@ -97,7 +110,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final canManageManagers = authUser?.canAccessManagers ?? false;
     final typeOptions = <String>[
       'debt_reminder', 'expiry_warning', 'service_end',
-      'activation_notice', 'payment_confirmation',
+      'activation_notice', 'renewal', 'payment_confirmation',
       'welcome_message',
       if (canManageManagers) 'manager_agent',
     ];
@@ -226,20 +239,6 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                       ),
                       const SizedBox(height: 10),
                     ],
-
-                    // اسم القالب
-                    TextField(
-                      controller: nameController,
-                      style: const TextStyle(fontSize: 14, fontFamily: 'Cairo'),
-                      textDirection: TextDirection.ltr,
-                      textAlign: TextAlign.left,
-                      decoration: const InputDecoration(
-                        labelText: 'اسم القالب',
-                        prefixIcon: Icon(Icons.label_outline, size: 20),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
 
                     // زر توليد القالب الجاهز
                     Row(
@@ -399,16 +398,26 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                       height: AppTheme.actionButtonHeight,
                       child: ElevatedButton(
                         onPressed: () async {
-                          if (nameController.text.isEmpty ||
-                              contentController.text.isEmpty) {
-                            AppSnackBar.warning(context, 'يرجى ملء جميع الحقول');
+                          if (contentController.text.isEmpty) {
+                            AppSnackBar.warning(
+                                context, 'يرجى كتابة محتوى الرسالة');
                             return;
                           }
+                          final effectiveType =
+                              template?.templateType ?? selectedType;
+                          // Auto-name from the type's Arabic label so the
+                          // manager doesn't have to type one. Preserve any
+                          // previously-saved custom name on edit.
+                          final existingName =
+                              template?.templateName.trim() ?? '';
+                          final autoName = existingName.isNotEmpty
+                              ? existingName
+                              : TemplateModel.getArabicType(effectiveType);
                           final newTemplate = TemplateModel(
                             id: template?.id,
                             adminId: adminId,
-                            templateType: template?.templateType ?? selectedType,
-                            templateName: nameController.text,
+                            templateType: effectiveType,
+                            templateName: autoName,
                             messageContent: contentController.text,
                             isActive: template?.isActive ?? true,
                           );

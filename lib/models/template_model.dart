@@ -25,6 +25,8 @@ class TemplateModel {
         return 'انتهاء الخدمة';
       case 'activation_notice':
         return 'إشعار تفعيل';
+      case 'renewal':
+        return 'إشعار تمديد';
       case 'payment_confirmation':
         return 'تأكيد تسديد';
       case 'welcome_message':

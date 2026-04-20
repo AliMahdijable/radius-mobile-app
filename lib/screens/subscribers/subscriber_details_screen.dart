@@ -1693,15 +1693,8 @@ class _SubscriberDetailsScreenState
         await ref.read(templatesProvider.notifier).loadTemplates();
       }
       final allTemplates = ref.read(templatesProvider).templates;
-      // 'renewal' isn't a real template type in the DB enum (it was removed
-      // from the creator dropdown to stop save failures). When the extend
-      // flow asks for it, fall back to the activation_notice template so
-      // managers only need to maintain one template and "إرسال عند التمديد"
-      // actually delivers something.
-      final effectiveType =
-          templateType == 'renewal' ? 'activation_notice' : templateType;
       final typeMatches = allTemplates
-          .where((t) => t.templateType == effectiveType)
+          .where((t) => t.templateType == templateType)
           .toList();
       final match = typeMatches.where((t) => t.isActive).toList();
       if (match.isEmpty) {
