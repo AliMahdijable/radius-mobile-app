@@ -1764,11 +1764,19 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         },
       );
       if (refreshDashboard) {
+        // Daily activations list + counters
         try {
           await _ref
               .read(dashboardProvider.notifier)
               .refreshDailyActivations(adminId);
         } catch (_) {}
+        // Totals on the dashboard (total / active / expired / online) so a
+        // new subscriber, a delete, a toggle etc. visibly shift the KPI
+        // cards without waiting for the 30s auto-timer.
+        try {
+          await _ref.read(dashboardProvider.notifier).refreshCountsOnly();
+        } catch (_) {}
+        // Reports screens re-fetch when the epoch bumps.
         try {
           _ref.read(reportsProvider.notifier).triggerRefresh();
         } catch (_) {}

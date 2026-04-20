@@ -459,6 +459,46 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
     }
   }
 
+  /// Accepts a dio Response and decides whether SAS4 actually honored the
+  /// request. SAS4 tends to return HTTP 200 even on logical rejections,
+  /// embedding the real status in the body (`{status: 400, message: ...}`).
+  /// The previous manager balance/debt flows just awaited the POST and
+  /// returned true regardless — so the user saw "تم" even when SAS4
+  /// rejected the op and nothing actually moved.
+  bool _sas4ResponseOk(Response response) {
+    if (response.statusCode != 200 && response.statusCode != 201) return false;
+    final data = response.data;
+    if (data is Map) {
+      final status = data['status'];
+      if (status is int) return status == 200 || status == 201;
+      if (status is String) {
+        final parsed = int.tryParse(status);
+        if (parsed != null) return parsed == 200 || parsed == 201;
+      }
+      if (data['success'] == true) return true;
+      // Some endpoints return no status field at all on success — treat
+      // them as ok as long as we don't see an explicit error/message.
+      if (status == null && data['error'] == null && data['errors'] == null) {
+        return true;
+      }
+      return false;
+    }
+    return true;
+  }
+
+  String? _extractSas4Error(Response? response) {
+    final data = response?.data;
+    if (data is Map) {
+      final msg = (data['message'] ?? data['error'] ?? data['errors'])?.toString();
+      if (msg != null && msg.trim().isNotEmpty) return msg.trim();
+    } else if (data is String && data.trim().isNotEmpty) {
+      final s = data.trim();
+      return s.length > 200 ? '${s.substring(0, 200)}…' : s;
+    }
+    final code = response?.statusCode;
+    return code != null ? 'رفض الخادم الطلب (رمز $code)' : null;
+  }
+
   Future<bool> addBalance({
     required ManagerModel manager,
     required double amount,
@@ -477,11 +517,22 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
         'balance': manager.balance,
       });
 
-      await _sas4Dio.post(
+      final response = await _sas4Dio.post(
         '/manager/deposit',
         data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
+        options: Options(
+          contentType: 'application/x-www-form-urlencoded',
+          validateStatus: (_) => true,
+        ),
       );
+
+      if (!_sas4ResponseOk(response)) {
+        dev.log(
+          'addBalance rejected: status=${response.statusCode} data=${response.data}',
+          name: 'MANAGERS',
+        );
+        return false;
+      }
 
       await _logManagerActivity(
         activityType: 'managers',
@@ -526,11 +577,22 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
         'balance': manager.balance,
       });
 
-      await _sas4Dio.post(
+      final response = await _sas4Dio.post(
         '/manager/withdraw',
         data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
+        options: Options(
+          contentType: 'application/x-www-form-urlencoded',
+          validateStatus: (_) => true,
+        ),
       );
+
+      if (!_sas4ResponseOk(response)) {
+        dev.log(
+          'withdrawBalance rejected: status=${response.statusCode} data=${response.data}',
+          name: 'MANAGERS',
+        );
+        return false;
+      }
 
       await _logManagerActivity(
         activityType: 'managers',
@@ -574,11 +636,22 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
         'debt': totalDebt,
       });
 
-      await _sas4Dio.post(
+      final response = await _sas4Dio.post(
         '/manager/payDebt',
         data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
+        options: Options(
+          contentType: 'application/x-www-form-urlencoded',
+          validateStatus: (_) => true,
+        ),
       );
+
+      if (!_sas4ResponseOk(response)) {
+        dev.log(
+          'payDebt rejected: status=${response.statusCode} data=${response.data}',
+          name: 'MANAGERS',
+        );
+        return false;
+      }
 
       await _logManagerActivity(
         activityType: 'managers',
