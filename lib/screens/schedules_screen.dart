@@ -75,6 +75,72 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
     }
   }
 
+  /// Called from the card switch. If the schedule row already exists we just
+  /// flip its is_enabled column. If it doesn't, the backend's UPDATE would
+  /// hit 0 rows and return a "الجدولة غير موجودة" error — so we transparently
+  /// save a new schedule with the current form values and enabled=true.
+  /// That way the first toggle works without forcing the user to press
+  /// "Save" first.
+  Future<void> _toggleOrCreateSchedule(String type, bool enable) async {
+    final state = ref.read(schedulesProvider);
+    final existing = _findSchedule(state, type);
+
+    if (existing != null) {
+      final err = await ref
+          .read(schedulesProvider.notifier)
+          .toggleSchedule(type, enable);
+      if (!mounted) return;
+      if (err == null) {
+        AppSnackBar.success(
+          context,
+          enable ? 'تم تفعيل الجدولة' : 'تم تعطيل الجدولة',
+        );
+      } else {
+        AppSnackBar.error(context, err);
+      }
+      return;
+    }
+
+    // No row yet. Turning off when there's no row is a no-op; anything else
+    // should create the schedule so the switch reflects reality.
+    if (!enable) return;
+
+    final storage = ref.read(storageServiceProvider);
+    final adminId = await storage.getAdminId() ?? '';
+    if (adminId.isEmpty) {
+      if (mounted) {
+        AppSnackBar.error(
+          context,
+          'معرّف المدير غير متوفر. سجّل الخروج والدخول ثم أعد المحاولة.',
+        );
+      }
+      return;
+    }
+
+    final schedule = ScheduleModel(
+      adminId: adminId,
+      scheduleType: type,
+      isEnabled: true,
+      scheduledTime: type == 'expiry_warning' ? _expiryTime : _debtTime,
+      activeDays: List<int>.from(
+        type == 'expiry_warning' ? _expiryDays : _debtDays,
+      )..sort(),
+      daysBefore: type == 'expiry_warning'
+          ? (int.tryParse(_daysBeforeController.text) ?? _daysBefore)
+          : null,
+      executionCount: 0,
+    );
+
+    final err =
+        await ref.read(schedulesProvider.notifier).saveSchedule(schedule);
+    if (!mounted) return;
+    if (err == null) {
+      AppSnackBar.success(context, 'تم تفعيل الجدولة');
+    } else {
+      AppSnackBar.error(context, err);
+    }
+  }
+
   Future<void> _saveSchedule(String type) async {
     final state = ref.read(schedulesProvider);
     final existing = _findSchedule(state, type);
@@ -151,20 +217,8 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                       accentColor: AppTheme.warningColor,
                       title: 'تنبيه قرب انتهاء الاشتراك',
                       isEnabled: expirySchedule?.isEnabled ?? false,
-                      onToggle: (v) async {
-                        final err = await ref
-                            .read(schedulesProvider.notifier)
-                            .toggleSchedule('expiry_warning', v);
-                        if (!mounted) return;
-                        if (err == null) {
-                          AppSnackBar.success(
-                            context,
-                            v ? 'تم تفعيل الجدولة' : 'تم تعطيل الجدولة',
-                          );
-                        } else {
-                          AppSnackBar.error(context, err);
-                        }
-                      },
+                      onToggle: (v) =>
+                          _toggleOrCreateSchedule('expiry_warning', v),
                       time: _expiryTime,
                       onTimeTap: () => _pickTime(_expiryTime, (t) {
                         setState(() => _expiryTime = t);
@@ -189,20 +243,8 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                       accentColor: AppTheme.infoColor,
                       title: 'تذكير بالديون المستحقة',
                       isEnabled: debtSchedule?.isEnabled ?? false,
-                      onToggle: (v) async {
-                        final err = await ref
-                            .read(schedulesProvider.notifier)
-                            .toggleSchedule('debt_reminder', v);
-                        if (!mounted) return;
-                        if (err == null) {
-                          AppSnackBar.success(
-                            context,
-                            v ? 'تم تفعيل الجدولة' : 'تم تعطيل الجدولة',
-                          );
-                        } else {
-                          AppSnackBar.error(context, err);
-                        }
-                      },
+                      onToggle: (v) =>
+                          _toggleOrCreateSchedule('debt_reminder', v),
                       time: _debtTime,
                       onTimeTap: () => _pickTime(_debtTime, (t) {
                         setState(() => _debtTime = t);
