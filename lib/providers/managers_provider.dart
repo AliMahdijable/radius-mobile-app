@@ -225,7 +225,10 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
     return enriched;
   }
 
-  Future<bool> createManager({
+  /// Creates a new manager on SAS4. Returns `null` on success or a short
+  /// Arabic error message describing why SAS4 rejected the request, so the
+  /// UI can show the actual reason instead of a generic "فشل".
+  Future<String?> createManager({
     required String username,
     required String password,
     required int aclGroupId,
@@ -283,39 +286,75 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
       final response = await _sas4Dio.post(
         '/manager',
         data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
+        options: Options(
+          contentType: 'application/x-www-form-urlencoded',
+          validateStatus: (_) => true,
+        ),
       );
 
-      final ok = response.data is Map
-          ? response.data['status'] == 200 || response.statusCode == 200
-          : response.statusCode == 200;
+      dev.log(
+        'createManager status=${response.statusCode} data=${response.data}',
+        name: 'MANAGERS',
+      );
 
-      if (ok) {
-        await _logManagerActivity(
-          activityType: 'managers',
-          actionType: 'MANAGER_ADD',
-          action: 'manager_add',
-          description:
-              'تم إضافة مدير جديد: $username - الاسم: ${firstname.trim()} ${lastname.trim()}',
-          targetId: response.data is Map
-              ? _toInt(response.data['id'] ?? response.data['data']?['id'])
-              : 0,
-          targetName: username,
-          metadata: {
-            'manager_action': 'create_manager',
-            'firstname': firstname.trim(),
-            'lastname': lastname.trim(),
-            'acl_group_id': aclGroupId,
-            'parent_id': parentId,
-            'enabled': enabled,
-          },
-        );
+      final ok = response.statusCode == 200 &&
+          (response.data is Map
+              ? (response.data['status'] == 200 || response.data['success'] == true)
+              : true);
+
+      if (!ok) {
+        final data = response.data;
+        String? serverMsg;
+        if (data is Map) {
+          serverMsg = (data['message'] ??
+                  data['error'] ??
+                  data['errors'] ??
+                  data['data']?['message'])
+              ?.toString();
+        } else if (data is String && data.isNotEmpty) {
+          serverMsg = data.length > 200 ? '${data.substring(0, 200)}…' : data;
+        }
+        return serverMsg?.trim().isNotEmpty == true
+            ? serverMsg
+            : 'فشل إضافة المدير (رمز ${response.statusCode})';
       }
 
-      return ok;
+      await _logManagerActivity(
+        activityType: 'managers',
+        actionType: 'MANAGER_ADD',
+        action: 'manager_add',
+        description:
+            'تم إضافة مدير جديد: $username - الاسم: ${firstname.trim()} ${lastname.trim()}',
+        targetId: response.data is Map
+            ? _toInt(response.data['id'] ?? response.data['data']?['id'])
+            : 0,
+        targetName: username,
+        metadata: {
+          'manager_action': 'create_manager',
+          'firstname': firstname.trim(),
+          'lastname': lastname.trim(),
+          'acl_group_id': aclGroupId,
+          'parent_id': parentId,
+          'enabled': enabled,
+        },
+      );
+
+      return null;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      String? serverMsg;
+      if (data is Map) {
+        serverMsg =
+            (data['message'] ?? data['error'] ?? data['errors'])?.toString();
+      }
+      dev.log('createManager DioException: ${e.message} data=$data',
+          name: 'MANAGERS');
+      return serverMsg?.trim().isNotEmpty == true
+          ? serverMsg
+          : (e.message ?? 'فشل إضافة المدير');
     } catch (e) {
       dev.log('createManager error: $e', name: 'MANAGERS');
-      return false;
+      return 'فشل إضافة المدير';
     }
   }
 

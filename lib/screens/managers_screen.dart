@@ -1458,6 +1458,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
 
     final notifier = ref.read(managersProvider.notifier);
     bool success;
+    String? createErr;
 
     if (_isEdit) {
       success = await notifier.updateManager(
@@ -1477,7 +1478,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
         parentId: _selectedParentId,
       );
     } else {
-      success = await notifier.createManager(
+      createErr = await notifier.createManager(
         username: _usernameController.text,
         password: _passwordController.text.trim(),
         aclGroupId: _selectedAclId!,
@@ -1492,6 +1493,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
         notes: _notesController.text,
         enabled: _enabled,
       );
+      success = createErr == null;
     }
 
     if (!mounted) return;
@@ -1503,7 +1505,9 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
     } else {
       AppSnackBar.error(
         context,
-        _isEdit ? 'فشل تحديث المدير' : 'فشل إضافة المدير',
+        _isEdit
+            ? 'فشل تحديث المدير'
+            : (createErr ?? 'فشل إضافة المدير'),
       );
     }
   }
