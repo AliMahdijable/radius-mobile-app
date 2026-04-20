@@ -30,15 +30,17 @@ class AppHelpers {
     return '$datePart  ${_twelveHourTime(baghdad)}';
   }
 
-  /// Shorter 12-hour variant for report rows (MM/dd hh:mm صباحاً/مساءً).
+  /// 12-hour variant for report rows (yyyy/MM/dd hh:mm صباحاً/مساءً).
   /// Accepts either an ISO string (UTC → Baghdad conversion) or a local
   /// DateTime parsable string. Defaults to '—' when empty/invalid.
+  /// Includes the 4-digit year so rows spanning years (e.g. financial
+  /// statements across a New Year boundary) are unambiguous.
   static String formatReportDateTime(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '—';
     final date = DateTime.tryParse(dateStr);
     if (date == null) return dateStr;
     final baghdad = date.isUtc ? toBaghdadTime(date) : date;
-    final datePart = intl.DateFormat('MM/dd').format(baghdad);
+    final datePart = intl.DateFormat('yyyy/MM/dd').format(baghdad);
     return '$datePart  ${_twelveHourTime(baghdad)}';
   }
 
