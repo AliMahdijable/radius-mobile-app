@@ -1249,7 +1249,27 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
-      return response.statusCode == 200 || response.statusCode == 201;
+      final ok = response.statusCode == 200 || response.statusCode == 201;
+      if (ok) {
+        final displayName =
+            [firstname, lastname].where((p) => p.trim().isNotEmpty).join(' ').trim();
+        logActivity(
+          action: 'add_subscriber',
+          description: 'إضافة مشترك جديد: $username'
+              '${displayName.isNotEmpty ? ' - $displayName' : ''}',
+          targetName: username,
+          refreshDashboard: true,
+          metadata: {
+            'username': username,
+            'firstname': firstname,
+            'lastname': lastname,
+            'phone': phone,
+            'profile_id': profileId,
+            'expiration': expiration,
+          },
+        );
+      }
+      return ok;
     } catch (e) {
       dev.log('createSubscriber error: $e', name: 'SUBS');
       return false;
@@ -1569,6 +1589,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   Future<bool> renameSubscriber(int userId, String newUsername) async {
     try {
+      final oldName = _findUsername(userId);
       final payload =
           EncryptionService.encrypt({'new_username': newUsername});
       final response = await _sas4Dio.post(
@@ -1576,7 +1597,20 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
-      return response.data?['status'] == 200 || response.statusCode == 200;
+      final ok = response.data?['status'] == 200 || response.statusCode == 200;
+      if (ok) {
+        logActivity(
+          action: 'edit_subscriber',
+          description: 'تغيير اسم المشترك من $oldName إلى $newUsername',
+          targetId: userId,
+          targetName: newUsername,
+          metadata: {
+            'old_username': oldName,
+            'new_username': newUsername,
+          },
+        );
+      }
+      return ok;
     } catch (_) {
       return false;
     }
@@ -1584,6 +1618,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   Future<bool> changeProfile(int userId, int profileId) async {
     try {
+      final subName = _findUsername(userId);
       final payload = EncryptionService.encrypt({
         'user_id': userId.toString(),
         'profile_id': profileId,
@@ -1594,7 +1629,20 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
-      return response.data?['status'] == 200 || response.statusCode == 200;
+      final ok = response.data?['status'] == 200 || response.statusCode == 200;
+      if (ok) {
+        logActivity(
+          action: 'edit_subscriber',
+          description: 'تغيير باقة المشترك: $subName',
+          targetId: userId,
+          targetName: subName,
+          metadata: {
+            'profile_id': profileId,
+            'username': subName,
+          },
+        );
+      }
+      return ok;
     } catch (_) {
       return false;
     }
@@ -1616,6 +1664,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   Future<bool> toggleSubscriber(int id, {required bool enable}) async {
     try {
+      final subName = _findUsername(id);
       final payload = EncryptionService.encrypt({'user_ids': [id]});
       final endpoint =
           enable ? ApiConstants.sas4EnableUser : ApiConstants.sas4DisableUser;
@@ -1625,9 +1674,24 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         data: {'payload': payload},
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
-      return response.data?['status'] == 200 ||
+      final ok = response.data?['status'] == 200 ||
           response.data?['success'] == true ||
           response.statusCode == 200;
+      if (ok) {
+        logActivity(
+          action: 'edit_subscriber',
+          description: enable
+              ? 'تفعيل حساب المشترك: $subName'
+              : 'تعطيل حساب المشترك: $subName',
+          targetId: id,
+          targetName: subName,
+          metadata: {
+            'enabled': enable,
+            'username': subName,
+          },
+        );
+      }
+      return ok;
     } catch (_) {
       return false;
     }
@@ -1648,6 +1712,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           description: 'تعديل بيانات المشترك: ${data['username'] ?? userId}',
           targetId: userId,
           targetName: data['username']?.toString() ?? userId.toString(),
+          refreshDashboard: true,
           metadata: {
             'firstname': data['firstname'],
             'lastname': data['lastname'],
@@ -1760,6 +1825,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           description: 'تسديد دين ${_formatIQD(amount)} IQD من المشترك: $username${paymentNotes != null ? ' - $paymentNotes' : ''}',
           targetId: userId,
           targetName: username,
+          refreshDashboard: true,
           metadata: {
             'amount': amount,
             'previous_balance': currentNotes,
@@ -1798,6 +1864,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           description: 'إضافة دين ${_formatIQD(amount)} IQD للمشترك: $username${comment != null ? ' - $comment' : ''}',
           targetId: userId,
           targetName: username,
+          refreshDashboard: true,
           metadata: {
             'amount': amount,
             'previous_comment': currentNotes,
@@ -1832,6 +1899,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           description: 'حذف مشترك: $subName',
           targetId: id,
           targetName: subName,
+          refreshDashboard: true,
         );
       }
       return ok;

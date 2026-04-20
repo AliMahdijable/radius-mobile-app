@@ -2540,21 +2540,32 @@ class _SheetScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
-    final systemInset = bottomSheetSystemInset(context);
-
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: keyboardInset),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 10, 16, systemInset + 20),
-        child: LoadingOverlay(
-          isLoading: isLoading,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+    // Single Padding that already accounts for keyboard + system inset.
+    // The previous layout wrapped an AnimatedPadding around a Padding whose
+    // bottom included systemInset, and then put a SingleChildScrollView
+    // inside — with isScrollControlled:true the sheet treated the scroll
+    // view as expandable, so it stretched to fill the available height
+    // and rendered the empty sheet background below the short form,
+    // producing the big white gap between the content and the keyboard.
+    //
+    // Collapse the padding into one bottomSheetBottomInset (keyboard +
+    // system + extra) and make the Column shrink-wrap so the sheet
+    // resizes to the actual form height.
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        bottomSheetBottomInset(context, extra: 20),
+      ),
+      child: LoadingOverlay(
+        isLoading: isLoading,
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                 Container(
                   width: 42,
                   height: 5,
@@ -2617,7 +2628,6 @@ class _SheetScaffold extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
