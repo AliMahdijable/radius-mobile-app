@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -66,13 +67,19 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
       final response = await _dio.post(
         ApiConstants.waSaveTemplate,
         data: template.toJson(),
+        options: Options(validateStatus: (_) => true),
       );
-      if (response.data['success'] == true) {
+      if (response.statusCode == 200 && response.data['success'] == true) {
         await loadTemplates();
         return true;
       }
+      dev.log(
+        'saveTemplate failed: status=${response.statusCode} data=${response.data}',
+        name: 'TEMPLATES',
+      );
       return false;
-    } catch (_) {
+    } catch (e) {
+      dev.log('saveTemplate error: $e', name: 'TEMPLATES');
       return false;
     }
   }
@@ -81,12 +88,21 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
     final _adminId = await _storage.getAdminId();
     if (_adminId == null) return false;
     try {
-      await _dio.delete(
+      final response = await _dio.delete(
         '${ApiConstants.waTemplate}/$_adminId/$templateType',
+        options: Options(validateStatus: (_) => true),
       );
-      await loadTemplates();
-      return true;
-    } catch (_) {
+      if (response.statusCode == 200 && response.data?['success'] == true) {
+        await loadTemplates();
+        return true;
+      }
+      dev.log(
+        'deleteTemplate failed: status=${response.statusCode} data=${response.data}',
+        name: 'TEMPLATES',
+      );
+      return false;
+    } catch (e) {
+      dev.log('deleteTemplate error: $e', name: 'TEMPLATES');
       return false;
     }
   }
@@ -95,17 +111,26 @@ class TemplatesNotifier extends StateNotifier<TemplatesState> {
     final _adminId = await _storage.getAdminId();
     if (_adminId == null) return false;
     try {
-      await _dio.patch(
+      final response = await _dio.patch(
         ApiConstants.waTemplateToggle,
         data: {
           'adminId': _adminId,
           'templateType': templateType,
           'isActive': isActive,
         },
+        options: Options(validateStatus: (_) => true),
       );
-      await loadTemplates();
-      return true;
-    } catch (_) {
+      if (response.statusCode == 200 && response.data?['success'] == true) {
+        await loadTemplates();
+        return true;
+      }
+      dev.log(
+        'toggleTemplate failed: status=${response.statusCode} data=${response.data}',
+        name: 'TEMPLATES',
+      );
+      return false;
+    } catch (e) {
+      dev.log('toggleTemplate error: $e', name: 'TEMPLATES');
       return false;
     }
   }

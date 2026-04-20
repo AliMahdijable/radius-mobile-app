@@ -56,15 +56,6 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'تاريخ الانتهاء: {expiry_date}\n'
             'المتبقي: {remaining_days}\n\n'
             'نتمنى لك تجربة ممتازة 🌐';
-      case 'renewal':
-        return 'تم التجديد 🔄\n\n'
-            'عزيزي {firstname}،\n'
-            'تم تجديد اشتراكك في {package_name}.\n'
-            'السعر: {package_price} IQD\n'
-            'المبلغ المدفوع: {paid_amount} IQD\n'
-            'تاريخ الانتهاء الجديد: {expiry_date}\n'
-            'المتبقي: {remaining_days}\n\n'
-            'شكراً لاستمراركم معنا 💚';
       case 'payment_confirmation':
         return 'تم استلام تسديد 💳\n\n'
             'عزيزي {firstname}،\n'
@@ -106,7 +97,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final canManageManagers = authUser?.canAccessManagers ?? false;
     final typeOptions = <String>[
       'debt_reminder', 'expiry_warning', 'service_end',
-      'activation_notice', 'renewal', 'payment_confirmation',
+      'activation_notice', 'payment_confirmation',
       'welcome_message',
       if (canManageManagers) 'manager_agent',
     ];
