@@ -168,8 +168,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 _FeatureToggle(
                   icon: Icons.autorenew,
                   title: 'إرسال عند التمديد',
-                  subtitle:
-                      'يُرسل نفس قالب "إشعار التفعيل" عند تمديد/تجديد اشتراك',
+                  subtitle: 'إرسال قالب "إشعار التمديد" عند تمديد/تجديد اشتراك',
                   value: settings.features.sendOnExtension,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
