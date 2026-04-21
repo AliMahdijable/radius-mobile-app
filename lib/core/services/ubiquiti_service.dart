@@ -18,8 +18,8 @@ class UbiquitiService {
   static Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 8),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
       validateStatus: (_) => true,
       followRedirects: false,
       headers: {'Accept': 'application/json, text/html, */*'},

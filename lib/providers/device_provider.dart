@@ -121,11 +121,21 @@ String _ontTempHealth(String temp) {
 
 /// Device status: resolves credentials, probes the device, returns the
 /// unified snapshot. Triggered lazily when the widget subscribes.
+/// Total probe time capped at 15s; anything slower is treated as "offline"
+/// so the UI never sits on a spinner forever.
 final deviceStatusProvider = FutureProvider.family
     .autoDispose<DeviceHealthSnapshot?, DeviceStatusArgs>((ref, args) async {
   // Keep the result warm for five minutes even if no widget watches.
   ref.cacheFor(const Duration(minutes: 5));
+  try {
+    return await _probeDevice(ref, args)
+        .timeout(const Duration(seconds: 15), onTimeout: () => null);
+  } catch (_) {
+    return null;
+  }
+});
 
+Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async {
   final cfg = await ref.watch(deviceConfigProvider(args.subscriberUsername).future) ??
       const DeviceConfig();
   final resolved = cfg.resolve(fallbackIp: args.fallbackIp);
