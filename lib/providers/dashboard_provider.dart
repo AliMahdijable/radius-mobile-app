@@ -251,6 +251,19 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         'parent_id': -1, 'group_id': -1, 'site_id': -1, 'sub_users': 1,
         'mac': '', 'columns': ['idx'],
       });
+      // Near-expiry count — mirrors web Dashboard.js `fetchExpiringSoonCount`.
+      // Pull a wide page with status=-1 (all) and local-filter by
+      // remaining_days<=3 && expiration>now. sub_users=1 includes
+      // sub-manager subscribers, so admins like admin@foxnet (no direct
+      // subs) still read the right count.
+      final nearExpiryPayload = EncryptionService.encrypt({
+        'page': 1, 'count': 1000, 'sortBy': 'username', 'direction': 'asc',
+        'search': '', 'status': -1, 'connection': -1, 'profile_id': -1,
+        'parent_id': -1, 'group_id': -1, 'site_id': -1, 'sub_users': 1,
+        'mac': '',
+        'columns': ['idx', 'username', 'firstname', 'lastname', 'expiration',
+                    'parent_username', 'name', 'remaining_days', 'phone'],
+      });
 
       final allResults = await Future.wait([
         // [0-5] SAS4 Widgets
@@ -280,6 +293,14 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
             .post(
               ApiConstants.sas4ListUsers,
               data: {'payload': expiredPayload},
+              options: Options(contentType: 'application/x-www-form-urlencoded'),
+            )
+            .catchError((_) => null),
+        // [10] SAS4 near-expiry (full list → local filter)
+        _sas4Dio
+            .post(
+              ApiConstants.sas4ListUsers,
+              data: {'payload': nearExpiryPayload},
               options: Options(contentType: 'application/x-www-form-urlencoded'),
             )
             .catchError((_) => null),
@@ -386,6 +407,40 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         return da.compareTo(db);
       });
 
+      // Parse near-expiry from the direct SAS4 call (mirrors web logic).
+      // Falls back to whatever subscribers_provider already pushed if the
+      // SAS4 response is empty/decryptable-but-without-data.
+      int? nearExpiryFromSas4;
+      List<Map<String, dynamic>>? nearExpiryListFromSas4;
+      try {
+        dynamic neRaw = allResults[10] is Response ? (allResults[10] as Response).data : null;
+        if (neRaw is String) neRaw = EncryptionService.decrypt(neRaw);
+        if (neRaw is Map && neRaw['data'] is List) {
+          final now = DateTime.now();
+          final list = <Map<String, dynamic>>[];
+          for (final raw in (neRaw['data'] as List)) {
+            if (raw is! Map) continue;
+            final expStr = raw['expiration']?.toString();
+            if (expStr == null || expStr.isEmpty) continue;
+            final expDate = _parseExpDate(expStr);
+            if (expDate == null || !expDate.isAfter(now)) continue;
+            final rd = _remainingDaysInt(raw['remaining_days']);
+            if (rd == null || rd < 0 || rd > 3) continue;
+            list.add(Map<String, dynamic>.from(raw));
+          }
+          list.sort((a, b) {
+            final da = _remainingDaysInt(a['remaining_days']) ?? 0;
+            final db = _remainingDaysInt(b['remaining_days']) ?? 0;
+            return da.compareTo(db);
+          });
+          nearExpiryFromSas4 = list.length;
+          nearExpiryListFromSas4 = list;
+          dev.log('NearExpiry (SAS4 direct): $nearExpiryFromSas4', name: 'DASH');
+        }
+      } catch (e) {
+        dev.log('NearExpiry SAS4 parse error: $e', name: 'DASH');
+      }
+
       state = state.copyWith(
         totalSubscribers: total,
         activeSubscribers: active,
@@ -393,8 +448,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         onlineCount: online,
         managerBalance: balance,
         managerPoints: points,
-        // nearExpiryCount/List مقصود عدم تمريرهما — subscribers_provider هو
-        // المصدر الوحيد لهذه القيمة (يدفع القيم الصحيحة من كامل بيانات SAS4).
+        // nearExpiryCount/List — نكتبها من استجابة SAS4 المباشرة (مثل الويب).
+        // لو فشلت تلك الاستجابة، subscribers_provider سيكتبها لاحقاً عبر
+        // updateNearExpiryFromSubscribers فلا نخسر الدقة.
+        nearExpiryCount: nearExpiryFromSas4 ?? state.nearExpiryCount,
+        nearExpiryList: nearExpiryListFromSas4 ?? state.nearExpiryList,
         expiredTodayCount: expiredToday,
         expiredOverdueCount: expiredOverdue,
         debtors: debtors,
