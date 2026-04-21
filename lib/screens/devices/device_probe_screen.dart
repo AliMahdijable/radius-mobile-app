@@ -178,16 +178,21 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
           );
           eatCookies(res);
           final bodyStr = (res.data ?? '').toString();
-          final loc = res.headers.value('location') ?? '';
-          _line('[try] ${a['label']} → ${res.statusCode} loc=${loc.isEmpty ? '-' : loc.substring(0, loc.length.clamp(0, 40))} len=${bodyStr.length}');
-          final preview = bodyStr.replaceAll(RegExp(r'\s+'), ' ').trim();
-          _line('  body: «${preview.length > 300 ? preview.substring(0, 300) : preview}»');
+          _line('[try] ${a['label']} → ${res.statusCode} len=${bodyStr.length}');
+          // Dump ALL response headers — maybe set-cookie uses unusual case
+          res.headers.forEach((name, values) {
+            _line('  hdr $name: ${values.join(" | ")}');
+          });
+          // Full body since it's small (< 500 bytes)
+          _line('  FULL BODY:');
+          _line(bodyStr);
           _line('  cookies now: ${cookies.keys.join(",")}');
-          // Real success test: try /index.asp; if it no longer looks like
-          // the login page we're in.
+          // Wait a second, then try /index.asp
+          await Future.delayed(const Duration(milliseconds: 1500));
           try {
             final idx = await dio.get('/index.asp', options: Options(headers: {
-              'Cookie': cookieHeader(), 'Referer': '$base/',
+              if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
+              'Referer': '$base/',
             }));
             final idxBody = (idx.data ?? '').toString();
             final stillLogin = idxBody.contains('safelogin.js') || idxBody.contains('GetRandCount');
