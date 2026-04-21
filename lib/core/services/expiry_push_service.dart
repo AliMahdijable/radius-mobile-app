@@ -206,41 +206,82 @@ class ExpiryPushService {
     final list = data['data'];
     if (list is! List) return;
 
-    int near = 0;
-    int expired = 0;
-    int overdue = 0;
+    final List<String> nearLines = [];
+    final List<String> expiredLines = [];
+    final List<String> overdueLines = [];
+
+    String _labelFor(Map<String, dynamic> sub) {
+      final first = (sub['firstname'] ?? '').toString().trim();
+      final last = (sub['lastname'] ?? '').toString().trim();
+      final arabicName =
+          [first, last].where((p) => p.isNotEmpty).join(' ').trim();
+      final username = (sub['username'] ?? '').toString().trim();
+      if (arabicName.isNotEmpty && username.isNotEmpty) {
+        return '$arabicName ($username)';
+      }
+      return arabicName.isNotEmpty ? arabicName : username;
+    }
+
     for (final raw in list) {
       if (raw is! Map) continue;
       final sub = Map<String, dynamic>.from(raw);
       final d = _remainingDaysInt(sub['remaining_days']);
-      if (d != null && d >= 1 && d <= 3) near++;
-      if (d == 0) expired++;
-      if (d != null && d < 0) overdue++;
+      final label = _labelFor(sub);
+      if (label.isEmpty) continue;
+      if (d != null && d >= 1 && d <= 3) nearLines.add(label);
+      if (d == 0) expiredLines.add(label);
+      if (d != null && d < 0) overdueLines.add(label);
     }
 
+    final near = nearLines.length;
+    final expired = expiredLines.length;
+    final overdue = overdueLines.length;
+
     final today = _todayLocal();
-    const androidDetails = AndroidNotificationDetails(
-      'mysvcs_expiry',
-      'تنبيهات الاشتراك',
-      channelDescription: 'قرب الانتهاء وانتهى اليوم',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+
+    /// Builds an Android BigTextStyle so the user can expand the notice and
+    /// see every subscriber's Arabic name + username, with a short summary
+    /// line on top — instead of just the raw count we used to show.
+    NotificationDetails _buildDetails(String summary, List<String> names) {
+      // Show the first 15 to keep the tray tidy; anything beyond collapses
+      // into a "…و N آخرين" tail so very large lists don't spam the shade.
+      const maxShown = 15;
+      final display = names.take(maxShown).toList();
+      final extras = names.length - display.length;
+      final body = [
+        summary,
+        ...display.map((n) => '• $n'),
+        if (extras > 0) '• …و $extras آخرين',
+      ].join('\n');
+
+      final androidDetails = AndroidNotificationDetails(
+        'mysvcs_expiry',
+        'تنبيهات الاشتراك',
+        channelDescription: 'قرب الانتهاء وانتهى اليوم',
+        importance: Importance.high,
+        priority: Priority.high,
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: summary,
+        ),
+      );
+      const iosDetails = DarwinNotificationDetails();
+      return NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+    }
 
     if (near > 0 &&
         prefs.getString(AppConstants.storagePushLastNearNotifDay) != today) {
+      final summary = near == 1
+          ? 'مشترك واحد ضمن 3 أيام من الانتهاء.'
+          : '$near مشتركين ضمن 3 أيام من الانتهاء.';
       await _fln.show(
         91001,
         'قرب انتهاء الاشتراك',
-        near == 1
-            ? 'مشترك واحد ضمن 3 أيام من الانتهاء.'
-            : '$near مشتركين ضمن 3 أيام من الانتهاء.',
-        details,
+        summary,
+        _buildDetails(summary, nearLines),
       );
       await prefs.setString(AppConstants.storagePushLastNearNotifDay, today);
     }
@@ -248,13 +289,14 @@ class ExpiryPushService {
     if (expired > 0 &&
         prefs.getString(AppConstants.storagePushLastExpiredNotifDay) !=
             today) {
+      final summary = expired == 1
+          ? 'مشترك واحد انتهى اشتراكه اليوم.'
+          : '$expired مشتركين انتهى اشتراكهم اليوم.';
       await _fln.show(
         91002,
         'انتهى الاشتراك اليوم',
-        expired == 1
-            ? 'مشترك واحد انتهى اشتراكه اليوم.'
-            : '$expired مشتركين انتهى اشتراكهم اليوم.',
-        details,
+        summary,
+        _buildDetails(summary, expiredLines),
       );
       await prefs.setString(
           AppConstants.storagePushLastExpiredNotifDay, today);
@@ -263,13 +305,14 @@ class ExpiryPushService {
     if (overdue > 0 &&
         prefs.getString(AppConstants.storagePushLastOverdueNotifDay) !=
             today) {
+      final summary = overdue == 1
+          ? 'مشترك واحد منتهي الاشتراك.'
+          : '$overdue مشتركين منتهية اشتراكاتهم.';
       await _fln.show(
         91003,
         'مشتركون منتهية اشتراكاتهم',
-        overdue == 1
-            ? 'مشترك واحد منتهي الاشتراك.'
-            : '$overdue مشتركين منتهية اشتراكاتهم.',
-        details,
+        summary,
+        _buildDetails(summary, overdueLines),
       );
       await prefs.setString(
           AppConstants.storagePushLastOverdueNotifDay, today);
