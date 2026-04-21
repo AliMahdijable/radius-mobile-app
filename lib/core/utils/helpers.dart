@@ -46,7 +46,7 @@ class AppHelpers {
     if (date == null) return dateStr;
     final baghdad = date.isUtc ? toBaghdadTime(date) : date;
     final datePart = intl.DateFormat('yyyy/MM/dd').format(baghdad);
-    return '$datePart  ${_twelveHourTime(baghdad)}';
+    return '$datePart  ${_twelveHourTime(baghdad, withSeconds: true)}';
   }
 
   /// 12-hour variant for report rows (yyyy/MM/dd hh:mm صباحاً/مساءً).
@@ -71,13 +71,17 @@ class AppHelpers {
     return _twelveHourTime(local);
   }
 
-  static String _twelveHourTime(DateTime dt) {
+  static String _twelveHourTime(DateTime dt, {bool withSeconds = false}) {
     final hour24 = dt.hour;
     final hour12 =
         hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
     final minute = dt.minute.toString().padLeft(2, '0');
+    final second = dt.second.toString().padLeft(2, '0');
     final meridiem = hour24 < 12 ? 'صباحاً' : 'مساءً';
-    return '${hour12.toString().padLeft(2, '0')}:$minute $meridiem';
+    final timePart = withSeconds
+        ? '${hour12.toString().padLeft(2, '0')}:$minute:$second'
+        : '${hour12.toString().padLeft(2, '0')}:$minute';
+    return '$timePart $meridiem';
   }
 
   /// Format date relative (e.g., "منذ 5 دقائق")
