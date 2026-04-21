@@ -249,17 +249,10 @@ class _MetricsInlineRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (int i = 0; i < chips.length; i++) ...[
-              if (i > 0) const SizedBox(width: 4),
-              chips[i],
-            ],
-          ],
-        ),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: chips,
       ),
     );
   }
