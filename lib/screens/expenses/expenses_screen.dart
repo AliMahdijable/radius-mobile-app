@@ -448,10 +448,17 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          style: TextButton.styleFrom(
+            textStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w600),
+          ),
           child: const Text('إلغاء'),
         ),
         FilledButton(
           onPressed: _saving ? null : _submit,
+          style: FilledButton.styleFrom(
+            textStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w700),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          ),
           child: _saving
               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
               : Text(isEdit ? 'حفظ' : 'إضافة'),

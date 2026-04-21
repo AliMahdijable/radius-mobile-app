@@ -469,33 +469,32 @@ class _AdminRow extends StatelessWidget {
     final extends_ = _toInt(admin['extend_count']);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 10),
+          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          // 3-column grid × 2 rows — compact and still reads well.
           Row(children: [
             _MiniStat('إيرادات', AppHelpers.formatMoney(revenue), Colors.green),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             _MiniStat('ديون', AppHelpers.formatMoney(debt), Colors.red),
-          ]),
-          const SizedBox(height: 6),
-          Row(children: [
+            const SizedBox(width: 4),
             _MiniStat('صرفيات', AppHelpers.formatMoney(expenses), const Color(0xFFef4444)),
-            const SizedBox(width: 6),
-            _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Row(children: [
+            _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
+            const SizedBox(width: 4),
             _MiniStat('تفعيل', '$activations', AppTheme.successColor),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             _MiniStat('تمديد', '$extends_', AppTheme.warningColor),
           ]),
         ],
@@ -527,21 +526,21 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: .08),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           border: Border.all(color: color.withValues(alpha: .18)),
         ),
         child: Column(children: [
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(value,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           Text(label,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600,
                   color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55))),
         ]),
       ),
