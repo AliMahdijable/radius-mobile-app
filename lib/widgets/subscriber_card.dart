@@ -252,37 +252,41 @@ class SubscriberCard extends StatelessWidget {
                         : subscriber.isExpired
                             ? 'منتهي'
                             : _formatRemaining(subscriber);
-                    return Container(
+                    final pill = Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
                         color: daysColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            mainLabel,
-                            style: TextStyle(
-                              color: daysColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (expiredSince != null)
-                            Text(
-                              expiredSince,
-                              style: TextStyle(
-                                color: daysColor.withOpacity(0.75),
-                                fontSize: 8,
-                                fontWeight: FontWeight.w500,
-                                height: 1.1,
-                              ),
-                            ),
-                        ],
+                      child: Text(
+                        mainLabel,
+                        style: TextStyle(
+                          color: daysColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
+                    );
+                    if (expiredSince == null) return pill;
+                    // Expired: stack the since-label below the pill as plain
+                    // text so the red box stays tight around "منتهي".
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        pill,
+                        const SizedBox(height: 2),
+                        Text(
+                          expiredSince,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.55),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
                     );
                   }),
                   const SizedBox(width: 4),
