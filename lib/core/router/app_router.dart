@@ -8,6 +8,7 @@ import '../../screens/login_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/subscribers/subscriber_details_screen.dart';
 import '../../screens/whatsapp/whatsapp_connection_screen.dart';
+import '../../screens/whatsapp/whatsapp_send_scope_screen.dart';
 import '../../screens/whatsapp/message_logs_screen.dart';
 import '../../screens/whatsapp/broadcast_screen.dart';
 import '../../screens/schedules_screen.dart';
@@ -60,6 +61,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/whatsapp-connection',
         builder: (context, state) => const WhatsAppConnectionScreen(),
+      ),
+      GoRoute(
+        path: '/whatsapp-send-scope',
+        builder: (context, state) => const WhatsAppSendScopeScreen(),
       ),
       GoRoute(
         path: '/message-logs',

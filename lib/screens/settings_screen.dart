@@ -314,6 +314,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onTap: () => context.push('/whatsapp-connection'),
         ),
         _SettingTile(
+          icon: Icons.share_location_rounded,
+          title: 'نطاق الإرسال',
+          subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
+          iconColor: AppTheme.whatsappGreen,
+          onTap: () => context.push('/whatsapp-send-scope'),
+        ),
+        _SettingTile(
           icon: Icons.schedule,
           title: 'الجدولة',
           onTap: () => context.push('/schedules'),
