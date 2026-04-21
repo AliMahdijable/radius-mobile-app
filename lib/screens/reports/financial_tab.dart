@@ -119,7 +119,8 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
         _num(kpis['activate_cash_sum']);
     final debts =
         _num(kpis['balance_add_sum']) + _num(kpis['activate_non_cash_sum']);
-    final netProfit = collections - debts;
+    final expenses = _num(kpis['expenses_sum']);
+    final netProfit = collections - debts - expenses;
     final activationsTotal =
         _num(kpis['activations_count']) + _num(kpis['extend_count']);
 
@@ -247,9 +248,20 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
             ),
             const SizedBox(width: 10),
             _KpiCard(
+              label: 'الصرفيات',
+              value: AppHelpers.formatMoney(expenses),
+              icon: Icons.account_balance_wallet_rounded,
+              colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
+            ),
+          ]),
+          const SizedBox(height: 10),
+          // Net profit standalone on its own row so the number is large
+          // and immediately readable — matches the web hero pattern.
+          Row(children: [
+            _KpiCard(
               label: 'صافي الربح',
               value: AppHelpers.formatMoney(netProfit),
-              icon: Icons.account_balance_wallet_rounded,
+              icon: Icons.savings_rounded,
               colors: const [Color(0xFF0ea5e9), Color(0xFF0284c7)],
             ),
           ]),
@@ -451,13 +463,14 @@ class _AdminRow extends StatelessWidget {
     final name = admin['admin_username']?.toString() ?? '—';
     final revenue = _toDouble(admin['revenue_total']);
     final debt = _toDouble(admin['debt_total']);
-    final net = revenue - debt;
+    final expenses = _toDouble(admin['expenses_total']);
+    final net = revenue - debt - expenses;
     final activations = _toInt(admin['activations_count']);
     final extends_ = _toInt(admin['extend_count']);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -466,21 +479,24 @@ class _AdminRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
+          Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
           Row(children: [
             _MiniStat('إيرادات', AppHelpers.formatMoney(revenue), Colors.green),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             _MiniStat('ديون', AppHelpers.formatMoney(debt), Colors.red),
-            const SizedBox(width: 4),
+          ]),
+          const SizedBox(height: 6),
+          Row(children: [
+            _MiniStat('صرفيات', AppHelpers.formatMoney(expenses), const Color(0xFFef4444)),
+            const SizedBox(width: 6),
             _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
           ]),
           const SizedBox(height: 6),
           Row(children: [
             _MiniStat('تفعيل', '$activations', AppTheme.successColor),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             _MiniStat('تمديد', '$extends_', AppTheme.warningColor),
-            const Spacer(flex: 3),
           ]),
         ],
       ),
@@ -511,21 +527,22 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: .06),
-          borderRadius: BorderRadius.circular(6),
+          color: color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: .18)),
         ),
         child: Column(children: [
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(value,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
           ),
-          const SizedBox(height: 1),
+          const SizedBox(height: 3),
           Text(label,
-              style: TextStyle(fontSize: 9,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .4))),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55))),
         ]),
       ),
     );
