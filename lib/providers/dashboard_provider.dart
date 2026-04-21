@@ -196,9 +196,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     return expDay == today && expDate.isBefore(now);
   }
 
-  static bool _isNearExpiryExact(String? expiration) {
+  static bool _isNearExpiryExact(String? expiration, {int? remainingDays}) {
     final expDate = _parseExpDate(expiration);
-    if (expDate == null) return false;
+    if (expDate == null) {
+      // Align with SubscriberModel.isNearExpiry: fall back to remaining_days
+      // when the backend doesn't emit an expiration string for this row.
+      return remainingDays != null && remainingDays >= 1 && remainingDays <= 3;
+    }
     final now = DateTime.now();
     if (expDate.isBefore(now)) return false;
     final diff = expDate.difference(now);
@@ -327,7 +331,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         final data = subsData['data'] as List? ?? [];
         for (final sub in data) {
           final expStr = sub['expiration']?.toString();
-          if (_isNearExpiryExact(expStr)) {
+          final remDays = _remainingDaysInt(sub['remaining_days']);
+          if (_isNearExpiryExact(expStr, remainingDays: remDays)) {
             nearExpiry++;
             nearExpiryList.add(Map<String, dynamic>.from(sub));
           }

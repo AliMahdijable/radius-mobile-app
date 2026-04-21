@@ -8,6 +8,11 @@ class ScheduleModel {
   final int? daysBefore;
   final String? lastRunAt;
   final int executionCount;
+  // Monthly mode support — when scheduleMode == 'monthly' the scheduler
+  // checks monthDays (1..31) against today's day-of-month instead of
+  // weekday. Value 31 is the sentinel "last day of the month".
+  final String scheduleMode;
+  final List<int> monthDays;
 
   const ScheduleModel({
     this.id,
@@ -19,6 +24,8 @@ class ScheduleModel {
     this.daysBefore,
     this.lastRunAt,
     this.executionCount = 0,
+    this.scheduleMode = 'weekly',
+    this.monthDays = const [],
   });
 
   static String getArabicType(String type) {
@@ -62,6 +69,34 @@ class ScheduleModel {
       return [0, 1, 2, 3, 4, 5, 6];
     }
 
+    List<int> parseMonthDays(dynamic d) {
+      if (d is List) {
+        final out = <int>[];
+        for (final e in d) {
+          final n = e is int
+              ? e
+              : (e is num ? e.toInt() : int.tryParse(e.toString().trim()));
+          if (n != null && n >= 1 && n <= 31) out.add(n);
+        }
+        return out;
+      }
+      if (d is String) {
+        try {
+          final cleaned = d.replaceAll('[', '').replaceAll(']', '').trim();
+          if (cleaned.isEmpty) return const [];
+          return cleaned
+              .split(',')
+              .map((e) => int.tryParse(e.trim()))
+              .whereType<int>()
+              .where((n) => n >= 1 && n <= 31)
+              .toList();
+        } catch (_) {
+          return const [];
+        }
+      }
+      return const [];
+    }
+
     return ScheduleModel(
       id: json['id'] is int
           ? json['id']
@@ -78,6 +113,8 @@ class ScheduleModel {
       executionCount: json['execution_count'] is int
           ? json['execution_count']
           : int.tryParse(json['execution_count']?.toString() ?? '0') ?? 0,
+      scheduleMode: (json['schedule_mode'] ?? 'weekly').toString(),
+      monthDays: parseMonthDays(json['month_days']),
     );
   }
 
@@ -97,6 +134,8 @@ class ScheduleModel {
         'scheduledTime': scheduledTimeOut,
         'activeDays': activeDays,
         if (daysBefore != null) 'daysBefore': daysBefore,
+        'scheduleMode': scheduleMode,
+        'monthDays': monthDays,
       },
     };
   }
