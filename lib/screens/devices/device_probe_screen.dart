@@ -8,6 +8,9 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../screens/devices/ont_device_screen.dart';
 
 class DeviceProbeScreen extends StatefulWidget {
   const DeviceProbeScreen({super.key});
@@ -22,6 +25,7 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
   final _pass = TextEditingController(text: 'admintelecom');
   final _log = <String>[];
   bool _running = false;
+  bool _probeSuccess = false;
 
   Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
@@ -49,7 +53,7 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
 
   Future<void> _probe() async {
     if (_running) return;
-    setState(() { _running = true; _log.clear(); });
+    setState(() { _running = true; _log.clear(); _probeSuccess = false; });
     final host = _host.text.trim();
     final u = _user.text.trim();
     final p = _pass.text;
@@ -158,6 +162,7 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
         continue;
       }
       _line('✓ Logged in  cookie=$sessionCookie');
+      _probeSuccess = true;
 
       // Confirmed page paths from frame.asp menu structure.
       final pages = [
@@ -218,6 +223,21 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
                   : const Icon(Icons.wifi_tethering),
               label: Text(_running ? 'جاري الفحص...' : 'فحص'),
             ),
+            if (_probeSuccess) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => context.push(
+                  '/ont-device',
+                  extra: OntDeviceArgs(
+                    host: _host.text.trim(),
+                    user: _user.text.trim(),
+                    pass: _pass.text,
+                  ),
+                ),
+                icon: const Icon(Icons.sensors),
+                label: const Text('عرض بيانات الضوء'),
+              ),
+            ],
             const SizedBox(height: 12),
             const Text('النتيجة (شاركها لو فشل):', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
@@ -225,7 +245,7 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.black12),
                 ),

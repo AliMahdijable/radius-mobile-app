@@ -20,6 +20,7 @@ import '../../screens/managers_screen.dart';
 import '../../screens/packages_screen.dart';
 import '../../screens/print_templates_screen.dart';
 import '../../screens/devices/device_probe_screen.dart';
+import '../../screens/devices/ont_device_screen.dart';
 
 /// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -70,6 +71,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/device-probe',
         builder: (context, state) => const DeviceProbeScreen(),
+      ),
+      GoRoute(
+        path: '/ont-device',
+        builder: (context, state) {
+          final args = state.extra as OntDeviceArgs;
+          return OntDeviceScreen(args: args);
+        },
       ),
       GoRoute(
         path: '/message-logs',
