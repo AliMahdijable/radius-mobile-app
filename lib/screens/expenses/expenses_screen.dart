@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 
@@ -309,7 +310,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
-      _amount.text = e.amount.toStringAsFixed(0);
+      _amount.text = _formatThousands(e.amount.toStringAsFixed(0));
       _note.text = e.note ?? '';
       _date = e.expenseDate;
     } else {
@@ -317,9 +318,18 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
     }
   }
 
+  double _parseAmount(String s) => double.tryParse(s.replaceAll(',', '').trim()) ?? 0;
+
+  void _addQuick(int delta) {
+    final current = _parseAmount(_amount.text);
+    final next = (current + delta).toStringAsFixed(0);
+    _amount.text = _formatThousands(next);
+    setState(() {});
+  }
+
   Future<void> _submit() async {
-    final amt = double.tryParse(_amount.text.trim().replaceAll(',', ''));
-    if (amt == null || amt <= 0) {
+    final amt = _parseAmount(_amount.text);
+    if (!amt.isFinite || amt <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('أدخل مبلغ صحيح')),
       );
@@ -372,14 +382,36 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
           children: [
             TextField(
               controller: _amount,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              keyboardType: const TextInputType.numberWithOptions(decimal: false),
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              inputFormatters: [_ExpenseThousandsFormatter()],
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
-                prefixIcon: Icon(Icons.attach_money),
+                suffixText: 'IQD',
+                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 8),
+            // Quick amount chips mirroring the debt modal — small + nudges
+            // the admin toward round thousands without fighting the keyboard.
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [5, 10, 25, 50, 100, 250, 500].map((k) {
+                return ActionChip(
+                  label: Text('+${k}K', style: const TextStyle(fontSize: 12)),
+                  onPressed: () => _addQuick(k * 1000),
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList()
+                ..add(ActionChip(
+                  label: const Text('مسح', style: TextStyle(fontSize: 12)),
+                  onPressed: () { _amount.clear(); setState(() {}); },
+                  visualDensity: VisualDensity.compact,
+                )),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -423,4 +455,34 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
       ],
     );
   }
+}
+
+
+/// Commas-on-input formatter matching the one in subscriber_details —
+/// keeps the field readable while typing. Stored as plain digits on submit.
+class _ExpenseThousandsFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return newValue.copyWith(text: '');
+    final n = int.tryParse(digits);
+    if (n == null) return oldValue;
+    final formatted = _formatThousands(n.toString());
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+String _formatThousands(String digits) {
+  final clean = digits.replaceAll(RegExp(r"[^0-9]"), "");
+  if (clean.isEmpty) return "";
+  final buf = StringBuffer();
+  for (int i = 0; i < clean.length; i++) {
+    if (i > 0 && (clean.length - i) % 3 == 0) buf.write(",");
+    buf.write(clean[i]);
+  }
+  return buf.toString();
 }
