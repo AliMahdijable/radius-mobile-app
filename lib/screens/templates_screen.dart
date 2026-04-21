@@ -32,12 +32,12 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'نود تذكيركم بوجود مبلغ دين قدره {debt_amount} IQD على حسابكم.\n'
             'الباقة: {package_name}\n'
             'تاريخ الانتهاء: {expiry_date}\n'
-            'المتبقي: {remaining_days}\n\n'
+            'المتبقي: {days_remaining}\n\n'
             'يرجى التواصل معنا للتسديد. شكراً لتعاونكم 💚';
       case 'expiry_warning':
         return 'تنبيه — اشتراكك على وشك الانتهاء ⏰\n\n'
             'عزيزي {firstname}،\n'
-            'باقتكم ({package_name}) ستنتهي خلال {remaining_days}.\n'
+            'باقتكم ({package_name}) ستنتهي خلال {days_remaining}.\n'
             'تاريخ الانتهاء: {expiry_date}\n'
             'سعر التجديد: {package_price} IQD\n\n'
             'يرجى التجديد قبل الانقطاع.';
@@ -54,7 +54,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'السعر: {package_price} IQD\n'
             'المبلغ المدفوع: {paid_amount} IQD\n'
             'تاريخ الانتهاء: {expiry_date}\n'
-            'المتبقي: {remaining_days}\n\n'
+            'المتبقي: {days_remaining}\n\n'
             'نتمنى لك تجربة ممتازة 🌐';
       case 'renewal':
         return 'تم تمديد الاشتراك 🔄\n\n'
@@ -62,7 +62,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             '{username}\n\n'
             'تم تمديد اشتراكك في {package_name}.\n'
             'تاريخ الانتهاء الجديد: {expiry_date}\n'
-            'المتبقي: {remaining_days}\n'
+            'المتبقي: {days_remaining}\n'
             'السعر: {package_price} IQD\n'
             'المبلغ المدفوع: {paid_amount} IQD\n'
             'الدين الحالي: {debt_amount} IQD\n\n'

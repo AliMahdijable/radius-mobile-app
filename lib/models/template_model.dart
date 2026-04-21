@@ -55,6 +55,11 @@ class TemplateModel {
     return availableVariables;
   }
 
+  // Variable names ALIGNED with the server-side canonical keys in
+  // whatsapp/templateHelper.js. Previously we shipped {expiration_date}
+  // and {remaining_days} which had to be aliased server-side — now
+  // every chip the admin taps inserts the name the renderer natively
+  // understands, so new templates render on day one.
   static const List<String> availableVariables = [
     '{firstname}',
     '{subscriber_name}',
@@ -62,8 +67,8 @@ class TemplateModel {
     '{phone}',
     '{package_name}',
     '{package_price}',
-    '{remaining_days}',
-    '{expiration_date}',
+    '{days_remaining}',
+    '{expiry_date}',
     '{debt_amount}',
     '{credit_amount}',
     '{paid_amount}',
@@ -78,8 +83,8 @@ class TemplateModel {
     '{phone}':            'رقم الهاتف',
     '{package_name}':     'اسم الباقة',
     '{package_price}':    'سعر الباقة',
-    '{remaining_days}':   'الأيام المتبقية',
-    '{expiration_date}':  'تاريخ الانتهاء',
+    '{days_remaining}':   'الأيام المتبقية',
+    '{expiry_date}':      'تاريخ الانتهاء',
     '{debt_amount}':      'مبلغ الدين',
     '{credit_amount}':    'الرصيد',
     '{paid_amount}':      'المبلغ المدفوع',
@@ -103,8 +108,8 @@ class TemplateModel {
     '{phone}':            '📞',
     '{package_name}':     '📦',
     '{package_price}':    '💰',
-    '{remaining_days}':   '📅',
-    '{expiration_date}':  '📅',
+    '{days_remaining}':   '📅',
+    '{expiry_date}':      '📅',
     '{debt_amount}':      '💸',
     '{credit_amount}':    '💳',
     '{paid_amount}':      '✅',
