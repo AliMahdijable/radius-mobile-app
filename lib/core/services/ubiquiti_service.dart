@@ -18,8 +18,10 @@ class UbiquitiService {
   static Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
+      // Keep per-request timeouts short so the 15s probe cap is not blown
+      // through on unreachable HTTPS before we even try HTTP.
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 8),
       validateStatus: (_) => true,
       followRedirects: false,
       headers: {'Accept': 'application/json, text/html, */*'},
@@ -53,18 +55,25 @@ class UbiquitiService {
   }
 
   // ── airOS 6.x ────────────────────────────────────────────────────────
-  //   Cookie is issued on GET / (not on login.cgi), so we must capture it
-  //   there and send it back with the POST.
+  //   Most variants issue the session cookie on GET / (before the POST),
+  //   but some firmware sets it only on the login.cgi 302 response, and
+  //   some use cookie names that don't start with AIROS_. We handle all
+  //   three cases: try GET / first, proceed without a cookie if none is
+  //   found (some devices work without it), and also harvest any cookie
+  //   that the login.cgi 302 response sets.
   static Future<UbiquitiLoginResult?> _tryLoginV6(
       String base, String user, String pass) async {
     final dio = _buildDio(base);
     try {
-      // Step 1: GET / — device issues session cookie here.
+      // Step 1: GET / — grab whatever cookie the device offers.
       final rootRes = await dio.get('/');
-      final cookie = _extractAirosCookie(rootRes);
-      if (cookie == null) return null;
+      // Accept AIROS_* / SESSION by name; fall back to any cookie the
+      // server sets in case this firmware uses a different naming scheme.
+      String? cookie =
+          _extractAirosCookie(rootRes) ?? _extractAnyCookie(rootRes);
 
-      // Step 2: POST /login.cgi with the session cookie already in hand.
+      // Step 2: POST /login.cgi — send cookie if we got one; some variants
+      // work without a pre-existing cookie and set it on the 302 response.
       final body =
           'uri=&username=${Uri.encodeQueryComponent(user)}&password=${Uri.encodeQueryComponent(pass)}';
       final res = await dio.post(
@@ -72,7 +81,7 @@ class UbiquitiService {
         data: body,
         options: Options(headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': cookie,
+          if (cookie != null) 'Cookie': cookie,
           'Referer': '$base/login.cgi',
         }),
       );
@@ -80,6 +89,10 @@ class UbiquitiService {
       if (res.statusCode != 302) return null;
       final location = res.headers.value('location') ?? '';
       if (!location.contains('index')) return null;
+
+      // Some firmware sets / refreshes the cookie on the login 302 response.
+      cookie ??= _extractAirosCookie(res) ?? _extractAnyCookie(res);
+      if (cookie == null) return null;
 
       // Step 3: Verify the cookie authenticates us.
       final check = await dio.get(
@@ -170,6 +183,18 @@ class UbiquitiService {
       if (nameVal.toUpperCase().startsWith('AIROS_') || nameVal.contains('SESSION')) {
         parts.add(nameVal);
       }
+    }
+    return parts.isEmpty ? null : parts.join('; ');
+  }
+
+  /// Fallback: grab every Set-Cookie value regardless of name.
+  /// Used when the device firmware uses a non-standard cookie name.
+  static String? _extractAnyCookie(Response res) {
+    final raw = res.headers.map['set-cookie'] ?? const [];
+    final parts = <String>[];
+    for (final line in raw) {
+      final nameVal = line.split(';').first.trim();
+      if (nameVal.contains('=')) parts.add(nameVal);
     }
     return parts.isEmpty ? null : parts.join('; ');
   }
