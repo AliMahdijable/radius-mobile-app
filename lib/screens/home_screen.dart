@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter_app_badger/flutter_app_badger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dashboard_screen.dart';
 import 'subscribers/subscribers_screen.dart';
@@ -62,6 +63,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   bool _alertsEnabled = true;
   bool _alertsDismissed = false;
   String? _lastBroadcastEvent;
+  int _lastBadgeCount = -1;
+
+  Future<void> _syncAppIconBadge(int count) async {
+    if (count == _lastBadgeCount) return;
+    _lastBadgeCount = count;
+    try {
+      final supported = await FlutterAppBadger.isAppBadgeSupported();
+      if (!supported) return;
+      if (count > 0) {
+        FlutterAppBadger.updateBadgeCount(count);
+      } else {
+        FlutterAppBadger.removeBadge();
+      }
+    } catch (_) { /* launcher may not support — ignore */ }
+  }
 
   final _titles = const [
     'لوحة المعلومات',
@@ -478,6 +494,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         appNotifications.unreadCount +
         (_alertsEnabled && !_alertsDismissed ? dash.totalAlerts : 0);
     final showAlertBadge = totalBellCount > 0;
+
+    // Keep the launcher-icon badge in sync with the in-app bell count.
+    // fire-and-forget: the plugin silently no-ops on launchers that
+    // don't support numeric badges (stock AOSP, some Chinese ROMs).
+    _syncAppIconBadge(totalBellCount);
 
     return PopScope(
       canPop: false,
