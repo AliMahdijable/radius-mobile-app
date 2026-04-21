@@ -1,7 +1,7 @@
-// Temporary exploratory screen — probes a device (Huawei ONT first) over LAN
-// from the phone. No backend involvement; the phone must be on the same WiFi
-// as the device. Lets us see which login endpoint + status pages the device
-// actually uses before we build the proper driver.
+// Temporary exploratory screen — probes a Huawei ONT or Ubiquiti airOS
+// device over LAN from the phone. No backend involvement; the phone must
+// be on the same WiFi as the device. Used to validate credentials before
+// wiring the device into the subscriber UI.
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,7 +10,11 @@ import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/services/ubiquiti_service.dart';
 import '../../screens/devices/ont_device_screen.dart';
+import '../../screens/devices/ubiquiti_device_screen.dart';
+
+enum _ProbeType { ont, ubiquiti }
 
 class DeviceProbeScreen extends StatefulWidget {
   const DeviceProbeScreen({super.key});
@@ -26,18 +30,30 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
   final _log = <String>[];
   bool _running = false;
   bool _probeSuccess = false;
+  _ProbeType _type = _ProbeType.ont;
+
+  void _applyDefaultsFor(_ProbeType t) {
+    setState(() {
+      _type = t;
+      if (t == _ProbeType.ont) {
+        _user.text = 'telecomadmin';
+        _pass.text = 'admintelecom';
+      } else {
+        _user.text = 'ubnt';
+        _pass.text = 'ubnt';
+      }
+    });
+  }
 
   Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      // HTTPS handshake on small routers can be slow — give it more time.
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       validateStatus: (_) => true,
       followRedirects: false,
       headers: {'Accept': 'text/html,application/xhtml+xml,*/*'},
     ));
-    // Accept self-signed HTTPS certs commonly shipped by Huawei ONTs.
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final c = HttpClient();
       c.badCertificateCallback = (_, __, ___) => true;
@@ -54,11 +70,21 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
   Future<void> _probe() async {
     if (_running) return;
     setState(() { _running = true; _log.clear(); _probeSuccess = false; });
+    if (_type == _ProbeType.ont) {
+      await _probeOnt();
+    } else {
+      await _probeUbiquiti();
+    }
+    if (!mounted) return;
+    setState(() => _running = false);
+    _line('');
+    _line('=== DONE ===');
+  }
+
+  Future<void> _probeOnt() async {
     final host = _host.text.trim();
     final u = _user.text.trim();
     final p = _pass.text;
-    // HG8145C serves management UI on HTTPS port 80 (confirmed by JS in root page).
-    // Try HTTPS:80 first, fall back to standard ports.
     final bases = [
       'https://$host:80',
       'https://$host:443',
@@ -70,7 +96,6 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
       _line('');
       _line('=== $base ===');
       final dio = _buildDio(base);
-      // Quick connectivity check — just confirm the host responds.
       try {
         final r = await dio.get('/');
         _line('root → ${r.statusCode} len=${(r.data ?? '').toString().length}');
@@ -79,17 +104,15 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
         continue;
       }
 
-      // Cookie jar — populated from Set-Cookie on successful login.
       String sessionCookie = '';
       void eatLoginCookie(Response r) {
         final raw = r.headers.map['set-cookie'] ?? const [];
         for (final line in raw) {
-          // e.g. "Cookie=sid=<hash>:Language:english:id=1;path=/"
-          final nameVal = line.split(';').first; // "Cookie=sid=..."
+          final nameVal = line.split(';').first;
           final eq = nameVal.indexOf('=');
           if (eq > 0) {
             final name = nameVal.substring(0, eq).trim();
-            final val  = nameVal.substring(eq + 1).trim();
+            final val = nameVal.substring(eq + 1).trim();
             if (name == 'Cookie' && val.contains('sid=')) {
               sessionCookie = '$name=$val';
             }
@@ -97,18 +120,6 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
         }
       }
 
-      // HG8145C login flow (confirmed via browser + PowerShell trace):
-      //   1) POST /asp/GetRandCount.asp  (NOT GET) — returns 32-hex token
-      //      on the SAME TCP/TLS connection as step 2 (server ties token
-      //      to the connection).
-      //   2) POST /login.cgi with:
-      //        Cookie: Cookie=body:Language:english:id=-1   (pre-login marker)
-      //        UserName      = <plain>
-      //        PassWord      = base64(<plain password>)
-      //        x.X_HW_Token  = <token from step 1>
-      //   3) Success → Set-Cookie: Cookie=sid=<hash>:Language:english:id=1
-      //                response body contains: var pageName = 'index.asp';
-      //      Failure → no Set-Cookie, body contains: var pageName = '/';
       String? hwToken;
       try {
         final tok = await dio.post('/asp/GetRandCount.asp',
@@ -147,11 +158,6 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
         eatLoginCookie(res);
         final bodyStr = (res.data ?? '').toString();
         _line('login.cgi → ${res.statusCode} len=${bodyStr.length}  sid=${sessionCookie.isNotEmpty ? "✓" : "✗"}');
-        res.headers.forEach((name, values) {
-          _line('  hdr $name: ${values.join(" | ")}');
-        });
-        _line('  FULL BODY: $bodyStr');
-        // Success: server redirects to index.asp; failure: redirects to /
         loggedIn = bodyStr.contains("pageName = 'index.asp'") && sessionCookie.isNotEmpty;
       } catch (e) {
         _line('login.cgi error: $e');
@@ -163,42 +169,41 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
       }
       _line('✓ Logged in  cookie=$sessionCookie');
       _probeSuccess = true;
-
-      // Confirmed page paths from frame.asp menu structure.
-      final pages = [
-        '/index.asp',
-        '/html/ssmp/deviceinfo/deviceinfo.asp',
-        '/html/amp/opticinfo/opticinfo.asp',
-        '/html/bbsp/waninfo/waninfo.asp',
-        '/html/amp/wlaninfo/wlaninfo.asp',
-        '/html/bbsp/dhcpinfo/dhcpinfo.asp',
-        '/html/bbsp/userdevinfo/userdevinfo.asp',
-        '/html/ssmp/bss/bssinfo.asp',
-        '/html/bbsp/common/GetLanUserDevInfo.asp',
-      ];
-      for (final path in pages) {
-        try {
-          final res = await dio.get(
-            path,
-            options: Options(
-              headers: {'Cookie': sessionCookie, 'Referer': '$base/index.asp'},
-            ),
-          );
-          final body = (res.data ?? '').toString();
-          final preview = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-          final snippet = preview.length > 120 ? preview.substring(0, 120) : preview;
-          _line('[page] $path → ${res.statusCode} len=${body.length}  «$snippet»');
-        } catch (e) {
-          _line('[page] $path → ERROR');
-        }
-      }
-      break; // done on first working base
+      break;
     }
+  }
 
-    if (!mounted) return;
-    setState(() => _running = false);
-    _line('');
-    _line('=== DONE ===');
+  Future<void> _probeUbiquiti() async {
+    final host = _host.text.trim();
+    final u = _user.text.trim();
+    final p = _pass.text;
+    _line('=== Ubiquiti probe ===');
+    _line('host=$host user=$u');
+    final session = await UbiquitiService.login(host, u, p);
+    if (session == null) {
+      _line('✗ Login failed on all variants (tried airOS v6 then v8, HTTPS then HTTP).');
+      return;
+    }
+    _line('✓ Logged in  variant=${session.airosVariant}  base=${session.baseUrl}');
+    final status = await UbiquitiService.fetchStatus(session);
+    if (status == null) {
+      _line('✗ status.cgi / api/status did not return a parseable JSON.');
+      return;
+    }
+    _line('→ hostname : ${status.hostname}');
+    _line('→ firmware : ${status.firmware}');
+    _line('→ ssid     : ${status.ssid}');
+    _line('→ mode     : ${status.mode}');
+    _line('→ signal   : ${status.signalDbm} dBm');
+    _line('→ noise    : ${status.noiseFloorDbm} dBm');
+    _line('→ SNR      : ${status.snrDb} dB');
+    _line('→ CCQ      : ${status.ccqPercent} %');
+    _line('→ TX rate  : ${status.txRateKbps} kbps');
+    _line('→ RX rate  : ${status.rxRateKbps} kbps');
+    _line('→ LAN      : ${status.lanSpeed} (up=${status.lanUp})');
+    _line('→ distance : ${status.distanceMeters} m');
+    _line('→ peer MAC : ${status.peerMac}');
+    _probeSuccess = true;
   }
 
   @override
@@ -210,6 +215,15 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            SegmentedButton<_ProbeType>(
+              segments: const [
+                ButtonSegment(value: _ProbeType.ont, label: Text('ONT (هواوي)')),
+                ButtonSegment(value: _ProbeType.ubiquiti, label: Text('Ubiquiti')),
+              ],
+              selected: {_type},
+              onSelectionChanged: (s) => _applyDefaultsFor(s.first),
+            ),
+            const SizedBox(height: 12),
             TextField(controller: _host, decoration: const InputDecoration(labelText: 'IP الجهاز (بدون http://)')),
             const SizedBox(height: 8),
             TextField(controller: _user, decoration: const InputDecoration(labelText: 'اسم المستخدم')),
@@ -226,16 +240,29 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
             if (_probeSuccess) ...[
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                onPressed: () => context.push(
-                  '/ont-device',
-                  extra: OntDeviceArgs(
-                    host: _host.text.trim(),
-                    user: _user.text.trim(),
-                    pass: _pass.text,
-                  ),
-                ),
+                onPressed: () {
+                  if (_type == _ProbeType.ont) {
+                    context.push(
+                      '/ont-device',
+                      extra: OntDeviceArgs(
+                        host: _host.text.trim(),
+                        user: _user.text.trim(),
+                        pass: _pass.text,
+                      ),
+                    );
+                  } else {
+                    context.push(
+                      '/ubiquiti-device',
+                      extra: UbiquitiDeviceArgs(
+                        host: _host.text.trim(),
+                        user: _user.text.trim(),
+                        pass: _pass.text,
+                      ),
+                    );
+                  }
+                },
                 icon: const Icon(Icons.sensors),
-                label: const Text('عرض بيانات الضوء'),
+                label: Text(_type == _ProbeType.ont ? 'عرض بيانات الضوء' : 'عرض بيانات Ubiquiti'),
               ),
             ],
             const SizedBox(height: 12),
