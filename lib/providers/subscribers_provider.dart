@@ -446,6 +446,31 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         dev.log('Could not update dashboard offline count: $e', name: 'SUBS');
       }
 
+      try {
+        final nearExpirySubs = enriched.where((s) => s.isNearExpiry).toList();
+        nearExpirySubs.sort((a, b) {
+          final da = a.remainingDays ?? 0;
+          final db = b.remainingDays ?? 0;
+          return da.compareTo(db);
+        });
+        _ref.read(dashboardProvider.notifier).updateNearExpiryFromSubscribers(
+              nearExpirySubs.length,
+              list: nearExpirySubs
+                  .map((s) => {
+                        'username': s.username,
+                        'firstname': s.firstname,
+                        'lastname': s.lastname,
+                        'expiration': s.expiration,
+                        'remaining_days': s.remainingDays,
+                        'phone': s.phone ?? s.mobile,
+                        'profile_name': s.profileName,
+                      })
+                  .toList(),
+            );
+      } catch (e) {
+        dev.log('Could not update dashboard near-expiry count: $e', name: 'SUBS');
+      }
+
       state = state.copyWith(
         subscribers: enriched,
         isLoading: false,

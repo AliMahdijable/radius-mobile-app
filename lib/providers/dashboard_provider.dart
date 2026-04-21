@@ -118,6 +118,20 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     state = state.copyWith(offlineCount: count, offlineLoaded: true);
   }
 
+  /// Override the near-expiry figures with counts computed from the full
+  /// SAS4 subscriber list (see subscribers_provider). The dashboard's own
+  /// /api/subscribers/with-phones source only covers subs with phones, so
+  /// admins whose near-expiry subs lack phone numbers would read 0 here.
+  void updateNearExpiryFromSubscribers(
+    int count, {
+    List<Map<String, dynamic>>? list,
+  }) {
+    state = state.copyWith(
+      nearExpiryCount: count,
+      nearExpiryList: list ?? state.nearExpiryList,
+    );
+  }
+
   /// Lightweight refresh of today's activation/extension counts and the
   /// recent-activities list without touching the heavy SAS4 widgets.
   /// Called after a local activate/extend so the dashboard reflects the
