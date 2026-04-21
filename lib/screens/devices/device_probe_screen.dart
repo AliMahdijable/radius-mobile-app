@@ -5,7 +5,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
@@ -48,197 +47,136 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
     setState(() => _log.add(s));
   }
 
-  String _sha256(String s) => sha256.convert(utf8.encode(s)).toString();
-
   Future<void> _probe() async {
     if (_running) return;
     setState(() { _running = true; _log.clear(); });
     final host = _host.text.trim();
     final u = _user.text.trim();
     final p = _pass.text;
-    // Huawei ONTs commonly serve HTTPS on an unusual port (often 80 or
-    // 443). The HTTP landing page's JS discloses the real SSL port —
-    // for 10.100.11.201 it's 80. Try the obvious combinations.
+    // HG8145C serves management UI on HTTPS port 80 (confirmed by JS in root page).
+    // Try HTTPS:80 first, fall back to standard ports.
     final bases = [
-      'http://$host',
       'https://$host:80',
       'https://$host:443',
       'https://$host',
+      'http://$host',
     ];
 
     for (final base in bases) {
       _line('');
       _line('=== $base ===');
       final dio = _buildDio(base);
-      // 1) root — dump enough HTML to see the actual login form/script
-      String rootBody = '';
+      // Quick connectivity check — just confirm the host responds.
       try {
         final r = await dio.get('/');
-        rootBody = (r.data ?? '').toString();
-        _line('root → ${r.statusCode} len=${rootBody.length}');
-        // Print the first 500 chars so we can see the form/script
-        final preview = rootBody.length > 500 ? rootBody.substring(0, 500) : rootBody;
-        _line('--- root preview ---');
-        _line(preview);
-        _line('--- /preview ---');
-        // Extract any <form action= and meta-refresh targets for clues.
-        final forms = RegExp(r'''<form[^>]*action\s*=\s*["']([^"']+)["']''', caseSensitive: false).allMatches(rootBody);
-        for (final m in forms) {
-          _line('form action → ${m.group(1)}');
-        }
-        final metaRefresh = RegExp(r'''content\s*=\s*["']\s*\d+\s*;\s*url\s*=\s*([^"']+)''', caseSensitive: false).firstMatch(rootBody);
-        if (metaRefresh != null) _line('meta refresh → ${metaRefresh.group(1)}');
-        final scriptSrcs = RegExp(r'''<script[^>]*src\s*=\s*["']([^"']+)["']''', caseSensitive: false).allMatches(rootBody);
-        for (final m in scriptSrcs) {
-          _line('script src → ${m.group(1)}');
-        }
+        _line('root → ${r.statusCode} len=${(r.data ?? '').toString().length}');
       } catch (e) {
         _line('root error: $e');
         continue;
       }
 
-      final cookies = <String, String>{};
-      void eatCookies(Response r) {
+      // Cookie jar — populated from Set-Cookie on successful login.
+      String sessionCookie = '';
+      void eatLoginCookie(Response r) {
         final raw = r.headers.map['set-cookie'] ?? const [];
         for (final line in raw) {
-          final kv = line.split(';').first.split('=');
-          if (kv.length >= 2) cookies[kv[0].trim()] = kv.sublist(1).join('=');
+          // e.g. "Cookie=sid=<hash>:Language:english:id=1;path=/"
+          final nameVal = line.split(';').first; // "Cookie=sid=..."
+          final eq = nameVal.indexOf('=');
+          if (eq > 0) {
+            final name = nameVal.substring(0, eq).trim();
+            final val  = nameVal.substring(eq + 1).trim();
+            if (name == 'Cookie' && val.contains('sid=')) {
+              sessionCookie = '$name=$val';
+            }
+          }
         }
       }
-      String cookieHeader() =>
-          cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
 
-      // HG8145C flow (verified by browser capture):
-      //   1) GET  /asp/GetRandCount.asp            → returns a 32-hex token
-      //   2) POST /login.cgi with
+      // HG8145C login flow (confirmed via browser + PowerShell trace):
+      //   1) POST /asp/GetRandCount.asp  (NOT GET) — returns 32-hex token
+      //      on the SAME TCP/TLS connection as step 2 (server ties token
+      //      to the connection).
+      //   2) POST /login.cgi with:
+      //        Cookie: Cookie=body:Language:english:id=-1   (pre-login marker)
       //        UserName      = <plain>
       //        PassWord      = base64(<plain password>)
       //        x.X_HW_Token  = <token from step 1>
+      //   3) Success → Set-Cookie: Cookie=sid=<hash>:Language:english:id=1
+      //                response body contains: var pageName = 'index.asp';
+      //      Failure → no Set-Cookie, body contains: var pageName = '/';
       String? hwToken;
       try {
-        final tok = await dio.get('/asp/GetRandCount.asp',
-            options: Options(headers: {
-              if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
-              'Referer': '$base/',
-            }));
-        eatCookies(tok);
+        final tok = await dio.post('/asp/GetRandCount.asp',
+            data: '',
+            options: Options(headers: {'Referer': '$base/'}));
         final raw = (tok.data ?? '').toString().trim();
         _line('GetRandCount → ${tok.statusCode} «${raw.length > 80 ? raw.substring(0, 80) : raw}»');
-        // The device typically returns the token as a plain string, possibly
-        // with a leading `$` or BOM. Keep only hex digits.
-        final m = RegExp(r'[0-9a-f]{16,}', caseSensitive: false).firstMatch(raw);
+        final m = RegExp(r'[0-9a-fA-F]{16,}').firstMatch(raw);
         hwToken = m?.group(0);
       } catch (e) {
         _line('GetRandCount error: $e');
       }
 
-      final b64Pass = base64Encode(utf8.encode(p));
-      final attempts = [
-        if (hwToken != null)
-          {
-            'label': 'HG8145C (base64 pw + X_HW_Token)',
-            'path': '/login.cgi',
-            'body': {
-              'UserName': u,
-              'PassWord': b64Pass,
-              'x.X_HW_Token': hwToken,
-            },
-          },
-        {
-          'label': 'fallback base64 pw (no token)',
-          'path': '/login.cgi',
-          'body': {'UserName': u, 'PassWord': b64Pass},
-        },
-        {
-          'label': 'plain password',
-          'path': '/login.cgi',
-          'body': {'UserName': u, 'PassWord': p},
-        },
-      ];
+      if (hwToken == null) {
+        _line('✗ No token, skipping $base');
+        continue;
+      }
 
       bool loggedIn = false;
-      for (final a in attempts) {
-        final body = (a['body'] as Map<String, dynamic>)
-            .entries
-            .map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value.toString())}')
-            .join('&');
-        try {
-          final res = await dio.post(
-            a['path'] as String,
-            data: body,
-            options: Options(
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Origin': base,
-                'Referer': '$base/',
-                if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
-              },
-            ),
-          );
-          eatCookies(res);
-          final bodyStr = (res.data ?? '').toString();
-          _line('[try] ${a['label']} → ${res.statusCode} len=${bodyStr.length}');
-          // Dump ALL response headers — maybe set-cookie uses unusual case
-          res.headers.forEach((name, values) {
-            _line('  hdr $name: ${values.join(" | ")}');
-          });
-          // Full body since it's small (< 500 bytes)
-          _line('  FULL BODY:');
-          _line(bodyStr);
-          _line('  cookies now: ${cookies.keys.join(",")}');
-          // Wait a second, then try /index.asp
-          await Future.delayed(const Duration(milliseconds: 1500));
-          try {
-            final idx = await dio.get('/index.asp', options: Options(headers: {
-              if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
-              'Referer': '$base/',
-            }));
-            final idxBody = (idx.data ?? '').toString();
-            final stillLogin = idxBody.contains('safelogin.js') || idxBody.contains('GetRandCount');
-            _line('  /index.asp → ${idx.statusCode} len=${idxBody.length} stillLoginPage=$stillLogin');
-            if (!stillLogin && idx.statusCode == 200 && idxBody.length > 1000) {
-              loggedIn = true;
-              break;
-            }
-          } catch (e) {
-            _line('  /index.asp check error: ${e.toString().substring(0, e.toString().length.clamp(0, 80))}');
-          }
-        } catch (e) {
-          _line('[try] ${a['label']} → ERROR ${e.toString().substring(0, e.toString().length.clamp(0, 120))}');
-        }
+      try {
+        final b64Pass = base64Encode(utf8.encode(p));
+        final loginBody =
+            'UserName=${Uri.encodeQueryComponent(u)}'
+            '&PassWord=${Uri.encodeQueryComponent(b64Pass)}'
+            '&x.X_HW_Token=${Uri.encodeQueryComponent(hwToken)}';
+        final res = await dio.post(
+          '/login.cgi',
+          data: loginBody,
+          options: Options(headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': base,
+            'Referer': '$base/',
+            'Cookie': 'Cookie=body:Language:english:id=-1',
+          }),
+        );
+        eatLoginCookie(res);
+        final bodyStr = (res.data ?? '').toString();
+        _line('login.cgi → ${res.statusCode} len=${bodyStr.length}  sid=${sessionCookie.isNotEmpty ? "✓" : "✗"}');
+        res.headers.forEach((name, values) {
+          _line('  hdr $name: ${values.join(" | ")}');
+        });
+        _line('  FULL BODY: $bodyStr');
+        // Success: server redirects to index.asp; failure: redirects to /
+        loggedIn = bodyStr.contains("pageName = 'index.asp'") && sessionCookie.isNotEmpty;
+      } catch (e) {
+        _line('login.cgi error: $e');
       }
 
       if (!loggedIn) {
-        _line('✗ Login attempts failed on $base');
+        _line('✗ Login failed on $base');
         continue;
       }
-      _line('✓ logged in, cookies=${cookies.keys.join(",")}');
+      _line('✓ Logged in  cookie=$sessionCookie');
 
-      // HG8145C status pages — the sidebar we saw in the browser lists
-      // these sections: WAN / WLAN / LAN / Optical / User Device Info /
-      // Device Info / Service Provisioning. Paths vary between firmware
-      // builds so we probe a wide net.
+      // Confirmed page paths from frame.asp menu structure.
       final pages = [
         '/index.asp',
         '/html/ssmp/deviceinfo/deviceinfo.asp',
-        '/html/ssmp/opticinfo/opticinfo.asp',
-        '/html/ssmp/wanstatus/wanstatus.asp',
-        '/html/ssmp/wlaninfo/wlaninfo.asp',
-        '/html/ssmp/userdevinfo/userdevinfo.asp',
-        '/html/amp/deviceinfo/deviceinfo.asp',
-        '/html/status/deviceinfo.asp',
-        '/html/status/opticinfo.asp',
-        '/html/status/wanstatus.asp',
+        '/html/amp/opticinfo/opticinfo.asp',
+        '/html/bbsp/waninfo/waninfo.asp',
+        '/html/amp/wlaninfo/wlaninfo.asp',
+        '/html/bbsp/dhcpinfo/dhcpinfo.asp',
+        '/html/bbsp/userdevinfo/userdevinfo.asp',
+        '/html/ssmp/bss/bssinfo.asp',
         '/html/bbsp/common/GetLanUserDevInfo.asp',
-        '/html/amp/diag/gpondiag.asp',
       ];
       for (final path in pages) {
         try {
           final res = await dio.get(
             path,
             options: Options(
-              headers: {'Cookie': cookieHeader(), 'Referer': '$base/'},
+              headers: {'Cookie': sessionCookie, 'Referer': '$base/index.asp'},
             ),
           );
           final body = (res.data ?? '').toString();
