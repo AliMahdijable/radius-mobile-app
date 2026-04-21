@@ -68,9 +68,9 @@ class _UbiquitiDeviceScreenState extends State<UbiquitiDeviceScreen> {
                     children: [
                       _HeaderCard(status: _status!),
                       const SizedBox(height: 12),
-                      _WirelessCard(status: _status!),
+                      _MetricsCard(status: _status!),
                       const SizedBox(height: 12),
-                      _LanCard(status: _status!),
+                      _WirelessCard(status: _status!),
                     ],
                   ),
                 ),
@@ -133,6 +133,109 @@ class _HeaderCard extends StatelessWidget {
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Compact 2×2 metrics card ─────────────────────────────────────────────────
+class _MetricsCard extends StatelessWidget {
+  final UbiquitiStatus status;
+  const _MetricsCard({required this.status});
+
+  static const _good = Color(0xFF2E7D32);
+  static const _warn = Color(0xFFF9A825);
+
+  Color _ccqColor(ColorScheme cs) {
+    final c = status.ccqPercent;
+    if (c == null) return cs.onSurfaceVariant;
+    if (c >= 80) return _good;
+    if (c >= 50) return _warn;
+    return cs.error;
+  }
+
+  Color _lanColor(ColorScheme cs) {
+    if (!status.lanUp) return cs.error;
+    final s = status.lanSpeed ?? '';
+    if (s.contains('1000')) return _good;
+    if (s.contains('100')) return _warn;
+    return cs.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tx = status.txRateKbps;
+    final rx = status.rxRateKbps;
+    final txStr = tx == null ? '—' : tx >= 1000 ? '${(tx / 1000).toStringAsFixed(1)} Mbps' : '$tx kbps';
+    final rxStr = rx == null ? '—' : rx >= 1000 ? '${(rx / 1000).toStringAsFixed(1)} Mbps' : '$rx kbps';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            _Tile(
+              icon: Icons.network_check,
+              label: 'CCQ',
+              value: status.ccqPercent != null ? '${status.ccqPercent}%' : '—',
+              color: _ccqColor(cs),
+            ),
+            _divider(),
+            _Tile(
+              icon: Icons.lan,
+              label: 'LAN',
+              value: status.lanSpeed ?? '—',
+              color: _lanColor(cs),
+            ),
+            _divider(),
+            _Tile(
+              icon: Icons.arrow_upward,
+              label: 'TX',
+              value: txStr,
+              color: cs.onSurface,
+            ),
+            _divider(),
+            _Tile(
+              icon: Icons.arrow_downward,
+              label: 'RX',
+              value: rxStr,
+              color: cs.onSurface,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _divider() => Container(
+        width: 1, height: 40,
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        color: Colors.black12,
+      );
+}
+
+class _Tile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  const _Tile({required this.icon, required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 4),
+          Text(value,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+          Text(label,
+              style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ],
       ),
     );
   }
@@ -227,34 +330,3 @@ class _WirelessCard extends StatelessWidget {
   }
 }
 
-class _LanCard extends StatelessWidget {
-  final UbiquitiStatus status;
-  const _LanCard({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final speed = status.lanSpeed ?? '—';
-    final isGig = speed.toLowerCase().contains('1000');
-    final is100 = speed.toLowerCase().contains('100') && !isGig;
-    final color = status.lanUp
-        ? (isGig ? const Color(0xFF2E7D32) : is100 ? const Color(0xFFF9A825) : cs.error)
-        : cs.error;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Icon(status.lanUp ? Icons.lan : Icons.lan_outlined, color: color),
-            const SizedBox(width: 10),
-            const Text('LAN: ', style: TextStyle(fontWeight: FontWeight.w600)),
-            Text(speed, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Text(status.lanUp ? 'متصل' : 'مفصول',
-                style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ),
-    );
-  }
-}

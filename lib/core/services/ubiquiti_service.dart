@@ -53,19 +53,18 @@ class UbiquitiService {
   }
 
   // ── airOS 6.x ────────────────────────────────────────────────────────
-  //   POST /login.cgi
-  //     Content-Type: application/x-www-form-urlencoded
-  //     Body: uri=&username=<u>&password=<p>
-  //   → Set-Cookie: AIROS_SESSIONID=...
-  //   Success if cookie present AND GET /status.cgi returns a JSON body.
+  //   Cookie is issued on GET / (not on login.cgi), so we must capture it
+  //   there and send it back with the POST.
   static Future<UbiquitiLoginResult?> _tryLoginV6(
       String base, String user, String pass) async {
     final dio = _buildDio(base);
     try {
-      // airOS 6.x sometimes issues its session cookie on the first GET /,
-      // so we prime the connection before posting credentials.
-      await dio.get('/');
+      // Step 1: GET / — device issues session cookie here.
+      final rootRes = await dio.get('/');
+      final cookie = _extractAirosCookie(rootRes);
+      if (cookie == null) return null;
 
+      // Step 2: POST /login.cgi with the session cookie already in hand.
       final body =
           'uri=&username=${Uri.encodeQueryComponent(user)}&password=${Uri.encodeQueryComponent(pass)}';
       final res = await dio.post(
@@ -73,14 +72,16 @@ class UbiquitiService {
         data: body,
         options: Options(headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': cookie,
           'Referer': '$base/login.cgi',
         }),
       );
+      // Successful login → 302 redirect to /index.cgi
+      if (res.statusCode != 302) return null;
+      final location = res.headers.value('location') ?? '';
+      if (!location.contains('index')) return null;
 
-      final cookie = _extractAirosCookie(res);
-      if (cookie == null) return null;
-
-      // Verify the cookie actually authenticates us by hitting status.cgi.
+      // Step 3: Verify the cookie authenticates us.
       final check = await dio.get(
         '/status.cgi',
         options: Options(headers: {
@@ -236,11 +237,11 @@ class UbiquitiService {
       mode: (wireless['mode'] ?? '').toString(),
       signalDbm: _int(wireless['signal']),
       noiseFloorDbm: _int(wireless['noisef']),
-      ccqPercent: _int(wireless['ccq']),
+      ccqPercent: _ccq(wireless['ccq']),
       distanceMeters: _int(wireless['distance']),
-      txRateKbps: _int(wireless['txrate']),
-      rxRateKbps: _int(wireless['rxrate']),
-      lanSpeed: lanSpeed,
+      txRateKbps: _rateToKbps(wireless['txrate']),
+      rxRateKbps: _rateToKbps(wireless['rxrate']),
+      lanSpeed: _buildLanSpeed(lanStatus),
       lanUp: lanUp,
       peerMac: peerMac,
       peerCount: _int(wireless['count']),
@@ -253,5 +254,32 @@ class UbiquitiService {
     if (v is int) return v;
     if (v is double) return v.round();
     return int.tryParse(v.toString());
+  }
+
+  // CCQ is 0–1000 in airOS JSON (1000 = 100%). Normalise to 0–100.
+  static int? _ccq(dynamic v) {
+    final raw = _int(v);
+    if (raw == null) return null;
+    return raw > 100 ? (raw / 10).round() : raw;
+  }
+
+  // TX/RX rates may be kbps integers (older) or Mbps strings like "19.5".
+  // Normalise everything to kbps.
+  static int? _rateToKbps(dynamic v) {
+    if (v == null) return null;
+    final d = v is num ? v.toDouble() : double.tryParse(v.toString());
+    if (d == null) return null;
+    return d >= 1000 ? d.round() : (d * 1000).round();
+  }
+
+  // Build a human-readable LAN speed string from the integer speed + duplex.
+  // e.g. speed=100, duplex=1  →  "100Mbps-Full"
+  static String? _buildLanSpeed(Map? s) {
+    if (s == null) return null;
+    final speed = _int(s['speed']);
+    if (speed == null || speed == 0) return null;
+    final duplex = s['duplex'];
+    final duplexStr = duplex == 1 ? '-Full' : duplex == 0 ? '-Half' : '';
+    return '${speed}Mbps$duplexStr';
   }
 }
