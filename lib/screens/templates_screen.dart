@@ -179,11 +179,24 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
               );
             }
 
+            // Give the sheet ALL the space above the keyboard (not just
+            // 93% of the screen minus keyboard padding). The old formula
+            // left maxHeight = 0.93×screen and then subtracted keyboardH
+            // internally — on phones with tall keyboards (Samsung, most
+            // RTL IMEs) that collapsed the content to ~30% of the screen
+            // which is why the text area looked squeezed.
+            final availableH = screenH - keyboardH;
             return ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: screenH * 0.93),
+              constraints: BoxConstraints(
+                maxHeight: keyboardOpen
+                    ? availableH           // full space above the keyboard
+                    : screenH * 0.93,      // same "peek" height as before
+              ),
               child: Padding(
                 padding: EdgeInsets.only(
-                  bottom: keyboardH,
+                  // Sheet is positioned above the keyboard now, so we
+                  // don't add keyboardH here — that would double-compress.
+                  bottom: keyboardOpen ? 0 : safeBottom.clamp(0, 40),
                   left: 20,
                   right: 20,
                   top: 16,
