@@ -94,6 +94,7 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
       titlePadding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       actionsPadding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      scrollable: true,
       title: const Text('إعدادات جهاز المشترك', style: TextStyle(fontSize: 15)),
       content: _loading
           ? const SizedBox(

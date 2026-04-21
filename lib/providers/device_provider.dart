@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -179,87 +181,128 @@ final deviceStatusProvider = FutureProvider.family
   }
 });
 
+/// Probe the device at `ip` — when the subscriber hasn't pinned a kind,
+/// fire ONT and Ubiquiti attempts **in parallel** and take the first one
+/// that actually returns data. The previous sequential approach meant a
+/// Ubiquiti-only IP still had to wait for the ONT login to time out
+/// first, which routinely blew past the 15s UI cap.
+///
+/// Credentials follow a 3-tier fallback per type:
+///   1. subscriber-specific override (only when cfg.deviceType matches)
+///   2. admin-wide default (admin_device_defaults table)
+///   3. library hard-coded default (telecomadmin/admintelecom, ubnt/ubnt)
 Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async {
   final cfg = await ref.watch(deviceConfigProvider(args.subscriberUsername).future) ??
       const DeviceConfig();
   final adminDefaults = await ref.watch(adminDeviceDefaultsProvider.future);
-  final resolved = cfg.resolve(
-    fallbackIp: args.fallbackIp,
-    adminOntUsername: adminDefaults.ontUsername,
-    adminOntPassword: adminDefaults.ontPassword,
-    adminUbntUsername: adminDefaults.ubntUsername,
-    adminUbntPassword: adminDefaults.ubntPassword,
-  );
-  final ip = resolved.ip;
+
+  final ip = (cfg.customIp?.isNotEmpty == true ? cfg.customIp : args.fallbackIp) ?? '';
   if (ip.isEmpty) return null;
 
-  // Decide probe order. Explicit kind → probe only that one. Unknown kind →
-  // ONT first (more common on fiber), then Ubiquiti.
-  final order = <DeviceKind>[];
-  if (resolved.kind == DeviceKind.ubiquiti) {
-    order.add(DeviceKind.ubiquiti);
-  } else if (resolved.kind == DeviceKind.ont) {
-    order.add(DeviceKind.ont);
-  } else {
-    order..add(DeviceKind.ont)..add(DeviceKind.ubiquiti);
-  }
+  // Per-type creds. Subscriber override applies ONLY when the admin
+  // explicitly pinned that kind — otherwise we treat username/password
+  // as auxiliary data that doesn't bias either probe.
+  final subOverridesOnt = cfg.deviceType == DeviceKind.ont;
+  final subOverridesUbnt = cfg.deviceType == DeviceKind.ubiquiti;
 
-  for (final kind in order) {
-    if (kind == DeviceKind.ont) {
-      final session = await HuaweiOntService.login(
-          ip, resolved.username, resolved.password);
-      if (session == null) continue;
-      final optical = await HuaweiOntService.fetchOptical(session);
-      if (optical == null) continue;
-      return DeviceHealthSnapshot(
-        kind: DeviceKind.ont,
-        headlineLabel: 'RX Power',
-        headlineValue: '${optical.rxPower} dBm',
-        headlineHealth: _ontRxHealth(optical.rxPower),
-        secondaryLabel: 'TX Power',
-        secondaryValue: '${optical.txPower} dBm',
-        secondaryHealth: optical.txOk ? 'good' : 'warn',
-        tertiaryLabel: 'Temp',
-        tertiaryValue: '${optical.temperature}°C',
-        tertiaryHealth: _ontTempHealth(optical.temperature),
-        ont: optical,
-        ubiquiti: null,
-      );
-    }
-    if (kind == DeviceKind.ubiquiti) {
-      // Credential priority:
-      //   1. per-subscriber override (cfg.username / cfg.password)
-      //   2. admin-wide Ubiquiti defaults
-      //   3. library default "ubnt/ubnt"
-      String pick(String? sub, String? admin, String fallback) {
-        if (sub != null && sub.isNotEmpty) return sub;
-        if (admin != null && admin.isNotEmpty) return admin;
-        return fallback;
+  final ontUser = subOverridesOnt && (cfg.username?.isNotEmpty ?? false)
+      ? cfg.username!
+      : (adminDefaults.ontUsername?.isNotEmpty == true
+          ? adminDefaults.ontUsername!
+          : 'telecomadmin');
+  final ontPass = subOverridesOnt && (cfg.password?.isNotEmpty ?? false)
+      ? cfg.password!
+      : (adminDefaults.ontPassword?.isNotEmpty == true
+          ? adminDefaults.ontPassword!
+          : 'admintelecom');
+  final ubntUser = subOverridesUbnt && (cfg.username?.isNotEmpty ?? false)
+      ? cfg.username!
+      : (adminDefaults.ubntUsername?.isNotEmpty == true
+          ? adminDefaults.ubntUsername!
+          : 'ubnt');
+  final ubntPass = subOverridesUbnt && (cfg.password?.isNotEmpty ?? false)
+      ? cfg.password!
+      : (adminDefaults.ubntPassword?.isNotEmpty == true
+          ? adminDefaults.ubntPassword!
+          : 'ubnt');
+
+  // If the admin pinned a kind on this subscriber, trust them — probe
+  // only that one. Cheaper and avoids the cost of a doomed Ubiquiti
+  // handshake when the admin already knows it's a fiber ONT.
+  if (subOverridesOnt) return _probeOnt(ip, ontUser, ontPass);
+  if (subOverridesUbnt) return _probeUbnt(ip, ubntUser, ubntPass);
+
+  // Auto mode — fire both and take the first winner.
+  final ont = _probeOnt(ip, ontUser, ontPass);
+  final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
+  return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
+}
+
+Future<DeviceHealthSnapshot?> _probeOnt(String ip, String user, String pass) async {
+  final session = await HuaweiOntService.login(ip, user, pass);
+  if (session == null) return null;
+  final optical = await HuaweiOntService.fetchOptical(session);
+  if (optical == null) return null;
+  return DeviceHealthSnapshot(
+    kind: DeviceKind.ont,
+    headlineLabel: 'RX Power',
+    headlineValue: '${optical.rxPower} dBm',
+    headlineHealth: _ontRxHealth(optical.rxPower),
+    secondaryLabel: 'TX Power',
+    secondaryValue: '${optical.txPower} dBm',
+    secondaryHealth: optical.txOk ? 'good' : 'warn',
+    tertiaryLabel: 'Temp',
+    tertiaryValue: '${optical.temperature}°C',
+    tertiaryHealth: _ontTempHealth(optical.temperature),
+    ont: optical,
+    ubiquiti: null,
+  );
+}
+
+Future<DeviceHealthSnapshot?> _probeUbnt(String ip, String user, String pass) async {
+  final session = await UbiquitiService.login(ip, user, pass);
+  if (session == null) return null;
+  final status = await UbiquitiService.fetchStatus(session);
+  if (status == null) return null;
+  return DeviceHealthSnapshot(
+    kind: DeviceKind.ubiquiti,
+    headlineLabel: 'الإشارة',
+    headlineValue: status.signalDbm != null ? '${status.signalDbm} dBm' : '—',
+    headlineHealth: status.signalHealth,
+    secondaryLabel: 'CCQ',
+    secondaryValue: status.ccqPercent != null ? '${status.ccqPercent}%' : '—',
+    secondaryHealth: status.ccqHealth,
+    tertiaryLabel: 'LAN',
+    tertiaryValue: status.lanSpeedShort ?? '—',
+    // Use the model's lanHealth getter (added on main alongside the
+    // multi-port LAN parsing) so all call sites stay consistent.
+    tertiaryHealth: status.lanHealth,
+    ont: null,
+    ubiquiti: status,
+  );
+}
+
+/// Returns the first non-null result among [futures], or null if they all
+/// resolve to null. Unlike Future.any, it doesn't reject on the first
+/// error — both probes are expected to fail occasionally and we want the
+/// other one to still have a chance.
+Future<T?> _firstNonNull<T>(List<Future<T?>> futures) {
+  final completer = Completer<T?>();
+  var pending = futures.length;
+  for (final f in futures) {
+    f.then((value) {
+      if (completer.isCompleted) return;
+      if (value != null) {
+        completer.complete(value);
+      } else if (--pending == 0) {
+        completer.complete(null);
       }
-      final user = pick(cfg.username, adminDefaults.ubntUsername, 'ubnt');
-      final pass = pick(cfg.password, adminDefaults.ubntPassword, 'ubnt');
-      final session = await UbiquitiService.login(ip, user, pass);
-      if (session == null) continue;
-      final status = await UbiquitiService.fetchStatus(session);
-      if (status == null) continue;
-      final lanHealth = status.lanHealth;
-      return DeviceHealthSnapshot(
-        kind: DeviceKind.ubiquiti,
-        headlineLabel: 'الإشارة',
-        headlineValue: status.signalDbm != null ? '${status.signalDbm} dBm' : '—',
-        headlineHealth: status.signalHealth,
-        secondaryLabel: 'CCQ',
-        secondaryValue: status.ccqPercent != null ? '${status.ccqPercent}%' : '—',
-        secondaryHealth: status.ccqHealth,
-        tertiaryLabel: 'LAN',
-        tertiaryValue: status.lanSpeedShort ?? '—',
-        tertiaryHealth: lanHealth,
-        ont: null,
-        ubiquiti: status,
-      );
-    }
+    }).catchError((_) {
+      if (completer.isCompleted) return;
+      if (--pending == 0) completer.complete(null);
+    });
   }
-  return null;
+  return completer.future;
 }
 
 class DeviceStatusArgs {

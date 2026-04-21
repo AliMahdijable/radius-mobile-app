@@ -372,8 +372,12 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
   Widget build(BuildContext context) {
     final dateStr = intl.DateFormat('y-MM-dd  HH:mm').format(_date);
     final isEdit = widget.existing != null;
+    // scrollable:true + tighter insetPadding means the dialog survives
+    // the keyboard on short phones instead of pushing actions off-screen.
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      scrollable: true,
       title: Text(isEdit ? 'تعديل صرفية' : 'إضافة صرفية'),
       content: SizedBox(
         width: 380,
