@@ -61,10 +61,28 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
       _line('');
       _line('=== $base ===');
       final dio = _buildDio(base);
-      // 1) root
+      // 1) root — dump enough HTML to see the actual login form/script
+      String rootBody = '';
       try {
         final r = await dio.get('/');
-        _line('root → ${r.statusCode} len=${(r.data ?? '').toString().length}');
+        rootBody = (r.data ?? '').toString();
+        _line('root → ${r.statusCode} len=${rootBody.length}');
+        // Print the first 500 chars so we can see the form/script
+        final preview = rootBody.length > 500 ? rootBody.substring(0, 500) : rootBody;
+        _line('--- root preview ---');
+        _line(preview);
+        _line('--- /preview ---');
+        // Extract any <form action= and meta-refresh targets for clues.
+        final forms = RegExp(r'''<form[^>]*action\s*=\s*["']([^"']+)["']''', caseSensitive: false).allMatches(rootBody);
+        for (final m in forms) {
+          _line('form action → ${m.group(1)}');
+        }
+        final metaRefresh = RegExp(r'''content\s*=\s*["']\s*\d+\s*;\s*url\s*=\s*([^"']+)''', caseSensitive: false).firstMatch(rootBody);
+        if (metaRefresh != null) _line('meta refresh → ${metaRefresh.group(1)}');
+        final scriptSrcs = RegExp(r'''<script[^>]*src\s*=\s*["']([^"']+)["']''', caseSensitive: false).allMatches(rootBody);
+        for (final m in scriptSrcs) {
+          _line('script src → ${m.group(1)}');
+        }
       } catch (e) {
         _line('root error: $e');
         continue;
