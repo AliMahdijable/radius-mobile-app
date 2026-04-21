@@ -108,26 +108,51 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
       String cookieHeader() =>
           cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
 
+      // HG8145C flow (verified by browser capture):
+      //   1) GET  /asp/GetRandCount.asp            → returns a 32-hex token
+      //   2) POST /login.cgi with
+      //        UserName      = <plain>
+      //        PassWord      = base64(<plain password>)
+      //        x.X_HW_Token  = <token from step 1>
+      String? hwToken;
+      try {
+        final tok = await dio.get('/asp/GetRandCount.asp',
+            options: Options(headers: {
+              if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
+              'Referer': '$base/',
+            }));
+        eatCookies(tok);
+        final raw = (tok.data ?? '').toString().trim();
+        _line('GetRandCount → ${tok.statusCode} «${raw.length > 80 ? raw.substring(0, 80) : raw}»');
+        // The device typically returns the token as a plain string, possibly
+        // with a leading `$` or BOM. Keep only hex digits.
+        final m = RegExp(r'[0-9a-f]{16,}', caseSensitive: false).firstMatch(raw);
+        hwToken = m?.group(0);
+      } catch (e) {
+        _line('GetRandCount error: $e');
+      }
+
+      final b64Pass = base64Encode(utf8.encode(p));
       final attempts = [
+        if (hwToken != null)
+          {
+            'label': 'HG8145C (base64 pw + X_HW_Token)',
+            'path': '/login.cgi',
+            'body': {
+              'UserName': u,
+              'PassWord': b64Pass,
+              'x.X_HW_Token': hwToken,
+            },
+          },
         {
-          'label': 'POST /login.cgi (Username/Password)',
+          'label': 'fallback base64 pw (no token)',
           'path': '/login.cgi',
-          'body': {'Username': u, 'Password': p},
+          'body': {'UserName': u, 'PassWord': b64Pass},
         },
         {
-          'label': 'POST /login.cgi (UserName/PassWord)',
+          'label': 'plain password',
           'path': '/login.cgi',
           'body': {'UserName': u, 'PassWord': p},
-        },
-        {
-          'label': 'POST /asp/login.asp (username/psd)',
-          'path': '/asp/login.asp',
-          'body': {'username': u, 'psd': p},
-        },
-        {
-          'label': 'POST /login.cgi (SHA-256 password, English)',
-          'path': '/login.cgi',
-          'body': {'UserName': u, 'PassWord': _sha256(p), 'Language': 'english'},
         },
       ];
 
@@ -170,12 +195,21 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
       }
       _line('✓ logged in, cookies=${cookies.keys.join(",")}');
 
+      // HG8145C status pages — the sidebar we saw in the browser lists
+      // these sections: WAN / WLAN / LAN / Optical / User Device Info /
+      // Device Info / Service Provisioning. Paths vary between firmware
+      // builds so we probe a wide net.
       final pages = [
-        '/html/status/wanstatus.asp',
+        '/index.asp',
+        '/html/ssmp/deviceinfo/deviceinfo.asp',
+        '/html/ssmp/opticinfo/opticinfo.asp',
+        '/html/ssmp/wanstatus/wanstatus.asp',
+        '/html/ssmp/wlaninfo/wlaninfo.asp',
+        '/html/ssmp/userdevinfo/userdevinfo.asp',
+        '/html/amp/deviceinfo/deviceinfo.asp',
+        '/html/status/deviceinfo.asp',
         '/html/status/opticinfo.asp',
-        '/html/network/opticinfo.asp',
-        '/html/status/lanstatus.asp',
-        '/html/bbsp/common/lanuserdevinfo.asp',
+        '/html/status/wanstatus.asp',
         '/html/bbsp/common/GetLanUserDevInfo.asp',
         '/html/amp/diag/gpondiag.asp',
       ];
