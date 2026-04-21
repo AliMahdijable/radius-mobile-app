@@ -291,6 +291,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => context.push('/packages'),
           ),
         _SettingTile(
+          icon: Icons.account_balance_wallet_rounded,
+          title: 'الصرفيات',
+          subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
+          onTap: () => context.push('/expenses'),
+        ),
+        _SettingTile(
           icon: Icons.router_rounded,
           title: 'الإعدادات الافتراضية لأجهزتك',
           subtitle: 'بيانات دخول Ubiquiti و ONT لكل مشتركيك',
