@@ -243,26 +243,48 @@ class SubscriberCard extends StatelessWidget {
                   ),
                 ),
                 if (!showOnlineDetails) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: daysColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      isDisabled
-                          ? 'معطّل'
-                          : subscriber.isExpired
-                              ? 'منتهي'
-                              : _formatRemaining(subscriber),
-                      style: TextStyle(
-                        color: daysColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
+                  Builder(builder: (context) {
+                    final expiredSince = (!isDisabled && subscriber.isExpired)
+                        ? _formatExpiredSince(subscriber)
+                        : null;
+                    final mainLabel = isDisabled
+                        ? 'معطّل'
+                        : subscriber.isExpired
+                            ? 'منتهي'
+                            : _formatRemaining(subscriber);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: daysColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                    ),
-                  ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            mainLabel,
+                            style: TextStyle(
+                              color: daysColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (expiredSince != null)
+                            Text(
+                              expiredSince,
+                              style: TextStyle(
+                                color: daysColor.withOpacity(0.75),
+                                fontSize: 8,
+                                fontWeight: FontWeight.w500,
+                                height: 1.1,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
                   const SizedBox(width: 4),
                   Icon(Icons.chevron_left, size: 14,
                       color: theme.colorScheme.onSurface.withOpacity(0.15)),
@@ -394,6 +416,59 @@ class SubscriberCard extends StatelessWidget {
       ),
     ),
     );
+  }
+
+  /// Returns a short "since" label for expired subscribers, e.g.
+  /// "منذ يوم", "منذ 5 أيام", "منذ شهر", "منذ 3 أشهر". Falls back to null
+  /// when the expiration date can't be parsed, letting the caller omit
+  /// the second line entirely.
+  static String? _formatExpiredSince(SubscriberModel sub) {
+    final expStr = sub.expiration?.trim();
+    if (expStr == null || expStr.isEmpty) {
+      // No expiration but remaining_days is negative → approximate from days.
+      final d = sub.remainingDays;
+      if (d == null || d >= 0) return null;
+      final n = -d;
+      return _sinceLabelFromDays(n);
+    }
+    DateTime? expDate;
+    if (expStr.contains('T') || expStr.contains('+')) {
+      expDate = DateTime.tryParse(expStr);
+    } else {
+      expDate = DateTime.tryParse('${expStr.replaceAll(' ', 'T')}+03:00');
+    }
+    if (expDate == null) return null;
+    final diff = DateTime.now().difference(expDate);
+    if (diff.isNegative) return null;
+    final days = diff.inDays;
+    if (days <= 0) {
+      final hours = diff.inHours;
+      if (hours >= 1) return 'منذ $hours ساعة';
+      return 'منذ قليل';
+    }
+    return _sinceLabelFromDays(days);
+  }
+
+  static String _sinceLabelFromDays(int days) {
+    // Arabic pluralization: 1=يوم، 2=يومين، 3..10=X أيام، >=11=X يوماً
+    if (days < 30) {
+      if (days == 1) return 'منذ يوم';
+      if (days == 2) return 'منذ يومين';
+      if (days <= 10) return 'منذ $days أيام';
+      return 'منذ $days يوماً';
+    }
+    final months = days ~/ 30;
+    if (months == 1) return 'منذ شهر';
+    if (months == 2) return 'منذ شهرين';
+    if (months <= 10) return 'منذ $months أشهر';
+    // For >10 months, showing years is more readable
+    final years = months ~/ 12;
+    if (years >= 1) {
+      if (years == 1) return 'منذ سنة';
+      if (years == 2) return 'منذ سنتين';
+      return 'منذ $years سنوات';
+    }
+    return 'منذ $months شهراً';
   }
 
   static String _formatRemaining(SubscriberModel sub) {
