@@ -26,10 +26,18 @@ class SubscribersScreen extends ConsumerStatefulWidget {
 
 class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   final _searchController = TextEditingController();
+  // Horizontal scroll controller for the filter chip bar so we can scroll
+  // the currently-selected chip into view when the user lands here via a
+  // dashboard KPI tap. The chips bar has 7 items and the nearExpiry /
+  // debtors ones sit off-screen on narrow phones, so a freshly activated
+  // filter looked like nothing changed.
+  final _chipScrollController = ScrollController();
+  final Map<String, GlobalKey> _chipKeys = {};
   Timer? _debounce;
   bool _isSearchMode = false;
   int _pageSize = 25;
   int _currentPage = 0;
+  String? _lastScrolledFilter;
 
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
@@ -61,6 +69,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _chipScrollController.dispose();
     _debounce?.cancel();
     FcmService.pendingSubscriberSearch.removeListener(_consumePendingSearch);
     super.dispose();
@@ -640,6 +649,38 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     final currentFilter = state.filter;
     final isOnlineFilter = currentFilter == 'online';
 
+    // When the filter changes (e.g. the user tapped a dashboard KPI card
+    // while we were on another tab), scroll the chip bar so the newly
+    // selected chip sits in the middle of the viewport. Uses a
+    // post-frame callback so the layout is complete before we measure
+    // RenderBox offsets.
+    if (!_isSearchMode && _lastScrolledFilter != currentFilter) {
+      _lastScrolledFilter = currentFilter;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final key = _chipKeys[currentFilter];
+        final ctx = key?.currentContext;
+        if (ctx == null || !_chipScrollController.hasClients) return;
+        final box = ctx.findRenderObject() as RenderBox?;
+        final scrollBox =
+            _chipScrollController.position.context.storageContext
+                .findRenderObject() as RenderBox?;
+        if (box == null || scrollBox == null) return;
+        final chipOffset =
+            box.localToGlobal(Offset.zero, ancestor: scrollBox).dx +
+                _chipScrollController.offset;
+        final viewport = _chipScrollController.position.viewportDimension;
+        final maxScroll = _chipScrollController.position.maxScrollExtent;
+        final target = (chipOffset - (viewport - box.size.width) / 2)
+            .clamp(0.0, maxScroll);
+        _chipScrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+
     String _getCount(_FilterDef f) {
       switch (f.key) {
         case 'all': return '${state.allCount}';
@@ -774,15 +815,21 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         // without that permission — and, worse, the chip highlight when a
         // user tapped a dashboard KPI card — simply never rendered. Moved
         // out so every role sees them, and the tap from the dashboard now
-        // visibly shifts the selected chip to the chosen filter.
+        // visibly shifts the selected chip to the chosen filter. The chip
+        // bar auto-scrolls (see _scrollSelectedChipIntoView below) so the
+        // selected chip is visible even when it sits past the edge of the
+        // viewport (nearExpiry/debtors commonly do).
         if (!_isSearchMode)
           SingleChildScrollView(
+            controller: _chipScrollController,
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: _filters.map((f) {
                 final count = _getCount(f);
+                final key = _chipKeys.putIfAbsent(f.key, () => GlobalKey());
                 return Padding(
+                  key: key,
                   padding: const EdgeInsets.only(left: 8),
                   child: _FilterChip(
                     icon: f.icon,

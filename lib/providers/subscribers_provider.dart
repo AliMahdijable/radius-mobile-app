@@ -498,9 +498,13 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       else if (data is Map && data['sessions'] is List) rows = data['sessions'] as List;
       else if (data is List) rows = data;
 
-      // IP من الجلسات المفتوحة فقط (acctstoptime فارغ) — إشارة على اتصال حي الآن
+      // IP + start-time from open sessions (acctstoptime empty). The
+      // start-time lets us compute live uptime on the detail screen even
+      // when the earlier /online-users payload didn't carry a sessionTime
+      // (e.g. for subscribers whose profile happens to be expired but are
+      // still connected).
       final openIpByUser = <String, String>{};
-      // IP من أي جلسة حديثة (مفتوحة أو مغلقة) — للاحتياط
+      final openStartByUser = <String, DateTime>{};
       final recentIpByUser = <String, String>{};
       for (final r in rows) {
         if (r is! Map) continue;
@@ -512,8 +516,32 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         final isOpen = stop.isEmpty || stop == '-' || stop.toLowerCase() == 'null';
         if (isOpen) {
           openIpByUser.putIfAbsent(uname, () => ip);
+          final rawStart = r['acctstarttime']?.toString().trim() ?? '';
+          if (rawStart.isNotEmpty) {
+            // SAS4 returns start time as Baghdad-naive "yyyy-MM-dd HH:mm:ss"
+            // or ISO with offset. Interpret naive as Baghdad (+03:00).
+            DateTime? start;
+            if (rawStart.contains('T') ||
+                rawStart.contains('+') ||
+                rawStart.endsWith('Z')) {
+              start = DateTime.tryParse(rawStart);
+            } else {
+              start = DateTime.tryParse(
+                  '${rawStart.replaceAll(' ', 'T')}+03:00');
+            }
+            if (start != null) {
+              openStartByUser.putIfAbsent(uname, () => start!);
+            }
+          }
         }
         recentIpByUser.putIfAbsent(uname, () => ip);
+      }
+
+      int? _uptimeSecondsFor(String usernameLower) {
+        final start = openStartByUser[usernameLower];
+        if (start == null) return null;
+        final secs = DateTime.now().difference(start).inSeconds;
+        return secs > 0 ? secs : null;
       }
 
       final current = state.subscribers;
@@ -523,10 +551,14 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         final key = s.username.toLowerCase();
         final openIp = openIpByUser[key];
         final recentIp = recentIpByUser[key];
+        final uptime = _uptimeSecondsFor(key);
 
-        // 1) جلسة مفتوحة → online مع IP (تتجاوز الحالة المنتهية)
-        if (openIp != null && openIp != (s.ipAddress ?? '')) {
-          updated.add(_copyWithIp(s, openIp, markOnline: true));
+        // 1) جلسة مفتوحة → online مع IP + مدة الاتصال
+        if (openIp != null &&
+            (openIp != (s.ipAddress ?? '') ||
+                (uptime != null && uptime != s.sessionTime))) {
+          updated.add(_copyWithIp(s, openIp,
+              markOnline: true, sessionSeconds: uptime));
           changed++;
           continue;
         }
@@ -562,7 +594,12 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  SubscriberModel _copyWithIp(SubscriberModel s, String ip, {bool markOnline = false}) {
+  SubscriberModel _copyWithIp(
+    SubscriberModel s,
+    String ip, {
+    bool markOnline = false,
+    int? sessionSeconds,
+  }) {
     return SubscriberModel(
       idx: s.idx,
       username: s.username,
@@ -584,7 +621,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       enabled: s.enabled,
       ipAddress: ip,
       macAddress: s.macAddress,
-      sessionTime: s.sessionTime,
+      sessionTime: sessionSeconds ?? s.sessionTime,
       uploadBytes: s.uploadBytes,
       downloadBytes: s.downloadBytes,
       deviceVendor: s.deviceVendor,
