@@ -291,6 +291,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => context.push('/packages'),
           ),
         _SettingTile(
+          icon: Icons.router_rounded,
+          title: 'الإعدادات الافتراضية لأجهزتك',
+          subtitle: 'بيانات دخول Ubiquiti و ONT لكل مشتركيك',
+          onTap: () => context.push('/device-defaults'),
+        ),
+        _SettingTile(
           icon: Icons.print_rounded,
           title: 'قوالب الطباعة',
           subtitle: 'إدارة قوالب وصولات الطباعة',
@@ -319,12 +325,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
           iconColor: AppTheme.whatsappGreen,
           onTap: () => context.push('/whatsapp-send-scope'),
-        ),
-        _SettingTile(
-          icon: Icons.router_rounded,
-          title: 'الإعدادات الافتراضية لأجهزتك',
-          subtitle: 'بيانات دخول Ubiquiti و ONT لكل مشتركيك',
-          onTap: () => context.push('/device-defaults'),
         ),
         _SettingTile(
           icon: Icons.schedule,
