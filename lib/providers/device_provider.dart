@@ -31,7 +31,7 @@ final deviceConfigProvider =
 });
 
 Future<bool> saveDeviceConfig(
-  Ref ref,
+  WidgetRef ref,
   String subscriberUsername,
   DeviceConfig cfg,
 ) async {
@@ -49,7 +49,7 @@ Future<bool> saveDeviceConfig(
   }
 }
 
-Future<bool> resetDeviceConfig(Ref ref, String subscriberUsername) async {
+Future<bool> resetDeviceConfig(WidgetRef ref, String subscriberUsername) async {
   final dio = ref.read(backendDioProvider);
   try {
     final res = await dio.delete('/api/subscribers/$subscriberUsername/device');
