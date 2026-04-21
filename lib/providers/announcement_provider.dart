@@ -83,13 +83,23 @@ class AnnouncementNotifier extends StateNotifier<AnnouncementState> {
   }
 
   /// Called when the user dismisses the popup. Persists the id so the
-  /// same announcement doesn't re-appear on next launch.
+  /// same announcement doesn't re-appear on next launch, and reports
+  /// the view to the server so super-admin can see who saw it.
   Future<void> markSeen() async {
     final current = state.pending;
     if (current == null) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_prefsKey, current.id);
     state = state.copyWith(clearPending: true);
+    // fire-and-forget report — a missed report just means this admin
+    // won't appear in the views list, not a data corruption.
+    _reportView(current.id);
+  }
+
+  Future<void> _reportView(int id) async {
+    try {
+      await _backendDio.post('/api/announcements/$id/seen');
+    } catch (_) { /* ignore */ }
   }
 }
 
