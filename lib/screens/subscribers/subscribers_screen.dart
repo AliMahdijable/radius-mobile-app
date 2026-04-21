@@ -708,7 +708,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ),
 
-        if (!_isSearchMode && canAccessManagers) ...[
+        // Manager filter (per-sub-manager dropdown) only for managers who
+        // can actually see sub-managers. A sub-manager without that
+        // permission has nothing to pick from.
+        if (!_isSearchMode && canAccessManagers)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
@@ -765,6 +768,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               ],
             ),
           ),
+
+        // Category chips (الكل / الفعالين / متصل / المنتهي / …). Previously
+        // they were nested inside the canAccessManagers branch, so managers
+        // without that permission — and, worse, the chip highlight when a
+        // user tapped a dashboard KPI card — simply never rendered. Moved
+        // out so every role sees them, and the tap from the dashboard now
+        // visibly shifts the selected chip to the chosen filter.
+        if (!_isSearchMode)
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -787,7 +798,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               }).toList(),
             ),
           ),
-        ],
 
         const SizedBox(height: 6),
 
