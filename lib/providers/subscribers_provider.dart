@@ -84,13 +84,8 @@ class SubscribersState {
         break;
       case 'nearExpiry':
         list = source.where((s) => s.isNearExpiry).toList();
-        list.sort((a, b) {
-          final da = a.remainingDays ?? 0;
-          final db = b.remainingDays ?? 0;
-          if (da != db) return da.compareTo(db);
-          return (a.expiration ?? '').compareTo(b.expiration ?? '');
-        });
-        return list;
+        // sort handled by _defaultSortByFilter + _applySorting below
+        break;
       default:
         list = source;
     }
@@ -116,6 +111,9 @@ class SubscribersState {
           break;
         case 'remaining_days':
           result = (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0);
+          break;
+        case 'session_time':
+          result = (a.sessionTime ?? 0).compareTo(b.sessionTime ?? 0);
           break;
         case 'parent_username':
           result = (a.parentUsername ?? '').compareTo(b.parentUsername ?? '');
@@ -1015,8 +1013,29 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     state = state.copyWith(searchResults: localResults, isSearching: false);
   }
 
+  // Default sort field + direction per filter tab. Applied automatically
+  // on tab switch so each tab opens in the order the user expects:
+  //   - active       → most remaining days first
+  //   - online       → longest active session first
+  //   - expired      → most recently expired first (closest → farthest)
+  //   - debtors      → largest debt first
+  //   - nearExpiry   → soonest to expire first
+  // Users can still override via the sort picker while on the tab.
+  static const Map<String, (String, String)> _defaultSortByFilter = {
+    'active':      ('remaining_days', 'desc'),
+    'online':      ('session_time',   'desc'),
+    'expired':     ('expiration',     'desc'),
+    'debtors':     ('notes',          'asc'),
+    'nearExpiry':  ('remaining_days', 'asc'),
+  };
+
   void setFilter(String filter) {
-    state = state.copyWith(filter: filter);
+    final def = _defaultSortByFilter[filter];
+    if (def != null) {
+      state = state.copyWith(filter: filter, sortBy: def.$1, sortDirection: def.$2);
+    } else {
+      state = state.copyWith(filter: filter);
+    }
     if (filter == 'online') {
       loadOnlineUsers();
     }
