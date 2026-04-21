@@ -174,19 +174,33 @@ class FcmService {
         ? '$type|$username'
         : null;
 
+    // For expiry-digest pushes the server packs a newline-separated
+    // list of "<firstname> <lastname> (<username>)" into data.names.
+    // Android's bigText style lets the user expand the notification to
+    // see all of them instead of the single-line truncated body.
+    final isDigest = type == 'near_expiry_digest' || type == 'expired_today_digest';
+    final digestNames = (message.data['names'] ?? '').toString();
+    final baseBody = notification.body ?? '';
+    final bigBody = isDigest && digestNames.isNotEmpty ? digestNames : baseBody;
+
     _fln.show(
       notification.hashCode,
       notification.title ?? '',
-      notification.body ?? '',
-      const NotificationDetails(
+      baseBody,
+      NotificationDetails(
         android: AndroidNotificationDetails(
           'mysvcs_fcm',
           'إشعارات التطبيق',
           channelDescription: 'إشعارات Firebase Cloud Messaging',
           importance: Importance.high,
           priority: Priority.high,
+          styleInformation: BigTextStyleInformation(
+            bigBody,
+            contentTitle: notification.title ?? '',
+            summaryText: notification.title ?? '',
+          ),
         ),
-        iOS: DarwinNotificationDetails(),
+        iOS: const DarwinNotificationDetails(),
       ),
       payload: payload,
     );
