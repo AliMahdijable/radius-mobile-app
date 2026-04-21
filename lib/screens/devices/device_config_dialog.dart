@@ -78,86 +78,115 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // Tight field style — compact density + dense padding so three inputs
+    // + a picker + a note all fit without scrolling on typical phones.
+    InputDecoration _dec(String label, String hint) => InputDecoration(
+          labelText: label,
+          hintText: hint,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: const OutlineInputBorder(),
+        );
+
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('إعدادات جهاز المشترك'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      title: const Text('إعدادات جهاز المشترك', style: TextStyle(fontSize: 15)),
       content: _loading
-          ? const SizedBox(width: 40, height: 40, child: Center(child: CircularProgressIndicator()))
+          ? const SizedBox(
+              width: 40, height: 40,
+              child: Center(child: CircularProgressIndicator()),
+            )
           : SizedBox(
-              width: 420,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'حدد نوع الجهاز لتجربة الاتصال. اتركه فارغاً ليُجرَّب ONT ثم Ubiquiti بالافتراضي.',
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'اتركه تلقائياً ليُجرَّب ONT ثم Ubiquiti.',
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, height: 1.2),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<DeviceKind?>(
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    const SizedBox(height: 12),
-                    SegmentedButton<DeviceKind?>(
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(value: null, label: Text('تلقائي')),
-                        ButtonSegment(value: DeviceKind.ont, label: Text('ONT')),
-                        ButtonSegment(value: DeviceKind.ubiquiti, label: Text('Ubiquiti')),
-                      ],
-                      selected: {_kind},
-                      onSelectionChanged: (s) => setState(() => _kind = s.first),
+                    segments: const [
+                      ButtonSegment(value: null, label: Text('تلقائي', style: TextStyle(fontSize: 12))),
+                      ButtonSegment(value: DeviceKind.ont, label: Text('ONT', style: TextStyle(fontSize: 12))),
+                      ButtonSegment(value: DeviceKind.ubiquiti, label: Text('Ubiquiti', style: TextStyle(fontSize: 12))),
+                    ],
+                    selected: {_kind},
+                    onSelectionChanged: (s) => setState(() => _kind = s.first),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _user,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: _dec(
+                      'اسم المستخدم',
+                      _kind == DeviceKind.ubiquiti ? 'ubnt' : 'telecomadmin',
                     ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _user,
-                      decoration: InputDecoration(
-                        labelText: 'اسم المستخدم',
-                        hintText: _kind == DeviceKind.ubiquiti ? 'ubnt' : 'telecomadmin',
-                        border: const OutlineInputBorder(),
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _pass,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: _dec(
+                      'كلمة السر',
+                      _kind == DeviceKind.ubiquiti ? 'ubnt' : 'admintelecom',
                     ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _pass,
-                      obscureText: false,
-                      decoration: InputDecoration(
-                        labelText: 'كلمة السر',
-                        hintText: _kind == DeviceKind.ubiquiti ? 'ubnt' : 'admintelecom',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _ip,
-                      decoration: const InputDecoration(
-                        labelText: 'IP مخصص (اختياري)',
-                        hintText: 'يُستخدم IP الساس تلقائياً إذا فارغ',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'ملاحظة: IP المخصص مفيد لأجهزة Ubiquiti الواقفة خلف NAT.',
-                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _ip,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: _dec('IP مخصص (اختياري)', 'يستخدم IP الساس إذا فارغ'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'IP المخصص مفيد لـ Ubiquiti خلف NAT.',
+                    style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                  ),
+                ],
               ),
             ),
       actions: [
         if (!_loading)
-          TextButton.icon(
+          TextButton(
             onPressed: _saving ? null : _reset,
-            icon: const Icon(Icons.restart_alt, size: 18),
-            label: const Text('استعادة الافتراضي'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('استعادة الافتراضي', style: TextStyle(fontSize: 12)),
           ),
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('إلغاء'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(0, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text('إلغاء', style: TextStyle(fontSize: 12)),
         ),
         FilledButton(
           onPressed: (_loading || _saving) ? null : _save,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            minimumSize: const Size(0, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
           child: _saving
-              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('حفظ'),
+              ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('حفظ', style: TextStyle(fontSize: 12)),
         ),
       ],
     );
