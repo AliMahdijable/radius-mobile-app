@@ -1103,14 +1103,28 @@ class _FilterChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color:
-              selected ? activeColor.withOpacity(0.12) : Colors.transparent,
+          // Clearer selected styling so the chip for the current category
+          // stands out obviously when the user lands here from a dashboard
+          // KPI tap or changes filter via the bar.
+          color: selected
+              ? activeColor.withOpacity(0.18)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected
-                ? activeColor.withOpacity(0.4)
+                ? activeColor
                 : theme.colorScheme.onSurface.withOpacity(0.1),
+            width: selected ? 1.5 : 1,
           ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: activeColor.withOpacity(0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1124,7 +1138,7 @@ class _FilterChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                 color: selected
                     ? activeColor
                     : theme.colorScheme.onSurface.withOpacity(0.6),

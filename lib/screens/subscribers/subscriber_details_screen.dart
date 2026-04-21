@@ -2570,6 +2570,7 @@ class _SubscriberDetailsScreenState
                     if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
                       _IpDetailRow(
                         ip: sub.ipAddress!.trim(),
+                        sessionSeconds: sub.sessionTime,
                         onTap: () => _launchIpInBrowser(sub.ipAddress!),
                       ),
                   ],
@@ -3141,13 +3142,37 @@ class _DetailDivider extends StatelessWidget {
 
 class _IpDetailRow extends StatelessWidget {
   final String ip;
+  final int? sessionSeconds;
   final VoidCallback onTap;
-  const _IpDetailRow({required this.ip, required this.onTap});
+  const _IpDetailRow({
+    required this.ip,
+    this.sessionSeconds,
+    required this.onTap,
+  });
+
+  /// Arabic uptime like "3س 12د" / "1ي 4س" / "45د". Returns null when the
+  /// session hasn't started yet or the SAS4 field isn't set — the row then
+  /// shows IP only (same as before).
+  static String? _formatUptime(int? seconds) {
+    if (seconds == null || seconds <= 0) return null;
+    final days = seconds ~/ 86400;
+    final hours = (seconds % 86400) ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    if (days > 0) {
+      return hours > 0 ? '${days}ي ${hours}س' : '${days}ي';
+    }
+    if (hours > 0) {
+      return minutes > 0 ? '${hours}س ${minutes}د' : '${hours}س';
+    }
+    if (minutes > 0) return '${minutes}د';
+    return '${seconds}ث';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
+    final uptime = _formatUptime(sessionSeconds);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -3165,37 +3190,72 @@ class _IpDetailRow extends StatelessWidget {
           Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: accent.withOpacity(0.08),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  InkWell(
+                    onTap: onTap,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: accent.withOpacity(0.22)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    textDirection: TextDirection.ltr,
-                    children: [
-                      Text(
-                        ip,
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: accent,
-                          letterSpacing: 0,
-                        ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: accent.withOpacity(0.22)),
                       ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.open_in_new_rounded,
-                          size: 11, color: accent),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        textDirection: TextDirection.ltr,
+                        children: [
+                          Text(
+                            ip,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: accent,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.open_in_new_rounded,
+                              size: 11, color: accent),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  if (uptime != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.successColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: AppTheme.successColor.withOpacity(0.22)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.schedule_rounded,
+                              size: 11, color: AppTheme.successColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            uptime,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.successColor,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
