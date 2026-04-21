@@ -27,8 +27,9 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
   Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 6),
-      receiveTimeout: const Duration(seconds: 8),
+      // HTTPS handshake on small routers can be slow — give it more time.
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
       validateStatus: (_) => true,
       followRedirects: false,
       headers: {'Accept': 'text/html,application/xhtml+xml,*/*'},
@@ -55,7 +56,15 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
     final host = _host.text.trim();
     final u = _user.text.trim();
     final p = _pass.text;
-    final bases = ['http://$host', 'https://$host'];
+    // Huawei ONTs commonly serve HTTPS on an unusual port (often 80 or
+    // 443). The HTTP landing page's JS discloses the real SSL port —
+    // for 10.100.11.201 it's 80. Try the obvious combinations.
+    final bases = [
+      'http://$host',
+      'https://$host:80',
+      'https://$host:443',
+      'https://$host',
+    ];
 
     for (final base in bases) {
       _line('');
