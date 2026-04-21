@@ -33,7 +33,13 @@ Future<bool> saveAdminDeviceDefaults(WidgetRef ref, AdminDeviceDefaults d) async
   try {
     final res = await dio.put('/api/admin/device-defaults', data: d.toJson());
     final ok = res.data is Map && res.data['success'] == true;
-    if (ok) ref.invalidate(adminDeviceDefaultsProvider);
+    if (ok) {
+      // The defaults affect every subscriber's probe — dropping both the
+      // defaults provider AND every cached status snapshot is the only
+      // way to guarantee the next card render uses the new credentials.
+      ref.invalidate(adminDeviceDefaultsProvider);
+      ref.invalidate(deviceStatusProvider);
+    }
     return ok;
   } on DioException {
     return false;
@@ -74,7 +80,10 @@ Future<bool> saveDeviceConfig(
       data: cfg.toPutJson(),
     );
     final ok = res.data is Map && res.data['success'] == true;
-    if (ok) ref.invalidate(deviceConfigProvider(subscriberUsername));
+    if (ok) {
+      ref.invalidate(deviceConfigProvider(subscriberUsername));
+      ref.invalidate(deviceStatusProvider);
+    }
     return ok;
   } on DioException {
     return false;
@@ -86,7 +95,10 @@ Future<bool> resetDeviceConfig(WidgetRef ref, String subscriberUsername) async {
   try {
     final res = await dio.delete('/api/subscribers/$subscriberUsername/device');
     final ok = res.data is Map && res.data['success'] == true;
-    if (ok) ref.invalidate(deviceConfigProvider(subscriberUsername));
+    if (ok) {
+      ref.invalidate(deviceConfigProvider(subscriberUsername));
+      ref.invalidate(deviceStatusProvider);
+    }
     return ok;
   } on DioException {
     return false;
