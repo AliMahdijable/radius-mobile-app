@@ -193,6 +193,11 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                   right: 20,
                   top: 16,
                 ),
+                // Structure:
+                //   [fixed header]  drag handle, title, dropdown
+                //   [Expanded scroll] text area + chips — scrollable so
+                //                     nothing is clipped by the keyboard
+                //   [fixed footer]  save button + keyboard-aware bottom pad
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -213,6 +218,11 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
 
                     // Dropdown (إنشاء فقط)
                     if (template == null) ...[
@@ -308,24 +318,24 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                     ),
                     const SizedBox(height: 6),
 
-                    // محتوى الرسالة - يتمدد ليملأ المساحة
-                    Expanded(
-                      child: TextField(
-                        controller: contentController,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        textDirection: TextDirection.ltr,
-                        textAlign: TextAlign.left,
-                        style: const TextStyle(
-                          fontSize: 14, height: 1.6, fontFamily: 'Cairo',
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: 'مرحبا {firstname}...',
-                          alignLabelWithHint: true,
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.all(12),
-                        ),
+                    // محتوى الرسالة — minLines:5 بدل expands:true عشان
+                    // يشتغل داخل الـ SingleChildScrollView؛ يتكبر لو
+                    // المحتوى طويل.
+                    TextField(
+                      controller: contentController,
+                      maxLines: null,
+                      minLines: 5,
+                      textAlignVertical: TextAlignVertical.top,
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.left,
+                      style: const TextStyle(
+                        fontSize: 14, height: 1.6, fontFamily: 'Cairo',
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: 'مرحبا {firstname}...',
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(12),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -395,10 +405,14 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                             .toList(),
                       ),
                     ],
+                          ],
+                        ),
+                      ),
+                    ),
 
                     const SizedBox(height: 10),
 
-                    // زر الحفظ
+                    // زر الحفظ — ثابت أسفل الشيت، ما يختفي تحت الكيبورد
                     SizedBox(
                       height: AppTheme.actionButtonHeight,
                       child: ElevatedButton(
