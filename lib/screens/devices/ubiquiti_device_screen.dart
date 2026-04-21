@@ -155,11 +155,11 @@ class _MetricsCard extends StatelessWidget {
   }
 
   Color _lanColor(ColorScheme cs) {
-    if (!status.lanUp) return cs.error;
-    final s = status.lanSpeed ?? '';
-    if (s.contains('1000')) return _good;
-    if (s.contains('100')) return _warn;
-    return cs.error;
+    switch (status.lanHealth) {
+      case 'good': return _good;
+      case 'warn': return _warn;
+      default: return cs.error;
+    }
   }
 
   @override
@@ -291,6 +291,19 @@ class _WirelessCard extends StatelessWidget {
                 status.distanceMeters != null ? '${status.distanceMeters} م' : '—', null),
             if (status.peerMac != null)
               _row('Peer MAC', status.peerMac!, null),
+            if (status.lanPorts.isNotEmpty) ...[
+              const Divider(height: 16),
+              for (final p in status.lanPorts)
+                _row(
+                  p.name.toUpperCase(),
+                  p.displaySpeed,
+                  p.plugged
+                      ? (p.displaySpeed.contains('1 G')
+                          ? const Color(0xFF2E7D32)
+                          : const Color(0xFFF9A825))
+                      : cs.onSurfaceVariant,
+                ),
+            ],
           ],
         ),
       ),

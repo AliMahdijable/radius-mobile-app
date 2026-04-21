@@ -227,31 +227,22 @@ Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async
       );
     }
     if (kind == DeviceKind.ubiquiti) {
-      // Fallback credentials for Ubiquiti when the resolved set came from
-      // ONT defaults (e.g. kind was unknown and we're now on the 2nd try).
-      // Admin-wide Ubiquiti defaults take precedence over library "ubnt/ubnt".
-      final user = resolved.kind == DeviceKind.ubiquiti
-          ? resolved.username
-          : (adminDefaults.ubntUsername?.isNotEmpty == true
-              ? adminDefaults.ubntUsername!
-              : 'ubnt');
-      final pass = resolved.kind == DeviceKind.ubiquiti
-          ? resolved.password
-          : (adminDefaults.ubntPassword?.isNotEmpty == true
-              ? adminDefaults.ubntPassword!
-              : 'ubnt');
+      // Credential priority:
+      //   1. per-subscriber override (cfg.username / cfg.password)
+      //   2. admin-wide Ubiquiti defaults
+      //   3. library default "ubnt/ubnt"
+      String pick(String? sub, String? admin, String fallback) {
+        if (sub != null && sub.isNotEmpty) return sub;
+        if (admin != null && admin.isNotEmpty) return admin;
+        return fallback;
+      }
+      final user = pick(cfg.username, adminDefaults.ubntUsername, 'ubnt');
+      final pass = pick(cfg.password, adminDefaults.ubntPassword, 'ubnt');
       final session = await UbiquitiService.login(ip, user, pass);
       if (session == null) continue;
       final status = await UbiquitiService.fetchStatus(session);
       if (status == null) continue;
-      final lan = status.lanSpeed ?? '';
-      final lanHealth = !status.lanUp
-          ? 'bad'
-          : lan.contains('1000')
-              ? 'good'
-              : lan.contains('100')
-                  ? 'warn'
-                  : 'bad';
+      final lanHealth = status.lanHealth;
       return DeviceHealthSnapshot(
         kind: DeviceKind.ubiquiti,
         headlineLabel: 'الإشارة',
@@ -261,7 +252,7 @@ Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async
         secondaryValue: status.ccqPercent != null ? '${status.ccqPercent}%' : '—',
         secondaryHealth: status.ccqHealth,
         tertiaryLabel: 'LAN',
-        tertiaryValue: status.lanSpeedShort ?? (lan.isEmpty ? '—' : lan),
+        tertiaryValue: status.lanSpeedShort ?? '—',
         tertiaryHealth: lanHealth,
         ont: null,
         ubiquiti: status,

@@ -209,19 +209,20 @@ class UbiquitiService {
     final wireless = (j['wireless'] ?? const {}) as Map;
     final interfaces = (j['interfaces'] ?? const []) as List;
 
-    // Find the primary LAN interface (usually eth0).
-    Map? lan;
+    // Collect ALL eth interfaces as LanPort entries.
+    final lanPorts = <LanPort>[];
     for (final iface in interfaces) {
-      if (iface is Map) {
-        final name = (iface['ifname'] ?? '').toString().toLowerCase();
-        if (name.startsWith('eth')) { lan = iface; break; }
-      }
+      if (iface is! Map) continue;
+      final name = (iface['ifname'] ?? '').toString().toLowerCase();
+      if (!name.startsWith('eth')) continue;
+      final s = iface['status'] as Map?;
+      final plugged = (s?['plugged'] == true) || (s?['plugged'] == 1);
+      lanPorts.add(LanPort(
+        name: name,
+        speed: _buildLanSpeed(s),
+        plugged: plugged,
+      ));
     }
-    final lanStatus = lan == null ? null : (lan['status'] as Map?);
-    final lanSpeed = lanStatus?['speed']?.toString();
-    final lanUp = (lanStatus?['plugged'] == true) ||
-        (lanStatus?['plugged'] == 1) ||
-        (lanSpeed != null && !lanSpeed.toLowerCase().contains('down'));
 
     // `sta` is present when wireless mode is station; `num_sta` in AP mode.
     final staList = wireless['sta'] as List?;
@@ -241,8 +242,7 @@ class UbiquitiService {
       distanceMeters: _int(wireless['distance']),
       txRateKbps: _rateToKbps(wireless['txrate']),
       rxRateKbps: _rateToKbps(wireless['rxrate']),
-      lanSpeed: _buildLanSpeed(lanStatus),
-      lanUp: lanUp,
+      lanPorts: lanPorts,
       peerMac: peerMac,
       peerCount: _int(wireless['count']),
       baseUrl: base,

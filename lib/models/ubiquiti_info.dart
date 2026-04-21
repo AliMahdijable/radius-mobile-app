@@ -1,3 +1,23 @@
+class LanPort {
+  final String name;    // eth0 / eth1
+  final String? speed;  // "100Mbps-Full" or null
+  final bool plugged;
+
+  const LanPort({required this.name, required this.speed, required this.plugged});
+
+  String get displaySpeed {
+    if (!plugged) return 'Unplugged';
+    final s = speed;
+    if (s == null || s == '0Mbps' || s.startsWith('0')) return 'Unplugged';
+    if (s.contains('1000')) return '1 Gbps';
+    final m = RegExp(r'(\d+)Mbps').firstMatch(s);
+    if (m != null) return '${m.group(1)} Mbps';
+    return s;
+  }
+
+  String get label => name.toUpperCase(); // ETH0 → show as LAN0
+}
+
 class UbiquitiStatus {
   final String hostname;
   final String firmware;
@@ -8,13 +28,12 @@ class UbiquitiStatus {
   final int? noiseFloorDbm;     // -96
   final int? ccqPercent;        // 0..100
   final int? distanceMeters;    // 2500
-  final int? txRateKbps;        // 130000
-  final int? rxRateKbps;        // 130000
-  final String? lanSpeed;       // "100Mbps-Full"
-  final bool lanUp;
+  final int? txRateKbps;
+  final int? rxRateKbps;
+  final List<LanPort> lanPorts; // all eth interfaces
   final String? peerMac;        // station mode: connected AP mac
   final int? peerCount;         // ap mode: number of connected stations
-  final String baseUrl;         // the URL that actually worked
+  final String baseUrl;
 
   const UbiquitiStatus({
     required this.hostname,
@@ -28,17 +47,21 @@ class UbiquitiStatus {
     required this.distanceMeters,
     required this.txRateKbps,
     required this.rxRateKbps,
-    required this.lanSpeed,
-    required this.lanUp,
+    required this.lanPorts,
     required this.peerMac,
     required this.peerCount,
     required this.baseUrl,
   });
 
-  // Signal health thresholds (dBm). More-negative = weaker.
-  //   green : > -65
-  //   yellow: -65 .. -75
-  //   red   : < -75
+  // Primary LAN = first plugged port, or first port if all unplugged.
+  LanPort? get primaryLan =>
+      lanPorts.firstWhere((p) => p.plugged, orElse: () => lanPorts.isEmpty ? const LanPort(name: '', speed: null, plugged: false) : lanPorts.first);
+
+  String? get lanSpeed => primaryLan?.speed;
+  bool get lanUp => primaryLan?.plugged ?? false;
+
+  String? get lanSpeedShort => primaryLan?.plugged == true ? primaryLan?.displaySpeed : null;
+
   String get signalHealth {
     final s = signalDbm;
     if (s == null) return 'unknown';
@@ -47,10 +70,6 @@ class UbiquitiStatus {
     return 'bad';
   }
 
-  // CCQ thresholds (%).
-  //   green : >= 80
-  //   yellow: 50..79
-  //   red   : < 50
   String get ccqHealth {
     final c = ccqPercent;
     if (c == null) return 'unknown';
@@ -59,17 +78,14 @@ class UbiquitiStatus {
     return 'bad';
   }
 
-  // Compact display string for chips: "100Mbps-Full" → "100 Mbps", "1000Mbps-Full" → "1 Gbps"
-  String? get lanSpeedShort {
-    final s = lanSpeed;
-    if (s == null) return null;
-    if (s.contains('1000')) return '1 Gbps';
-    final m = RegExp(r'(\d+)Mbps').firstMatch(s);
-    if (m != null) return '${m.group(1)} Mbps';
-    return s;
+  String get lanHealth {
+    if (!lanUp) return 'bad';
+    final s = lanSpeed ?? '';
+    if (s.contains('1000')) return 'good';
+    if (s.contains('100')) return 'warn';
+    return 'bad';
   }
 
-  // SNR = signal - noise. Higher is better.
   int? get snrDb {
     final s = signalDbm; final n = noiseFloorDbm;
     if (s == null || n == null) return null;
@@ -80,8 +96,8 @@ class UbiquitiStatus {
 class UbiquitiLoginResult {
   final String baseUrl;
   final String sessionCookie;
-  final String? csrfToken;   // airOS 8.x only
-  final String airosVariant; // 'v6' or 'v8'
+  final String? csrfToken;
+  final String airosVariant;
 
   const UbiquitiLoginResult({
     required this.baseUrl,
