@@ -209,7 +209,7 @@ Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async
     }
   }
   return null;
-});
+}
 
 class DeviceStatusArgs {
   final String subscriberUsername;
