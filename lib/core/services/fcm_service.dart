@@ -45,6 +45,13 @@ class FcmService {
   static final ValueNotifier<String?> pendingSubscriberSearch =
       ValueNotifier<String?>(null);
 
+  /// Signalled when a server-side expiry-digest FCM is tapped. Value is
+  /// one of: `'nearExpiry'`, `'expired'` — the subscribers_provider filter
+  /// name. HomeScreen watches this to switch to the subscribers tab with
+  /// the right preset.
+  static final ValueNotifier<String?> pendingFilterSwitch =
+      ValueNotifier<String?>(null);
+
   static const String periodicSyncUniqueName = 'mysvcs_fcm_sync_v1';
   static const String periodicSyncTaskName = 'fcmTokenSync';
   static const Duration _periodicSyncFrequency = Duration(hours: 3);
@@ -122,6 +129,18 @@ class FcmService {
   /// and pushes it onto [pendingSubscriberSearch] so UI screens can react.
   static void _handleNotificationOpen(RemoteMessage message) {
     final type = message.data['type']?.toString() ?? '';
+    // Server-side expiry-digest alerts open the relevant subscribers
+    // filter directly (no per-subscriber deep-link needed).
+    if (type == 'near_expiry_digest') {
+      debugPrint('FCM tap → near-expiry filter');
+      pendingFilterSwitch.value = 'nearExpiry';
+      return;
+    }
+    if (type == 'expired_today_digest') {
+      debugPrint('FCM tap → expired-today filter');
+      pendingFilterSwitch.value = 'expired';
+      return;
+    }
     final username = message.data['username']?.toString() ?? '';
     if (username.isEmpty) return;
     if (type != 'expiry_warning' && type != 'service_end') return;

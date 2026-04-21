@@ -157,9 +157,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       ref.read(announcementProvider.notifier).checkForPending();
     });
     FcmService.pendingSubscriberSearch.addListener(_onPendingSubscriberSearch);
+    FcmService.pendingFilterSwitch.addListener(_onPendingFilterSwitch);
     if (FcmService.pendingSubscriberSearch.value != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _onPendingSubscriberSearch();
+      });
+    }
+    if (FcmService.pendingFilterSwitch.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onPendingFilterSwitch();
       });
     }
   }
@@ -168,6 +174,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     FcmService.pendingSubscriberSearch.removeListener(_onPendingSubscriberSearch);
+    FcmService.pendingFilterSwitch.removeListener(_onPendingFilterSwitch);
     super.dispose();
   }
 
@@ -177,6 +184,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     if (_currentIndex != 1) {
       setState(() => _currentIndex = 1);
     }
+  }
+
+  /// Handles the server-side digest-FCM taps: switch to the subscribers
+  /// tab (index 1) and preset the filter to nearExpiry or expired.
+  void _onPendingFilterSwitch() {
+    if (!mounted) return;
+    final filter = FcmService.pendingFilterSwitch.value;
+    if (filter == null || filter.isEmpty) return;
+    ref.read(subscribersProvider.notifier).setFilter(filter);
+    if (_currentIndex != 1) {
+      setState(() => _currentIndex = 1);
+    }
+    FcmService.pendingFilterSwitch.value = null;
   }
 
   @override
