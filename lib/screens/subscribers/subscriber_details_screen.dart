@@ -1096,6 +1096,15 @@ class _SubscriberDetailsScreenState
     final requiredAmount = activationData['required_amount']?.toString() ?? '—';
     final managerBalance = activationData['manager_balance']?.toString() ?? '—';
     final rewardPoints = activationData['reward_points']?.toString() ?? '0';
+    // Admin cost (what the current admin owes their upstream for this
+    // activation). SAS4 returns it as `n_required_amount` (numeric) and
+    // `required_amount` (formatted). We only surface it when it differs
+    // from the user's sale price — otherwise the two lines would look
+    // redundant.
+    final adminCost = _toDouble(
+      activationData['n_required_amount'] ?? activationData['unit_price'],
+    );
+    final showAdminCost = adminCost > 0 && (adminCost - originalPrice).abs() > 0.01;
     final currentBalance = _toDouble(userData?['notes'] ?? userData?['comments']);
 
     if (hasDiscount && mounted) {
@@ -1212,6 +1221,37 @@ class _SubscriberDetailsScreenState
                         ],
                       ),
                     ),
+                    if (showAdminCost) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warningColor.withOpacity(0.10),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.warningColor.withOpacity(0.25)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.request_quote_rounded, size: 16, color: AppTheme.warningColor),
+                            const SizedBox(width: 6),
+                            Text('التكلفة عليك: ',
+                                style: TextStyle(fontSize: 12,
+                                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                            Text(AppHelpers.formatMoney(adminCost),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800,
+                                    color: AppTheme.warningColor)),
+                            const SizedBox(width: 6),
+                            if (originalPrice > adminCost)
+                              Text(
+                                '(ربح ${AppHelpers.formatMoney(originalPrice - adminCost)})',
+                                style: TextStyle(fontSize: 11,
+                                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.55)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (hasDiscount) ...[
                       const SizedBox(height: 10),
                       Container(
