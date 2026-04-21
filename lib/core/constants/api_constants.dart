@@ -12,6 +12,9 @@ class ApiConstants {
   static const String refreshToken = '/api/auth/refresh-token';
   static const String verifyToken = '/api/auth/verify-token';
 
+  // Announcements (admin broadcast shown as in-app popup)
+  static const String announcementsCurrent = '/api/announcements/current';
+
   // Subscribers
   static const String subscribersWithPhones = '/api/subscribers/with-phones';
   static const String subscribersSearch = '/api/subscribers/search';

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dashboard_screen.dart';
 import 'subscribers/subscribers_screen.dart';
 import '../widgets/add_subscriber_sheet.dart';
@@ -13,6 +14,7 @@ import 'settings_screen.dart';
 import '../providers/whatsapp_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/app_notifications_provider.dart';
+import '../providers/announcement_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/subscribers_provider.dart';
 import '../providers/messages_provider.dart';
@@ -65,6 +67,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   String? _lastBroadcastEvent;
   int _lastBadgeCount = -1;
 
+  void _showAnnouncementDialog(AnnouncementModel ann) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.campaign_rounded, color: theme.colorScheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(ann.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Text(ann.body, style: const TextStyle(fontSize: 14, height: 1.5)),
+          ),
+          actions: [
+            if (ann.actionUrl != null && ann.actionUrl!.isNotEmpty)
+              TextButton.icon(
+                onPressed: () async {
+                  try {
+                    final uri = Uri.tryParse(ann.actionUrl!);
+                    if (uri != null) {
+                      // ignore: use_build_context_synchronously
+                      await _launchAnnouncementUrl(uri);
+                    }
+                  } catch (_) {}
+                },
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: Text(ann.actionLabel ?? 'المزيد'),
+              ),
+            FilledButton(
+              onPressed: () {
+                ref.read(announcementProvider.notifier).markSeen();
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('تمام'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _launchAnnouncementUrl(Uri uri) async {
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   Future<void> _syncAppIconBadge(int count) async {
     if (count == _lastBadgeCount) return;
     _lastBadgeCount = count;
@@ -91,6 +154,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     _loadAlertsPref();
     Future.microtask(() {
       ref.read(appNotificationsProvider.notifier).loadNotifications();
+      ref.read(announcementProvider.notifier).checkForPending();
     });
     FcmService.pendingSubscriberSearch.addListener(_onPendingSubscriberSearch);
     if (FcmService.pendingSubscriberSearch.value != null) {
@@ -122,6 +186,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         if (!mounted) return;
         ref.read(dashboardProvider.notifier).refreshCountsOnly();
         ref.read(appNotificationsProvider.notifier).loadNotifications(silent: true);
+        ref.read(announcementProvider.notifier).checkForPending();
         final subs = ref.read(subscribersProvider);
         if (subs.subscribers.isNotEmpty && !subs.isLoading) {
           ref.read(subscribersProvider.notifier).loadSubscribers();
@@ -467,6 +532,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final dash = ref.watch(dashboardProvider);
     final msgState = ref.watch(messagesProvider);
     final theme = Theme.of(context);
+
+    // Announcement modal — listen for a new pending announcement and show
+    // it as a Dialog. markSeen() persists the id so we don't re-show.
+    ref.listen(announcementProvider, (prev, next) {
+      final ann = next.pending;
+      if (ann == null) return;
+      if (prev?.pending?.id == ann.id) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _showAnnouncementDialog(ann);
+      });
+    });
 
     final broadcast = msgState.broadcast;
     if (broadcast != null && broadcast.event.isNotEmpty && broadcast.event != _lastBroadcastEvent) {
