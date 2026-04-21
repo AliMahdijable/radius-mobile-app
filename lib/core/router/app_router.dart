@@ -19,6 +19,7 @@ import '../../screens/debt_import_screen.dart';
 import '../../screens/managers_screen.dart';
 import '../../screens/packages_screen.dart';
 import '../../screens/print_templates_screen.dart';
+import '../../screens/devices/device_probe_screen.dart';
 
 /// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -65,6 +66,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/whatsapp-send-scope',
         builder: (context, state) => const WhatsAppSendScopeScreen(),
+      ),
+      GoRoute(
+        path: '/device-probe',
+        builder: (context, state) => const DeviceProbeScreen(),
       ),
       GoRoute(
         path: '/message-logs',

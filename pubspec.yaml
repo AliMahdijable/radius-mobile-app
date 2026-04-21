@@ -30,6 +30,7 @@ dependencies:
   # Encryption (CryptoJS compatible)
   pointycastle: ^3.9.1
   convert: ^3.1.2
+  crypto: ^3.0.3
 
   # UI
   # google_fonts removed - using bundled Cairo font
