@@ -185,7 +185,7 @@ class _MetricsCard extends StatelessWidget {
             _Tile(
               icon: Icons.lan,
               label: 'LAN',
-              value: status.lanSpeed ?? '—',
+              value: status.lanSpeedShort ?? '—',
               color: _lanColor(cs),
             ),
             _divider(),

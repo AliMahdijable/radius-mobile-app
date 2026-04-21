@@ -59,6 +59,16 @@ class UbiquitiStatus {
     return 'bad';
   }
 
+  // Compact display string for chips: "100Mbps-Full" → "100 Mbps", "1000Mbps-Full" → "1 Gbps"
+  String? get lanSpeedShort {
+    final s = lanSpeed;
+    if (s == null) return null;
+    if (s.contains('1000')) return '1 Gbps';
+    final m = RegExp(r'(\d+)Mbps').firstMatch(s);
+    if (m != null) return '${m.group(1)} Mbps';
+    return s;
+  }
+
   // SNR = signal - noise. Higher is better.
   int? get snrDb {
     final s = signalDbm; final n = noiseFloorDbm;

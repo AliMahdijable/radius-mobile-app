@@ -201,7 +201,7 @@ Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async
         secondaryValue: status.ccqPercent != null ? '${status.ccqPercent}%' : '—',
         secondaryHealth: status.ccqHealth,
         tertiaryLabel: 'LAN',
-        tertiaryValue: lan.isEmpty ? '—' : lan,
+        tertiaryValue: status.lanSpeedShort ?? (lan.isEmpty ? '—' : lan),
         tertiaryHealth: lanHealth,
         ont: null,
         ubiquiti: status,
