@@ -39,21 +39,21 @@ class ConnectionStatusCard extends ConsumerWidget {
           border: Border.all(color: cs.outlineVariant),
         ),
         child: asyncSnap.when(
+          // Silent loading — probe can take a few seconds on slow links,
+          // so we don't want to shove a spinner into the subscriber card.
+          // Keep just the title + gear so the admin can still edit creds.
           loading: () => _buildBody(
             context, ref,
-            leading: const SizedBox(
-              width: 16, height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            title: 'جاري فحص الجهاز...',
+            leading: Icon(Icons.router_outlined, color: cs.onSurfaceVariant),
+            title: 'الجهاز',
             body: null,
             onTap: null,
           ),
           error: (_, __) => _buildBody(
             context, ref,
             leading: Icon(Icons.error_outline, color: cs.error),
-            title: 'فشل الاتصال بالجهاز',
-            body: Text('اضغط ⚙️ لضبط الإعدادات', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11)),
+            title: 'الجهاز',
+            body: null,
             onTap: null,
           ),
           data: (snap) {
@@ -61,13 +61,8 @@ class ConnectionStatusCard extends ConsumerWidget {
               return _buildBody(
                 context, ref,
                 leading: Icon(Icons.link_off, color: cs.onSurfaceVariant),
-                title: 'الجهاز غير متاح',
-                body: Text(
-                  (fallbackIp == null || fallbackIp!.isEmpty)
-                      ? 'لا يوجد IP للمشترك'
-                      : 'لم نصل للجهاز عبر $fallbackIp',
-                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11),
-                ),
+                title: 'الجهاز',
+                body: null,
                 onTap: null,
               );
             }
@@ -178,43 +173,82 @@ class _MetricsRow extends StatelessWidget {
   final DeviceHealthSnapshot snap;
   const _MetricsRow({required this.snap});
 
+  // Abbreviate verbose labels so all three chips fit on one line on
+  // narrow phones. "RX Power" → "RX", "الإشارة" → "sig", etc.
+  String _shortLabel(String label) {
+    switch (label) {
+      case 'RX Power': return 'RX';
+      case 'TX Power': return 'TX';
+      case 'Temp':     return 'T';
+      case 'الإشارة':  return 'sig';
+      default:         return label;
+    }
+  }
+
+  // Strip units from values when the chip is already narrow — for the
+  // card summary the number itself is what matters, the unit is in the
+  // detail screen. Keeps e.g. "dBm" off the chip but leaves "%" on CCQ.
+  String _shortValue(String value) {
+    return value
+        .replaceAll(' dBm', '')
+        .replaceAll(' Mbps', 'M')
+        .replaceAll(' kbps', 'k')
+        .trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        if (snap.headlineValue != null)
-          _chip(snap.headlineLabel ?? '', snap.headlineValue!, snap.headlineHealth, cs),
-        if (snap.secondaryValue != null)
-          _chip(snap.secondaryLabel ?? '', snap.secondaryValue!, snap.secondaryHealth, cs),
-        if (snap.tertiaryValue != null)
-          _chip(snap.tertiaryLabel ?? '', snap.tertiaryValue!, snap.tertiaryHealth, cs),
-      ],
+    final chips = <Widget>[];
+    if (snap.headlineValue != null) {
+      chips.add(_chip(_shortLabel(snap.headlineLabel ?? ''),
+          _shortValue(snap.headlineValue!), snap.headlineHealth, cs));
+    }
+    if (snap.secondaryValue != null) {
+      chips.add(_chip(_shortLabel(snap.secondaryLabel ?? ''),
+          _shortValue(snap.secondaryValue!), snap.secondaryHealth, cs));
+    }
+    if (snap.tertiaryValue != null) {
+      chips.add(_chip(_shortLabel(snap.tertiaryLabel ?? ''),
+          _shortValue(snap.tertiaryValue!), snap.tertiaryHealth, cs));
+    }
+    // Single scrollable row — if device screen is wide enough all fit,
+    // on narrow phones the admin can swipe horizontally rather than have
+    // the chips wrap and break the card height.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < chips.length; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            chips[i],
+          ],
+        ],
+      ),
     );
   }
 
   Widget _chip(String label, String value, String health, ColorScheme cs) {
     final color = ConnectionStatusCard._healthColor(health, cs);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 6, height: 6,
+            width: 5, height: 5,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
           const SizedBox(width: 4),
-          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          Text(label, style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+          const SizedBox(width: 3),
+          Text(value, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
     );
