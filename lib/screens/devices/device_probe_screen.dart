@@ -177,32 +177,88 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
     final host = _host.text.trim();
     final u = _user.text.trim();
     final p = _pass.text;
-    _line('=== Ubiquiti probe ===');
-    _line('host=$host user=$u');
+    final bases = ['https://$host', 'http://$host'];
+
+    for (final base in bases) {
+      _line('');
+      _line('=== $base ===');
+      final dio = _buildDio(base);
+
+      // 1) Root — see whether the device is even reachable.
+      String rootBody = '';
+      try {
+        final r = await dio.get('/');
+        rootBody = (r.data ?? '').toString();
+        _line('root → ${r.statusCode} len=${rootBody.length}');
+        r.headers.forEach((n, v) => _line('  hdr $n: ${v.join(" | ")}'));
+        final preview = rootBody.length > 300 ? rootBody.substring(0, 300) : rootBody;
+        _line('  preview: ${preview.replaceAll(RegExp(r"\s+"), " ")}');
+      } catch (e) {
+        _line('root error: $e');
+        continue;
+      }
+
+      // 2) v6.x — POST /login.cgi with form body
+      _line('');
+      _line('→ v6.x attempt: POST /login.cgi');
+      try {
+        final body =
+            'uri=&username=${Uri.encodeQueryComponent(u)}&password=${Uri.encodeQueryComponent(p)}';
+        final res = await dio.post(
+          '/login.cgi',
+          data: body,
+          options: Options(headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Referer': '$base/login.cgi',
+          }),
+        );
+        final bstr = (res.data ?? '').toString();
+        _line('  login.cgi → ${res.statusCode} len=${bstr.length}');
+        res.headers.forEach((n, v) => _line('    hdr $n: ${v.join(" | ")}'));
+        final pv = bstr.replaceAll(RegExp(r'\s+'), ' ').trim();
+        _line('    body: ${pv.length > 250 ? pv.substring(0, 250) : pv}');
+      } catch (e) {
+        _line('  login.cgi error: $e');
+      }
+
+      // 3) v8.x — JSON POST /api/auth
+      _line('');
+      _line('→ v8.x attempt: POST /api/auth');
+      try {
+        final res = await dio.post(
+          '/api/auth',
+          data: jsonEncode({'username': u, 'password': p}),
+          options: Options(
+            headers: {'Content-Type': 'application/json', 'Referer': '$base/'},
+            responseType: ResponseType.json,
+          ),
+        );
+        final bstr = (res.data ?? '').toString();
+        _line('  /api/auth → ${res.statusCode} len=${bstr.length}');
+        res.headers.forEach((n, v) => _line('    hdr $n: ${v.join(" | ")}'));
+        final pv = bstr.replaceAll(RegExp(r'\s+'), ' ').trim();
+        _line('    body: ${pv.length > 250 ? pv.substring(0, 250) : pv}');
+      } catch (e) {
+        _line('  /api/auth error: $e');
+      }
+    }
+
+    // 4) Finally, try the real driver (uses the same steps but returns
+    //    a parsed status object on success).
+    _line('');
+    _line('=== UbiquitiService.login + fetchStatus ===');
     final session = await UbiquitiService.login(host, u, p);
     if (session == null) {
-      _line('✗ Login failed on all variants (tried airOS v6 then v8, HTTPS then HTTP).');
+      _line('✗ UbiquitiService.login returned null');
       return;
     }
-    _line('✓ Logged in  variant=${session.airosVariant}  base=${session.baseUrl}');
+    _line('✓ session  variant=${session.airosVariant}  base=${session.baseUrl}');
     final status = await UbiquitiService.fetchStatus(session);
     if (status == null) {
-      _line('✗ status.cgi / api/status did not return a parseable JSON.');
+      _line('✗ fetchStatus returned null (JSON missing wireless/host?)');
       return;
     }
-    _line('→ hostname : ${status.hostname}');
-    _line('→ firmware : ${status.firmware}');
-    _line('→ ssid     : ${status.ssid}');
-    _line('→ mode     : ${status.mode}');
-    _line('→ signal   : ${status.signalDbm} dBm');
-    _line('→ noise    : ${status.noiseFloorDbm} dBm');
-    _line('→ SNR      : ${status.snrDb} dB');
-    _line('→ CCQ      : ${status.ccqPercent} %');
-    _line('→ TX rate  : ${status.txRateKbps} kbps');
-    _line('→ RX rate  : ${status.rxRateKbps} kbps');
-    _line('→ LAN      : ${status.lanSpeed} (up=${status.lanUp})');
-    _line('→ distance : ${status.distanceMeters} m');
-    _line('→ peer MAC : ${status.peerMac}');
+    _line('→ signal=${status.signalDbm} CCQ=${status.ccqPercent} LAN=${status.lanSpeed}');
     _probeSuccess = true;
   }
 
