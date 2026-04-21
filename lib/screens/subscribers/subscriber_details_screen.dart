@@ -2786,6 +2786,13 @@ class _SubscriberDetailsScreenState
             _sendWhatsAppFromTemplate('debt_reminder');
           },
         ),
+      if (sub.isNearExpiry)
+        _FabAction(
+          Icons.alarm_rounded,
+          'تذكير انتهاء',
+          Colors.deepOrange,
+          () => _sendWhatsAppFromTemplate('expiry_warning'),
+        ),
       _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
       _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
       _FabAction(
