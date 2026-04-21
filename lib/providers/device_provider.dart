@@ -4,9 +4,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/network/dio_client.dart';
 import '../core/services/huawei_ont_service.dart';
 import '../core/services/ubiquiti_service.dart';
+import '../models/admin_device_defaults.dart';
 import '../models/device_config.dart';
 import '../models/ont_info.dart';
 import '../models/ubiquiti_info.dart';
+
+// ─── Admin-wide defaults ────────────────────────────────────────────────
+// One fetch per session — used as the 2nd fallback tier when a given
+// subscriber has no override.
+
+final adminDeviceDefaultsProvider =
+    FutureProvider<AdminDeviceDefaults>((ref) async {
+  final dio = ref.read(backendDioProvider);
+  try {
+    final res = await dio.get('/api/admin/device-defaults');
+    final data = res.data;
+    if (data is! Map || data['success'] != true) return AdminDeviceDefaults.empty();
+    final d = data['defaults'];
+    if (d is! Map) return AdminDeviceDefaults.empty();
+    return AdminDeviceDefaults.fromJson(Map<String, dynamic>.from(d));
+  } catch (_) {
+    return AdminDeviceDefaults.empty();
+  }
+});
+
+Future<bool> saveAdminDeviceDefaults(WidgetRef ref, AdminDeviceDefaults d) async {
+  final dio = ref.read(backendDioProvider);
+  try {
+    final res = await dio.put('/api/admin/device-defaults', data: d.toJson());
+    final ok = res.data is Map && res.data['success'] == true;
+    if (ok) ref.invalidate(adminDeviceDefaultsProvider);
+    return ok;
+  } on DioException {
+    return false;
+  }
+}
 
 // ─── Config (server-side, per-admin) ────────────────────────────────────
 //
@@ -138,7 +170,14 @@ final deviceStatusProvider = FutureProvider.family
 Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async {
   final cfg = await ref.watch(deviceConfigProvider(args.subscriberUsername).future) ??
       const DeviceConfig();
-  final resolved = cfg.resolve(fallbackIp: args.fallbackIp);
+  final adminDefaults = await ref.watch(adminDeviceDefaultsProvider.future);
+  final resolved = cfg.resolve(
+    fallbackIp: args.fallbackIp,
+    adminOntUsername: adminDefaults.ontUsername,
+    adminOntPassword: adminDefaults.ontPassword,
+    adminUbntUsername: adminDefaults.ubntUsername,
+    adminUbntPassword: adminDefaults.ubntPassword,
+  );
   final ip = resolved.ip;
   if (ip.isEmpty) return null;
 
@@ -178,8 +217,17 @@ Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async
     if (kind == DeviceKind.ubiquiti) {
       // Fallback credentials for Ubiquiti when the resolved set came from
       // ONT defaults (e.g. kind was unknown and we're now on the 2nd try).
-      final user = resolved.kind == DeviceKind.ubiquiti ? resolved.username : 'ubnt';
-      final pass = resolved.kind == DeviceKind.ubiquiti ? resolved.password : 'ubnt';
+      // Admin-wide Ubiquiti defaults take precedence over library "ubnt/ubnt".
+      final user = resolved.kind == DeviceKind.ubiquiti
+          ? resolved.username
+          : (adminDefaults.ubntUsername?.isNotEmpty == true
+              ? adminDefaults.ubntUsername!
+              : 'ubnt');
+      final pass = resolved.kind == DeviceKind.ubiquiti
+          ? resolved.password
+          : (adminDefaults.ubntPassword?.isNotEmpty == true
+              ? adminDefaults.ubntPassword!
+              : 'ubnt');
       final session = await UbiquitiService.login(ip, user, pass);
       if (session == null) continue;
       final status = await UbiquitiService.fetchStatus(session);

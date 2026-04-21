@@ -19,7 +19,7 @@ import '../../screens/debt_import_screen.dart';
 import '../../screens/managers_screen.dart';
 import '../../screens/packages_screen.dart';
 import '../../screens/print_templates_screen.dart';
-import '../../screens/devices/device_probe_screen.dart';
+import '../../screens/devices/device_defaults_screen.dart';
 import '../../screens/devices/ont_device_screen.dart';
 import '../../screens/devices/ubiquiti_device_screen.dart';
 
@@ -70,8 +70,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const WhatsAppSendScopeScreen(),
       ),
       GoRoute(
-        path: '/device-probe',
-        builder: (context, state) => const DeviceProbeScreen(),
+        path: '/device-defaults',
+        builder: (context, state) => const DeviceDefaultsScreen(),
       ),
       GoRoute(
         path: '/ont-device',

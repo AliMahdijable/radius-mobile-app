@@ -69,21 +69,37 @@ class DeviceConfig {
   bool get isEmpty =>
       deviceType == null && username == null && password == null && customIp == null;
 
-  /// Resolve the effective credentials for the given subscriber fallback.
+  /// Resolve the effective credentials. Three-tier fallback:
+  ///   1. subscriber-specific override (username/password on this object)
+  ///   2. admin-wide defaults (from AdminDeviceDefaults)
+  ///   3. library hard-coded defaults (telecomadmin/admintelecom, ubnt/ubnt)
+  ///
   /// `fallbackIp` is the SAS4 framedipaddress. Returns null kind for "unknown
   /// yet — caller should try ONT first, Ubiquiti second".
-  ResolvedDevice resolve({required String? fallbackIp}) {
+  ResolvedDevice resolve({
+    required String? fallbackIp,
+    String? adminOntUsername,
+    String? adminOntPassword,
+    String? adminUbntUsername,
+    String? adminUbntPassword,
+  }) {
     final kind = deviceType;
+    String pick(String? override, String? adminDefault, String hardcoded) {
+      if (override != null && override.isNotEmpty) return override;
+      if (adminDefault != null && adminDefault.isNotEmpty) return adminDefault;
+      return hardcoded;
+    }
+
     String user;
     String pass;
     if (kind == DeviceKind.ubiquiti) {
-      user = username?.isNotEmpty == true ? username! : 'ubnt';
-      pass = password?.isNotEmpty == true ? password! : 'ubnt';
+      user = pick(username, adminUbntUsername, 'ubnt');
+      pass = pick(password, adminUbntPassword, 'ubnt');
     } else {
       // Treat unknown the same as ONT for credential fallback — the caller
       // can still probe Ubiquiti separately if this fails.
-      user = username?.isNotEmpty == true ? username! : 'telecomadmin';
-      pass = password?.isNotEmpty == true ? password! : 'admintelecom';
+      user = pick(username, adminOntUsername, 'telecomadmin');
+      pass = pick(password, adminOntPassword, 'admintelecom');
     }
     final ip = customIp?.isNotEmpty == true ? customIp! : (fallbackIp ?? '');
     return ResolvedDevice(kind: kind, ip: ip, username: user, password: pass);

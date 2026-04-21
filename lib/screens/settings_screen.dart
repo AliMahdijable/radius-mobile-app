@@ -321,10 +321,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onTap: () => context.push('/whatsapp-send-scope'),
         ),
         _SettingTile(
-          icon: Icons.wifi_tethering,
-          title: 'فحص جهاز (تجريبي)',
-          subtitle: 'تشخيص سريع لراوتر/ONT على الشبكة المحلية',
-          onTap: () => context.push('/device-probe'),
+          icon: Icons.router_rounded,
+          title: 'الإعدادات الافتراضية لأجهزتك',
+          subtitle: 'بيانات دخول Ubiquiti و ONT لكل مشتركيك',
+          onTap: () => context.push('/device-defaults'),
         ),
         _SettingTile(
           icon: Icons.schedule,
