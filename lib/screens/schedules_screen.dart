@@ -137,7 +137,7 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
       executionCount: 0,
       scheduleMode: type == 'debt_reminder' ? _debtMode : 'weekly',
       monthDays: type == 'debt_reminder' && _debtMode == 'monthly'
-          ? List<int>.from(_debtMonthDays)..sort()
+          ? (List<int>.from(_debtMonthDays)..sort())
           : const [],
     );
 
@@ -183,7 +183,7 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
       executionCount: existing?.executionCount ?? 0,
       scheduleMode: type == 'debt_reminder' ? _debtMode : 'weekly',
       monthDays: type == 'debt_reminder' && _debtMode == 'monthly'
-          ? List<int>.from(_debtMonthDays)..sort()
+          ? (List<int>.from(_debtMonthDays)..sort())
           : const [],
     );
 
