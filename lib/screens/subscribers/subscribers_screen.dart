@@ -649,34 +649,22 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     final currentFilter = state.filter;
     final isOnlineFilter = currentFilter == 'online';
 
-    // When the filter changes (e.g. the user tapped a dashboard KPI card
-    // while we were on another tab), scroll the chip bar so the newly
-    // selected chip sits in the middle of the viewport. Uses a
-    // post-frame callback so the layout is complete before we measure
-    // RenderBox offsets.
+    // When the filter changes (dashboard KPI tap while on another tab,
+    // or any setFilter call), scroll the chip bar so the newly selected
+    // chip is visible. Scrollable.ensureVisible handles RTL correctly on
+    // its own, unlike my earlier manual offset math which assumed LTR
+    // and left the chip pinned outside the viewport.
     if (!_isSearchMode && _lastScrolledFilter != currentFilter) {
       _lastScrolledFilter = currentFilter;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final key = _chipKeys[currentFilter];
-        final ctx = key?.currentContext;
-        if (ctx == null || !_chipScrollController.hasClients) return;
-        final box = ctx.findRenderObject() as RenderBox?;
-        final scrollBox =
-            _chipScrollController.position.context.storageContext
-                .findRenderObject() as RenderBox?;
-        if (box == null || scrollBox == null) return;
-        final chipOffset =
-            box.localToGlobal(Offset.zero, ancestor: scrollBox).dx +
-                _chipScrollController.offset;
-        final viewport = _chipScrollController.position.viewportDimension;
-        final maxScroll = _chipScrollController.position.maxScrollExtent;
-        final target = (chipOffset - (viewport - box.size.width) / 2)
-            .clamp(0.0, maxScroll);
-        _chipScrollController.animateTo(
-          target,
+        final chipContext = _chipKeys[currentFilter]?.currentContext;
+        if (chipContext == null) return;
+        Scrollable.ensureVisible(
+          chipContext,
           duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+          alignment: 0.5, // center in the viewport
+          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
         );
       });
     }
