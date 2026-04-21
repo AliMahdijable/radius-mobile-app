@@ -169,20 +169,35 @@ class _DeviceProbeScreenState extends State<DeviceProbeScreen> {
             options: Options(
               headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Origin': base,
                 'Referer': '$base/',
+                if (cookies.isNotEmpty) 'Cookie': cookieHeader(),
               },
             ),
           );
           eatCookies(res);
           final bodyStr = (res.data ?? '').toString();
           final loc = res.headers.value('location') ?? '';
-          final bad = RegExp(r'errorPage|Username or password|login failed|invalid', caseSensitive: false)
-              .hasMatch(bodyStr);
-          _line('[try] ${a['label']} → ${res.statusCode} loc=${loc.isEmpty ? '-' : loc.substring(0, loc.length.clamp(0, 40))} len=${bodyStr.length}${bad ? ' BAD' : ''}');
-          if ((res.statusCode == 200 || res.statusCode == 302) && !bad && cookies.isNotEmpty) {
-            loggedIn = true;
-            break;
+          _line('[try] ${a['label']} → ${res.statusCode} loc=${loc.isEmpty ? '-' : loc.substring(0, loc.length.clamp(0, 40))} len=${bodyStr.length}');
+          final preview = bodyStr.replaceAll(RegExp(r'\s+'), ' ').trim();
+          _line('  body: «${preview.length > 300 ? preview.substring(0, 300) : preview}»');
+          _line('  cookies now: ${cookies.keys.join(",")}');
+          // Real success test: try /index.asp; if it no longer looks like
+          // the login page we're in.
+          try {
+            final idx = await dio.get('/index.asp', options: Options(headers: {
+              'Cookie': cookieHeader(), 'Referer': '$base/',
+            }));
+            final idxBody = (idx.data ?? '').toString();
+            final stillLogin = idxBody.contains('safelogin.js') || idxBody.contains('GetRandCount');
+            _line('  /index.asp → ${idx.statusCode} len=${idxBody.length} stillLoginPage=$stillLogin');
+            if (!stillLogin && idx.statusCode == 200 && idxBody.length > 1000) {
+              loggedIn = true;
+              break;
+            }
+          } catch (e) {
+            _line('  /index.asp check error: ${e.toString().substring(0, e.toString().length.clamp(0, 80))}');
           }
         } catch (e) {
           _line('[try] ${a['label']} → ERROR ${e.toString().substring(0, e.toString().length.clamp(0, 120))}');
