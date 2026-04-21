@@ -111,6 +111,20 @@ class AppHelpers {
     return '${formatter.format(value.abs())} IQD';
   }
 
+  /// Compact money format — "250K IQD" / "1.2M IQD" / "500 IQD".
+  /// Matches the compact style used on the dashboard debt / credit chips.
+  /// Use this in list rows where horizontal space is tight.
+  static String formatCompactMoney(dynamic amount) {
+    if (amount == null) return '0';
+    final double v;
+    if (amount is String) { v = double.tryParse(amount) ?? 0; }
+    else { v = (amount as num).toDouble(); }
+    final a = v.abs();
+    if (a >= 1000000) return '${(a / 1000000).toStringAsFixed(1)}M IQD';
+    if (a >= 1000)    return '${(a / 1000).toStringAsFixed(0)}K IQD';
+    return '${a.toStringAsFixed(0)} IQD';
+  }
+
   /// Format numbers in text (e.g. "السعر: -30000 IQD" → "السعر: 30,000 IQD")
   static String formatNumbersInText(String text) {
     return text.replaceAllMapped(

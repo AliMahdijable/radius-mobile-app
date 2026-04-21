@@ -96,7 +96,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       builder: (_) => AlertDialog(
         title: const Text('حذف الصرفية'),
         content: Text(
-          'سيحذف هذا السجل بقيمة ${AppHelpers.formatMoney(e.amount)}. '
+          'سيحذف هذا السجل بقيمة ${AppHelpers.formatCompactMoney(e.amount)}. '
           'متأكد؟',
         ),
         actions: [
@@ -146,7 +146,7 @@ class _TotalBanner extends StatelessWidget {
                 const Text('إجمالي الصرفيات', style: TextStyle(fontSize: 12)),
                 const SizedBox(height: 2),
                 Text(
-                  AppHelpers.formatMoney(total),
+                  AppHelpers.formatCompactMoney(total),
                   style: TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w800, color: cs.error),
                 ),
@@ -262,7 +262,7 @@ class _ExpenseTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      AppHelpers.formatMoney(expense.amount),
+                      AppHelpers.formatCompactMoney(expense.amount),
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: cs.error),
                     ),
                     if (expense.note != null && expense.note!.isNotEmpty) ...[
