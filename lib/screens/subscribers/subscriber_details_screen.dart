@@ -23,6 +23,7 @@ import '../../core/utils/receipt_printer.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/contact_picker.dart';
 import '../../widgets/quick_amount_chips.dart';
+import '../../widgets/connection_status_card.dart';
 
 class SubscriberDetailsScreen extends ConsumerStatefulWidget {
   final SubscriberModel subscriber;
@@ -2572,6 +2573,13 @@ class _SubscriberDetailsScreenState
                         ip: sub.ipAddress!.trim(),
                         sessionSeconds: sub.sessionTime,
                         onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                      ),
+                    // Connection status (CPE health) — only meaningful when
+                    // SAS4 has an IP for the subscriber.
+                    if ((sub.ipAddress ?? '').trim().isNotEmpty)
+                      ConnectionStatusCard(
+                        subscriberUsername: sub.username,
+                        fallbackIp: sub.ipAddress!.trim(),
                       ),
                   ],
                 ),
