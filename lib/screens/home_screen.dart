@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:flutter_app_badger/flutter_app_badger.dart';
+import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dashboard_screen.dart';
 import 'subscribers/subscribers_screen.dart';
@@ -69,13 +69,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     if (count == _lastBadgeCount) return;
     _lastBadgeCount = count;
     try {
-      final supported = await FlutterAppBadger.isAppBadgeSupported();
+      final supported = await AppBadgePlus.isSupported();
       if (!supported) return;
-      if (count > 0) {
-        FlutterAppBadger.updateBadgeCount(count);
-      } else {
-        FlutterAppBadger.removeBadge();
-      }
+      // app_badge_plus treats 0 as "clear" natively.
+      await AppBadgePlus.updateBadge(count);
     } catch (_) { /* launcher may not support — ignore */ }
   }
 
