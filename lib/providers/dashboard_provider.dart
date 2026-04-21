@@ -210,19 +210,6 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     return expDay == today && expDate.isBefore(now);
   }
 
-  static bool _isNearExpiryExact(String? expiration, {int? remainingDays}) {
-    final expDate = _parseExpDate(expiration);
-    if (expDate == null) {
-      // Align with SubscriberModel.isNearExpiry: fall back to remaining_days
-      // when the backend doesn't emit an expiration string for this row.
-      return remainingDays != null && remainingDays >= 1 && remainingDays <= 3;
-    }
-    final now = DateTime.now();
-    if (expDate.isBefore(now)) return false;
-    final diff = expDate.difference(now);
-    return diff.inDays <= 3;
-  }
-
   int? _parseWidgetIntOrNull(dynamic responseOrData) {
     final data = responseOrData is Response ? responseOrData.data : responseOrData;
     if (data == null) return null;
@@ -322,12 +309,14 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       dev.log('Widgets: total=$total active=$active expired=$expired online=$online', name: 'DASH');
 
       // معالجة بيانات المشتركين
+      // ملاحظة: nearExpiryCount/List تُحدَّث فقط من subscribers_provider عبر
+      // updateNearExpiryFromSubscribers لأن /with-phones يقتصر على مَن لديه
+      // رقم هاتف. الاحتفاظ بالقيم الحالية يضمن عدم رجوع العداد إلى 0 عند
+      // إعادة تحميل الداش بورد (نقر تبويب الرئيسية / سحب للتحديث ... إلخ).
       int debtors = state.debtors;
       double totalDebt = state.totalDebt;
-      int nearExpiry = state.nearExpiryCount;
       int expiredToday = state.expiredTodayCount;
       int expiredOverdue = state.expiredOverdueCount;
-      List<Map<String, dynamic>> nearExpiryList = state.nearExpiryList;
       List<Map<String, dynamic>> expiredTodayList = state.expiredTodayList;
       List<Map<String, dynamic>> expiredOverdueList = state.expiredOverdueList;
 
@@ -336,20 +325,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       if (subsData is Map && subsData['success'] == true) {
         debtors = 0;
         totalDebt = 0;
-        nearExpiry = 0;
         expiredToday = 0;
         expiredOverdue = 0;
-        nearExpiryList = [];
         expiredTodayList = [];
         expiredOverdueList = [];
         final data = subsData['data'] as List? ?? [];
         for (final sub in data) {
           final expStr = sub['expiration']?.toString();
-          final remDays = _remainingDaysInt(sub['remaining_days']);
-          if (_isNearExpiryExact(expStr, remainingDays: remDays)) {
-            nearExpiry++;
-            nearExpiryList.add(Map<String, dynamic>.from(sub));
-          }
           if (_isExpiredTodayExact(expStr)) {
             expiredToday++;
             expiredTodayList.add(Map<String, dynamic>.from(sub));
@@ -411,7 +393,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         onlineCount: online,
         managerBalance: balance,
         managerPoints: points,
-        nearExpiryCount: nearExpiry,
+        // nearExpiryCount/List مقصود عدم تمريرهما — subscribers_provider هو
+        // المصدر الوحيد لهذه القيمة (يدفع القيم الصحيحة من كامل بيانات SAS4).
         expiredTodayCount: expiredToday,
         expiredOverdueCount: expiredOverdue,
         debtors: debtors,
@@ -419,7 +402,6 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         todayActivations: todayAct,
         todayExtensions: todayExt,
         recentActivities: activities,
-        nearExpiryList: nearExpiryList,
         expiredTodayList: expiredTodayList,
         expiredOverdueList: expiredOverdueList,
         isLoading: false,
