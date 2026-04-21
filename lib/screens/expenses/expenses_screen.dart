@@ -395,15 +395,19 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            // Quick amount chips mirroring the debt modal — small + nudges
-            // the admin toward round thousands without fighting the keyboard.
+            // Quick amount chips mirroring the debt modal — nudges the
+            // admin toward round thousands without fighting the keyboard.
+            // Labels use the full "5,000" form instead of "5K" at the
+            // admin's request (matches the IQD display convention
+            // everywhere else in the app).
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: [5, 10, 25, 50, 100, 250, 500].map((k) {
+              children: [5000, 10000, 25000, 50000, 100000, 250000, 500000].map((v) {
                 return ActionChip(
-                  label: Text('+${k}K', style: const TextStyle(fontSize: 12)),
-                  onPressed: () => _addQuick(k * 1000),
+                  label: Text('+${_formatThousands(v.toString())}',
+                      style: const TextStyle(fontSize: 12)),
+                  onPressed: () => _addQuick(v),
                   visualDensity: VisualDensity.compact,
                 );
               }).toList()
