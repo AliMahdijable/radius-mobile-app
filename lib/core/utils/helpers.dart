@@ -21,11 +21,30 @@ class AppHelpers {
 
   /// Format expiration / due date in 12-hour style with Arabic AM/PM.
   /// Example: "2026/04/25 ‏05:59 مساءً"
+  ///
+  /// SAS4 returns expirations as naive strings like "2026-04-20 20:46:00"
+  /// that are **already in Baghdad time** — no timezone suffix. The
+  /// previous implementation called DateTime.tryParse (which treats naive
+  /// input as device-local) and then piped the result through
+  /// toBaghdadTime, blindly adding another +3h. That made every expiration
+  /// display 3 hours ahead of what SAS4 actually stored — a subscriber
+  /// whose DB row said 20:46 rendered as 23:46 on the phone.
+  ///
+  /// Match the pattern used by subscriber_model / dashboard_provider /
+  /// home_screen: append +03:00 for naive strings so the parser anchors
+  /// them as Baghdad, and only convert when the string explicitly carries
+  /// UTC (Z/+HH:MM).
   static String formatExpiration(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '—';
-    final date = DateTime.tryParse(dateStr);
+    final s = dateStr.trim();
+    DateTime? date;
+    if (s.contains('T') || s.contains('+') || s.endsWith('Z')) {
+      date = DateTime.tryParse(s);
+    } else {
+      date = DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
+    }
     if (date == null) return dateStr;
-    final baghdad = toBaghdadTime(date);
+    final baghdad = date.isUtc ? toBaghdadTime(date) : date;
     final datePart = intl.DateFormat('yyyy/MM/dd').format(baghdad);
     return '$datePart  ${_twelveHourTime(baghdad)}';
   }
