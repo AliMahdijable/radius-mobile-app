@@ -325,13 +325,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: 'اتصال واتساب',
           onTap: () => context.push('/whatsapp-connection'),
         ),
-        _SettingTile(
-          icon: Icons.share_location_rounded,
-          title: 'نطاق الإرسال',
-          subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
-          iconColor: AppTheme.whatsappGreen,
-          onTap: () => context.push('/whatsapp-send-scope'),
-        ),
+        // نطاق الإرسال يخص أصحاب المدراء الفرعيين فقط. الأدمن الفرعي
+        // ما عنده مدراء تحته فلا معنى للخيار عنده.
+        if (canAccessManagers)
+          _SettingTile(
+            icon: Icons.share_location_rounded,
+            title: 'نطاق الإرسال',
+            subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
+            iconColor: AppTheme.whatsappGreen,
+            onTap: () => context.push('/whatsapp-send-scope'),
+          ),
         _SettingTile(
           icon: Icons.schedule,
           title: 'الجدولة',
