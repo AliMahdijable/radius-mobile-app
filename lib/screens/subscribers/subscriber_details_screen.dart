@@ -2608,23 +2608,40 @@ class _SubscriberDetailsScreenState
                           : '—',
                     ),
                     _StatusRow(sub: sub),
-                    if (sub.isOnline && (sub.ipAddress ?? '').trim().isNotEmpty)
-                      _IpDetailRow(
-                        ip: sub.ipAddress!.trim(),
-                        sessionSeconds: sub.sessionTime,
-                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
-                      ),
-                    // Connection status (CPE health) — only meaningful when
-                    // SAS4 has an IP for the subscriber.
-                    if ((sub.ipAddress ?? '').trim().isNotEmpty)
-                      ConnectionStatusCard(
-                        subscriberUsername: sub.username,
-                        fallbackIp: sub.ipAddress!.trim(),
-                      ),
                   ],
                 ),
 
                 const SizedBox(height: 12),
+
+                // ── Connection & Device ──
+                // Shown for every subscriber except the purely offline
+                // (active subscription but not currently connected). IP
+                // row + live uptime on top, CPE probe card below. When
+                // SAS4 hasn't returned an IP yet we still show the card
+                // with a placeholder so the admin can open the config
+                // dialog and enter custom creds.
+                if (!sub.isOffline)
+                  _DetailSection(
+                    title: 'الاتصال والجهاز',
+                    children: [
+                      if ((sub.ipAddress ?? '').trim().isNotEmpty)
+                        _IpDetailRow(
+                          ip: sub.ipAddress!.trim(),
+                          sessionSeconds: sub.sessionTime,
+                          onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                        )
+                      else
+                        const _NoIpHint(),
+                      ConnectionStatusCard(
+                        subscriberUsername: sub.username,
+                        fallbackIp: (sub.ipAddress ?? '').trim().isNotEmpty
+                            ? sub.ipAddress!.trim()
+                            : null,
+                      ),
+                    ],
+                  ),
+
+                if (!sub.isOffline) const SizedBox(height: 12),
 
                 // ── Subscription Status ──
                 _DetailSection(
@@ -3311,6 +3328,44 @@ class _IpDetailRow extends StatelessWidget {
                       ),
                     ),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder row shown in the Connection & Device section when SAS4
+/// hasn't returned a `framedipaddress` for the subscriber yet (common
+/// for freshly-activated accounts that haven't started a RADIUS session).
+/// Keeps the section layout consistent with the _IpDetailRow it replaces.
+class _NoIpHint extends StatelessWidget {
+  const _NoIpHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withOpacity(0.55),
+      fontWeight: FontWeight.w600,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(Icons.lan_rounded, size: 16, color: accent),
+          const SizedBox(width: 8),
+          Text('IP', style: labelStyle),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'لا يوجد اتصال نشط',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: theme.colorScheme.onSurface.withOpacity(0.45),
               ),
             ),
           ),
