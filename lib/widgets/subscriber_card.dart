@@ -956,37 +956,119 @@ class _ConnectionHealthPill extends ConsumerWidget {
       error: (_, __) => const SizedBox.shrink(),
       data: (snap) {
         if (snap == null) return const SizedBox.shrink();
-        final color = _colorFor(snap.overallHealth, cs);
         final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
-        // Strip the unit to keep the pill narrow (e.g. "-22 dBm" → "-22").
-        final value = (snap.headlineValue ?? '')
-            .replaceAll(' dBm', '')
-            .replaceAll(' Mbps', 'M')
-            .trim();
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: color.withOpacity(0.30)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7, height: 7,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        // All three metrics are shown so the admin can spot exactly which
+        // one is failing without opening the details screen. Each metric
+        // is its own tiny pill so they wrap cleanly on narrow phones.
+        final metrics = <_PillMetric>[
+          if (snap.headlineValue != null)
+            _PillMetric(
+              label: _shortLabel(snap.headlineLabel ?? ''),
+              value: _shortValue(snap.headlineValue!),
+              health: snap.headlineHealth,
+            ),
+          if (snap.secondaryValue != null)
+            _PillMetric(
+              label: _shortLabel(snap.secondaryLabel ?? ''),
+              value: _shortValue(snap.secondaryValue!),
+              health: snap.secondaryHealth,
+            ),
+          if (snap.tertiaryValue != null)
+            _PillMetric(
+              label: _shortLabel(snap.tertiaryLabel ?? ''),
+              value: _shortValue(snap.tertiaryValue!),
+              health: snap.tertiaryHealth,
+            ),
+        ];
+        // Wrap so on narrow screens the metric chips spill onto a
+        // second line instead of overflowing the card width.
+        return Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _colorFor(snap.overallHealth, cs).withOpacity(0.10),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _colorFor(snap.overallHealth, cs).withOpacity(0.30),
+                ),
               ),
-              const SizedBox(width: 6),
-              Text(kindLabel, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
-              if (value.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Text(value, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w700)),
-              ],
-            ],
-          ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7, height: 7,
+                    decoration: BoxDecoration(
+                      color: _colorFor(snap.overallHealth, cs),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    kindLabel,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final m in metrics) _metricPill(m, cs),
+          ],
         );
       },
+    );
+  }
+
+  String _shortLabel(String label) {
+    switch (label) {
+      case 'RX Power': return 'RX';
+      case 'TX Power': return 'TX';
+      case 'Temp':     return 'T';
+      case 'الإشارة':  return 'sig';
+      default:         return label;
+    }
+  }
+
+  String _shortValue(String value) => value
+      .replaceAll(' dBm', '')
+      .replaceAll(' Mbps', 'M')
+      .replaceAll(' kbps', 'k')
+      .trim();
+
+  Widget _metricPill(_PillMetric m, ColorScheme cs) {
+    final color = _colorFor(m.health, cs);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5, height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            m.label,
+            style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            m.value,
+            style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1003,4 +1085,13 @@ class _ConnectionHealthPill extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Simple value object that ferries one metric's (label, value, health)
+/// from the parsed snapshot into the chip-building helper.
+class _PillMetric {
+  final String label;
+  final String value;
+  final String health;
+  const _PillMetric({required this.label, required this.value, required this.health});
 }
