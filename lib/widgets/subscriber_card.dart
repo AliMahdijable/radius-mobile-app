@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/utils/helpers.dart';
 import '../core/theme/app_theme.dart';
 import '../models/subscriber_model.dart';
+import '../providers/device_provider.dart';
 
 class SubscriberCard extends StatelessWidget {
   final SubscriberModel subscriber;
@@ -334,6 +336,17 @@ class SubscriberCard extends StatelessWidget {
                           : AppTheme.warningColor.withOpacity(0.18),
                     ),
                   ],
+                  // CPE health pill — probes the subscriber's router
+                  // (ONT / Ubiquiti) and shows a colored dot for quick
+                  // scanning down the list. Shown for every subscriber
+                  // EXCEPT purely offline ones (no live session to
+                  // probe), matching the admin's request.
+                  if (!subscriber.isOffline &&
+                      (subscriber.ipAddress ?? '').trim().isNotEmpty)
+                    _ConnectionHealthPill(
+                      subscriberUsername: subscriber.username,
+                      fallbackIp: subscriber.ipAddress!.trim(),
+                    ),
                 ],
               ),
             ),
@@ -896,6 +909,97 @@ class _LastPaymentRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small inline pill showing the CPE probe result inside the subscriber
+/// card. Uses the same deviceStatusProvider the details screen uses, so
+/// opening the details page hits a warm cache. Only 1 request per
+/// subscriber every 5 minutes thanks to `cacheFor` on that provider.
+///
+/// Visual states:
+///   - loading : shimmering dot (no text)
+///   - no data : hidden (empty SizedBox) — avoids clutter on rows that
+///               genuinely can't be probed
+///   - data    : dot + brief "ONT" / "Ubiquiti" label + headline value
+///               (e.g. "RX -22" / "sig -62")
+class _ConnectionHealthPill extends ConsumerWidget {
+  final String subscriberUsername;
+  final String fallbackIp;
+  const _ConnectionHealthPill({
+    required this.subscriberUsername,
+    required this.fallbackIp,
+  });
+
+  Color _colorFor(String health, ColorScheme cs) {
+    switch (health) {
+      case 'good': return const Color(0xFF2E7D32);
+      case 'warn': return const Color(0xFFF9A825);
+      case 'bad':  return cs.error;
+      default:     return cs.onSurfaceVariant;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final args = DeviceStatusArgs(
+      subscriberUsername: subscriberUsername,
+      fallbackIp: fallbackIp,
+    );
+    final asyncSnap = ref.watch(deviceStatusProvider(args));
+    final cs = Theme.of(context).colorScheme;
+
+    return asyncSnap.when(
+      loading: () => _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (snap) {
+        if (snap == null) return const SizedBox.shrink();
+        final color = _colorFor(snap.overallHealth, cs);
+        final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
+        // Strip the unit to keep the pill narrow (e.g. "-22 dBm" → "-22").
+        final value = (snap.headlineValue ?? '')
+            .replaceAll(' dBm', '')
+            .replaceAll(' Mbps', 'M')
+            .trim();
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withOpacity(0.30)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7, height: 7,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(kindLabel, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+              if (value.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(value, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w700)),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _dotOnly(Color c) {
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.10),
+        shape: BoxShape.circle,
+      ),
+      child: Container(
+        width: 7, height: 7,
+        decoration: BoxDecoration(color: c, shape: BoxShape.circle),
       ),
     );
   }
