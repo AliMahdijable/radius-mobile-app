@@ -598,19 +598,80 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         state = state.copyWith(subscribers: updated);
       }
 
-      // fallback: لأي مشترك online بدون IP بعد، نجلب تفاصيله من /subscriber/:id
-      // (يحدث أحياناً لمشتركين منتهين حالياً متصلين لم يظهروا في UserSessions)
+      // Per-user UserSessions fallback. The bulk 2000-row fetch above
+      // returns the most recent sessions globally — so subscribers who
+      // have been continuously connected for days end up pushed past
+      // the window and their IP goes missing (e.g. hal@xuuo under
+      // admin@xuuo stayed connected 3+ days while newer sessions filled
+      // the list). Targeted search=username hits the exact session row
+      // regardless of how old the start time is.
       final stillMissing = state.subscribers
-          .where((s) => s.isOnline && (s.ipAddress ?? '').trim().isEmpty && s.idx != null)
-          .take(10) // حدّ أعلى للإنصاف
+          .where((s) =>
+              s.isOnline &&
+              (s.ipAddress ?? '').trim().isEmpty &&
+              s.username.trim().isNotEmpty)
+          .take(10) // حدّ أعلى للإنصاف على SAS4
           .toList();
+      if (stillMissing.isNotEmpty) {
+        dev.log('loadOnlineIps: ${stillMissing.length} online subs still missing IP — doing per-user lookup',
+            name: 'SUBS');
+      }
       for (final s in stillMissing) {
-        final id = int.tryParse(s.idx ?? '');
-        if (id == null) continue;
         try {
-          // refreshSubscriberAfterOperation يستدعي /subscriber/:id ويدمج framedipaddress
-          await refreshSubscriberAfterOperation(id);
-        } catch (_) { /* تجاهل */ }
+          final userPayload = EncryptionService.encrypt({
+            'page': 1, 'count': 3,
+            'sortBy': 'acctstarttime', 'direction': 'desc',
+            'search': s.username,
+            'columns': ['username', 'framedipaddress', 'acctstarttime', 'acctstoptime'],
+            'framedipaddress': '', 'username': s.username, 'mac': '',
+            'start_date': '', 'end_date': '',
+          });
+          final userRes = await _sas4Dio.post(
+            ApiConstants.sas4UserSessions,
+            data: {'payload': userPayload},
+            options: Options(contentType: 'application/x-www-form-urlencoded'),
+          );
+          dynamic ud = userRes.data;
+          if (ud is String) ud = EncryptionService.decrypt(ud);
+          final urows = (ud is Map && ud['data'] is List)
+              ? ud['data'] as List
+              : (ud is Map && ud['sessions'] is List)
+                  ? ud['sessions'] as List
+                  : (ud is List ? ud : const []);
+          // The very first open row is the live session.
+          for (final r in urows) {
+            if (r is! Map) continue;
+            final stop = r['acctstoptime']?.toString().trim() ?? '';
+            final open = stop.isEmpty || stop == '-' || stop.toLowerCase() == 'null';
+            if (!open) continue;
+            final ip = r['framedipaddress']?.toString().trim();
+            if (ip == null || ip.isEmpty || ip == '-') continue;
+            // Parse start time for uptime display.
+            int? uptimeSec;
+            final rawStart = r['acctstarttime']?.toString().trim() ?? '';
+            if (rawStart.isNotEmpty) {
+              DateTime? st;
+              if (rawStart.contains('T') || rawStart.contains('+') || rawStart.endsWith('Z')) {
+                st = DateTime.tryParse(rawStart);
+              } else {
+                st = DateTime.tryParse('${rawStart.replaceAll(' ', 'T')}+03:00');
+              }
+              if (st != null) {
+                uptimeSec = DateTime.now().difference(st).inSeconds;
+                if (uptimeSec < 0) uptimeSec = null;
+              }
+            }
+            // Merge into state.
+            final i = state.subscribers.indexWhere((x) => x.username == s.username);
+            if (i == -1) break;
+            final next = List<SubscriberModel>.from(state.subscribers);
+            next[i] = _copyWithIp(next[i], ip, markOnline: true, sessionSeconds: uptimeSec);
+            state = state.copyWith(subscribers: next);
+            break;
+          }
+        } catch (e) {
+          dev.log('per-user session lookup failed for ${s.username}: $e', name: 'SUBS');
+        }
       }
     } catch (e) {
       dev.log('loadOnlineIps error: $e', name: 'SUBS');
