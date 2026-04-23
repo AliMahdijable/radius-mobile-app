@@ -785,7 +785,16 @@ class _WhatsAppDialog extends StatefulWidget {
 }
 
 class _WhatsAppDialogState extends State<_WhatsAppDialog> {
-  final _phone = TextEditingController();
+  late final TextEditingController _phone;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill from the phone captured at debt-create time (from SAS4
+    // manager tree). Admin can still overwrite if a newer number is
+    // known.
+    _phone = TextEditingController(text: widget.debt.debtorAdminPhone ?? '');
+  }
 
   @override
   void dispose() {

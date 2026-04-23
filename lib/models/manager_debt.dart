@@ -31,6 +31,7 @@ class ManagerDebt {
   final String? parentAdminUsername;
   final int debtorAdminId;
   final String? debtorAdminUsername;
+  final String? debtorAdminPhone;
   final double amount;
   final double paidAmount;
   final double remainingAmount;
@@ -46,6 +47,7 @@ class ManagerDebt {
     required this.parentAdminUsername,
     required this.debtorAdminId,
     required this.debtorAdminUsername,
+    required this.debtorAdminPhone,
     required this.amount,
     required this.paidAmount,
     required this.remainingAmount,
@@ -71,6 +73,9 @@ class ManagerDebt {
       parentAdminUsername: j['parent_admin_username']?.toString(),
       debtorAdminId: _int(j['debtor_admin_id']),
       debtorAdminUsername: j['debtor_admin_username']?.toString(),
+      debtorAdminPhone: (j['debtor_admin_phone']?.toString().trim().isEmpty ?? true)
+          ? null
+          : j['debtor_admin_phone'].toString().trim(),
       amount: _num(j['amount']),
       paidAmount: _num(j['paid_amount']),
       remainingAmount: _num(j['remaining_amount']),
@@ -173,15 +178,23 @@ class ManagerDebtsSummary {
   );
 }
 
-/// Entry in the sub-admin dropdown for creating a new debt.
+/// Entry in the sub-admin dropdown for creating a new debt. `phone`
+/// comes from the SAS4 manager tree (mobile/phone field) and is used
+/// to pre-fill the WhatsApp-reminder dialog and to persist onto the
+/// debt row at create time so later reminders don't need a second
+/// tree lookup.
 class SubAdminRef {
   final int id;
   final String username;
-  const SubAdminRef({required this.id, required this.username});
+  final String? phone;
+  const SubAdminRef({required this.id, required this.username, this.phone});
 
   factory SubAdminRef.fromJson(Map<String, dynamic> j) => SubAdminRef(
         id: j['id'] is int ? j['id'] : int.tryParse(j['id']?.toString() ?? '0') ?? 0,
         username: j['username']?.toString() ?? '',
+        phone: (j['phone']?.toString().trim().isEmpty ?? true)
+            ? null
+            : j['phone'].toString().trim(),
       );
 }
 
