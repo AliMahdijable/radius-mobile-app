@@ -484,7 +484,7 @@ class _DebtFormSheetState extends ConsumerState<_DebtFormSheet> {
                 TextFormField(
                   controller: _amountCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'المبلغ (د.ع)',
+                    labelText: 'المبلغ (IQD)',
                     prefixIcon: Icon(Icons.payments_outlined),
                     border: OutlineInputBorder(),
                   ),
