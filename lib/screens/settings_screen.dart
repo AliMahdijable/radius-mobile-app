@@ -327,6 +327,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'إدارة قوالب وصولات الطباعة',
           onTap: () => context.push('/print-templates'),
         ),
+        _SettingTile(
+          icon: Icons.notifications_active_rounded,
+          title: 'إعدادات الإشعارات',
+          subtitle: 'تفعيل/إيقاف Push + ساعات صمت',
+          iconColor: Colors.indigo,
+          onTap: () => context.push('/notification-settings'),
+        ),
 
         const SizedBox(height: 20),
 
