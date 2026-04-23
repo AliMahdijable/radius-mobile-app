@@ -353,89 +353,105 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: () => _toggleAlerts(
-                                        !_alertsEnabled,
-                                        setSheetState,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Switch(
-                                            value: _alertsEnabled,
-                                            onChanged: (v) => _toggleAlerts(
-                                              v,
-                                              setSheetState,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            _alertsEnabled
-                                                ? 'تنبيهات الاشتراك مفعلة'
-                                                : 'تنبيهات الاشتراك معطلة',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                              color: _alertsEnabled
-                                                  ? Colors.orange
-                                                  : theme.colorScheme.onSurface
-                                                      .withValues(alpha: 0.4),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                              // Row 1: subscription-alerts toggle (always
+                              // visible, full-width — label has room to
+                              // breathe even on small phones).
+                              GestureDetector(
+                                onTap: () => _toggleAlerts(
+                                  !_alertsEnabled,
+                                  setSheetState,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Switch(
+                                      value: _alertsEnabled,
+                                      onChanged: (v) =>
+                                          _toggleAlerts(v, setSheetState),
                                     ),
-                                  ),
-                                  if (hasAppNotifications)
-                                    TextButton.icon(
-                                      onPressed: () async {
-                                        await ref
-                                            .read(appNotificationsProvider.notifier)
-                                            .dismissAll();
-                                      },
-                                      icon: const Icon(
-                                        Icons.clear_all,
-                                        size: 18,
-                                      ),
-                                      label: const Text(
-                                        'مسح الكل',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor:
-                                            theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.6),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _alertsEnabled
+                                            ? 'تنبيهات الاشتراك مفعلة'
+                                            : 'تنبيهات الاشتراك معطلة',
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: _alertsEnabled
+                                              ? Colors.orange
+                                              : theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.4),
                                         ),
-                                        visualDensity: VisualDensity.compact,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                  if (dash.totalAlerts > 0)
-                                    TextButton.icon(
-                                      onPressed: () => _clearAlerts(ctx),
-                                      icon: const Icon(
-                                        Icons.visibility_off_outlined,
-                                        size: 18,
-                                      ),
-                                      label: const Text(
-                                        'إخفاء تنبيهات الاشتراك',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: theme
-                                            .colorScheme.onSurface
-                                            .withValues(alpha: 0.5),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
+                              // Row 2: action buttons below. Wrap so they
+                              // stack on narrow phones instead of
+                              // overflowing off the side.
+                              if (hasAppNotifications || dash.totalAlerts > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: [
+                                      if (hasAppNotifications)
+                                        TextButton.icon(
+                                          onPressed: () async {
+                                            await ref
+                                                .read(appNotificationsProvider
+                                                    .notifier)
+                                                .dismissAll();
+                                          },
+                                          icon: const Icon(
+                                            Icons.clear_all,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'مسح الكل',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: Colors.redAccent,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 2,
+                                            ),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            minimumSize: const Size(0, 32),
+                                          ),
+                                        ),
+                                      if (dash.totalAlerts > 0)
+                                        TextButton.icon(
+                                          onPressed: () => _clearAlerts(ctx),
+                                          icon: const Icon(
+                                            Icons.visibility_off_outlined,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'إخفاء تنبيهات الاشتراك',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: theme
+                                                .colorScheme.onSurface
+                                                .withValues(alpha: 0.55),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 2,
+                                            ),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            minimumSize: const Size(0, 32),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               const SizedBox(height: 4),
                             ],
                           ),
