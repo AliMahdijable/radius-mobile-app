@@ -30,6 +30,8 @@ class AppConstants {
   static const String storageFcmLastAdminId = 'fcmLastAdminId';
   static const String storageAppNotificationLastSeenPrefix =
       'appNotificationLastSeen:';
+  static const String storageAppNotificationDismissedPrefix =
+      'appNotificationDismissed:';
 
   static const String baghdadTimezone = 'Asia/Baghdad';
   static const int baghdadUtcOffset = 3;

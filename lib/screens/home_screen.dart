@@ -277,7 +277,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         return Consumer(
           builder: (ctx, ref, _) {
             final appNotifications = ref.watch(appNotificationsProvider);
-            final appNotificationCount = appNotifications.notifications.length;
+            // Use visibleNotifications so dismissed rows disappear from
+            // both the list and the count shown in the sheet header.
+            final visibleAppNotifs = appNotifications.visibleNotifications;
+            final appNotificationCount = visibleAppNotifs.length;
             return StatefulBuilder(
               builder: (ctx, setSheetState) {
                 final theme = Theme.of(ctx);
@@ -385,15 +388,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       ),
                                     ),
                                   ),
-                                  if (dash.totalAlerts > 0)
+                                  if (hasAppNotifications)
                                     TextButton.icon(
-                                      onPressed: () => _clearAlerts(ctx),
+                                      onPressed: () async {
+                                        await ref
+                                            .read(appNotificationsProvider.notifier)
+                                            .dismissAll();
+                                      },
                                       icon: const Icon(
                                         Icons.clear_all,
                                         size: 18,
                                       ),
                                       label: const Text(
-                                        'مسح تنبيهات الاشتراك',
+                                        'مسح الكل',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor:
+                                            theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.6),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                  if (dash.totalAlerts > 0)
+                                    TextButton.icon(
+                                      onPressed: () => _clearAlerts(ctx),
+                                      icon: const Icon(
+                                        Icons.visibility_off_outlined,
+                                        size: 18,
+                                      ),
+                                      label: const Text(
+                                        'إخفاء تنبيهات الاشتراك',
                                         style: TextStyle(fontSize: 12),
                                       ),
                                       style: TextButton.styleFrom(
@@ -424,9 +452,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   color: AppTheme.primary,
                                   icon: Icons.notifications_rounded,
                                 ),
-                                ...appNotifications.notifications.map(
-                                  (notification) => _AppNotificationItem(
-                                    notification: notification,
+                                ...visibleAppNotifs.map(
+                                  // Each notification is swipeable. We use
+                                  // ValueKey(notification.id) so Flutter
+                                  // identifies rows correctly across rebuilds —
+                                  // otherwise dismissing one row would cascade
+                                  // into the next.
+                                  (notification) => Dismissible(
+                                    key: ValueKey('appnotif_${notification.id}'),
+                                    direction: DismissDirection.horizontal,
+                                    background: _dismissBackground(
+                                      theme,
+                                      alignStart: true,
+                                    ),
+                                    secondaryBackground: _dismissBackground(
+                                      theme,
+                                      alignStart: false,
+                                    ),
+                                    onDismissed: (_) => ref
+                                        .read(appNotificationsProvider.notifier)
+                                        .dismiss(notification.id),
+                                    child: _AppNotificationItem(
+                                      notification: notification,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -1018,5 +1066,22 @@ class _AlertItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Red strip shown behind a notification row while it's being swiped.
+/// Aligned start for LTR-swipe, end for RTL-swipe, so the trash icon
+/// appears on the side the finger is pulling toward.
+Widget _dismissBackground(ThemeData theme, {required bool alignStart}) {
+  return Container(
+    margin: const EdgeInsets.symmetric(vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    decoration: BoxDecoration(
+      color: Colors.redAccent.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    alignment: alignStart ? Alignment.centerLeft : Alignment.centerRight,
+    child: Icon(Icons.delete_sweep_rounded,
+        color: Colors.redAccent, size: 22),
+  );
 }
 

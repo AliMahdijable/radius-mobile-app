@@ -166,4 +166,35 @@ class StorageService {
         '${AppConstants.storageAppNotificationLastSeenPrefix}$adminId',
       ) ??
       0;
+
+  // Dismissed notification ids — stored as a comma-separated string per
+  // admin in SharedPreferences. Keeping it local (not on the server) is
+  // deliberate: the activity_logs rows are an audit trail we don't want
+  // to mutate, and the dismissed state is purely a view preference.
+  Future<Set<int>> getDismissedAppNotificationIds(String adminId) async {
+    final raw = (await _sp)
+            .getString('${AppConstants.storageAppNotificationDismissedPrefix}$adminId') ??
+        '';
+    if (raw.isEmpty) return <int>{};
+    return raw
+        .split(',')
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toSet();
+  }
+
+  Future<void> saveDismissedAppNotificationIds(
+    String adminId,
+    Set<int> ids,
+  ) async {
+    // Cap at 500 ids to keep the key size reasonable. Oldest-first is
+    // safe because ids from activity_logs are monotonically increasing,
+    // so we drop the smallest (oldest) first.
+    final sorted = ids.toList()..sort((a, b) => b.compareTo(a));
+    final capped = sorted.take(500);
+    await (await _sp).setString(
+      '${AppConstants.storageAppNotificationDismissedPrefix}$adminId',
+      capped.join(','),
+    );
+  }
 }

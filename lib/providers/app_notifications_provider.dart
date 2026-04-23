@@ -15,22 +15,40 @@ class AppNotificationsState {
   final bool isLoading;
   final String? error;
   final int lastSeenId;
+  // Locally-dismissed notification ids. Not sent to the server — the
+  // activity_logs rows stay intact as an audit trail; this is purely a
+  // view filter so tapping "مسح" or swiping hides them from the bell.
+  final Set<int> dismissedIds;
 
   const AppNotificationsState({
     this.notifications = const [],
     this.isLoading = false,
     this.error,
     this.lastSeenId = 0,
+    this.dismissedIds = const <int>{},
   });
 
-  int get unreadCount =>
-      notifications.where((notification) => notification.id > lastSeenId).length;
+  /// The notifications shown to the user — what's left after removing
+  /// anything the user has dismissed locally. The raw list stays in
+  /// `notifications` so the loader can still compare against it when
+  /// new data arrives.
+  List<AppNotificationModel> get visibleNotifications => notifications
+      .where((n) => !dismissedIds.contains(n.id))
+      .toList(growable: false);
+
+  /// Unread = visible AND newer than lastSeenId. Dismissed rows don't
+  /// count — if you swiped it away you don't want the badge reminding
+  /// you about it.
+  int get unreadCount => notifications
+      .where((n) => !dismissedIds.contains(n.id) && n.id > lastSeenId)
+      .length;
 
   AppNotificationsState copyWith({
     List<AppNotificationModel>? notifications,
     bool? isLoading,
     String? error,
     int? lastSeenId,
+    Set<int>? dismissedIds,
     bool clearError = false,
   }) {
     return AppNotificationsState(
@@ -38,6 +56,7 @@ class AppNotificationsState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : error ?? this.error,
       lastSeenId: lastSeenId ?? this.lastSeenId,
+      dismissedIds: dismissedIds ?? this.dismissedIds,
     );
   }
 }
@@ -112,10 +131,13 @@ class AppNotificationsNotifier extends StateNotifier<AppNotificationsState> {
 
       final lastSeenId =
           await _storage.getLastSeenAppNotificationId(adminId);
+      final dismissed =
+          await _storage.getDismissedAppNotificationIds(adminId);
 
       state = state.copyWith(
         notifications: items,
         lastSeenId: lastSeenId,
+        dismissedIds: dismissed,
         isLoading: false,
         clearError: true,
       );
@@ -136,6 +158,39 @@ class AppNotificationsNotifier extends StateNotifier<AppNotificationsState> {
     final highestId = state.notifications.first.id;
     await _storage.saveLastSeenAppNotificationId(adminId, highestId);
     state = state.copyWith(lastSeenId: highestId);
+  }
+
+  /// Hide a single notification from the bell list. Persisted so it
+  /// stays hidden on app restart and the next /manager-financial fetch
+  /// doesn't re-surface it.
+  Future<void> dismiss(int id) async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null || adminId.isEmpty) return;
+    final next = {...state.dismissedIds, id};
+    await _storage.saveDismissedAppNotificationIds(adminId, next);
+    state = state.copyWith(dismissedIds: next);
+  }
+
+  /// Clear the bell entirely — dismisses every currently-loaded id.
+  /// New notifications arriving later (higher ids) still show up.
+  Future<void> dismissAll() async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null || adminId.isEmpty) return;
+    final ids = state.notifications.map((n) => n.id).toSet();
+    final next = {...state.dismissedIds, ...ids};
+    await _storage.saveDismissedAppNotificationIds(adminId, next);
+    // Also bump lastSeenId so the red badge clears immediately even if
+    // the user never opened the sheet before dismissing all.
+    final highestId = state.notifications.isEmpty
+        ? state.lastSeenId
+        : state.notifications.first.id;
+    if (highestId > state.lastSeenId) {
+      await _storage.saveLastSeenAppNotificationId(adminId, highestId);
+    }
+    state = state.copyWith(
+      dismissedIds: next,
+      lastSeenId: highestId,
+    );
   }
 
   @override
