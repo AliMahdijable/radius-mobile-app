@@ -24,8 +24,6 @@ class _ManagerDebtDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    // Fetch fresh debt from the list provider — it's the source of truth
-    // after mutations. Falls back to widget.debt on first paint.
     final allDebts = ref.watch(managerDebtsListProvider(const DebtsFilterArgs()));
     final debt = allDebts.maybeWhen(
           data: (list) {
@@ -38,7 +36,6 @@ class _ManagerDebtDetailScreenState
           orElse: () => widget.debt,
         );
     final payments = ref.watch(managerDebtPaymentsProvider(debt.id));
-    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -65,9 +62,11 @@ class _ManagerDebtDetailScreenState
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
           children: [
             _DebtorHeader(debt: debt),
+            const SizedBox(height: 16),
+            _HeroRemaining(debt: debt),
             const SizedBox(height: 12),
-            _AmountsBand(debt: debt),
-            const SizedBox(height: 14),
+            _SecondaryAmounts(debt: debt),
+            const SizedBox(height: 18),
             if (debt.remainingAmount > 0) ...[
               _ActionsRow(
                 onPartial: () => _openPayment(context, debt, full: false),
@@ -77,9 +76,9 @@ class _ManagerDebtDetailScreenState
             ],
             _WhatsAppButton(
               sending: _sendingWa,
-              onPressed: () => _sendWhatsApp(context, debt.id),
+              onPressed: () => _openWhatsAppDialog(context, debt),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 24),
             _PaymentsSection(payments: payments, debtId: debt.id),
           ],
         ),
@@ -87,27 +86,22 @@ class _ManagerDebtDetailScreenState
     );
   }
 
-  Future<void> _sendWhatsApp(BuildContext context, int debtId) async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _openWhatsAppDialog(BuildContext context, ManagerDebt debt) async {
+    final phone = await showDialog<String?>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('إرسال تذكير واتساب'),
-        content: const Text('سيُرسل تذكير على رقم الواتساب المسجّل. متابعة؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إرسال')),
-        ],
-      ),
+      builder: (_) => _WhatsAppDialog(debt: debt),
     );
-    if (confirmed != true) return;
+    if (phone == null || phone.isEmpty) return;
+
     setState(() => _sendingWa = true);
-    final ok = await sendManagerDebtWhatsApp(ref, debtId);
+    final ok = await sendManagerDebtWhatsApp(ref, debt.id, phone: phone);
     if (!mounted) return;
     setState(() => _sendingWa = false);
     if (ok) {
       AppSnackBar.success(context, 'تم الإرسال');
     } else {
-      AppSnackBar.error(context, 'فشل الإرسال — تأكد من اتصال واتساب');
+      AppSnackBar.error(context,
+          'فشل الإرسال — تأكد أن رقم واتساب الفرعي صحيح ومسجّل على واتساب');
     }
   }
 
@@ -162,7 +156,7 @@ class _ManagerDebtDetailScreenState
   }
 }
 
-// ─── Debtor header (name + date row) ───────────────────────────────────
+// ─── Debtor header (compact card) ──────────────────────────────────────
 
 class _DebtorHeader extends StatelessWidget {
   final ManagerDebt debt;
@@ -176,20 +170,24 @@ class _DebtorHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [cs.primary.withOpacity(0.10), cs.primary.withOpacity(0.02)],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: cs.primary.withOpacity(0.15),
-            child: Icon(Icons.person_outline, color: cs.primary, size: 22),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [cs.primary.withOpacity(0.3), cs.primary.withOpacity(0.1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.person_outline_rounded, color: cs.primary, size: 26),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -198,22 +196,21 @@ class _DebtorHeader extends StatelessWidget {
               children: [
                 Text(
                   debt.debtorAdminUsername ?? 'مدير #${debt.debtorAdminId}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.event, size: 13, color: cs.onSurfaceVariant),
-                    const SizedBox(width: 3),
-                    Text(
-                      dateStr,
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                    ),
+                    Icon(Icons.calendar_month_rounded,
+                        size: 13, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(dateStr,
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                   ],
                 ),
                 if (debt.note != null && debt.note!.isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   Text(
                     debt.note!,
                     style: TextStyle(
@@ -230,14 +227,29 @@ class _DebtorHeader extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.15),
+              color: statusColor.withOpacity(0.12),
               borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: statusColor.withOpacity(0.35)),
             ),
-            child: Text(
-              debtStatusLabel(debt.status),
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: statusColor),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6, height: 6,
+                  decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  debtStatusLabel(debt.status),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -246,79 +258,193 @@ class _DebtorHeader extends StatelessWidget {
   }
 }
 
-// ─── 3 amount cards, single balanced row ───────────────────────────────
+// ─── Hero remaining card with progress bar ─────────────────────────────
 
-class _AmountsBand extends StatelessWidget {
+class _HeroRemaining extends StatelessWidget {
   final ManagerDebt debt;
-  const _AmountsBand({required this.debt});
+  const _HeroRemaining({required this.debt});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return IntrinsicHeight(
-      child: Row(
+    final isDone = debt.remainingAmount <= 0;
+    final heroColor = isDone ? Colors.green : Colors.redAccent;
+    final secondaryColor = isDone ? Colors.green.shade700 : Colors.red.shade700;
+    final progress = debt.amount > 0
+        ? (debt.paidAmount / debt.amount).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            heroColor.withOpacity(0.13),
+            heroColor.withOpacity(0.03),
+          ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: heroColor.withOpacity(0.3)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _AmountTile(
-            label: 'الأصلي',
-            value: debt.amount,
-            color: cs.primary,
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: _AmountTile(
-            label: 'المسدّد',
-            value: debt.paidAmount,
-            color: Colors.green,
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: _AmountTile(
-            label: 'المتبقي',
-            value: debt.remainingAmount,
-            color: debt.remainingAmount > 0 ? Colors.redAccent : Colors.green,
-            bold: true,
-          )),
+          Row(
+            children: [
+              Icon(
+                isDone ? Icons.check_circle_rounded : Icons.hourglass_bottom_rounded,
+                color: heroColor,
+                size: 20,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isDone ? 'مسدّد بالكامل' : 'المبلغ المتبقي',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: secondaryColor,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${(progress * 100).toStringAsFixed(0)}%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: secondaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              AppHelpers.formatMoney(
+                isDone ? debt.amount : debt.remainingAmount,
+              ),
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.w900,
+                color: heroColor,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: heroColor.withOpacity(0.15),
+              color: heroColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'مسدّد ${AppHelpers.formatMoney(debt.paidAmount)}',
+                style: TextStyle(fontSize: 12, color: secondaryColor, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              Text(
+                'من ${AppHelpers.formatMoney(debt.amount)}',
+                style: TextStyle(fontSize: 12, color: secondaryColor, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _AmountTile extends StatelessWidget {
+// ─── Secondary amounts (original + paid as small twin cards) ───────────
+
+class _SecondaryAmounts extends StatelessWidget {
+  final ManagerDebt debt;
+  const _SecondaryAmounts({required this.debt});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: _MiniStat(
+            icon: Icons.request_quote_outlined,
+            label: 'المبلغ الأصلي',
+            value: debt.amount,
+            color: cs.primary,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _MiniStat(
+            icon: Icons.savings_outlined,
+            label: 'المسدّد',
+            value: debt.paidAmount,
+            color: Colors.green.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final IconData icon;
   final String label;
   final double value;
   final Color color;
-  final bool bold;
-  const _AmountTile({
+  const _MiniStat({
+    required this.icon,
     required this.label,
     required this.value,
     required this.color,
-    this.bold = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.22)),
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
             child: Text(
               AppHelpers.formatMoney(value),
               style: TextStyle(
-                fontSize: bold ? 15 : 13.5,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: color,
               ),
@@ -330,7 +456,7 @@ class _AmountTile extends StatelessWidget {
   }
 }
 
-// ─── Action row: partial / full ────────────────────────────────────────
+// ─── Action buttons row ────────────────────────────────────────────────
 
 class _ActionsRow extends StatelessWidget {
   final VoidCallback onPartial;
@@ -347,18 +473,20 @@ class _ActionsRow extends StatelessWidget {
             icon: const Icon(Icons.payments_outlined, size: 18),
             label: const Text('تسديد جزئي'),
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         Expanded(
           child: FilledButton.icon(
             onPressed: onFull,
             icon: const Icon(Icons.done_all, size: 18),
             label: const Text('تسديد كامل'),
             style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
@@ -383,19 +511,20 @@ class _WhatsAppButton extends StatelessWidget {
                 width: 16, height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Icon(Icons.send, size: 18),
+            : const Icon(Icons.send_rounded, size: 18),
         label: Text(sending ? 'جاري الإرسال...' : 'إرسال تذكير واتساب'),
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.green.shade700,
-          side: BorderSide(color: Colors.green.shade300),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          side: BorderSide(color: Colors.green.shade400, width: 1.2),
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
   }
 }
 
-// ─── Payments section ──────────────────────────────────────────────────
+// ─── Payments timeline ─────────────────────────────────────────────────
 
 class _PaymentsSection extends ConsumerWidget {
   final AsyncValue<List<ManagerDebtPayment>> payments;
@@ -410,19 +539,42 @@ class _PaymentsSection extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.history, size: 18),
-            const SizedBox(width: 6),
-            const Text('سجل التسديدات',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: cs.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.history_rounded, size: 16, color: cs.primary),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'سجل التسديدات',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+            ),
             const Spacer(),
             payments.when(
-              data: (p) => Text('${p.length}', style: TextStyle(color: cs.onSurfaceVariant)),
+              data: (p) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${p.length}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                  ),
+                ),
+              ),
               loading: () => const SizedBox.shrink(),
               error: (_, __) => const SizedBox.shrink(),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         payments.when(
           loading: () => const Padding(
             padding: EdgeInsets.all(20),
@@ -432,28 +584,36 @@ class _PaymentsSection extends ConsumerWidget {
           data: (list) {
             if (list.isEmpty) {
               return Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: cs.outlineVariant.withOpacity(0.4),
+                    style: BorderStyle.solid,
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: cs.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Text('لا توجد تسديدات بعد',
-                        style: TextStyle(color: cs.onSurfaceVariant)),
+                    Icon(Icons.info_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Text(
+                      'لا توجد تسديدات بعد',
+                      style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+                    ),
                   ],
                 ),
               );
             }
             return Column(
-              children: list
-                  .map((p) => _PaymentTile(
-                        payment: p,
-                        onDelete: () => _confirmDeletePayment(context, ref, p, debtId),
-                      ))
-                  .toList(),
+              children: [
+                for (int i = 0; i < list.length; i++)
+                  _PaymentRow(
+                    payment: list[i],
+                    isFirst: i == 0,
+                    isLast: i == list.length - 1,
+                    onDelete: () => _confirmDeletePayment(context, ref, list[i], debtId),
+                  ),
+              ],
             );
           },
         ),
@@ -489,65 +649,124 @@ class _PaymentsSection extends ConsumerWidget {
   }
 }
 
-class _PaymentTile extends StatelessWidget {
+class _PaymentRow extends StatelessWidget {
   final ManagerDebtPayment payment;
+  final bool isFirst;
+  final bool isLast;
   final VoidCallback onDelete;
-  const _PaymentTile({required this.payment, required this.onDelete});
+  const _PaymentRow({
+    required this.payment,
+    required this.isFirst,
+    required this.isLast,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final date = intl.DateFormat('y/MM/dd').format(payment.paymentDate);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.withOpacity(0.2)),
-      ),
+    return IntrinsicHeight(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check, color: Colors.green, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
+          // Timeline rail (dots + connecting line)
+          SizedBox(
+            width: 28,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  AppHelpers.formatMoney(payment.amountPaid),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                if (!isFirst)
+                  Container(
+                    width: 2,
+                    height: 8,
+                    color: Colors.green.withOpacity(0.3),
+                  )
+                else
+                  const SizedBox(height: 8),
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
                     color: Colors.green,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.3),
+                        blurRadius: 4,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  payment.note != null && payment.note!.isNotEmpty
-                      ? '$date · ${payment.note}'
-                      : date,
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: Colors.green.withOpacity(0.3),
+                    ),
+                  ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            iconSize: 20,
-            color: Colors.redAccent,
-            onPressed: onDelete,
-            visualDensity: VisualDensity.compact,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.check_circle,
+                                  color: Colors.green, size: 16),
+                              const SizedBox(width: 5),
+                              Text(
+                                AppHelpers.formatMoney(payment.amountPaid),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            payment.note != null && payment.note!.isNotEmpty
+                                ? '$date · ${payment.note}'
+                                : date,
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    InkWell(
+                      onTap: onDelete,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -555,7 +774,116 @@ class _PaymentTile extends StatelessWidget {
   }
 }
 
-// ─── Payment AlertDialog (matches expense modal style) ─────────────────
+// ─── WhatsApp send dialog (with manual phone entry) ────────────────────
+
+class _WhatsAppDialog extends StatefulWidget {
+  final ManagerDebt debt;
+  const _WhatsAppDialog({required this.debt});
+
+  @override
+  State<_WhatsAppDialog> createState() => _WhatsAppDialogState();
+}
+
+class _WhatsAppDialogState extends State<_WhatsAppDialog> {
+  final _phone = TextEditingController();
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      scrollable: true,
+      title: Row(
+        children: [
+          Icon(Icons.send_rounded, color: Colors.green.shade700, size: 20),
+          const SizedBox(width: 8),
+          const Text('إرسال تذكير واتساب'),
+        ],
+      ),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'أدخل رقم واتساب ${widget.debt.debtorAdminUsername ?? "المدير الفرعي"} الذي يستقبل التذكير.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              textDirection: TextDirection.ltr,
+              decoration: const InputDecoration(
+                labelText: 'رقم الواتساب',
+                hintText: '07801234567 أو 9647801234567',
+                prefixIcon: Icon(Icons.phone_outlined),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'سيُرسل من حساب واتساب الخاص بك.',
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            final v = _phone.text.trim();
+            if (v.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('أدخل رقم الواتساب'))
+              );
+              return;
+            }
+            Navigator.pop(context, v);
+          },
+          icon: const Icon(Icons.send_rounded, size: 18),
+          label: const Text('إرسال'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.green.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Payment AlertDialog ───────────────────────────────────────────────
 
 class _PaymentDialog extends ConsumerStatefulWidget {
   final ManagerDebt debt;
@@ -689,10 +1017,6 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            // Quick-amount chips, same pattern as the expenses modal.
-            // The first chip "ملء" pre-fills the exact remaining so the
-            // admin can tap once for a full payment even if the button
-            // was "partial".
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -924,9 +1248,6 @@ Color _statusColor(ManagerDebtStatus s) {
   }
 }
 
-// Mirrors the expenses modal formatter so amount fields across the app
-// share the same typing behaviour (typing "25000" auto-formats to
-// "25,000").
 class _DebtThousandsFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(

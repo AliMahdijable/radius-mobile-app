@@ -245,10 +245,19 @@ Future<bool> deleteManagerDebtPayment(
   }
 }
 
-Future<bool> sendManagerDebtWhatsApp(WidgetRef ref, int debtId) async {
+Future<bool> sendManagerDebtWhatsApp(
+  WidgetRef ref,
+  int debtId, {
+  String? phone,
+}) async {
   final dio = ref.read(backendDioProvider);
   try {
-    final res = await dio.post('/api/admin/manager-debts/$debtId/whatsapp');
+    final res = await dio.post(
+      '/api/admin/manager-debts/$debtId/whatsapp',
+      data: {
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+      },
+    );
     return res.data is Map && res.data['success'] == true;
   } on DioException {
     return false;
