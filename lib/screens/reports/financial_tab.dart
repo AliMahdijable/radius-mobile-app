@@ -120,7 +120,11 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     final debts =
         _num(kpis['balance_add_sum']) + _num(kpis['activate_non_cash_sum']);
     final expenses = _num(kpis['expenses_sum']);
-    final netProfit = collections - debts - expenses;
+    // Outstanding inter-admin debts (parent admin is owed this much by
+    // sub-admins). Reduces effective cash position same way subscriber
+    // debts do — mirror the web formula.
+    final managerDebtsOutstanding = _num(kpis['manager_debts_outstanding']);
+    final netProfit = collections - debts - expenses - managerDebtsOutstanding;
     final activationsTotal =
         _num(kpis['activations_count']) + _num(kpis['extend_count']);
 
@@ -254,6 +258,22 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
               colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
             ),
           ]),
+          // Only render the manager-debts card when there's actually an
+          // outstanding balance — keeps the grid clean for sub-admins
+          // who never see this field populated.
+          if (managerDebtsOutstanding > 0) ...[
+            const SizedBox(height: 10),
+            Row(children: [
+              _KpiCard(
+                label: 'ديون المدراء',
+                value: AppHelpers.formatMoney(managerDebtsOutstanding),
+                icon: Icons.assignment_ind_rounded,
+                colors: const [Color(0xFFf59e0b), Color(0xFFb45309)],
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: const SizedBox()),
+            ]),
+          ],
           const SizedBox(height: 10),
           // Net profit standalone on its own row so the number is large
           // and immediately readable — matches the web hero pattern.

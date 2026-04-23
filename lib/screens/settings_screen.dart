@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../core/router/app_router.dart';
 import '../providers/auth_provider.dart';
+import '../providers/manager_debts_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
@@ -296,6 +297,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
           onTap: () => context.push('/expenses'),
         ),
+        // Parent-admin ledger for sub-admin debts. Rendered only when the
+        // /access gate confirms this admin actually manages sub-admins —
+        // otherwise the button is pointless and would hit 403.
+        Consumer(builder: (_, innerRef, __) {
+          final access = innerRef.watch(managerDebtsAccessProvider);
+          if (access.valueOrNull?.hasSubAdmins != true) return const SizedBox.shrink();
+          return _SettingTile(
+            icon: Icons.assignment_ind_rounded,
+            title: 'ديون المدراء',
+            subtitle: 'دين بينك وبين المدراء الفرعيين — مستقل عن ديون الساس',
+            iconColor: Colors.orange,
+            onTap: () => context.push('/manager-debts'),
+          );
+        }),
         _SettingTile(
           icon: Icons.router_rounded,
           title: 'الإعدادات الافتراضية لأجهزتك',
@@ -371,6 +386,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: 'استيراد ديون المشتركين',
           subtitle: 'استيراد ديون من ملف CSV',
           onTap: _showDebtImportDialog,
+        ),
+        // Personal ledger — any admin can see debts the parent recorded
+        // against them. No gate: unlike manager debts it's always safe to
+        // hit /my-debts; the endpoint just returns an empty list when
+        // nothing is owed. Intentionally placed at the bottom of the
+        // section so it feels like a "my account" view, not a main action.
+        _SettingTile(
+          icon: Icons.receipt_long_outlined,
+          title: 'ديون عليّ',
+          subtitle: 'ديون مسجلة عليك من قبل المدير الرئيسي',
+          onTap: () => context.push('/my-debts'),
         ),
 
         const SizedBox(height: 20),

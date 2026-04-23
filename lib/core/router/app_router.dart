@@ -23,6 +23,8 @@ import '../../screens/devices/device_defaults_screen.dart';
 import '../../screens/devices/ont_device_screen.dart';
 import '../../screens/devices/ubiquiti_device_screen.dart';
 import '../../screens/expenses/expenses_screen.dart';
+import '../../screens/debts/manager_debts_screen.dart';
+import '../../screens/debts/my_debts_screen.dart';
 
 /// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -77,6 +79,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/expenses',
         builder: (context, state) => const ExpensesScreen(),
+      ),
+      GoRoute(
+        path: '/manager-debts',
+        builder: (context, state) => const ManagerDebtsScreen(),
+      ),
+      GoRoute(
+        path: '/my-debts',
+        builder: (context, state) => const MyDebtsScreen(),
       ),
       GoRoute(
         path: '/ont-device',
