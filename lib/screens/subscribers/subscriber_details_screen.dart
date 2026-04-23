@@ -796,6 +796,12 @@ class _SubscriberDetailsScreenState
         bool submitting = false;
         bool printReceipt = false;
 
+        // When the user switches packages in the dropdown the required-
+        // points number must also change — the web uses
+        // selectedPackageData.reward_points_required. We store it here
+        // and fall back to the initial extData value if the package
+        // details don't carry the field (e.g. old SAS4 builds).
+        String effectiveRequiredPoints = requiredPoints;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
             padding: EdgeInsets.only(
@@ -822,7 +828,7 @@ class _SubscriberDetailsScreenState
                 ]),
                 const SizedBox(height: 16),
                 _InfoChip(label: 'المشترك', value: sub.fullName),
-                _InfoChip(label: 'النقاط المطلوبة', value: '$requiredPoints نقطة'),
+                _InfoChip(label: 'النقاط المطلوبة', value: '$effectiveRequiredPoints نقطة'),
                 _InfoChip(label: 'النقاط المتاحة', value: '$availablePoints نقطة'),
                 if (notesSigned > 0)
                   _InfoChip(
@@ -883,7 +889,21 @@ class _SubscriberDetailsScreenState
                             setSheet(() => selectedPkgId = v);
                             final det = await notifier.getPackageDetails(v);
                             if (det != null) {
-                              setSheet(() => pkgPrice = (det['price'] ?? det['monthly_fee'])?.toString());
+                              setSheet(() {
+                                pkgPrice = (det['price'] ?? det['monthly_fee'])?.toString();
+                                // Pull the package-specific required
+                                // points. SAS4 exposes it under
+                                // `reward_points_required` (matches web).
+                                // Keep falling back to the original
+                                // extData.required_points if the field
+                                // is missing for whatever reason.
+                                final pts = det['reward_points_required']
+                                    ?? det['required_points']
+                                    ?? det['points_required'];
+                                if (pts != null) {
+                                  effectiveRequiredPoints = pts.toString();
+                                }
+                              });
                             }
                           },
                         ),
