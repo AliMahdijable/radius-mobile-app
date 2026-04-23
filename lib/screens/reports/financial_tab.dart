@@ -226,65 +226,58 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
               ]),
             ),
 
-          // KPI cards
-          Row(children: [
-            _KpiCard(
-              label: 'إجمالي التحصيلات',
-              value: AppHelpers.formatMoney(collections),
-              icon: Icons.trending_up_rounded,
-              colors: const [Color(0xFF10b981), Color(0xFF059669)],
-            ),
-            const SizedBox(width: 10),
-            _KpiCard(
-              label: 'تفعيل + تمديد',
-              value: activationsTotal.toInt().toString(),
-              icon: Icons.check_circle_rounded,
-              colors: const [Color(0xFFf59e0b), Color(0xFFd97706)],
-            ),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            _KpiCard(
-              label: 'إجمالي الديون',
-              value: AppHelpers.formatMoney(debts),
-              icon: Icons.payments_rounded,
-              colors: const [Color(0xFF16a34a), Color(0xFF0f9d58)],
-            ),
-            const SizedBox(width: 10),
-            _KpiCard(
-              label: 'الصرفيات',
-              value: AppHelpers.formatMoney(expenses),
-              icon: Icons.account_balance_wallet_rounded,
-              colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
-            ),
-          ]),
-          // Only render the manager-debts card when there's actually an
-          // outstanding balance — keeps the grid clean for sub-admins
-          // who never see this field populated.
-          if (managerDebtsOutstanding > 0) ...[
-            const SizedBox(height: 10),
-            Row(children: [
-              _KpiCard(
-                label: 'ديون المدراء',
-                value: AppHelpers.formatMoney(managerDebtsOutstanding),
-                icon: Icons.assignment_ind_rounded,
-                colors: const [Color(0xFFf59e0b), Color(0xFFb45309)],
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: const SizedBox()),
-            ]),
-          ],
-          const SizedBox(height: 10),
-          // Net profit standalone on its own row so the number is large
-          // and immediately readable — matches the web hero pattern.
-          Row(children: [
-            _KpiCard(
-              label: 'صافي الربح',
-              value: AppHelpers.formatMoney(netProfit),
-              icon: Icons.savings_rounded,
-              colors: const [Color(0xFF0ea5e9), Color(0xFF0284c7)],
-            ),
-          ]),
+          // KPI cards — built dynamically so we only render rows that
+          // have meaningful data. Empty categories stay hidden instead
+          // of taking grid space with "0 IQD" cards. Net profit is
+          // always present as the hero summary.
+          _KpiGrid(
+            items: [
+              if (collections > 0)
+                _KpiItem(
+                  label: 'إجمالي التحصيلات',
+                  value: AppHelpers.formatMoney(collections),
+                  icon: Icons.trending_up_rounded,
+                  colors: const [Color(0xFF10b981), Color(0xFF059669)],
+                ),
+              if (activationsTotal > 0)
+                _KpiItem(
+                  label: 'تفعيل + تمديد',
+                  value: activationsTotal.toInt().toString(),
+                  icon: Icons.check_circle_rounded,
+                  colors: const [Color(0xFFf59e0b), Color(0xFFd97706)],
+                ),
+              if (debts > 0)
+                _KpiItem(
+                  label: 'إجمالي الديون',
+                  value: AppHelpers.formatMoney(debts),
+                  icon: Icons.payments_rounded,
+                  colors: const [Color(0xFF16a34a), Color(0xFF0f9d58)],
+                ),
+              if (expenses > 0)
+                _KpiItem(
+                  label: 'الصرفيات',
+                  value: AppHelpers.formatMoney(expenses),
+                  icon: Icons.account_balance_wallet_rounded,
+                  colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
+                ),
+              if (managerDebtsOutstanding > 0)
+                _KpiItem(
+                  label: 'ديون المدراء',
+                  value: AppHelpers.formatMoney(managerDebtsOutstanding),
+                  icon: Icons.assignment_ind_rounded,
+                  colors: const [Color(0xFFf59e0b), Color(0xFFb45309)],
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Net profit hero — always shown even when 0 because it's the
+          // bottom line number the admin opens the screen to see.
+          _KpiHero(
+            label: 'صافي الربح',
+            value: AppHelpers.formatMoney(netProfit),
+            icon: Icons.savings_rounded,
+            colors: const [Color(0xFF0ea5e9), Color(0xFF0284c7)],
+          ),
           const SizedBox(height: 20),
 
           // Per-admin table
@@ -435,39 +428,227 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
       ActionChip(label: Text(label, style: const TextStyle(fontSize: 11)), onPressed: onTap, visualDensity: VisualDensity.compact);
 }
 
-class _KpiCard extends StatelessWidget {
+/// Plain data for a KPI card — no widgets. Kept as a tiny value type so
+/// the grid builder can conditionally skip empty categories without
+/// managing widget lifecycle.
+class _KpiItem {
   final String label;
   final String value;
   final IconData icon;
   final List<Color> colors;
+  const _KpiItem({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.colors,
+  });
+}
 
-  const _KpiCard({required this.label, required this.value, required this.icon, required this.colors});
+/// Responsive grid of KPI tiles.
+///
+/// We drop any card whose category has no data (amount == 0, count == 0)
+/// so the admin doesn't see a wall of "0 IQD" boxes. Remaining tiles
+/// flow into a 2-column grid on phones, widening to 3 columns on
+/// tablets (> 600 px) via LayoutBuilder. Tile heights are fixed via
+/// a `childAspectRatio` so the grid stays uniform regardless of whether
+/// a row ends up odd.
+class _KpiGrid extends StatelessWidget {
+  final List<_KpiItem> items;
+  const _KpiGrid({required this.items});
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, size: 18, color: Colors.white70),
-              const SizedBox(width: 6),
-              Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70), overflow: TextOverflow.ellipsis)),
-            ]),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
+    if (items.isEmpty) {
+      return _EmptyKpis();
+    }
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final cols = constraints.maxWidth >= 600 ? 3 : 2;
+        const spacing = 10.0;
+        final tileWidth = (constraints.maxWidth - spacing * (cols - 1)) / cols;
+        // Aspect ratio tuned so the gradient tiles don't squish on small
+        // phones: ~2.1 gives enough headroom for two lines of text +
+        // icon without clipping the value.
+        final tileHeight = tileWidth / 2.1;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: items.map((it) => SizedBox(
+            width: tileWidth,
+            height: tileHeight,
+            child: _KpiTile(item: it),
+          )).toList(),
+        );
+      },
+    );
+  }
+}
+
+class _EmptyKpis extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.bar_chart_rounded, size: 22, color: cs.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'لا توجد حركات مالية ضمن الفلتر الحالي.',
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiTile extends StatelessWidget {
+  final _KpiItem item;
+  const _KpiTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: item.colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: item.colors.last.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(item.icon, size: 16, color: Colors.white),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  item.label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              item.value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hero card used for "صافي الربح" — always rendered full-width, taller
+/// than the grid tiles so it reads as the page's summary line.
+class _KpiHero extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final List<Color> colors;
+  const _KpiHero({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

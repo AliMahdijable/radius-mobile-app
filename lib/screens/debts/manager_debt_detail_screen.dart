@@ -776,6 +776,14 @@ class _PaymentRow extends StatelessWidget {
 
 // ─── WhatsApp send dialog (with manual phone entry) ────────────────────
 
+/// WhatsApp send dialog.
+///
+/// Two modes:
+///   * Confirmation — when the debt already has a phone (captured from
+///     SAS4 /manager/{id} at create time). Shows the number read-only
+///     and sends on single tap.
+///   * Manual entry — fallback when SAS4 didn't return a phone. User
+///     types it and we'll also save it on the debt for next time.
 class _WhatsAppDialog extends StatefulWidget {
   final ManagerDebt debt;
   const _WhatsAppDialog({required this.debt});
@@ -786,14 +794,15 @@ class _WhatsAppDialog extends StatefulWidget {
 
 class _WhatsAppDialogState extends State<_WhatsAppDialog> {
   late final TextEditingController _phone;
+  bool _editing = false;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill from the phone captured at debt-create time (from SAS4
-    // manager tree). Admin can still overwrite if a newer number is
-    // known.
-    _phone = TextEditingController(text: widget.debt.debtorAdminPhone ?? '');
+    final initial = widget.debt.debtorAdminPhone ?? '';
+    _phone = TextEditingController(text: initial);
+    // Start in edit mode only if we have nothing to send to.
+    _editing = initial.isEmpty;
   }
 
   @override
@@ -804,15 +813,17 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final storedPhone = widget.debt.debtorAdminPhone;
+    final hasStored = storedPhone != null && storedPhone.isNotEmpty;
+
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-      scrollable: true,
       title: Row(
         children: [
           Icon(Icons.send_rounded, color: Colors.green.shade700, size: 20),
           const SizedBox(width: 8),
-          const Text('إرسال تذكير واتساب'),
+          const Text('تذكير واتساب'),
         ],
       ),
       content: SizedBox(
@@ -821,47 +832,104 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'أدخل رقم واتساب ${widget.debt.debtorAdminUsername ?? "المدير الفرعي"} الذي يستقبل التذكير.',
-                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+            if (hasStored && !_editing) ...[
+              // Confirmation card — the number is known, just confirm.
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.phone_rounded, color: Colors.green.shade700, size: 18),
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.debt.debtorAdminUsername ?? 'المدير الفرعي',
+                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            storedPhone,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              fontFamily: 'monospace',
+                            ),
+                            textDirection: TextDirection.ltr,
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _editing = true),
+                      icon: const Icon(Icons.edit, size: 14),
+                      label: const Text('تعديل', style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'سيُرسل تذكير تلقائي من حسابك على واتساب.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ] else ...[
+              // Manual entry fallback — phone wasn't captured from SAS4.
+              if (!hasStored)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'لم يتم العثور على رقم من SAS — أدخل الرقم يدوياً.',
+                          style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (!hasStored) const SizedBox(height: 12),
+              TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                textDirection: TextDirection.ltr,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'رقم الواتساب',
+                  hintText: '07801234567',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              textDirection: TextDirection.ltr,
-              decoration: const InputDecoration(
-                labelText: 'رقم الواتساب',
-                hintText: '07801234567 أو 9647801234567',
-                prefixIcon: Icon(Icons.phone_outlined),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'سيُرسل من حساب واتساب الخاص بك.',
-              style: TextStyle(
-                fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -872,10 +940,12 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
         ),
         FilledButton.icon(
           onPressed: () {
-            final v = _phone.text.trim();
+            final v = _editing || !hasStored
+                ? _phone.text.trim()
+                : storedPhone;
             if (v.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('أدخل رقم الواتساب'))
+                const SnackBar(content: Text('أدخل رقم الواتساب')),
               );
               return;
             }
