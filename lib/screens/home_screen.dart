@@ -753,20 +753,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             selectedIcon: Icon(Icons.dashboard),
             label: 'الرئيسية',
           ),
-          // المشتركين: decorated with a Material 3 Badge showing the total
-          // count of subscribers that need the admin's attention
-          // (near-expiry + expired-today), pulled from DashboardState
-          // which is the single source of truth across the app. When the
-          // count is zero the Badge is hidden automatically.
-          NavigationDestination(
-            icon: _UrgentBadge(
-              count: dash.totalAlerts,
-              child: const Icon(Icons.people_outline),
-            ),
-            selectedIcon: _UrgentBadge(
-              count: dash.totalAlerts,
-              child: const Icon(Icons.people),
-            ),
+          // المشتركين: no badge — the same "urgent subscribers" count
+          // already appears in two louder places (the bell icon top-right
+          // and the red "قريب الانتهاء" card on the dashboard), so a
+          // third indicator on the nav tab was noise.
+          const NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
             label: 'المشتركين',
           ),
           NavigationDestination(
@@ -1027,27 +1020,3 @@ class _AlertItem extends StatelessWidget {
   }
 }
 
-/// Small badge overlay for a NavigationDestination icon.
-///
-/// Shows a red pill with the count when `count > 0`, otherwise just
-/// renders the bare icon so the tab looks normal. Caps the displayed
-/// number at "99+" to avoid the badge growing into other tabs' space
-/// when an admin has hundreds of urgent subscribers.
-class _UrgentBadge extends StatelessWidget {
-  final int count;
-  final Widget child;
-  const _UrgentBadge({required this.count, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    if (count <= 0) return child;
-    final label = count > 99 ? '99+' : count.toString();
-    return Badge(
-      label: Text(label),
-      backgroundColor: Colors.redAccent,
-      textColor: Colors.white,
-      textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-      child: child,
-    );
-  }
-}
