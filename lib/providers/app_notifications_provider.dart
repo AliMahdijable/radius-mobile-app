@@ -53,10 +53,15 @@ class AppNotificationsNotifier extends StateNotifier<AppNotificationsState> {
     _listenToSocket();
   }
 
+  // Types the bell surfaces to the admin. Extend here whenever the
+  // server adds a new buildManagerFinancialNotificationPayload branch so
+  // the client doesn't silently drop valid notifications.
   static const Set<String> _supportedTypes = {
     'cash_deposit',
     'loan_deposit',
     'pay_debt',
+    'near_expiry',
+    'expired_today',
   };
 
   bool _shouldInclude(AppNotificationModel notification) =>
