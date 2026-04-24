@@ -1639,7 +1639,11 @@ class _SubscriberDetailsScreenState
   }
 
   String _calcRemainingDays(String? expiration) {
-    if (expiration == null || expiration.isEmpty) return '0';
+    // Returns a human-readable remaining duration ("3 يوم و 4 ساعة").
+    // When expiration is missing/invalid we return 'غير محدد' rather than
+    // '0' so templates like "ينتهي بعد {days_remaining}." don't render
+    // as "ينتهي بعد 0." — which reads as a wrong zero countdown.
+    if (expiration == null || expiration.isEmpty) return 'غير محدد';
     try {
       final s = expiration.trim();
       DateTime? exp;
@@ -1648,7 +1652,7 @@ class _SubscriberDetailsScreenState
       } else {
         exp = DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
       }
-      if (exp == null) return '0';
+      if (exp == null) return 'غير محدد';
       final diff = exp.difference(DateTime.now());
       if (diff.isNegative) return 'منتهي';
       final days = diff.inDays;
@@ -1661,7 +1665,7 @@ class _SubscriberDetailsScreenState
       if (parts.isEmpty) return 'أقل من دقيقة';
       return parts.join(' و ');
     } catch (_) {
-      return '0';
+      return 'غير محدد';
     }
   }
 

@@ -81,7 +81,7 @@ class ConnectionStatusCard extends ConsumerWidget {
           // admins can't tap it for an ONT (those don't serve a stock
           // HTTP UI the admin would recognise).
           if (asyncSnap.maybeWhen(
-            data: (snap) => snap != null && snap.kind == DeviceKind.ubnt,
+            data: (snap) => snap != null && snap.kind == DeviceKind.ubiquiti,
             orElse: () => false,
           ))
             InkResponse(
