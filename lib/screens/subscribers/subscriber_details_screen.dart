@@ -1810,6 +1810,18 @@ class _SubscriberDetailsScreenState
         '{username}': sub.username,
         ...?extraVars,
       };
+      // Normalize date-ish vars to the 12-hour Arabic format the rest
+      // of the app uses ("2026/04/25  05:59:00 مساءً"). Previously the
+      // activation/renewal flows passed raw SAS4 strings like
+      // "2026-05-24 14:30:00" (24-hour, no AM/PM) which leaked into
+      // the WhatsApp message. formatExpiration is a no-op when the
+      // input is already formatted or empty.
+      for (final dateKey in const ['{expiry_date}', '{expiration_date}']) {
+        final raw = vars[dateKey];
+        if (raw != null && raw.isNotEmpty) {
+          vars[dateKey] = AppHelpers.formatExpiration(raw);
+        }
+      }
       vars.forEach((k, v) => msg = msg.replaceAll(k, v));
 
       final result =

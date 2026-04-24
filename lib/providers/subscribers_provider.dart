@@ -148,6 +148,16 @@ class SubscribersState {
   int get debtorsCount => _managerScoped.where((s) => s.hasDebt).length;
   int get nearExpiryCount => _managerScoped.where((s) => s.isNearExpiry).length;
 
+  /// Sum of outstanding debt across subscribers in the current
+  /// manager-filter scope (respects the "المدراء" dropdown so when the
+  /// admin picks a single sub-manager the total only counts that
+  /// sub-manager's debtors). Value is always non-negative — we sum the
+  /// absolute of `debtAmount` so the UI doesn't have to worry about sign
+  /// conventions.
+  double get totalDebtAmount => _managerScoped
+      .where((s) => s.hasDebt)
+      .fold<double>(0, (sum, s) => sum + s.debtAmount.abs());
+
   SubscribersState copyWith({
     List<SubscriberModel>? subscribers,
     List<SubscriberModel>? searchResults,

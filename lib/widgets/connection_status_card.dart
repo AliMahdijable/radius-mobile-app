@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/device_config.dart';
 import '../providers/device_provider.dart';
@@ -74,6 +75,23 @@ class ConnectionStatusCard extends ConsumerWidget {
               child: Icon(Icons.settings_outlined, size: 16, color: cs.onSurfaceVariant),
             ),
           ),
+          // Globe — opens the Ubiquiti admin page (http://<ip>) in the
+          // system browser. Only rendered when the probe came back
+          // healthy AND the device is a NanoStation/Ubiquiti unit, so
+          // admins can't tap it for an ONT (those don't serve a stock
+          // HTTP UI the admin would recognise).
+          if (asyncSnap.maybeWhen(
+            data: (snap) => snap != null && snap.kind == DeviceKind.ubnt,
+            orElse: () => false,
+          ))
+            InkResponse(
+              onTap: () => _openInBrowser(context, ref),
+              radius: 16,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.public, size: 16, color: cs.primary),
+              ),
+            ),
           // Refresh — disabled while a probe is in flight so the admin
           // doesn't queue duplicate requests against the router.
           InkResponse(
@@ -120,6 +138,19 @@ class ConnectionStatusCard extends ConsumerWidget {
       context.push('/ubiquiti-device',
           extra: UbiquitiDeviceArgs(host: resolved.ip, user: resolved.username, pass: resolved.password));
     }
+  }
+
+  /// Opens http://<ip> in the system browser — same as tapping the raw
+  /// IP on the subscriber row. Resolves the IP via the stored device
+  /// config so the value matches whatever the admin set in the config
+  /// dialog (falls back to the SAS4 framedipaddress).
+  void _openInBrowser(BuildContext context, WidgetRef ref) async {
+    final cfg = await ref.read(deviceConfigProvider(subscriberUsername).future) ??
+        const DeviceConfig();
+    final ip = cfg.resolve(fallbackIp: fallbackIp).ip;
+    if (ip.isEmpty) return;
+    final uri = Uri.parse('http://$ip');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   static Color healthColor(String h, ColorScheme cs) {

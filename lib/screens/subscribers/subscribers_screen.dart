@@ -834,6 +834,74 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
             ),
           ),
 
+        // Debt summary banner — only on the Debtors tab. Reacts to the
+        // manager-filter dropdown above: when the admin picks a specific
+        // sub-manager, the total recomputes for that scope. Hidden while
+        // searching because the count wouldn't line up with the filtered
+        // search results.
+        if (!_isSearchMode && currentFilter == 'debtors' && state.debtorsCount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFF57F17).withOpacity(0.12),
+                    const Color(0xFFF57F17).withOpacity(0.03),
+                  ],
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFF57F17).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF57F17).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.credit_card_off_rounded,
+                        size: 18, color: Color(0xFFF57F17)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'إجمالي الديون',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withOpacity(0.65),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            '${AppHelpers.formatMoney(state.totalDebtAmount)}'
+                            ' من ${state.debtorsCount} مشترك',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFE65100),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
         const SizedBox(height: 6),
 
         if (!_isSearchMode && totalItems > 0)
