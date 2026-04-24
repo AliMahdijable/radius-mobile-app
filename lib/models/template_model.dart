@@ -33,6 +33,8 @@ class TemplateModel {
         return 'رسالة ترحيب';
       case 'manager_agent':
         return 'قالب الوكيل';
+      case 'subscriber_info':
+        return 'معلومات المشترك';
       default:
         return type;
     }

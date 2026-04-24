@@ -92,6 +92,19 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'الرصيد الحالي: {current_credit} IQD\n'
             'الدين السابق: {previous_debt} IQD\n'
             'الدين الحالي: {current_debt} IQD';
+      case 'subscriber_info':
+        return 'مرحباً {subscriber_name} 👋\n\n'
+            '📋 معلومات اشتراكك:\n\n'
+            '👤 اسم المستخدم: {username}\n'
+            '📦 الباقة: {package_name}\n'
+            '💰 سعر الباقة: {package_price} IQD\n'
+            '📅 تاريخ الانتهاء: {expiry_date}\n'
+            '⏰ الأيام المتبقية: {days_remaining}\n\n'
+            '💳 الحساب:\n'
+            '• الدين المستحق: {debt_amount} IQD\n'
+            '• الخصم: {discount_amount} IQD\n'
+            '• الرصيد: {credit_amount} IQD\n\n'
+            'للاستفسار يرجى التواصل معنا 🙏';
       default:
         return '';
     }
@@ -111,7 +124,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final typeOptions = <String>[
       'debt_reminder', 'expiry_warning', 'service_end',
       'activation_notice', 'renewal', 'payment_confirmation',
-      'welcome_message',
+      'welcome_message', 'subscriber_info',
       if (canManageManagers) 'manager_agent',
     ];
 

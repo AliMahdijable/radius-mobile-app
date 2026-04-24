@@ -1681,6 +1681,11 @@ class _SubscriberDetailsScreenState
         return features.serviceEndNotification;
       case 'debt_reminder':
         return features.debtReminder;
+      case 'subscriber_info':
+        // subscriber_info is fired by an explicit admin action, never by
+        // the auto-send pipeline. No feature flag gates it — returning
+        // null lets the caller skip the disabled-feature check.
+        return null;
       default:
         return null; // بلا flag مخصّص
     }
@@ -1700,6 +1705,8 @@ class _SubscriberDetailsScreenState
         return 'تنبيه انتهاء الخدمة';
       case 'debt_reminder':
         return 'تذكير الدين';
+      case 'subscriber_info':
+        return 'معلومات المشترك';
       default:
         return templateType;
     }
@@ -2871,6 +2878,14 @@ class _SubscriberDetailsScreenState
           () => _sendWhatsAppFromTemplate('expiry_warning'),
         ),
       _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
+      // إرسال قالب "معلومات المشترك" الكامل عبر واتساب — يختلف عن "توليد
+      // رابط" الذي يبعث URL قصير العمر؛ هنا الرسالة ذاتها تحمل التفاصيل.
+      _FabAction(
+        Icons.info_outline_rounded,
+        'إرسال المعلومات',
+        Colors.blueAccent,
+        () => _sendWhatsAppFromTemplate('subscriber_info'),
+      ),
       _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
       _FabAction(
         isEnabled ? Icons.block : Icons.check_circle_outline,
