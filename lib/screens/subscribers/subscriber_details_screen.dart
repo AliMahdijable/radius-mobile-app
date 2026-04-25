@@ -2138,6 +2138,15 @@ class _SubscriberDetailsScreenState
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
                             final freshExpDate2 = fresh?['expiration']?.toString() ?? '';
                             final freshRemDays2 = _calcRemainingDays(freshExpDate2);
+                            // Web's pay-debt flow already includes {payment_date}
+                            // in the payment_confirmation substitution; mobile
+                            // was missing it so admin templates with that
+                            // placeholder rendered with the literal token.
+                            // Default to today (the mobile sheet doesn't
+                            // expose a date picker yet — same fallback the
+                            // web uses when no date is picked).
+                            final paymentDateStr =
+                                intl.DateFormat('yyyy-MM-dd').format(DateTime.now());
                             await _sendWhatsAppFromTemplate('payment_confirmation',
                               extraVars: {
                                 '{paid_amount}': _formatNumber(payAmount),
@@ -2147,6 +2156,7 @@ class _SubscriberDetailsScreenState
                                 '{expiration_date}': freshExpDate2,
                                 '{remaining_days}': freshRemDays2,
                                 '{days_remaining}': freshRemDays2,
+                                '{payment_date}': paymentDateStr,
                               });
                             if (printReceipt) {
                               await _printReceiptNow(ReceiptData(
