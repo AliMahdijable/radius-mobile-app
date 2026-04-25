@@ -1009,7 +1009,13 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
                             lastPayment: state.lastPayments[sub.username],
-                            onTap: isOnlineFilter ? null : () {
+                            // The online filter used to disable onTap so
+                            // the disconnect button could own the row.
+                            // Per user request, mirror every other tab:
+                            // tapping a row opens the subscriber details.
+                            // The disconnect button still works as its
+                            // own tap target inside the card.
+                            onTap: () {
                               context.push(
                                 '/subscriber/${sub.username}',
                                 extra: sub,
