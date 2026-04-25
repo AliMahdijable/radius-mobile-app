@@ -811,11 +811,33 @@ class ManagersNotifier extends StateNotifier<ManagersState> {
   Future<(bool success, String? message)> deleteManager(
       ManagerModel manager) async {
     try {
-      final response = await _sas4Dio.delete('/manager/${manager.id}');
+      final response = await _sas4Dio.delete(
+        '/manager/${manager.id}',
+        options: Options(validateStatus: (_) => true),
+      );
       final body = response.data;
-      final success = body is Map
-          ? body['status'] == 200 || response.statusCode == 200
-          : response.statusCode == 200;
+      // SAS4 returns HTTP 200 with `body.status: 400` (and an Arabic
+      // message) when a delete is rejected — typically because the
+      // manager still owns subscribers or has open debts. Trusting the
+      // HTTP code via `|| response.statusCode == 200` made every reject
+      // look successful. Mirror the web client: when the body carries a
+      // status field, that's authoritative; HTTP code is only a
+      // fallback when the body is malformed.
+      bool _statusOk(dynamic raw) {
+        if (raw is num) return raw == 200;
+        if (raw is String) {
+          if (raw == '200') return true;
+          final lower = raw.toLowerCase();
+          return lower == 'success' || lower == 'ok';
+        }
+        return false;
+      }
+
+      final success = body is Map && body['status'] != null
+          ? _statusOk(body['status'])
+          : (response.statusCode != null &&
+              response.statusCode! >= 200 &&
+              response.statusCode! < 300);
       final message = body is Map ? body['message']?.toString() : null;
 
       if (success) {
