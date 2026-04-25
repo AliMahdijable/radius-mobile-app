@@ -110,34 +110,18 @@ class ConnectionStatusCard extends ConsumerWidget {
       ],
     );
 
-    // Adaptive layout: small phones can't fit label + 3 chips + 3 action
-    // icons on a single row, so when available width is tight we drop the
-    // chips onto a second line under the header. Threshold is on the
-    // widget's own width (LayoutBuilder), not the screen.
+    // Two-row layout (per user request):
+    //   Row 1 — icon + label + the metric chips ("info on top")
+    //   Row 2 — action icons aligned to the visual LEFT (RTL end)
+    // Action buttons used to share the same line as the chips, which
+    // crowded the row on most phones. Splitting them gives the chips
+    // full breathing room and the actions a predictable position.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final narrow = constraints.maxWidth < 360;
-          if (narrow) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: headerLeading),
-                    actions,
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 24),
-                  child: valueChild,
-                ),
-              ],
-            );
-          }
-          return Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               headerLeading,
@@ -148,10 +132,14 @@ class ConnectionStatusCard extends ConsumerWidget {
                   child: valueChild,
                 ),
               ),
-              actions,
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: actions,
+          ),
+        ],
       ),
     );
   }
