@@ -121,10 +121,19 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     final debts =
         _num(kpis['balance_add_sum']) + _num(kpis['activate_non_cash_sum']);
     final expenses = _num(kpis['expenses_sum']);
-    // Outstanding inter-admin debts (parent admin is owed this much by
-    // sub-admins). Reduces effective cash position same way subscriber
-    // debts do — mirror the web formula.
-    final managerDebtsOutstanding = _num(kpis['manager_debts_outstanding']);
+    // Outstanding inter-admin debts. The KPI returned by the server
+    // covers ONLY the custom manager_debts ledger; SAS-side debt
+    // (manager.debt) lives behind the SAS4 API and isn't visible to
+    // the finance controller. Sum it client-side from the manager-tree
+    // we already fetch via reportsProvider.fetchManagers so the card
+    // matches the per-manager breakdown shown on the managers screen
+    // (دين الساس + ديون أخرى).
+    final managerDebtsCustom = _num(kpis['manager_debts_outstanding']);
+    final sasManagerDebtSum = state.managers.fold<double>(
+      0,
+      (sum, m) => sum + (m.debt > 0 ? m.debt : 0),
+    );
+    final managerDebtsOutstanding = managerDebtsCustom + sasManagerDebtSum;
     final netProfit = collections - debts - expenses - managerDebtsOutstanding;
     final activationsTotal =
         _num(kpis['activations_count']) + _num(kpis['extend_count']);

@@ -9,7 +9,12 @@ import '../core/services/encryption_service.dart';
 class ManagerOption {
   final String id;
   final String name;
-  const ManagerOption({required this.id, required this.name});
+  // SAS-side outstanding debt for this manager (manager.debt in SAS).
+  // Populated when present in the /manager/tree node so the financial
+  // tab can sum it alongside the custom-debts ledger without an extra
+  // round-trip.
+  final double debt;
+  const ManagerOption({required this.id, required this.name, this.debt = 0});
 }
 
 class ReportsState {
@@ -128,17 +133,26 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       state = state.copyWith(managers: const []);
       return;
     }
-    if (state.managers.isNotEmpty) return;
+    // Always re-fetch — the tree carries each manager's current SAS
+    // debt, which the financial tab sums into the debts KPI. Skipping
+    // when state.managers wasn't empty kept stale debt totals.
     try {
       final res = await _sas4Dio.get(ApiConstants.sas4ManagerTree);
       final data = res.data;
       final flat = <ManagerOption>[];
+      double _num(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
       void flatten(dynamic node) {
         if (node is Map) {
           final id = (node['id'] ?? node['idx'] ?? '').toString();
           final name = (node['username'] ?? node['name'] ?? '').toString();
           if (id.isNotEmpty && name.isNotEmpty) {
-            flat.add(ManagerOption(id: id, name: name));
+            flat.add(ManagerOption(
+              id: id,
+              name: name,
+              // SAS uses different key spellings across builds; probe
+              // the common ones. Falls back to 0 when missing.
+              debt: _num(node['debt'] ?? node['totalDebt'] ?? node['debt_total']),
+            ));
           }
           if (node['children'] is List) {
             for (final c in node['children']) {
