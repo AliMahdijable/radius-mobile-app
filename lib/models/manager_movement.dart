@@ -41,8 +41,20 @@ class ManagerMovement {
       if (v is int) return v;
       return int.tryParse(v.toString());
     }
-    DateTime _date(dynamic v) =>
-        DateTime.tryParse(v?.toString() ?? '') ?? DateTime.now();
+    // The server stores created_at as UTC (the host timezone is UTC and
+    // mysql2 hands back a JS Date that res.json serializes with the Z
+    // suffix). The app's convention is to display every date in Baghdad
+    // time regardless of the device's locale, so parse to UTC and shift
+    // by +3h. We deliberately keep the result in `isUtc=true` so
+    // DateFormat.format prints the Baghdad clock-face value without
+    // applying another toLocal() conversion.
+    DateTime _date(dynamic v) {
+      final raw = v?.toString();
+      if (raw == null || raw.isEmpty) return DateTime.now().toUtc();
+      final parsed = DateTime.tryParse(raw);
+      if (parsed == null) return DateTime.now().toUtc();
+      return parsed.toUtc().add(const Duration(hours: 3));
+    }
     return ManagerMovement(
       rowType: j['row_type']?.toString() ?? '',
       id: _intN(j['id']) ?? 0,
