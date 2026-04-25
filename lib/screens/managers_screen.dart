@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../core/theme/app_theme.dart';
@@ -11,6 +10,7 @@ import '../core/utils/bottom_sheet_utils.dart';
 import '../models/manager_model.dart';
 import '../models/template_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/manager_debts_provider.dart';
 import '../providers/managers_provider.dart';
 import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
@@ -603,6 +603,23 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     }
   }
 
+  Future<void> _openOtherDebtSheet(ManagerModel manager) async {
+    final added = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _AddOtherDebtSheet(manager: manager),
+    );
+
+    if (added == true && mounted) {
+      AppSnackBar.success(context, 'تم إضافة الدين');
+      // Refresh the SAS4 list so the (cached) summary catches up — the
+      // mutation already invalidated managerDebtsSummaryProvider so the
+      // next watch will refetch automatically; no SAS4 reload needed
+      // because manager.debt itself didn't change here.
+    }
+  }
+
   Future<void> _openPointsSheet(ManagerModel manager) async {
     final changed = await showModalBottomSheet<bool>(
       context: context,
@@ -651,9 +668,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
         await _openPointsSheet(manager);
         break;
       case _ManagerActionType.otherDebts:
-        // Push the existing parent-admin debts ledger filtered to this
-        // sub-admin so it doubles as a per-manager debt screen.
-        await context.push('/manager-debts', extra: manager.id);
+        await _openOtherDebtSheet(manager);
         break;
       case _ManagerActionType.delete:
         await _confirmDeleteManager(manager);
@@ -667,13 +682,25 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     final state = ref.watch(managersProvider);
     final canAccessManagers = authState.user?.canAccessManagers ?? false;
     final totalPages = _totalPages(state);
+
+    // Custom inter-admin debts — added inline via the "ديون أخرى"
+    // action and summed into each manager's displayed debt total. The
+    // summary endpoint returns one row per debtor, so a quick map
+    // lookup gives us O(1) per card.
+    final customDebtSummary = ref.watch(managerDebtsSummaryProvider);
+    final Map<int, double> customDebtByManager = {
+      for (final d in customDebtSummary.asData?.value.perDebtor ?? const [])
+        d.debtorAdminId: d.totalRemaining,
+    };
+
     final visibleCredit = state.managers.fold<double>(
       0,
       (sum, manager) => sum + manager.credit,
     );
     final visibleDebt = state.managers.fold<double>(
       0,
-      (sum, manager) => sum + manager.debt,
+      (sum, manager) =>
+          sum + manager.debt + (customDebtByManager[manager.id] ?? 0),
     );
 
     if (!canAccessManagers) {
@@ -975,6 +1002,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                             return _ManagerListCard(
                               manager: manager,
                               selected: selected,
+                              extraDebt:
+                                  customDebtByManager[manager.id] ?? 0,
                               onTap: () {
                                 setState(() {
                                   _selectedManagerId =
@@ -1085,12 +1114,17 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
 class _ManagerListCard extends StatelessWidget {
   final ManagerModel manager;
   final bool selected;
+  // Sum of remaining custom debts (open + partial) — folded into the
+  // displayed debt badge so the parent admin sees one combined total
+  // instead of having to add SAS4 debt + custom debts in their head.
+  final double extraDebt;
   final VoidCallback onTap;
   final ValueChanged<_ManagerActionType> onActionSelected;
 
   const _ManagerListCard({
     required this.manager,
     required this.selected,
+    this.extraDebt = 0,
     required this.onTap,
     required this.onActionSelected,
   });
@@ -1275,7 +1309,7 @@ class _ManagerListCard extends StatelessWidget {
                   ),
                   _ManagersMiniStatChip(
                     icon: Icons.trending_down_rounded,
-                    label: 'دين ${_formatCurrency(manager.debt)}',
+                    label: 'دين ${_formatCurrency(manager.debt + extraDebt)}',
                     color: AppTheme.warningColor,
                   ),
                 ],
@@ -2535,6 +2569,200 @@ class _DeleteManagerDialogState extends ConsumerState<_DeleteManagerDialog> {
           label: Text(_deleting ? 'جارٍ الحذف...' : 'حذف المدير'),
         ),
       ],
+    );
+  }
+}
+
+/// Inline sheet for the "ديون أخرى" action on a manager card. Records
+/// a custom inter-admin debt against `manager` via the same backend
+/// endpoint the standalone debts screen uses; the parent's debts
+/// summary provider is invalidated by the mutation, so the card's
+/// combined "دين" badge refreshes on the next build.
+class _AddOtherDebtSheet extends ConsumerStatefulWidget {
+  final ManagerModel manager;
+  const _AddOtherDebtSheet({required this.manager});
+
+  @override
+  ConsumerState<_AddOtherDebtSheet> createState() => _AddOtherDebtSheetState();
+}
+
+class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+  DateTime _debtDate = DateTime.now();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _debtDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+    );
+    if (picked != null && mounted) setState(() => _debtDate = picked);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final amount = _parseFormattedAmount(_amountController.text);
+    if (amount == null || amount <= 0) {
+      AppSnackBar.warning(context, 'أدخل مبلغًا صحيحًا');
+      return;
+    }
+    setState(() => _saving = true);
+    final ok = await createManagerDebt(
+      ref,
+      debtorAdminId: widget.manager.id,
+      amount: amount,
+      note: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+      debtDate: _debtDate,
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) {
+      Navigator.of(context).pop(true);
+    } else {
+      AppSnackBar.error(context, 'تعذّر حفظ الدين');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = intl.DateFormat('yyyy-MM-dd');
+    final combinedDebt = widget.manager.debt; // SAS4-side only here; the
+    // custom-debt total is shown on the manager card itself.
+    return _SheetScaffold(
+      title: 'إضافة دين',
+      icon: Icons.receipt_long_rounded,
+      subtitle: 'يُسجّل كدين مستقل عن دين الساس ويُجمع معه في إجمالي الدين الظاهر على البطاقة.',
+      isLoading: _saving,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            _SheetSectionCard(
+              title: 'ملخص المدير',
+              icon: Icons.person_outline_rounded,
+              child: Column(
+                children: [
+                  _SummaryLine(label: 'المدير', value: widget.manager.username),
+                  _SummaryLine(
+                    label: 'الاسم',
+                    value: widget.manager.fullName.isNotEmpty
+                        ? widget.manager.fullName
+                        : 'غير محدد',
+                  ),
+                  _SummaryLine(
+                    label: 'دين الساس الحالي',
+                    value: _formatCurrency(combinedDebt),
+                    accent: AppTheme.warningColor,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SheetSectionCard(
+              title: 'بيانات الدين الجديد',
+              icon: Icons.payments_outlined,
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: _amountController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [_ThousandsSeparatorInputFormatter()],
+                    decoration: InputDecoration(
+                      labelText: 'مبلغ الدين',
+                      prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                      suffixIcon: _amountController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _amountController.clear();
+                                setState(() {});
+                              },
+                            ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    validator: (value) {
+                      final amount = _parseFormattedAmount(value ?? '');
+                      if (amount == null || amount <= 0) {
+                        return 'أدخل مبلغًا صحيحًا';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  QuickAmountChips(
+                    amounts: const [
+                      10000.0, 25000.0, 50000.0, 100000.0, 250000.0, 500000.0,
+                    ],
+                    selectedAmount:
+                        _parseFormattedAmount(_amountController.text) ?? 0,
+                    enabled: true,
+                    onSelected: (v) {
+                      FocusScope.of(context).unfocus();
+                      final current =
+                          _parseFormattedAmount(_amountController.text) ?? 0;
+                      final total = current + v;
+                      final formatter = intl.NumberFormat('#,##0', 'en_US');
+                      _amountController.text = formatter.format(total);
+                      setState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _notesController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'ملاحظة (اختياري)',
+                      prefixIcon: Icon(Icons.note_alt_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today_rounded),
+                    title: const Text('تاريخ الدين'),
+                    subtitle: Text(dateFmt.format(_debtDate)),
+                    trailing: TextButton(
+                      onPressed: _saving ? null : _pickDate,
+                      child: const Text('تغيير'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _submit,
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('حفظ الدين'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
