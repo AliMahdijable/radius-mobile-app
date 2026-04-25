@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../models/subscriber_model.dart';
+import '../../models/manager_model.dart';
 import '../../screens/login_screen.dart';
+import '../../screens/managers/manager_movements_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/subscribers/subscriber_details_screen.dart';
 import '../../screens/whatsapp/whatsapp_connection_screen.dart';
@@ -88,6 +90,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/my-debts',
         builder: (context, state) => const MyDebtsScreen(),
+      ),
+      GoRoute(
+        path: '/manager-movements',
+        builder: (context, state) {
+          final manager = state.extra as ManagerModel;
+          return ManagerMovementsScreen(manager: manager);
+        },
       ),
       GoRoute(
         path: '/notification-settings',

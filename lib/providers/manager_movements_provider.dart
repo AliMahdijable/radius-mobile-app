@@ -25,18 +25,23 @@ final managerMovementsProvider = FutureProvider.family
   }
 });
 
-/// Patch the note on a balance-movement audit row. Amount/kind are
-/// locked server-side (SAS4 owns the actual state).
-Future<bool> updateBalanceMovementNote(
+/// Patch a balance-movement audit row. Note and amount are editable;
+/// kind is locked. Amount edits do NOT touch SAS4 — caller must warn
+/// the admin that the change is audit-only.
+Future<bool> updateBalanceMovement(
   WidgetRef ref,
   int id, {
-  required String note,
+  String? note,
+  double? amount,
 }) async {
   final dio = ref.read(backendDioProvider);
   try {
     final res = await dio.patch(
       '/api/admin/manager-movements/$id',
-      data: {'note': note},
+      data: {
+        if (note != null) 'note': note,
+        if (amount != null) 'amount': amount,
+      },
     );
     return res.data is Map && res.data['success'] == true;
   } on DioException {
