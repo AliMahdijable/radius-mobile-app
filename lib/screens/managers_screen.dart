@@ -9,9 +9,11 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/bottom_sheet_utils.dart';
 import '../models/manager_debt.dart';
 import '../models/manager_model.dart';
+import '../models/manager_movement.dart';
 import '../models/template_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/manager_debts_provider.dart';
+import '../providers/manager_movements_provider.dart';
 import '../providers/managers_provider.dart';
 import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
@@ -26,9 +28,12 @@ enum _ManagerActionType {
   withdraw,
   payDebt,
   addPoints,
-  // Opens the existing custom-debts ledger pre-filtered to this manager
-  // — separate from the SAS4-native `debt` field handled by `payDebt`.
+  // Inline sheet to record a custom inter-admin debt — separate from
+  // the SAS4-native `debt` field handled by `payDebt`.
   otherDebts,
+  // Phase 2: opens the unified movements timeline (deposits, debts,
+  // payments, points) for this manager as a read-only bottom sheet.
+  movements,
   delete,
 }
 
@@ -851,6 +856,14 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
         await _openOtherDebtSheet(manager,
             currentTotalDebt: manager.debt + extraDebt);
         break;
+      case _ManagerActionType.movements:
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          builder: (_) => _ManagerMovementsSheet(manager: manager),
+        );
+        break;
       case _ManagerActionType.delete:
         await _confirmDeleteManager(manager);
         break;
@@ -1490,11 +1503,21 @@ class _ManagerListCard extends StatelessWidget {
                     label: 'رصيد ${_formatCurrency(manager.credit)}',
                     color: AppTheme.successColor,
                   ),
-                  _ManagersMiniStatChip(
-                    icon: Icons.trending_down_rounded,
-                    label: 'دين ${_formatCurrency(manager.debt + extraDebt)}',
-                    color: AppTheme.warningColor,
-                  ),
+                  // Two distinct chips so the admin sees the breakdown:
+                  // SAS debt (yellow) and other/custom debts (sky blue).
+                  // Either can be hidden if its source is zero.
+                  if (manager.debt > 0)
+                    _ManagersMiniStatChip(
+                      icon: Icons.account_balance_outlined,
+                      label: 'دين الساس ${_formatCurrency(manager.debt)}',
+                      color: AppTheme.warningColor,
+                    ),
+                  if (extraDebt > 0)
+                    _ManagersMiniStatChip(
+                      icon: Icons.receipt_long_rounded,
+                      label: 'ديون أخرى ${_formatCurrency(extraDebt)}',
+                      color: AppTheme.infoColor,
+                    ),
                 ],
               ),
               AnimatedCrossFade(
@@ -1555,9 +1578,16 @@ class _ManagerListCard extends StatelessWidget {
                         _ManagerActionButton(
                           icon: Icons.receipt_long_rounded,
                           label: 'ديون أخرى',
-                          color: AppTheme.warningColor,
+                          color: AppTheme.infoColor,
                           onPressed: () =>
                               onActionSelected(_ManagerActionType.otherDebts),
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.timeline_rounded,
+                          label: 'حركات',
+                          color: AppTheme.teal600,
+                          onPressed: () =>
+                              onActionSelected(_ManagerActionType.movements),
                         ),
                         _ManagerActionButton(
                           icon: Icons.delete_outline_rounded,
@@ -2778,6 +2808,227 @@ class _DeleteManagerDialogState extends ConsumerState<_DeleteManagerDialog> {
 /// endpoint the standalone debts screen uses; the parent's debts
 /// summary provider is invalidated by the mutation, so the card's
 /// combined "دين" badge refreshes on the next build.
+/// Phase 2 read-only timeline of every recorded action against one
+/// sub-admin: balance ops + custom debts + custom-debt payments. Edit
+/// and delete actions land in a follow-up commit; this iteration is
+/// pure history viewer so the admin can audit the account.
+class _ManagerMovementsSheet extends ConsumerWidget {
+  final ManagerModel manager;
+  const _ManagerMovementsSheet({required this.manager});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(managerMovementsProvider(manager.id));
+    return _SheetScaffold(
+      title: 'حركات المدير',
+      icon: Icons.timeline_rounded,
+      isLoading: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            manager.username,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          async.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 28),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (_, __) => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                'تعذّر تحميل الحركات',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            data: (movements) {
+              if (movements.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Text(
+                    'لا توجد حركات مسجّلة بعد',
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  for (final m in movements)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _MovementRow(movement: m),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 6),
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MovementRow extends StatelessWidget {
+  final ManagerMovement movement;
+  const _MovementRow({required this.movement});
+
+  ({String title, IconData icon, Color color, String sign}) _decorate() {
+    switch (movement.rowType) {
+      case 'balance':
+        switch (movement.subKind) {
+          case 'deposit_cash':
+            return (
+              title: 'إضافة رصيد نقدي',
+              icon: Icons.add_card_rounded,
+              color: AppTheme.successColor,
+              sign: '+',
+            );
+          case 'deposit_loan':
+            return (
+              title: 'إضافة رصيد آجل',
+              icon: Icons.add_card_rounded,
+              color: AppTheme.warningColor,
+              sign: '+',
+            );
+          case 'withdraw':
+            return (
+              title: 'سحب رصيد',
+              icon: Icons.remove_circle_outline_rounded,
+              color: AppTheme.dangerColor,
+              sign: '-',
+            );
+          case 'points':
+            return (
+              title: 'نقاط',
+              icon: Icons.stars_rounded,
+              color: AppTheme.secondary,
+              sign: '+',
+            );
+          case 'sas_pay_debt':
+            return (
+              title: 'تسديد دين الساس',
+              icon: Icons.account_balance_outlined,
+              color: AppTheme.warningColor,
+              sign: '-',
+            );
+        }
+        return (
+          title: 'حركة',
+          icon: Icons.bolt_rounded,
+          color: AppTheme.primary,
+          sign: '',
+        );
+      case 'debt_created':
+        return (
+          title: 'دين جديد',
+          icon: Icons.receipt_long_rounded,
+          color: AppTheme.infoColor,
+          sign: '+',
+        );
+      case 'debt_payment':
+        return (
+          title: 'تسديد دين آخر',
+          icon: Icons.payments_outlined,
+          color: AppTheme.infoColor,
+          sign: '-',
+        );
+      default:
+        return (
+          title: movement.rowType,
+          icon: Icons.help_outline,
+          color: AppTheme.primary,
+          sign: '',
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final d = _decorate();
+    final dateFmt = intl.DateFormat('yyyy-MM-dd HH:mm');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: d.color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: d.color.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: d.color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(d.icon, size: 18, color: d.color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        d.title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${d.sign}${_formatCurrency(movement.amount)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: d.color,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  dateFmt.format(movement.eventAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: cs.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+                if (movement.note != null && movement.note!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      movement.note!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurface.withValues(alpha: 0.70),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AddOtherDebtSheet extends ConsumerStatefulWidget {
   final ManagerModel manager;
   // Combined SAS4 + custom remaining at the moment the sheet was opened
@@ -2883,11 +3134,12 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
-            _DebtTotalBadge(
-              label: 'الديون المستحقة على المدير',
-              amount: widget.currentTotalDebt,
-              color: AppTheme.warningColor,
-              icon: Icons.account_balance_wallet_outlined,
+            _DebtSourcesBadges(
+              sasAmount: widget.manager.debt,
+              // currentTotalDebt = sas + custom; subtract to isolate
+              customAmount: (widget.currentTotalDebt - widget.manager.debt)
+                  .clamp(0, double.infinity)
+                  .toDouble(),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -3167,11 +3419,11 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
-            _DebtTotalBadge(
-              label: 'الديون المستحقة على المدير',
-              amount: widget.manager.debt + widget.customDebtTotal,
-              color: AppTheme.warningColor,
-              icon: Icons.account_balance_wallet_outlined,
+            _DebtSourcesBadges(
+              sasAmount: widget.manager.debt,
+              customAmount: widget.customDebtTotal,
+              highlightSas: _source == _PaySource.sas,
+              highlightCustom: _source == _PaySource.custom,
             ),
             const SizedBox(height: 12),
             if (showSelector) ...[
@@ -3308,51 +3560,116 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
   }
 }
 
-/// Colored pill that highlights a debt total at the top of the
-/// add-debt and pay-debt sheets. Adds explanatory wording (so the
-/// figure isn't just a bare number) and uses a tinted background
-/// so the value stands out from the rest of the form.
-class _DebtTotalBadge extends StatelessWidget {
+/// Two split badges — one per debt source — so the admin always sees
+/// at a glance which kind of debt each value belongs to:
+///   • دين الساس → warning yellow
+///   • ديون أخرى → info blue (سمائي)
+/// Renders only the sources whose amount is > 0; collapses to a single
+/// badge when only one side has debt. The optional [highlightSas] /
+/// [highlightCustom] flags add a thicker border around the currently
+/// selected source (used by the pay-sheet segmented control).
+class _DebtSourcesBadges extends StatelessWidget {
+  final double sasAmount;
+  final double customAmount;
+  final bool highlightSas;
+  final bool highlightCustom;
+  const _DebtSourcesBadges({
+    required this.sasAmount,
+    required this.customAmount,
+    this.highlightSas = false,
+    this.highlightCustom = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSas = sasAmount > 0;
+    final hasCustom = customAmount > 0;
+    if (!hasSas && !hasCustom) {
+      return _DebtBadge(
+        label: 'لا يوجد دين',
+        amount: 0,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        icon: Icons.check_circle_outline_rounded,
+      );
+    }
+    final children = <Widget>[
+      if (hasSas)
+        Expanded(
+          child: _DebtBadge(
+            label: 'دين الساس',
+            amount: sasAmount,
+            color: AppTheme.warningColor,
+            icon: Icons.account_balance_outlined,
+            highlighted: highlightSas,
+          ),
+        ),
+      if (hasSas && hasCustom) const SizedBox(width: 8),
+      if (hasCustom)
+        Expanded(
+          child: _DebtBadge(
+            label: 'ديون أخرى',
+            amount: customAmount,
+            color: AppTheme.infoColor,
+            icon: Icons.receipt_long_rounded,
+            highlighted: highlightCustom,
+          ),
+        ),
+    ];
+    return Row(children: children);
+  }
+}
+
+class _DebtBadge extends StatelessWidget {
   final String label;
   final double amount;
   final Color color;
   final IconData icon;
-  const _DebtTotalBadge({
+  final bool highlighted;
+  const _DebtBadge({
     required this.label,
     required this.amount,
     required this.color,
     required this.icon,
+    this.highlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: color.withValues(alpha: highlighted ? 0.18 : 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.30)),
+        border: Border.all(
+          color: color.withValues(alpha: highlighted ? 0.65 : 0.30),
+          width: highlighted ? 1.5 : 1,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
+            ],
           ),
-          const SizedBox(width: 8),
+          const SizedBox(height: 2),
           Text(
             _formatCurrency(amount),
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w800,
               color: color,
             ),
