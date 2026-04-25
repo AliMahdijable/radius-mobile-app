@@ -2884,6 +2884,33 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (ok) {
+      // Same notice dialog the SAS sheet uses — gives the parent admin
+      // a one-click way to fire WhatsApp + in-app push to the sub-admin
+      // about the payment they just received. Skipping is allowed.
+      final paidFromSas = _source == _PaySource.sas;
+      final previousTotal =
+          widget.manager.debt + widget.customDebtTotal;
+      final currentTotal =
+          (previousTotal - amount).clamp(0, double.infinity).toDouble();
+      await _showManagerFinancialNoticeDialog(
+        context: context,
+        ref: ref,
+        notice: _ManagerFinancialNoticeData(
+          manager: widget.manager,
+          amount: amount,
+          kind: _ManagerFinancialNoticeKind.debtPayment,
+          notes: _notesController.text.trim(),
+          previousCredit: widget.manager.credit,
+          previousDebt: paidFromSas ? widget.manager.debt : previousTotal,
+          currentCredit: widget.manager.credit,
+          currentDebt: paidFromSas
+              ? (widget.manager.debt - amount)
+                  .clamp(0, double.infinity)
+                  .toDouble()
+              : currentTotal,
+        ),
+      );
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } else {
       AppSnackBar.error(context, 'تعذّر تنفيذ التسديد');
