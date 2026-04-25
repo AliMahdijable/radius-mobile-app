@@ -1499,9 +1499,10 @@ class _ManagerListCard extends StatelessWidget {
                     label: 'رصيد ${_formatCurrency(manager.credit)}',
                     color: AppTheme.successColor,
                   ),
-                  // Two distinct chips so the admin sees the breakdown:
-                  // SAS debt (yellow) and other/custom debts (sky blue).
-                  // Either can be hidden if its source is zero.
+                  // Three debt chips: SAS (yellow), custom/other (blue),
+                  // and the combined total (red) — only render the ones
+                  // that actually have value so empty managers stay
+                  // clean.
                   if (manager.debt > 0)
                     _ManagersMiniStatChip(
                       icon: Icons.account_balance_outlined,
@@ -1513,6 +1514,13 @@ class _ManagerListCard extends StatelessWidget {
                       icon: Icons.receipt_long_rounded,
                       label: 'ديون أخرى ${_formatCurrency(extraDebt)}',
                       color: AppTheme.infoColor,
+                    ),
+                  if (manager.debt + extraDebt > 0)
+                    _ManagersMiniStatChip(
+                      icon: Icons.summarize_rounded,
+                      label:
+                          'المجموع ${_formatCurrency(manager.debt + extraDebt)}',
+                      color: AppTheme.dangerColor,
                     ),
                 ],
               ),

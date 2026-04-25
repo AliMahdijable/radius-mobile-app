@@ -103,13 +103,21 @@ class ManagerMovementsScreen extends ConsumerWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   final ManagerModel manager;
   const _Header({required this.manager});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    // Custom debts remaining for this specific manager — pulled from
+    // the shared summary provider so we don't refetch.
+    final summary = ref.watch(managerDebtsSummaryProvider);
+    final customRemaining = summary.asData?.value.perDebtor
+            .where((d) => d.debtorAdminId == manager.id)
+            .fold<double>(0, (sum, d) => sum + d.totalRemaining) ??
+        0;
+    final totalDebt = manager.debt + customRemaining;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
       child: Container(
@@ -159,13 +167,16 @@ class _Header extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
+            // Compact 4-pill grid: balance, SAS debt, other debts, total
+            // — laid out as a 2-column wrap so they stay readable on
+            // small phones without overflowing.
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: [
                 _StatPill(
                   icon: Icons.account_balance_wallet_outlined,
-                  label: 'رصيد',
+                  label: 'الرصيد',
                   amount: manager.credit,
                   color: AppTheme.successColor,
                 ),
@@ -174,6 +185,18 @@ class _Header extends StatelessWidget {
                   label: 'دين الساس',
                   amount: manager.debt,
                   color: AppTheme.warningColor,
+                ),
+                _StatPill(
+                  icon: Icons.receipt_long_rounded,
+                  label: 'ديون أخرى',
+                  amount: customRemaining,
+                  color: AppTheme.infoColor,
+                ),
+                _StatPill(
+                  icon: Icons.summarize_rounded,
+                  label: 'مجموع الديون',
+                  amount: totalDebt,
+                  color: AppTheme.dangerColor,
                 ),
               ],
             ),
