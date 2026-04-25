@@ -2691,25 +2691,17 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.manager.username,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'الدين الحالي: ${_formatCurrency(widget.currentTotalDebt)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.warningColor,
-                  ),
-                ),
-              ],
+            Text(
+              widget.manager.username,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            _DebtTotalBadge(
+              label: 'الديون المستحقة على المدير',
+              amount: widget.currentTotalDebt,
+              color: AppTheme.warningColor,
+              icon: Icons.account_balance_wallet_outlined,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -2945,25 +2937,17 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.manager.username,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'الإجمالي: ${_formatCurrency(widget.manager.debt + widget.customDebtTotal)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.warningColor,
-                  ),
-                ),
-              ],
+            Text(
+              widget.manager.username,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            _DebtTotalBadge(
+              label: 'الديون المستحقة على المدير',
+              amount: widget.manager.debt + widget.customDebtTotal,
+              color: AppTheme.warningColor,
+              icon: Icons.account_balance_wallet_outlined,
             ),
             const SizedBox(height: 12),
             if (showSelector) ...[
@@ -3087,6 +3071,61 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Colored pill that highlights a debt total at the top of the
+/// add-debt and pay-debt sheets. Adds explanatory wording (so the
+/// figure isn't just a bare number) and uses a tinted background
+/// so the value stands out from the rest of the form.
+class _DebtTotalBadge extends StatelessWidget {
+  final String label;
+  final double amount;
+  final Color color;
+  final IconData icon;
+  const _DebtTotalBadge({
+    required this.label,
+    required this.amount,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _formatCurrency(amount),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
