@@ -74,6 +74,7 @@ class TemplateModel {
     '{debt_amount}',
     '{credit_amount}',
     '{paid_amount}',
+    '{payment_date}',
     '{discount_amount}',
     '{discounted_price}',
   ];
@@ -90,6 +91,7 @@ class TemplateModel {
     '{debt_amount}':      'مبلغ الدين',
     '{credit_amount}':    'الرصيد',
     '{paid_amount}':      'المبلغ المدفوع',
+    '{payment_date}':     'تاريخ التسديد',
     '{discount_amount}':  'قيمة الخصم',
     '{discounted_price}': 'السعر بعد الخصم',
     '{manager_name}':        'اسم المدير',
@@ -115,6 +117,7 @@ class TemplateModel {
     '{debt_amount}':      '💸',
     '{credit_amount}':    '💳',
     '{paid_amount}':      '✅',
+    '{payment_date}':     '📅',
     '{discount_amount}':  '🏷️',
     '{discounted_price}': '🏷️',
     '{manager_name}':        '👤',
