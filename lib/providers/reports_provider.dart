@@ -137,6 +137,12 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     // debt, which the financial tab sums into the debts KPI. Skipping
     // when state.managers wasn't empty kept stale debt totals.
     try {
+      // Drop the calling admin from the tree so their own debt isn't
+      // counted in sums (the SAS tree returns the caller as the root,
+      // and the financial KPI is "what sub-admins owe me" — adding
+      // self distorts the figure for an admin who has any SAS debt of
+      // their own).
+      final selfId = (await _storage.getAdminId() ?? '').toString();
       final res = await _sas4Dio.get(ApiConstants.sas4ManagerTree);
       final data = res.data;
       final flat = <ManagerOption>[];
@@ -145,7 +151,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
         if (node is Map) {
           final id = (node['id'] ?? node['idx'] ?? '').toString();
           final name = (node['username'] ?? node['name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty) {
+          if (id.isNotEmpty && name.isNotEmpty && id != selfId) {
             flat.add(ManagerOption(
               id: id,
               name: name,
