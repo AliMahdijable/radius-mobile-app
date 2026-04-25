@@ -2859,7 +2859,10 @@ class _ManagerMovementsSheet extends ConsumerWidget {
                   for (final m in movements)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: _MovementRow(movement: m),
+                      child: _MovementRow(
+                        movement: m,
+                        targetAdminId: manager.id,
+                      ),
                     ),
                 ],
               );
@@ -2876,9 +2879,10 @@ class _ManagerMovementsSheet extends ConsumerWidget {
   }
 }
 
-class _MovementRow extends StatelessWidget {
+class _MovementRow extends ConsumerWidget {
   final ManagerMovement movement;
-  const _MovementRow({required this.movement});
+  final int targetAdminId;
+  const _MovementRow({required this.movement, required this.targetAdminId});
 
   ({String title, IconData icon, Color color, String sign}) _decorate() {
     switch (movement.rowType) {
@@ -2951,7 +2955,7 @@ class _MovementRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final d = _decorate();
     final dateFmt = intl.DateFormat('yyyy-MM-dd HH:mm');
@@ -3022,6 +3026,310 @@ class _MovementRow extends StatelessWidget {
                   ),
               ],
             ),
+          ),
+          // Per-row actions menu — options vary by row type. Note: edit/
+          // delete on balance movements only touches the audit log; the
+          // actual SAS4 state is NOT reversed.
+          _MovementMenu(
+            movement: movement,
+            targetAdminId: targetAdminId,
+            color: d.color,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Three-dot menu attached to each row in the movements timeline. The
+/// available actions depend on row type:
+///   • balance       — تعديل ملاحظة / حذف (audit-only, doesn't reverse SAS4)
+///   • debt_created  — تعديل الدين / حذف الدين (uses existing debt endpoints)
+///   • debt_payment  — حذف التسديد (uses existing payment endpoint)
+class _MovementMenu extends ConsumerWidget {
+  final ManagerMovement movement;
+  final int targetAdminId;
+  final Color color;
+  const _MovementMenu({
+    required this.movement,
+    required this.targetAdminId,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      tooltip: 'خيارات',
+      icon: Icon(
+        Icons.more_vert_rounded,
+        size: 18,
+        color: color.withValues(alpha: 0.7),
+      ),
+      padding: EdgeInsets.zero,
+      onSelected: (action) => _handle(context, ref, action),
+      itemBuilder: (ctx) {
+        switch (movement.rowType) {
+          case 'balance':
+            return const [
+              PopupMenuItem(
+                value: 'edit_note',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.edit_note_rounded, size: 18),
+                  title: Text('تعديل ملاحظة'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete_balance',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline_rounded, size: 18),
+                  title: Text('حذف من السجل'),
+                ),
+              ),
+            ];
+          case 'debt_created':
+            return const [
+              PopupMenuItem(
+                value: 'edit_debt',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.edit_outlined, size: 18),
+                  title: Text('تعديل الدين'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete_debt',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline_rounded, size: 18),
+                  title: Text('حذف الدين'),
+                ),
+              ),
+            ];
+          case 'debt_payment':
+            return const [
+              PopupMenuItem(
+                value: 'delete_payment',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline_rounded, size: 18),
+                  title: Text('حذف التسديد'),
+                ),
+              ),
+            ];
+          default:
+            return const [];
+        }
+      },
+    );
+  }
+
+  Future<void> _handle(BuildContext context, WidgetRef ref, String action) async {
+    switch (action) {
+      case 'edit_note':
+        await _editNote(context, ref);
+        break;
+      case 'delete_balance':
+        await _deleteBalance(context, ref);
+        break;
+      case 'edit_debt':
+        await _editDebt(context, ref);
+        break;
+      case 'delete_debt':
+        await _deleteDebt(context, ref);
+        break;
+      case 'delete_payment':
+        await _deletePayment(context, ref);
+        break;
+    }
+  }
+
+  Future<void> _editNote(BuildContext context, WidgetRef ref) async {
+    final ctrl = TextEditingController(text: movement.note ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('تعديل الملاحظة'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'الملاحظة',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    final ok = await updateBalanceMovementNote(ref, movement.id, note: ctrl.text);
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(managerMovementsProvider(targetAdminId));
+      AppSnackBar.success(context, 'تم تعديل الملاحظة');
+    } else {
+      AppSnackBar.error(context, 'تعذّر التعديل');
+    }
+  }
+
+  Future<void> _deleteBalance(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: 'حذف من السجل',
+      message:
+          'هذا الحذف يزيل الحركة من سجل التطبيق فقط — لا يُعيد المبلغ على نظام الساس. تأكد قبل المتابعة.',
+    );
+    if (confirmed != true) return;
+    final ok = await deleteBalanceMovement(ref, movement.id);
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(managerMovementsProvider(targetAdminId));
+      AppSnackBar.success(context, 'تم الحذف من السجل');
+    } else {
+      AppSnackBar.error(context, 'تعذّر الحذف');
+    }
+  }
+
+  Future<void> _editDebt(BuildContext context, WidgetRef ref) async {
+    if (movement.debtId == null) return;
+    // Reuse the existing PATCH endpoint via the manager_debts provider.
+    // Minimal sheet — note + amount only.
+    final amountCtrl = TextEditingController(
+      text: movement.amount.toStringAsFixed(0),
+    );
+    final noteCtrl = TextEditingController(text: movement.note ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('تعديل الدين'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'المبلغ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: noteCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'الملاحظة',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    final amt = double.tryParse(amountCtrl.text.replaceAll(',', '').trim());
+    final ok = await updateManagerDebt(
+      ref,
+      movement.debtId!,
+      amount: amt,
+      note: noteCtrl.text,
+    );
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(managerMovementsProvider(targetAdminId));
+      AppSnackBar.success(context, 'تم التعديل');
+    } else {
+      AppSnackBar.error(context, 'تعذّر التعديل');
+    }
+  }
+
+  Future<void> _deleteDebt(BuildContext context, WidgetRef ref) async {
+    if (movement.debtId == null) return;
+    final confirmed = await _confirmDelete(
+      context,
+      title: 'حذف الدين',
+      message: 'سيتم حذف الدين وكل تسديداته المرتبطة. لا يمكن التراجع.',
+    );
+    if (confirmed != true) return;
+    final ok = await deleteManagerDebt(ref, movement.debtId!);
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(managerMovementsProvider(targetAdminId));
+      AppSnackBar.success(context, 'تم حذف الدين');
+    } else {
+      AppSnackBar.error(context, 'تعذّر الحذف');
+    }
+  }
+
+  Future<void> _deletePayment(BuildContext context, WidgetRef ref) async {
+    if (movement.relatedDebtId == null) return;
+    final confirmed = await _confirmDelete(
+      context,
+      title: 'حذف التسديد',
+      message: 'سيُعاد احتساب رصيد الدين بدون هذا التسديد. متابعة؟',
+    );
+    if (confirmed != true) return;
+    final ok = await deleteManagerDebtPayment(
+      ref,
+      movement.id,
+      movement.relatedDebtId!,
+    );
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(managerMovementsProvider(targetAdminId));
+      AppSnackBar.success(context, 'تم حذف التسديد');
+    } else {
+      AppSnackBar.error(context, 'تعذّر الحذف');
+    }
+  }
+
+  Future<bool?> _confirmDelete(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.dangerColor,
+            ),
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: const Text('حذف'),
           ),
         ],
       ),

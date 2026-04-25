@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/dio_client.dart';
@@ -23,3 +24,34 @@ final managerMovementsProvider = FutureProvider.family
     return const [];
   }
 });
+
+/// Patch the note on a balance-movement audit row. Amount/kind are
+/// locked server-side (SAS4 owns the actual state).
+Future<bool> updateBalanceMovementNote(
+  WidgetRef ref,
+  int id, {
+  required String note,
+}) async {
+  final dio = ref.read(backendDioProvider);
+  try {
+    final res = await dio.patch(
+      '/api/admin/manager-movements/$id',
+      data: {'note': note},
+    );
+    return res.data is Map && res.data['success'] == true;
+  } on DioException {
+    return false;
+  }
+}
+
+/// Hard-delete a balance-movement audit row. Does NOT reverse the
+/// SAS4-side state — caller must warn the admin before invoking.
+Future<bool> deleteBalanceMovement(WidgetRef ref, int id) async {
+  final dio = ref.read(backendDioProvider);
+  try {
+    final res = await dio.delete('/api/admin/manager-movements/$id');
+    return res.data is Map && res.data['success'] == true;
+  } on DioException {
+    return false;
+  }
+}
