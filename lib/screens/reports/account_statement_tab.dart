@@ -10,6 +10,7 @@ import '../../core/utils/pdf_statement.dart';
 import '../../providers/reports_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/report_controls.dart';
 
 class AccountStatementTab extends ConsumerStatefulWidget {
@@ -549,6 +550,13 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                       });
                     }),
                   ]),
+                  const SizedBox(height: 10),
+                  DateRangePickerRow(
+                    fromDate: from,
+                    toDate: to,
+                    onFromChanged: (v) => setSheet(() => from = v),
+                    onToChanged: (v) => setSheet(() => to = v),
+                  ),
                   const SizedBox(height: 14),
 
                   // Action type filter

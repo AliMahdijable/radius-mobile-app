@@ -7,6 +7,7 @@ import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/report_controls.dart';
 
 class ActivationsTab extends ConsumerStatefulWidget {
@@ -273,6 +274,13 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
                     _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
                     _qc('شهر', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                   ]),
+                  const SizedBox(height: 10),
+                  DateRangePickerRow(
+                    fromDate: from,
+                    toDate: to,
+                    onFromChanged: (v) => setSheet(() => from = v),
+                    onToChanged: (v) => setSheet(() => to = v),
+                  ),
                   const SizedBox(height: 14),
 
                   _SectionLabel('نوع الحركة'),
