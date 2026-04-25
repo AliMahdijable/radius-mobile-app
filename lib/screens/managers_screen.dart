@@ -176,6 +176,154 @@ Future<({bool success, String? error})> _sendManagerWhatsAppNotification({
   }
 }
 
+/// Fires WhatsApp + in-app push for a financial event without a
+/// confirmation dialog — driven by per-sheet checkbox toggles. Failures
+/// are surfaced via snackbars so the admin sees what happened, but the
+/// underlying balance/debt operation has already succeeded by the time
+/// this runs (we never block the action on the notification).
+Future<void> _autoSendManagerNotice({
+  required BuildContext context,
+  required WidgetRef ref,
+  required _ManagerFinancialNoticeData notice,
+  required bool sendWhatsApp,
+  required bool sendPush,
+}) async {
+  if (!sendWhatsApp && !sendPush) return;
+
+  // Resolve the WA message via the manager_agent template (same path the
+  // confirmation dialog used) so admins keep editing one template only.
+  final templatesState = ref.read(templatesProvider);
+  if (templatesState.templates.isEmpty && !templatesState.isLoading) {
+    await ref.read(templatesProvider.notifier).loadTemplates();
+  }
+  final managerTemplates = ref
+      .read(templatesProvider)
+      .templates
+      .where((t) => t.templateType == 'manager_agent' && t.isActive)
+      .toList();
+  final TemplateModel? managerTemplate =
+      managerTemplates.isEmpty ? null : managerTemplates.first;
+  final resolvedMessage = managerTemplate != null
+      ? notice.applyTemplate(managerTemplate.messageContent)
+      : notice.previewMessage;
+
+  if (sendWhatsApp) {
+    if (notice.manager.mobile.trim().isEmpty) {
+      if (context.mounted) {
+        AppSnackBar.warning(context, 'لا يوجد رقم هاتف محفوظ — لم يُرسل واتساب');
+      }
+    } else {
+      final result = await _sendManagerWhatsAppNotification(
+        ref: ref,
+        manager: notice.manager,
+        message: resolvedMessage,
+      );
+      if (context.mounted) {
+        if (result.success) {
+          AppSnackBar.whatsapp(context, 'تم إرسال واتساب للمدير');
+        } else {
+          AppSnackBar.whatsappError(
+            context,
+            'فشل إرسال واتساب',
+            detail: result.error,
+          );
+        }
+      }
+    }
+  }
+
+  if (sendPush) {
+    final result =
+        await ref.read(managersProvider.notifier).sendManagerBalanceUpdateNotification(
+              manager: notice.manager,
+              amount: notice.amount,
+              isLoan: notice.isLoanDeposit,
+              previousCredit: notice.previousCredit,
+              previousDebt: notice.previousDebt,
+              currentCredit: notice.currentCredit,
+              currentDebt: notice.currentDebt,
+              actionKind: notice.pushActionKind,
+              notes: notice.notes,
+            );
+    if (context.mounted && !result.$1) {
+      // Only surface failures — success is implicit (the bell row is
+      // already there once the action completes server-side).
+      AppSnackBar.warning(
+        context,
+        result.$2 ?? 'تعذّر إرسال إشعار التطبيق',
+      );
+    }
+  }
+}
+
+/// Compact two-checkbox row for the bottom of pay/add sheets — both
+/// default ON. Lets the admin opt out of WhatsApp / app push BEFORE
+/// executing the action instead of clicking through a post-success
+/// confirmation dialog.
+class _NotifyToggles extends StatelessWidget {
+  final bool sendWhatsApp;
+  final bool sendPush;
+  final bool whatsAppDisabled; // true when manager has no phone — toggle reads off + locked
+  final ValueChanged<bool> onWhatsAppChanged;
+  final ValueChanged<bool> onPushChanged;
+  const _NotifyToggles({
+    required this.sendWhatsApp,
+    required this.sendPush,
+    required this.onWhatsAppChanged,
+    required this.onPushChanged,
+    this.whatsAppDisabled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        CheckboxListTile.adaptive(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: whatsAppDisabled ? false : sendWhatsApp,
+          onChanged: whatsAppDisabled ? null : (v) => onWhatsAppChanged(v ?? false),
+          title: Row(
+            children: [
+              const Icon(Icons.whatshot, size: 16, color: Color(0xFF25D366)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  whatsAppDisabled
+                      ? 'إرسال واتساب — لا يوجد رقم'
+                      : 'إرسال رسالة واتساب للمدير',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+        CheckboxListTile.adaptive(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: sendPush,
+          onChanged: (v) => onPushChanged(v ?? false),
+          title: const Row(
+            children: [
+              Icon(Icons.notifications_active_outlined,
+                  size: 16, color: Colors.blueGrey),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'إشعار داخل التطبيق',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 Future<void> _showManagerFinancialNoticeDialog({
   required BuildContext context,
   required WidgetRef ref,
@@ -1900,6 +2048,8 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
   final TextEditingController _notesController = TextEditingController();
   bool _isLoan = false;
   bool _saving = false;
+  bool _sendWa = true;
+  bool _sendPush = true;
 
   bool get _isDeposit => widget.action == _ManagerBalanceActionType.deposit;
 
@@ -1946,9 +2096,11 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
 
     if (success) {
       if (_isDeposit) {
-        await _showManagerFinancialNoticeDialog(
+        await _autoSendManagerNotice(
           context: context,
           ref: ref,
+          sendWhatsApp: _sendWa,
+          sendPush: _sendPush,
           notice: _ManagerFinancialNoticeData(
             manager: widget.manager,
             amount: amount,
@@ -2099,7 +2251,17 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 18),
+            if (_isDeposit) ...[
+              const SizedBox(height: 8),
+              _NotifyToggles(
+                sendWhatsApp: _sendWa,
+                sendPush: _sendPush,
+                whatsAppDisabled: widget.manager.mobile.trim().isEmpty,
+                onWhatsAppChanged: (v) => setState(() => _sendWa = v),
+                onPushChanged: (v) => setState(() => _sendPush = v),
+              ),
+            ],
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
@@ -2633,6 +2795,8 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
   final TextEditingController _notesController = TextEditingController();
   DateTime _debtDate = DateTime.now();
   bool _saving = false;
+  bool _sendWa = true;
+  bool _sendPush = true;
 
   @override
   void dispose() {
@@ -2669,6 +2833,28 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (ok) {
+      // Auto-fire WA / push per the toggles. Use loanDeposit semantics
+      // (a debt is being added; balance is unchanged) for the template
+      // placeholders — admins can edit the manager_agent template if
+      // they want different wording for "add debt".
+      final newTotalDebt = widget.currentTotalDebt + amount;
+      await _autoSendManagerNotice(
+        context: context,
+        ref: ref,
+        sendWhatsApp: _sendWa,
+        sendPush: _sendPush,
+        notice: _ManagerFinancialNoticeData(
+          manager: widget.manager,
+          amount: amount,
+          kind: _ManagerFinancialNoticeKind.loanDeposit,
+          notes: _notesController.text.trim(),
+          previousCredit: widget.manager.credit,
+          previousDebt: widget.currentTotalDebt,
+          currentCredit: widget.manager.credit,
+          currentDebt: newTotalDebt,
+        ),
+      );
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } else {
       AppSnackBar.error(context, 'تعذّر حفظ الدين');
@@ -2779,7 +2965,15 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 6),
+            _NotifyToggles(
+              sendWhatsApp: _sendWa,
+              sendPush: _sendPush,
+              whatsAppDisabled: widget.manager.mobile.trim().isEmpty,
+              onWhatsAppChanged: (v) => setState(() => _sendWa = v),
+              onPushChanged: (v) => setState(() => _sendPush = v),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -2833,6 +3027,10 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
   final TextEditingController _notesController = TextEditingController();
   late _PaySource _source;
   bool _saving = false;
+  // Notify-on-success toggles — both default ON; admin can opt out
+  // before tapping save instead of being prompted afterward.
+  bool _sendWa = true;
+  bool _sendPush = true;
 
   @override
   void initState() {
@@ -2884,17 +3082,16 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (ok) {
-      // Same notice dialog the SAS sheet uses — gives the parent admin
-      // a one-click way to fire WhatsApp + in-app push to the sub-admin
-      // about the payment they just received. Skipping is allowed.
+      // Auto-fire WA / push per the toggles (no confirmation dialog).
       final paidFromSas = _source == _PaySource.sas;
-      final previousTotal =
-          widget.manager.debt + widget.customDebtTotal;
+      final previousTotal = widget.manager.debt + widget.customDebtTotal;
       final currentTotal =
           (previousTotal - amount).clamp(0, double.infinity).toDouble();
-      await _showManagerFinancialNoticeDialog(
+      await _autoSendManagerNotice(
         context: context,
         ref: ref,
+        sendWhatsApp: _sendWa,
+        sendPush: _sendPush,
         notice: _ManagerFinancialNoticeData(
           manager: widget.manager,
           amount: amount,
@@ -3075,7 +3272,15 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
                 isDense: true,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 6),
+            _NotifyToggles(
+              sendWhatsApp: _sendWa,
+              sendPush: _sendPush,
+              whatsAppDisabled: widget.manager.mobile.trim().isEmpty,
+              onWhatsAppChanged: (v) => setState(() => _sendWa = v),
+              onPushChanged: (v) => setState(() => _sendPush = v),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
