@@ -170,7 +170,29 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       } else {
         flatten(data);
       }
-      state = state.copyWith(managers: flat);
+      // Tree carries id+username only — SAS debt lives behind a
+      // dedicated /manager/debt/:id endpoint. Fetch each in parallel
+      // so the financial tab's "ديون المدراء" KPI sums SAS + custom
+      // debts without an extra user-triggered round trip. Failures
+      // fall through to debt=0 (the manager just doesn't contribute
+      // to the SAS-side bucket).
+      final enriched = await Future.wait(flat.map((m) async {
+        final id = int.tryParse(m.id);
+        if (id == null) return m;
+        try {
+          final dr = await _sas4Dio.get('/manager/debt/$id');
+          final body = dr.data;
+          final node = body is Map && body['data'] is Map
+              ? body['data'] as Map
+              : (body is Map ? body : const {});
+          final raw = node['total'] ?? node['totalDebt'] ?? node['debt'];
+          final v = _num(raw).abs();
+          return ManagerOption(id: m.id, name: m.name, debt: v);
+        } catch (_) {
+          return m;
+        }
+      }));
+      state = state.copyWith(managers: enriched);
     } catch (e) {
       dev.log('fetchManagers error: $e', name: 'REPORTS');
     }
