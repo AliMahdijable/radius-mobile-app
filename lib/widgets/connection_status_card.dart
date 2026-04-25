@@ -51,66 +51,107 @@ class ConnectionStatusCard extends ConsumerWidget {
       },
     );
 
+    final showGlobe = asyncSnap.maybeWhen(
+      data: (snap) => snap != null && snap.kind == DeviceKind.ubiquiti,
+      orElse: () => false,
+    );
+
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Config gear — always enabled, even during loading/error.
+        InkResponse(
+          onTap: () => _openConfig(context, ref),
+          radius: 16,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(Icons.settings_outlined, size: 16, color: cs.onSurfaceVariant),
+          ),
+        ),
+        // Globe — opens the Ubiquiti admin page (http://<ip>) in the
+        // system browser. Only rendered for NanoStation/Ubiquiti units;
+        // ONTs don't serve a stock HTTP UI the admin would recognise.
+        if (showGlobe)
+          InkResponse(
+            onTap: () => _openInBrowser(context, ref),
+            radius: 16,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(Icons.public, size: 16, color: cs.primary),
+            ),
+          ),
+        // Refresh — disabled while a probe is in flight so the admin
+        // doesn't queue duplicate requests against the router.
+        InkResponse(
+          onTap: isLoading
+              ? null
+              : () => ref.invalidate(deviceStatusProvider(args)),
+          radius: 16,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(
+              Icons.refresh_rounded,
+              size: 16,
+              color: isLoading
+                  ? cs.onSurfaceVariant.withValues(alpha: 0.35)
+                  : cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final headerLeading = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.router_rounded, size: 16, color: cs.primary),
+        const SizedBox(width: 8),
+        Text('الاتصال', style: labelStyle),
+      ],
+    );
+
+    // Adaptive layout: small phones can't fit label + 3 chips + 3 action
+    // icons on a single row, so when available width is tight we drop the
+    // chips onto a second line under the header. Threshold is on the
+    // widget's own width (LayoutBuilder), not the screen.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(Icons.router_rounded, size: 16, color: cs.primary),
-          const SizedBox(width: 8),
-          Text('الاتصال', style: labelStyle),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: valueChild,
-            ),
-          ),
-          // Config gear — always enabled, even during loading/error.
-          InkResponse(
-            onTap: () => _openConfig(context, ref),
-            radius: 16,
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(Icons.settings_outlined, size: 16, color: cs.onSurfaceVariant),
-            ),
-          ),
-          // Globe — opens the Ubiquiti admin page (http://<ip>) in the
-          // system browser. Only rendered when the probe came back
-          // healthy AND the device is a NanoStation/Ubiquiti unit, so
-          // admins can't tap it for an ONT (those don't serve a stock
-          // HTTP UI the admin would recognise).
-          if (asyncSnap.maybeWhen(
-            data: (snap) => snap != null && snap.kind == DeviceKind.ubiquiti,
-            orElse: () => false,
-          ))
-            InkResponse(
-              onTap: () => _openInBrowser(context, ref),
-              radius: 16,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(Icons.public, size: 16, color: cs.primary),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 360;
+          if (narrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: headerLeading),
+                    actions,
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 24),
+                  child: valueChild,
+                ),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              headerLeading,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: valueChild,
+                ),
               ),
-            ),
-          // Refresh — disabled while a probe is in flight so the admin
-          // doesn't queue duplicate requests against the router.
-          InkResponse(
-            onTap: isLoading
-                ? null
-                : () => ref.invalidate(deviceStatusProvider(args)),
-            radius: 16,
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(
-                Icons.refresh_rounded,
-                size: 16,
-                color: isLoading
-                    ? cs.onSurfaceVariant.withValues(alpha: 0.35)
-                    : cs.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
+              actions,
+            ],
+          );
+        },
       ),
     );
   }
