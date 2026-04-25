@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../core/theme/app_theme.dart';
@@ -24,6 +25,9 @@ enum _ManagerActionType {
   withdraw,
   payDebt,
   addPoints,
+  // Opens the existing custom-debts ledger pre-filtered to this manager
+  // — separate from the SAS4-native `debt` field handled by `payDebt`.
+  otherDebts,
   delete,
 }
 
@@ -645,6 +649,11 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
         break;
       case _ManagerActionType.addPoints:
         await _openPointsSheet(manager);
+        break;
+      case _ManagerActionType.otherDebts:
+        // Push the existing parent-admin debts ledger filtered to this
+        // sub-admin so it doubles as a per-manager debt screen.
+        await context.push('/manager-debts', extra: manager.id);
         break;
       case _ManagerActionType.delete:
         await _confirmDeleteManager(manager);
@@ -1322,6 +1331,13 @@ class _ManagerListCard extends StatelessWidget {
                           color: AppTheme.secondary,
                           onPressed: () =>
                               onActionSelected(_ManagerActionType.addPoints),
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.receipt_long_rounded,
+                          label: 'ديون أخرى',
+                          color: AppTheme.warningColor,
+                          onPressed: () =>
+                              onActionSelected(_ManagerActionType.otherDebts),
                         ),
                         _ManagerActionButton(
                           icon: Icons.delete_outline_rounded,

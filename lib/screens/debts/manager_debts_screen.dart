@@ -12,8 +12,14 @@ import 'manager_debt_detail_screen.dart';
 /// Parent-admin ledger: lists debts owed BY sub-admins. Gated by the
 /// /access endpoint so sub-admins who don't manage anyone get an empty
 /// state even if they deep-link into the route.
+///
+/// [initialDebtorFilter] — when set (from a deep-link out of a single
+/// manager card), the list opens pre-filtered to that debtor and the
+/// "إضافة دين" sheet preselects them, so the screen acts as that
+/// manager's personal debt ledger.
 class ManagerDebtsScreen extends ConsumerStatefulWidget {
-  const ManagerDebtsScreen({super.key});
+  final int? initialDebtorFilter;
+  const ManagerDebtsScreen({super.key, this.initialDebtorFilter});
 
   @override
   ConsumerState<ManagerDebtsScreen> createState() => _ManagerDebtsScreenState();
@@ -22,6 +28,12 @@ class ManagerDebtsScreen extends ConsumerStatefulWidget {
 class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
   String? _statusFilter;
   int? _debtorFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _debtorFilter = widget.initialDebtorFilter;
+  }
 
   DebtsFilterArgs get _args =>
       DebtsFilterArgs(status: _statusFilter, debtorAdminId: _debtorFilter);
@@ -161,7 +173,11 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
       BuildContext context, List<SubAdminRef> subAdmins) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _CreateDebtDialog(subAdmins: subAdmins),
+      builder: (_) => _CreateDebtDialog(
+        subAdmins: subAdmins,
+        // Preselect when we entered the screen filtered to one debtor.
+        preselectedDebtorId: _debtorFilter,
+      ),
     );
     if (saved == true && mounted) {
       AppSnackBar.success(context, 'تم إضافة الدين');
@@ -608,7 +624,8 @@ class _InlineStat extends StatelessWidget {
 
 class _CreateDebtDialog extends ConsumerStatefulWidget {
   final List<SubAdminRef> subAdmins;
-  const _CreateDebtDialog({required this.subAdmins});
+  final int? preselectedDebtorId;
+  const _CreateDebtDialog({required this.subAdmins, this.preselectedDebtorId});
 
   @override
   ConsumerState<_CreateDebtDialog> createState() => _CreateDebtDialogState();
@@ -620,6 +637,12 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
   final _noteCtrl = TextEditingController();
   DateTime _date = DateTime.now();
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _debtorId = widget.preselectedDebtorId;
+  }
 
   @override
   void dispose() {

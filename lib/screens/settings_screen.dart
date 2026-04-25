@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../core/router/app_router.dart';
 import '../providers/auth_provider.dart';
-import '../providers/manager_debts_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
@@ -297,24 +296,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
           onTap: () => context.push('/expenses'),
         ),
-        // Parent-admin ledger for sub-admin debts. Hidden for anyone who
-        // either lacks the `prm_managers_create` permission (sub-admins
-        // shouldn't see it at all) or whose SAS4 tree actually contains
-        // no sub-admins (there would be nothing to record debts against).
-        // Both checks are needed: permission is the hard gate, the tree
-        // check is a no-sub-admins soft gate.
-        if (canAccessManagers)
-          Consumer(builder: (_, innerRef, __) {
-            final access = innerRef.watch(managerDebtsAccessProvider);
-            if (access.valueOrNull?.hasSubAdmins != true) return const SizedBox.shrink();
-            return _SettingTile(
-              icon: Icons.assignment_ind_rounded,
-              title: 'ديون المدراء',
-              subtitle: 'دين بينك وبين المدراء الفرعيين — مستقل عن ديون الساس',
-              iconColor: Colors.orange,
-              onTap: () => context.push('/manager-debts'),
-            );
-          }),
+        // "ديون المدراء" was here. Now merged into the managers screen
+        // — each manager card has a "ديون أخرى" action that opens the
+        // same ledger pre-filtered to that sub-admin. Sub-admins still
+        // reach their own debts via "ديوني" below.
         _SettingTile(
           icon: Icons.router_rounded,
           title: 'الإعدادات الافتراضية لأجهزتك',

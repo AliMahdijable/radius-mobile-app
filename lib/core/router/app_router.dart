@@ -83,7 +83,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/manager-debts',
-        builder: (context, state) => const ManagerDebtsScreen(),
+        builder: (context, state) {
+          // Optional preselected debtor — set when entering from a single
+          // manager's card in the managers screen.
+          final extra = state.extra;
+          final debtorId = extra is int
+              ? extra
+              : (extra is Map && extra['debtorAdminId'] is int
+                  ? extra['debtorAdminId'] as int
+                  : null);
+          return ManagerDebtsScreen(initialDebtorFilter: debtorId);
+        },
       ),
       GoRoute(
         path: '/my-debts',
