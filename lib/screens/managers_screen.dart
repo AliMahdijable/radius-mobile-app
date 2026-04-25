@@ -13,7 +13,6 @@ import '../models/template_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/manager_debts_provider.dart';
 import '../providers/managers_provider.dart';
-import 'debts/manager_debt_detail_screen.dart';
 import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../widgets/app_snackbar.dart';
@@ -605,12 +604,18 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     }
   }
 
-  Future<void> _openPayChooserSheet(ManagerModel manager) async {
+  Future<void> _openUnifiedPaySheet(
+    ManagerModel manager, {
+    required double extraDebt,
+  }) async {
     final paid = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _PayDebtChooserSheet(manager: manager),
+      builder: (_) => _PayDebtUnifiedSheet(
+        manager: manager,
+        customDebtTotal: extraDebt,
+      ),
     );
     if (paid == true && mounted) {
       AppSnackBar.success(context, 'تم تسديد الدين');
@@ -682,17 +687,13 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
         await _openBalanceSheet(manager, _ManagerBalanceActionType.withdraw);
         break;
       case _ManagerActionType.payDebt:
-        // Pay flow now spans BOTH SAS4 debt and custom debts:
-        //   - SAS4 debt > 0 → open the existing SAS4 sheet
-        //   - SAS4 debt = 0 but custom > 0 → open a chooser of this
-        //     manager's open custom debts so the admin can pay one
-        //   - both > 0 → start with the chooser (it includes SAS4 too)
-        if (manager.debt > 0 && extraDebt <= 0) {
-          await _openDebtSheet(manager);
-        } else if (extraDebt > 0) {
-          await _openPayChooserSheet(manager);
-        } else {
+        // Single unified pay sheet — same look as the SAS4 sheet, with a
+        // segmented selector at top when both sources have debt. No
+        // chooser list, no detail-screen jump.
+        if (manager.debt <= 0 && extraDebt <= 0) {
           await _openDebtSheet(manager); // surfaces "لا يوجد دين" UI
+        } else {
+          await _openUnifiedPaySheet(manager, extraDebt: extraDebt);
         }
         break;
       case _ManagerActionType.addPoints:
@@ -2813,175 +2814,278 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
   }
 }
 
-/// Picker shown when the admin taps "تسديد" on a manager that has open
-/// custom debts (and possibly SAS4 debt too). Lists each payable item
-/// — SAS4 debt as one row, then each custom debt with its remaining
-/// balance — and routes to the right payment UI when a row is tapped.
-class _PayDebtChooserSheet extends ConsumerWidget {
+/// Single sheet that pays manager debt — same compact shape as the
+/// add-debt sheet. When both SAS4 and custom debts exist, a small
+/// segmented control at the top lets the admin pick the source. For
+/// custom debts the entered amount is distributed FIFO across the
+/// manager's open custom debts oldest-first via the existing
+/// per-debt payment endpoint.
+class _PayDebtUnifiedSheet extends ConsumerStatefulWidget {
   final ManagerModel manager;
-  const _PayDebtChooserSheet({required this.manager});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final debtsAsync = ref.watch(
-      managerDebtsListProvider(DebtsFilterArgs(debtorAdminId: manager.id)),
-    );
-    return _SheetScaffold(
-      title: 'اختر الدين لتسديده',
-      icon: Icons.payments_outlined,
-      isLoading: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            manager.username,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 12),
-          if (manager.debt > 0)
-            _PayChoiceTile(
-              icon: Icons.account_balance_outlined,
-              title: 'دين الساس',
-              subtitle: 'تسديد عبر سجل الساس',
-              amount: manager.debt,
-              color: AppTheme.warningColor,
-              onTap: () {
-                Navigator.of(context).pop(false); // close chooser
-                showModalBottomSheet<bool>(
-                  context: context,
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  builder: (_) => _ManagerDebtPaymentSheet(manager: manager),
-                ).then((_) {
-                  // managers list is reloaded by the parent screen on close.
-                });
-              },
-            ),
-          debtsAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (_, __) => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('تعذّر تحميل الديون الأخرى'),
-            ),
-            data: (all) {
-              final open = all
-                  .where((d) =>
-                      d.status != ManagerDebtStatus.paid && d.remainingAmount > 0)
-                  .toList(growable: false);
-              if (open.isEmpty && manager.debt <= 0) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text(
-                    'لا يوجد دين قابل للتسديد',
-                    textAlign: TextAlign.center,
-                  ),
-                );
-              }
-              return Column(
-                children: [
-                  for (final d in open)
-                    _PayChoiceTile(
-                      icon: Icons.receipt_long_rounded,
-                      title:
-                          d.note?.isNotEmpty == true ? d.note! : 'دين بتاريخ',
-                      subtitle: intl.DateFormat('yyyy-MM-dd').format(d.debtDate),
-                      amount: d.remainingAmount,
-                      color: AppTheme.infoColor,
-                      onTap: () {
-                        Navigator.of(context).pop(false);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ManagerDebtDetailScreen(debt: d),
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PayChoiceTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final double amount;
-  final Color color;
-  final VoidCallback onTap;
-  const _PayChoiceTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.amount,
-    required this.color,
-    required this.onTap,
+  final double customDebtTotal;
+  const _PayDebtUnifiedSheet({
+    required this.manager,
+    required this.customDebtTotal,
   });
 
   @override
+  ConsumerState<_PayDebtUnifiedSheet> createState() =>
+      _PayDebtUnifiedSheetState();
+}
+
+enum _PaySource { sas, custom }
+
+class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+  late _PaySource _source;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _source = widget.manager.debt > 0 ? _PaySource.sas : _PaySource.custom;
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  double get _max => _source == _PaySource.sas
+      ? widget.manager.debt
+      : widget.customDebtTotal;
+
+  String get _maxLabel =>
+      'الحد الأقصى: ${_formatCurrency(_max)}';
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final amount = _parseFormattedAmount(_amountController.text);
+    if (amount == null || amount <= 0) {
+      AppSnackBar.warning(context, 'أدخل مبلغًا صحيحًا');
+      return;
+    }
+    if (amount > _max + 0.01) {
+      AppSnackBar.warning(context, 'المبلغ أكبر من المتاح');
+      return;
+    }
+
+    setState(() => _saving = true);
+    bool ok = false;
+
+    if (_source == _PaySource.sas) {
+      ok = await ref.read(managersProvider.notifier).payDebt(
+            manager: widget.manager,
+            amount: amount,
+            debtForMe: widget.manager.debt,
+            totalDebt: widget.manager.debt,
+            notes: _notesController.text,
+          );
+    } else {
+      ok = await _payCustomFifo(amount, _notesController.text.trim());
+    }
+
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) {
+      Navigator.of(context).pop(true);
+    } else {
+      AppSnackBar.error(context, 'تعذّر تنفيذ التسديد');
+    }
+  }
+
+  /// Distributes [amount] across the manager's open custom debts
+  /// oldest-first by calling the per-debt payment endpoint sequentially.
+  /// Returns true once everything posted; partial-success is treated as
+  /// failure so the admin retries with the right remainder.
+  Future<bool> _payCustomFifo(double amount, String note) async {
+    final list = await ref.read(
+      managerDebtsListProvider(
+        DebtsFilterArgs(debtorAdminId: widget.manager.id),
+      ).future,
+    );
+    final open = list
+        .where((d) =>
+            d.status != ManagerDebtStatus.paid && d.remainingAmount > 0)
+        .toList()
+      ..sort((a, b) => a.debtDate.compareTo(b.debtDate));
+
+    double left = amount;
+    for (final d in open) {
+      if (left <= 0) break;
+      final pay = left > d.remainingAmount ? d.remainingAmount : left;
+      final res = await addManagerDebtPayment(
+        ref,
+        d.id,
+        amountPaid: pay,
+        note: note.isEmpty ? null : note,
+      );
+      if (!res.success) return false;
+      left -= pay;
+    }
+    return left <= 0.01;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withValues(alpha: 0.25)),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurface.withValues(alpha: 0.65),
-                      ),
-                    ),
-                  ],
+    final hasSas = widget.manager.debt > 0;
+    final hasCustom = widget.customDebtTotal > 0;
+    final showSelector = hasSas && hasCustom;
+
+    return _SheetScaffold(
+      title: 'تسديد دين',
+      icon: Icons.payments_outlined,
+      isLoading: _saving,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.manager.username,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'الإجمالي: ${_formatCurrency(widget.manager.debt + widget.customDebtTotal)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.warningColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (showSelector) ...[
+              SegmentedButton<_PaySource>(
+                segments: const [
+                  ButtonSegment(
+                    value: _PaySource.sas,
+                    label: Text('دين الساس'),
+                    icon: Icon(Icons.account_balance_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: _PaySource.custom,
+                    label: Text('ديون أخرى'),
+                    icon: Icon(Icons.receipt_long_rounded, size: 16),
+                  ),
+                ],
+                selected: {_source},
+                onSelectionChanged: (s) {
+                  setState(() {
+                    _source = s.first;
+                    _amountController.clear();
+                  });
+                },
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
-              Text(
-                _formatCurrency(amount),
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                ),
-              ),
+              const SizedBox(height: 10),
             ],
-          ),
+            TextFormField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [_ThousandsSeparatorInputFormatter()],
+              decoration: InputDecoration(
+                labelText: 'مبلغ التسديد',
+                helperText: _maxLabel,
+                prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                isDense: true,
+                suffixIcon: _amountController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        onPressed: () {
+                          _amountController.clear();
+                          setState(() {});
+                        },
+                      ),
+              ),
+              onChanged: (_) => setState(() {}),
+              validator: (v) {
+                final a = _parseFormattedAmount(v ?? '');
+                if (a == null || a <= 0) return 'أدخل مبلغًا صحيحًا';
+                if (a > _max + 0.01) return 'أكبر من المتاح';
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          final formatter = intl.NumberFormat('#,##0', 'en_US');
+                          _amountController.text = formatter.format(_max);
+                          setState(() {});
+                        },
+                  icon: const Icon(Icons.done_all_rounded, size: 16),
+                  label: const Text('تسديد كامل المبلغ'),
+                ),
+              ],
+            ),
+            QuickAmountChips(
+              amounts: const [
+                10000.0, 25000.0, 50000.0, 100000.0, 250000.0,
+              ],
+              selectedAmount:
+                  _parseFormattedAmount(_amountController.text) ?? 0,
+              enabled: !_saving,
+              onSelected: (v) {
+                FocusScope.of(context).unfocus();
+                final current =
+                    _parseFormattedAmount(_amountController.text) ?? 0;
+                final total = current + v;
+                final capped = total > _max ? _max : total;
+                final formatter = intl.NumberFormat('#,##0', 'en_US');
+                _amountController.text = formatter.format(capped);
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _notesController,
+              maxLines: 1,
+              decoration: const InputDecoration(
+                labelText: 'ملاحظة (اختياري)',
+                prefixIcon: Icon(Icons.note_alt_outlined),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _submit,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('تسديد'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
