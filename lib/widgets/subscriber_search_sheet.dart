@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme/app_theme.dart';
 import '../models/subscriber_model.dart';
+import '../providers/device_provider.dart';
 import '../providers/subscribers_provider.dart';
 
 /// Shows a bottom sheet that searches loaded subscribers by username, name,
@@ -199,6 +200,20 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
                                             : Colors.grey);
                                 return ListTile(
                                   onTap: () {
+                                    // Prefetch device status before
+                                    // pushing — same pattern as the
+                                    // main subscribers list. Warms the
+                                    // 5-min cache so ConnectionStatusCard
+                                    // renders instantly on the details
+                                    // screen.
+                                    ref
+                                        .read(deviceStatusProvider(
+                                          DeviceStatusArgs(
+                                            subscriberUsername: s.username,
+                                            fallbackIp: s.ipAddress,
+                                          ),
+                                        ).future)
+                                        .catchError((_) => null);
                                     Navigator.of(ctx).pop();
                                     context.push(
                                       '/subscriber/${s.username}',

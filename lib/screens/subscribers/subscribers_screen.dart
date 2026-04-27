@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/device_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../models/subscriber_model.dart';
@@ -1016,6 +1017,25 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             // The disconnect button still works as its
                             // own tap target inside the card.
                             onTap: () {
+                              // Prefetch device status the moment the
+                              // admin taps the row, so by the time the
+                              // details screen mounts the
+                              // ConnectionStatusCard the result (or at
+                              // least the in-flight Future) is already
+                              // warm in the provider's 5-min cache.
+                              // ref.read(...).future kicks off the work
+                              // without subscribing — autoDispose's
+                              // cacheFor in deviceStatusProvider keeps
+                              // it alive long enough for the next
+                              // screen to pick up.
+                              ref
+                                  .read(deviceStatusProvider(
+                                    DeviceStatusArgs(
+                                      subscriberUsername: sub.username,
+                                      fallbackIp: sub.ipAddress,
+                                    ),
+                                  ).future)
+                                  .catchError((_) => null);
                               context.push(
                                 '/subscriber/${sub.username}',
                                 extra: sub,
