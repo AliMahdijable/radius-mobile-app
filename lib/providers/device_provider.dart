@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/dio_client.dart';
+import '../core/services/device_status_cache.dart';
 import '../core/services/huawei_ont_service.dart';
+import '../core/services/tcp_reachability.dart';
 import '../core/services/ubiquiti_service.dart';
 import '../models/admin_device_defaults.dart';
 import '../models/device_config.dart';
@@ -167,15 +169,25 @@ String _ontTempHealth(String temp) {
 
 /// Device status: resolves credentials, probes the device, returns the
 /// unified snapshot. Triggered lazily when the widget subscribes.
-/// Total probe time capped at 15s; anything slower is treated as "offline"
-/// so the UI never sits on a spinner forever.
+/// Total probe time capped at 6s; anything slower is treated as "offline"
+/// so the UI never sits on a spinner forever. The cap was 15s but with
+/// the tighter per-request timeouts in HuaweiOntService and the new TCP
+/// pre-check in _probeDevice, a real reachable device finishes well
+/// under that ceiling, while unreachable ones short-circuit faster.
 final deviceStatusProvider = FutureProvider.family
     .autoDispose<DeviceHealthSnapshot?, DeviceStatusArgs>((ref, args) async {
   // Keep the result warm for five minutes even if no widget watches.
   ref.cacheFor(const Duration(minutes: 5));
   try {
-    return await _probeDevice(ref, args)
-        .timeout(const Duration(seconds: 15), onTimeout: () => null);
+    final snap = await _probeDevice(ref, args)
+        .timeout(const Duration(seconds: 6), onTimeout: () => null);
+    // Persist successful probes to the on-disk cache so the next cold
+    // start renders the card immediately, without waiting for a fresh
+    // probe wave to even begin.
+    if (snap != null) {
+      DeviceStatusCache.instance.save(args.subscriberUsername, snap);
+    }
+    return snap;
   } catch (_) {
     return null;
   }
@@ -198,6 +210,13 @@ Future<DeviceHealthSnapshot?> _probeDevice(Ref ref, DeviceStatusArgs args) async
 
   final ip = (cfg.customIp?.isNotEmpty == true ? cfg.customIp : args.fallbackIp) ?? '';
   if (ip.isEmpty) return null;
+
+  // TCP pre-check — bail fast on dead IPs (>1.2s = unreachable). This
+  // avoids the 4s × multiple-base-URL × 2-protocols cost we'd otherwise
+  // spend trying to log into a router that isn't even up. Saves the
+  // bulk wave from spending most of its budget on offline subscribers.
+  final reachable = await TcpReachability.isReachable(ip);
+  if (!reachable) return null;
 
   // Per-type creds. Subscriber override applies ONLY when the admin
   // explicitly pinned that kind — otherwise we treat username/password

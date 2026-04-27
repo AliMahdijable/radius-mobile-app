@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/services/device_status_cache.dart';
 import '../core/utils/helpers.dart';
 import '../core/theme/app_theme.dart';
 import '../models/subscriber_model.dart';
@@ -966,25 +967,29 @@ class _ConnectionHealthPill extends ConsumerWidget {
       ),
     );
 
-    return asyncSnap.when(
-      loading: () => Wrap(
+    // Stale-while-revalidate: only fall back to the on-disk cache while
+    // the live probe is still in flight. If the probe has *completed*
+    // and explicitly returned null (timeout / unreachable), respect
+    // that and show "no data" — otherwise a permanently-down device
+    // would always render its last known good values, masking outages.
+    final cached = asyncSnap.isLoading
+        ? DeviceStatusCache.instance.get(subscriberUsername)
+        : null;
+    final effectiveSnap = asyncSnap.value ?? cached;
+
+    if (effectiveSnap == null) {
+      return Wrap(
         spacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
           refreshBtn,
         ],
-      ),
-      error: (_, __) => refreshBtn,
-      data: (snap) {
-        if (snap == null) {
-          return Wrap(
-            spacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [refreshBtn],
-          );
-        }
-        final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
+      );
+    }
+    {
+      final snap = effectiveSnap;
+      final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
         // All three metrics are shown so the admin can spot exactly which
         // one is failing without opening the details screen. Each metric
         // is its own tiny pill so they wrap cleanly on narrow phones.
@@ -1050,8 +1055,7 @@ class _ConnectionHealthPill extends ConsumerWidget {
             refreshBtn,
           ],
         );
-      },
-    );
+    }
   }
 
   String _shortLabel(String label) {

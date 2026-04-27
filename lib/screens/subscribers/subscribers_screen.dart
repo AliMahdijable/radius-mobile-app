@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/services/device_status_cache.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/device_provider.dart';
 import '../../providers/subscribers_provider.dart';
@@ -81,6 +82,18 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     Future.microtask(() {
       ref.read(subscribersProvider.notifier).loadSubscribers();
     });
+    // Hydrate the screen-level probe map from the on-disk cache so the
+    // filter / sort UI has data to work with the moment the admin
+    // taps "RX سيء" — even before the live wave fires its first probe.
+    Future.microtask(() async {
+      await DeviceStatusCache.instance.ready();
+      if (!mounted) return;
+      final cached = DeviceStatusCache.instance.snapshotsByUsername();
+      if (cached.isEmpty) return;
+      setState(() {
+        _probeCache.addAll(cached);
+      });
+    });
     FcmService.pendingSubscriberSearch.addListener(_consumePendingSearch);
     if (FcmService.pendingSubscriberSearch.value != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -114,7 +127,11 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       _probeProgress = 0;
     });
 
-    const concurrency = 8;
+    // 25 concurrent probes is a sweet spot on a typical Android device:
+    // each probe is I/O-bound (HTTP login + status fetch), so going wide
+    // doesn't stall the UI thread, and the per-probe 6s cap means even
+    // 100 dead IPs finish in 4 batches × 6s = 24s. Was 8 — a 3× lift.
+    const concurrency = 25;
     var done = 0;
     for (var i = 0; i < probable.length; i += concurrency) {
       if (!mounted || _probeRunId != myRun) return;
