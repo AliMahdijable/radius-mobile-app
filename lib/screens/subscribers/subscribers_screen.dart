@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/device_provider.dart';
+import '../../providers/server_device_status_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../models/device_config.dart';
@@ -43,24 +44,13 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   // Device-health filter / sort. Both apply to the FULL subscriber list
   // (every page, not just the visible 25), so the admin sees every
   // affected sub no matter where in the pagination they sit.
+  // Data comes from the SERVER cache (serverDeviceStatusProvider) which
+  // probes routers via the backend stagger worker and pushes results
+  // through the polling endpoint — the mobile no longer probes
+  // directly, so the filter/sort sees fresh data within ~30s of any
+  // backend probe cycle without any phone-side fan-out.
   String? _deviceFilter;
   String? _deviceSort;
-  // Cache of probe results keyed by subscriber username. Populated by
-  // _runDeviceProbes when filter/sort is active. The actual provider's
-  // 5-min cacheFor handles the underlying HTTP calls; this map is just
-  // a synchronously-readable mirror so the build method can filter/sort
-  // without awaiting.
-  final Map<String, DeviceHealthSnapshot?> _probeCache = {};
-  bool _probing = false;
-  int _probeProgress = 0;
-  int _probeTotal = 0;
-  // Bumps each time a probe wave starts so an in-flight wave can be
-  // cancelled when the admin changes filter/sort/search mid-probe.
-  int _probeRunId = 0;
-  // Hash of the list we last probed against — re-probe whenever the
-  // list shape changes (search results changed, filter chip changed,
-  // etc.).
-  String _lastProbedHash = '';
 
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
@@ -97,53 +87,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     FcmService.pendingSubscriberSearch.removeListener(_consumePendingSearch);
     super.dispose();
   }
-
-  // Throttled probe wave for the full subscriber list. Concurrent probes
-  // are capped so we don't fan out 1000 simultaneous router logins; the
-  // underlying deviceStatusProvider keeps each result warm for 5 min so
-  // re-running this with a populated cache is essentially free.
-  Future<void> _runDeviceProbes(List<SubscriberModel> subs) async {
-    if (!mounted) return;
-    _probeRunId += 1;
-    final myRun = _probeRunId;
-    final probable = subs.where((s) =>
-        !s.isOffline && (s.ipAddress ?? '').trim().isNotEmpty).toList();
-    setState(() {
-      _probing = true;
-      _probeTotal = probable.length;
-      _probeProgress = 0;
-    });
-
-    const concurrency = 8;
-    var done = 0;
-    for (var i = 0; i < probable.length; i += concurrency) {
-      if (!mounted || _probeRunId != myRun) return;
-      final batch = probable.skip(i).take(concurrency).toList();
-      await Future.wait(batch.map((sub) async {
-        final args = DeviceStatusArgs(
-          subscriberUsername: sub.username,
-          fallbackIp: sub.ipAddress!.trim(),
-        );
-        try {
-          final snap = await ref.read(deviceStatusProvider(args).future);
-          _probeCache[sub.username] = snap;
-        } catch (_) {
-          _probeCache[sub.username] = null;
-        }
-      }));
-      if (!mounted || _probeRunId != myRun) return;
-      done += batch.length;
-      setState(() => _probeProgress = done);
-    }
-    if (!mounted || _probeRunId != myRun) return;
-    setState(() => _probing = false);
-  }
-
-  // Stable hash of the visible-list shape. Changes when search results,
-  // filter chip, or manager filter shifts the list. Used to decide
-  // whether the cached probe wave is still valid for the new list.
-  String _hashList(List<SubscriberModel> list) =>
-      '${list.length}|${list.isEmpty ? '' : list.first.username}|${list.isEmpty ? '' : list.last.username}';
 
   void _consumePendingSearch() {
     final username = FcmService.pendingSubscriberSearch.value;
@@ -704,36 +647,31 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     final fullList =
         _isSearchMode ? state.searchResults : state.filteredSubscribers;
 
-    // When a device filter or sort is on, kick off a throttled probe
-    // wave for the FULL list (not just the visible page) so the
-    // filter/sort decisions have data to work with. Done in a
-    // post-frame callback so we don't trigger a state update during
-    // build. The hash short-circuits the wave when the list shape
-    // hasn't actually changed.
-    final deviceModeOn = _deviceFilter != null || _deviceSort != null;
-    final listHash = _hashList(fullList);
-    if (deviceModeOn && listHash != _lastProbedHash) {
-      _lastProbedHash = listHash;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _runDeviceProbes(fullList);
-      });
-    } else if (!deviceModeOn && _lastProbedHash.isNotEmpty) {
-      // Filter/sort just turned off — reset so re-enabling it later
-      // forces a fresh wave.
-      _lastProbedHash = '';
-    }
+    // Watch the server-side cache. The notifier polls /api/devices/status
+    // every 5s and keeps `byUsername` keyed by lowercase username — the
+    // filter and sort below read from it synchronously.
+    final deviceState = ref.watch(serverDeviceStatusProvider);
+    final probeMap = deviceState.byUsername;
+
+    // Register the current list with the backend stagger worker. The
+    // notifier short-circuits if the list shape hasn't changed, so this
+    // is cheap to call on every rebuild. Done in a post-frame callback
+    // so we don't fire state updates during build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(serverDeviceStatusProvider.notifier).syncSubs(fullList);
+      }
+    });
 
     // Apply device filter (problems-only) on the full list, not on the
-    // visible page. Subs without an IP can't be probed so they drop out
-    // entirely; subs with no probe yet are hidden until the wave fills
-    // the cache and the next rebuild puts them back.
+    // visible page. Subs without a server snapshot drop out — the
+    // worker pushes them in within ~30s of /sync.
     var visibleList = fullList;
     if (_deviceFilter != null) {
       final fk = _deviceFilter!;
       visibleList = visibleList.where((sub) {
         if (sub.isOffline || (sub.ipAddress ?? '').trim().isEmpty) return false;
-        if (!_probeCache.containsKey(sub.username)) return false;
-        final snap = _probeCache[sub.username];
+        final snap = probeMap[sub.username.toLowerCase()];
         if (snap == null) return false;
         return _matchesDeviceFilter(fk, snap);
       }).toList();
@@ -745,8 +683,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       final sk = _deviceSort!;
       final asc = _sortAscending(sk);
       visibleList = [...visibleList]..sort((a, b) {
-        final ka = _deviceSortKey(sk, _probeCache[a.username]);
-        final kb = _deviceSortKey(sk, _probeCache[b.username]);
+        final ka = _deviceSortKey(sk, probeMap[a.username.toLowerCase()]);
+        final kb = _deviceSortKey(sk, probeMap[b.username.toLowerCase()]);
         if (ka == null && kb == null) return 0;
         if (ka == null) return 1;
         if (kb == null) return -1;
@@ -887,9 +825,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                           : 'الأسوأ أولاً';
                       return '${def.label} ($dirLabel)';
                     })(),
-              probing: _probing,
-              probeProgress: _probeProgress,
-              probeTotal: _probeTotal,
+              initializing: deviceState.initializing,
+              lastFetchedAt: deviceState.lastFetchedAt,
               onClear: () {
                 setState(() {
                   _deviceFilter = null;
@@ -1153,15 +1090,15 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               ? Icons.search_off
                               : Icons.people_outline),
                       title: _deviceFilter != null
-                          ? (_probing
-                              ? 'جاري فحص الأجهزة...'
+                          ? (deviceState.initializing
+                              ? 'بانتظار بيانات الخادم...'
                               : 'لا يوجد مشترك يطابق الفلتر')
                           : (_isSearchMode
                               ? 'لا توجد نتائج'
                               : 'لا يوجد مشتركين'),
                       subtitle: _deviceFilter != null
-                          ? (_probing
-                              ? 'تم فحص $_probeProgress من $_probeTotal جهاز'
+                          ? (deviceState.initializing
+                              ? 'الخادم يفحص الأجهزة بالخلفية…'
                               : 'جرب فلتر مختلف أو اضغط × لإزالته')
                           : (_isSearchMode
                               ? 'جرب كلمة بحث مختلفة'
@@ -1583,18 +1520,24 @@ class _DeviceFilterButton extends StatelessWidget {
 class _ActiveDeviceFilterBanner extends StatelessWidget {
   final String? filterLabel;
   final String? sortLabel;
-  final bool probing;
-  final int probeProgress;
-  final int probeTotal;
+  final bool initializing;
+  final DateTime? lastFetchedAt;
   final VoidCallback onClear;
   const _ActiveDeviceFilterBanner({
     this.filterLabel,
     this.sortLabel,
-    required this.probing,
-    required this.probeProgress,
-    required this.probeTotal,
+    required this.initializing,
+    required this.lastFetchedAt,
     required this.onClear,
   });
+
+  String _ageLabel(DateTime? at) {
+    if (at == null) return 'بانتظار البيانات…';
+    final diff = DateTime.now().difference(at);
+    if (diff.inSeconds < 60) return 'آخر تحديث: قبل ${diff.inSeconds}s';
+    if (diff.inMinutes < 60) return 'آخر تحديث: قبل ${diff.inMinutes}m';
+    return 'آخر تحديث: قبل ${diff.inHours}h';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1628,29 +1571,30 @@ class _ActiveDeviceFilterBanner extends StatelessWidget {
                     color: theme.colorScheme.onSurface.withOpacity(0.85),
                   ),
                 ),
-                if (probing && probeTotal > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    if (initializing) ...[
                       SizedBox(
                         width: 10, height: 10,
                         child: CircularProgressIndicator(
                           strokeWidth: 1.5,
                           valueColor: const AlwaysStoppedAnimation<Color>(accent),
-                          value: probeTotal == 0 ? null : probeProgress / probeTotal,
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'فحص الأجهزة: $probeProgress / $probeTotal',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
                     ],
-                  ),
-                ],
+                    Text(
+                      initializing
+                          ? 'مزامنة مع الخادم...'
+                          : _ageLabel(lastFetchedAt),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
