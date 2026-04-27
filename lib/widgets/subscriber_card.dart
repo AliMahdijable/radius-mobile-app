@@ -6,7 +6,6 @@ import '../core/utils/helpers.dart';
 import '../core/theme/app_theme.dart';
 import '../models/subscriber_model.dart';
 import '../providers/device_provider.dart';
-import '../providers/server_device_status_provider.dart';
 
 class SubscriberCard extends StatelessWidget {
   final SubscriberModel subscriber;
@@ -926,23 +925,13 @@ class _LastPaymentRow extends StatelessWidget {
 ///               genuinely can't be probed
 ///   - data    : dot + brief "ONT" / "Ubiquiti" label + headline value
 ///               (e.g. "RX -22" / "sig -62")
-class _ConnectionHealthPill extends ConsumerStatefulWidget {
+class _ConnectionHealthPill extends ConsumerWidget {
   final String subscriberUsername;
   final String fallbackIp;
   const _ConnectionHealthPill({
     required this.subscriberUsername,
     required this.fallbackIp,
   });
-
-  @override
-  ConsumerState<_ConnectionHealthPill> createState() => _ConnectionHealthPillState();
-}
-
-class _ConnectionHealthPillState extends ConsumerState<_ConnectionHealthPill> {
-  // Local "in-flight" flag for the per-row refresh tap. Toggled while
-  // /api/devices/probe/:username is running so the icon stays grey and
-  // a duplicate tap is ignored.
-  bool _probing = false;
 
   Color _colorFor(String health, ColorScheme cs) {
     switch (health) {
@@ -953,60 +942,49 @@ class _ConnectionHealthPillState extends ConsumerState<_ConnectionHealthPill> {
     }
   }
 
-  Future<void> _refresh() async {
-    if (_probing) return;
-    setState(() => _probing = true);
-    try {
-      await ref
-          .read(serverDeviceStatusProvider.notifier)
-          .forceProbe(widget.subscriberUsername, widget.fallbackIp);
-    } finally {
-      if (mounted) setState(() => _probing = false);
-    }
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final args = DeviceStatusArgs(
+      subscriberUsername: subscriberUsername,
+      fallbackIp: fallbackIp,
+    );
+    final asyncSnap = ref.watch(deviceStatusProvider(args));
     final cs = Theme.of(context).colorScheme;
-    // Server-cached snapshot — null while the worker hasn't probed
-    // this row yet (mobile shows a tiny dot + refresh icon so the
-    // admin can force-probe individually).
-    final snap = ref.watch(subDeviceStatusProvider(widget.subscriberUsername));
+    final isLoading = asyncSnap.isLoading;
     final refreshBtn = InkResponse(
-      onTap: _probing ? null : _refresh,
+      onTap: isLoading ? null : () => ref.invalidate(deviceStatusProvider(args)),
       radius: 14,
       child: Padding(
         padding: const EdgeInsets.all(3),
-        child: _probing
-            ? SizedBox(
-                width: 13, height: 13,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    cs.onSurfaceVariant.withOpacity(0.55),
-                  ),
-                ),
-              )
-            : Icon(
-                Icons.refresh_rounded,
-                size: 13,
-                color: cs.onSurfaceVariant.withOpacity(0.75),
-              ),
+        child: Icon(
+          Icons.refresh_rounded,
+          size: 13,
+          color: isLoading
+              ? cs.onSurfaceVariant.withOpacity(0.35)
+              : cs.onSurfaceVariant.withOpacity(0.75),
+        ),
       ),
     );
 
-    if (snap == null) {
-      return Wrap(
+    return asyncSnap.when(
+      loading: () => Wrap(
         spacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
           refreshBtn,
         ],
-      );
-    }
-
-    final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
+      ),
+      error: (_, __) => refreshBtn,
+      data: (snap) {
+        if (snap == null) {
+          return Wrap(
+            spacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [refreshBtn],
+          );
+        }
+        final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
         // All three metrics are shown so the admin can spot exactly which
         // one is failing without opening the details screen. Each metric
         // is its own tiny pill so they wrap cleanly on narrow phones.
@@ -1072,6 +1050,8 @@ class _ConnectionHealthPillState extends ConsumerState<_ConnectionHealthPill> {
             refreshBtn,
           ],
         );
+      },
+    );
   }
 
   String _shortLabel(String label) {
