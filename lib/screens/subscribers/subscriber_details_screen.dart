@@ -14,6 +14,7 @@ import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/storage_service.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/device_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/templates_provider.dart';
@@ -2691,6 +2692,7 @@ class _SubscriberDetailsScreenState
                             ? sub.ipAddress!.trim()
                             : null,
                       ),
+                      _DeviceNotesRow(subscriberUsername: sub.username),
                     ],
                   ),
 
@@ -3539,6 +3541,66 @@ class _StatusBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Renders the admin's free-form note for a subscriber's CPE, if any.
+/// Pulled from the same deviceConfigProvider that backs the gear-icon
+/// edit dialog, so saves there reflect here without a manual refresh.
+/// Hidden entirely when there's no note — the connection section stays
+/// tight for the common case.
+class _DeviceNotesRow extends ConsumerWidget {
+  final String subscriberUsername;
+  const _DeviceNotesRow({required this.subscriberUsername});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncCfg = ref.watch(deviceConfigProvider(subscriberUsername));
+    final notes = asyncCfg.value?.notes?.trim() ?? '';
+    if (notes.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: cs.primary.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: cs.primary.withOpacity(0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.sticky_note_2_outlined, size: 14, color: cs.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'ملاحظات',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              notes,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurface.withOpacity(0.85),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
