@@ -3563,28 +3563,51 @@ class _DeviceNotesRow extends ConsumerWidget {
 
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // Inline hint — no background / border, just a tiny icon and the
-    // note text in muted color so it sits as a footnote under the
-    // chips instead of an attention-grabbing card.
+    // Inline footnote — left-aligned (RTL visual left = the end of the
+    // line, where the gear/refresh icons sit). Width hugs the content
+    // so a long note still wraps within a maxWidth that doesn't cross
+    // the section to the right where the metric chips live.
     return Padding(
       padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.sticky_note_2_outlined,
-              size: 12, color: cs.onSurface.withOpacity(0.45)),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              'ملاحظة: $notes',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurface.withOpacity(0.55),
-                fontSize: 11,
-                height: 1.3,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.sticky_note_2_outlined,
+                  size: 14, color: cs.primary.withOpacity(0.75)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: 'ملاحظة: ',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.primary.withOpacity(0.85),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                      ),
+                    ),
+                    TextSpan(
+                      text: notes,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurface.withOpacity(0.85),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1.3,
+                      ),
+                    ),
+                  ]),
+                  textAlign: TextAlign.start,
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
