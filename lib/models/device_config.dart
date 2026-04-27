@@ -23,17 +23,20 @@ String deviceKindToString(DeviceKind k) {
 ///   - username : telecomadmin (ONT) / ubnt (Ubiquiti)
 ///   - password : admintelecom  (ONT) / ubnt (Ubiquiti)
 ///   - customIp : framedipaddress from SAS4
+///   - notes    : free-form admin note (no fallback — purely informational)
 class DeviceConfig {
   final DeviceKind? deviceType;
   final String? username;
   final String? password;
   final String? customIp;
+  final String? notes;
 
   const DeviceConfig({
     this.deviceType,
     this.username,
     this.password,
     this.customIp,
+    this.notes,
   });
 
   factory DeviceConfig.fromJson(Map<String, dynamic> j) => DeviceConfig(
@@ -41,6 +44,7 @@ class DeviceConfig {
         username: j['username']?.toString(),
         password: j['password']?.toString(),
         customIp: j['customIp']?.toString(),
+        notes: j['notes']?.toString(),
       );
 
   Map<String, dynamic> toPutJson() => {
@@ -48,6 +52,10 @@ class DeviceConfig {
         if (username != null) 'username': username,
         if (password != null) 'password': password,
         if (customIp != null) 'customIp': customIp,
+        // Always send notes (even when null) so an admin clearing the
+        // field can persist that — without this the upsert would keep
+        // the previous value.
+        'notes': notes,
       };
 
   DeviceConfig copyWith({
@@ -55,19 +63,26 @@ class DeviceConfig {
     String? username,
     String? password,
     String? customIp,
+    String? notes,
     bool clearDeviceType = false,
     bool clearCustomIp = false,
+    bool clearNotes = false,
   }) {
     return DeviceConfig(
       deviceType: clearDeviceType ? null : (deviceType ?? this.deviceType),
       username: username ?? this.username,
       password: password ?? this.password,
       customIp: clearCustomIp ? null : (customIp ?? this.customIp),
+      notes: clearNotes ? null : (notes ?? this.notes),
     );
   }
 
   bool get isEmpty =>
-      deviceType == null && username == null && password == null && customIp == null;
+      deviceType == null &&
+      username == null &&
+      password == null &&
+      customIp == null &&
+      (notes == null || notes!.isEmpty);
 
   /// Resolve the effective credentials. Three-tier fallback:
   ///   1. subscriber-specific override (username/password on this object)
