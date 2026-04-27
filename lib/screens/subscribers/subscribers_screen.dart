@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/device_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../models/device_config.dart';
 import '../../models/subscriber_model.dart';
 import '../../widgets/subscriber_card.dart';
 import '../../widgets/loading_overlay.dart';
@@ -39,6 +40,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   int _pageSize = 25;
   int _currentPage = 0;
   String? _lastScrolledFilter;
+  // Device-health filter (ONT/Ubiquiti probe metric). Null = no filter,
+  // every subscriber is visible. When set, _DeviceFilteredCard hides
+  // rows whose probe doesn't match.
+  String? _deviceFilter;
 
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
@@ -729,6 +734,11 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                 ),
               ),
               const SizedBox(width: 8),
+              _DeviceFilterButton(
+                active: _deviceFilter != null,
+                onTap: () => _showDeviceFilterSheet(context),
+              ),
+              const SizedBox(width: 8),
               _SortButton(
                 label: sortLabel,
                 isAsc: currentDirection == 'asc',
@@ -737,6 +747,23 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
             ],
           ),
         ),
+
+        if (_deviceFilter != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: _ActiveDeviceFilterBanner(
+              label: _deviceFilterDefs
+                  .firstWhere((d) => d.key == _deviceFilter,
+                      orElse: () => _deviceFilterDefs.first)
+                  .label,
+              onClear: () {
+                setState(() {
+                  _deviceFilter = null;
+                  _currentPage = 0;
+                });
+              },
+            ),
+          ),
 
         // Manager filter (per-sub-manager dropdown) only for managers who
         // can actually see sub-managers. A sub-manager without that
@@ -1006,7 +1033,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         itemCount: displayList.length,
                         itemBuilder: (context, index) {
                           final sub = displayList[index];
-                          return SubscriberCard(
+                          final card = SubscriberCard(
                             subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
                             lastPayment: state.lastPayments[sub.username],
@@ -1071,11 +1098,328 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                                   }
                                 : null,
                           );
+                          if (_deviceFilter == null) return card;
+                          // Filter by device probe — for purely offline
+                          // subs (no IP) the probe never runs, so skip
+                          // them entirely while a health filter is on.
+                          if (sub.isOffline ||
+                              (sub.ipAddress ?? '').trim().isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return _DeviceFilteredCard(
+                            filterKey: _deviceFilter!,
+                            args: DeviceStatusArgs(
+                              subscriberUsername: sub.username,
+                              fallbackIp: sub.ipAddress!.trim(),
+                            ),
+                            child: card,
+                          );
                         },
                       ),
                     ),
         ),
       ],
+    );
+  }
+
+  void _showDeviceFilterSheet(BuildContext context) {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      useSafeArea: true,
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20, 12, 20, bottomSheetBottomInset(ctx, extra: 24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(Icons.network_check_rounded, size: 20,
+                      color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('فلتر حالة الأجهزة', style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  )),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'يعرض المشتركين فقط الذين يطابقون فحص الجهاز المحدد',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: [
+                  _DeviceFilterPick(
+                    label: 'بدون فلتر',
+                    icon: Icons.clear_rounded,
+                    selected: _deviceFilter == null,
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    onTap: () {
+                      setState(() {
+                        _deviceFilter = null;
+                        _currentPage = 0;
+                      });
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                  for (final f in _deviceFilterDefs)
+                    _DeviceFilterPick(
+                      label: f.label,
+                      icon: f.icon,
+                      selected: _deviceFilter == f.key,
+                      color: f.color,
+                      onTap: () {
+                        setState(() {
+                          _deviceFilter = f.key;
+                          _currentPage = 0;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// All device-health filter options, grouped by device kind. Each one
+// matches a metric on DeviceHealthSnapshot (headline/secondary/tertiary)
+// and counts a row as a "match" if its health is warn or bad — i.e. the
+// admin is looking for problems, not green/healthy units.
+const List<_DeviceFilterDef> _deviceFilterDefs = [
+  _DeviceFilterDef('any_problem', 'أي مشكلة',
+      Icons.report_problem_rounded, Color(0xFFC62828)),
+  _DeviceFilterDef('ont_rx', 'الضوئي - RX سيء',
+      Icons.fiber_manual_record_rounded, Color(0xFF6A1B9A)),
+  _DeviceFilterDef('ont_tx', 'الضوئي - TX سيء',
+      Icons.upload_rounded, Color(0xFF6A1B9A)),
+  _DeviceFilterDef('ont_temp', 'الضوئي - حرارة عالية',
+      Icons.thermostat_rounded, Color(0xFFE65100)),
+  _DeviceFilterDef('ubnt_sig', 'النانو - إشارة سيئة',
+      Icons.signal_cellular_alt_rounded, Color(0xFF1565C0)),
+  _DeviceFilterDef('ubnt_ccq', 'النانو - CCQ منخفض',
+      Icons.show_chart_rounded, Color(0xFF1565C0)),
+  _DeviceFilterDef('ubnt_lan', 'النانو - LAN ضعيف',
+      Icons.lan_rounded, Color(0xFF1565C0)),
+];
+
+bool _matchesDeviceFilter(String key, DeviceHealthSnapshot snap) {
+  bool isProblem(String h) => h == 'bad' || h == 'warn';
+  switch (key) {
+    case 'any_problem':
+      return isProblem(snap.overallHealth);
+    case 'ont_rx':
+      return snap.kind == DeviceKind.ont && isProblem(snap.headlineHealth);
+    case 'ont_tx':
+      return snap.kind == DeviceKind.ont && isProblem(snap.secondaryHealth);
+    case 'ont_temp':
+      return snap.kind == DeviceKind.ont && isProblem(snap.tertiaryHealth);
+    case 'ubnt_sig':
+      return snap.kind == DeviceKind.ubiquiti && isProblem(snap.headlineHealth);
+    case 'ubnt_ccq':
+      return snap.kind == DeviceKind.ubiquiti && isProblem(snap.secondaryHealth);
+    case 'ubnt_lan':
+      return snap.kind == DeviceKind.ubiquiti && isProblem(snap.tertiaryHealth);
+  }
+  return true;
+}
+
+class _DeviceFilterDef {
+  final String key;
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _DeviceFilterDef(this.key, this.label, this.icon, this.color);
+}
+
+class _DeviceFilterButton extends StatelessWidget {
+  final bool active;
+  final VoidCallback onTap;
+  const _DeviceFilterButton({required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = active
+        ? const Color(0xFFC62828)
+        : theme.colorScheme.primary;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: accent.withOpacity(active ? 0.14 : 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accent.withOpacity(active ? 0.5 : 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.network_check_rounded, size: 18, color: accent),
+            if (active) ...[
+              const SizedBox(width: 4),
+              Container(
+                width: 6, height: 6,
+                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveDeviceFilterBanner extends StatelessWidget {
+  final String label;
+  final VoidCallback onClear;
+  const _ActiveDeviceFilterBanner({required this.label, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const accent = Color(0xFFC62828);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.network_check_rounded, size: 14, color: accent),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'فلتر الأجهزة: $label',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface.withOpacity(0.85),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(Icons.close_rounded, size: 14, color: accent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceFilterPick extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  const _DeviceFilterPick({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.14)
+              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? color.withOpacity(0.5) : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15,
+                color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.5)),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+              color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.7),
+            )),
+            if (selected) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.check_rounded, size: 14, color: color),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Wraps a SubscriberCard: watches the device probe for the row and
+// hides the card unless the snapshot matches the active health filter.
+// Loading/error/null collapse to SizedBox.shrink so an unprobed row
+// never fills space while a filter is active. The probe is triggered
+// by the `ref.watch` itself, so the filter "lazy-fans-out" probes as
+// rows scroll into view.
+class _DeviceFilteredCard extends ConsumerWidget {
+  final String filterKey;
+  final DeviceStatusArgs args;
+  final Widget child;
+  const _DeviceFilteredCard({
+    required this.filterKey,
+    required this.args,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncSnap = ref.watch(deviceStatusProvider(args));
+    return asyncSnap.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (snap) {
+        if (snap == null) return const SizedBox.shrink();
+        return _matchesDeviceFilter(filterKey, snap)
+            ? child
+            : const SizedBox.shrink();
+      },
     );
   }
 }

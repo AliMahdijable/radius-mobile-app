@@ -950,12 +950,40 @@ class _ConnectionHealthPill extends ConsumerWidget {
     );
     final asyncSnap = ref.watch(deviceStatusProvider(args));
     final cs = Theme.of(context).colorScheme;
+    final isLoading = asyncSnap.isLoading;
+    final refreshBtn = InkResponse(
+      onTap: isLoading ? null : () => ref.invalidate(deviceStatusProvider(args)),
+      radius: 14,
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Icon(
+          Icons.refresh_rounded,
+          size: 13,
+          color: isLoading
+              ? cs.onSurfaceVariant.withOpacity(0.35)
+              : cs.onSurfaceVariant.withOpacity(0.75),
+        ),
+      ),
+    );
 
     return asyncSnap.when(
-      loading: () => _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
-      error: (_, __) => const SizedBox.shrink(),
+      loading: () => Wrap(
+        spacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
+          refreshBtn,
+        ],
+      ),
+      error: (_, __) => refreshBtn,
       data: (snap) {
-        if (snap == null) return const SizedBox.shrink();
+        if (snap == null) {
+          return Wrap(
+            spacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [refreshBtn],
+          );
+        }
         final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
         // All three metrics are shown so the admin can spot exactly which
         // one is failing without opening the details screen. Each metric
@@ -1019,6 +1047,7 @@ class _ConnectionHealthPill extends ConsumerWidget {
               ),
             ),
             for (final m in metrics) _metricPill(m, cs),
+            refreshBtn,
           ],
         );
       },
