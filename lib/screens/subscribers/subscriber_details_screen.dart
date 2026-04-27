@@ -3563,44 +3563,28 @@ class _DeviceNotesRow extends ConsumerWidget {
 
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    // Inline hint — no background / border, just a tiny icon and the
+    // note text in muted color so it sits as a footnote under the
+    // chips instead of an attention-grabbing card.
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: cs.primary.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: cs.primary.withOpacity(0.18)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.sticky_note_2_outlined, size: 14, color: cs.primary),
-                const SizedBox(width: 6),
-                Text(
-                  'ملاحظات',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              notes,
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.sticky_note_2_outlined,
+              size: 12, color: cs.onSurface.withOpacity(0.45)),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              'ملاحظة: $notes',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurface.withOpacity(0.85),
-                fontSize: 12,
-                height: 1.35,
+                color: cs.onSurface.withOpacity(0.55),
+                fontSize: 11,
+                height: 1.3,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
