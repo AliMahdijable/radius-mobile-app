@@ -40,6 +40,13 @@ class TemplateModel {
     }
   }
 
+  // Chip list shown in the editor. {previous_debt} and {current_debt}
+  // were the original debt placeholders — both still resolve at render
+  // time (so legacy templates keep working) but they're omitted here
+  // because admins kept getting confused when they collapsed to the
+  // same value as {sas_debts} for managers without "ديون أخرى".
+  // The new trio (sas / other / total) is the canonical way to compose
+  // a debt section.
   static const List<String> managerAgentVariables = [
     '{manager_name}',
     '{manager_username}',
@@ -47,8 +54,6 @@ class TemplateModel {
     '{action_type}',
     '{previous_credit}',
     '{current_credit}',
-    '{previous_debt}',
-    '{current_debt}',
     '{sas_debts}',
     '{other_debts}',
     '{total_debts}',

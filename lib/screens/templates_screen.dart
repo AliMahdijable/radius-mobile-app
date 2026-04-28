@@ -85,13 +85,16 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
       case 'manager_agent':
         return 'عزيزي المدير {manager_name} 👋\n\n'
             'تم تسجيل حركة مالية على حسابك:\n'
-            'النوع: {action_type}\n'
-            'المبلغ: {amount} IQD\n'
-            'الوصف: {movement_description}\n\n'
-            'الرصيد السابق: {previous_credit} IQD\n'
-            'الرصيد الحالي: {current_credit} IQD\n'
-            'الدين السابق: {previous_debt} IQD\n'
-            'الدين الحالي: {current_debt} IQD';
+            '🧾 النوع: {action_type}\n'
+            '💰 المبلغ: {amount} IQD\n'
+            '📝 الوصف: {movement_description}\n\n'
+            '— الرصيد —\n'
+            '💳 السابق: {previous_credit} IQD\n'
+            '💳 الحالي: {current_credit} IQD\n\n'
+            '— الديون عليك —\n'
+            '🧾 ديون الساس: {sas_debts} IQD\n'
+            '📑 ديون أخرى: {other_debts} IQD\n'
+            '📊 المجموع: {total_debts} IQD';
       case 'subscriber_info':
         return 'مرحباً {subscriber_name} 👋\n\n'
             '📋 معلومات اشتراكك:\n\n'
