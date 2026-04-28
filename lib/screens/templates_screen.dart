@@ -29,7 +29,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     switch (type) {
       case 'debt_reminder':
         return 'عزيزي {firstname} 🙏\n'
-            'نود تذكيركم بوجود مبلغ دين قدره {debt_amount} IQD على حسابكم.\n'
+            'نود تذكيركم بوجود مبلغ دين قدره {debt_amount} على حسابكم.\n'
             'الباقة: {package_name}\n'
             'تاريخ الانتهاء: {expiry_date}\n'
             'المتبقي: {days_remaining}\n\n'
@@ -39,20 +39,20 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'عزيزي {firstname}،\n'
             'باقتكم ({package_name}) ستنتهي خلال {days_remaining}.\n'
             'تاريخ الانتهاء: {expiry_date}\n'
-            'سعر التجديد: {package_price} IQD\n\n'
+            'سعر التجديد: {package_price}\n\n'
             'يرجى التجديد قبل الانقطاع.';
       case 'service_end':
         return 'انتهاء الاشتراك 🚫\n\n'
             'عزيزي {firstname}،\n'
             'انتهت صلاحية اشتراكك في باقة {package_name} بتاريخ {expiry_date}.\n'
-            'سعر التجديد: {package_price} IQD\n\n'
+            'سعر التجديد: {package_price}\n\n'
             'نرجو التواصل لتجديد الخدمة.';
       case 'activation_notice':
         return 'تم التفعيل بنجاح ✅\n\n'
             'أهلاً {firstname}،\n'
             'تم تفعيل اشتراكك في {package_name}.\n'
-            'السعر: {package_price} IQD\n'
-            'المبلغ المدفوع: {paid_amount} IQD\n'
+            'السعر: {package_price}\n'
+            'المبلغ المدفوع: {paid_amount}\n'
             'تاريخ الانتهاء: {expiry_date}\n'
             'المتبقي: {days_remaining}\n\n'
             'نتمنى لك تجربة ممتازة 🌐';
@@ -63,16 +63,16 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'تم تمديد اشتراكك في {package_name}.\n'
             'تاريخ الانتهاء الجديد: {expiry_date}\n'
             'المتبقي: {days_remaining}\n'
-            'السعر: {package_price} IQD\n'
-            'المبلغ المدفوع: {paid_amount} IQD\n'
-            'الدين الحالي: {debt_amount} IQD\n\n'
+            'السعر: {package_price}\n'
+            'المبلغ المدفوع: {paid_amount}\n'
+            'الدين الحالي: {debt_amount}\n\n'
             'شكراً لاستمراركم معنا 💚';
       case 'payment_confirmation':
         return 'تم استلام تسديد 💳\n\n'
             'عزيزي {firstname}،\n'
-            'استلمنا منكم مبلغ {paid_amount} IQD.\n'
-            'الدين الحالي: {debt_amount} IQD\n'
-            'الرصيد الحالي: {credit_amount} IQD\n\n'
+            'استلمنا منكم مبلغ {paid_amount}.\n'
+            'الدين الحالي: {debt_amount}\n'
+            'الرصيد الحالي: {credit_amount}\n\n'
             'شكراً لكم 🙏';
       case 'welcome_message':
         return 'أهلاً بك في خدماتنا 🎉\n\n'
@@ -86,27 +86,27 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
         return 'عزيزي المدير {manager_name} 👋\n\n'
             'تم تسجيل حركة مالية على حسابك:\n'
             '🧾 النوع: {action_type}\n'
-            '💰 المبلغ: {amount} IQD\n'
+            '💰 المبلغ: {amount}\n'
             '📝 الوصف: {movement_description}\n\n'
             '— الرصيد —\n'
-            '💳 السابق: {previous_credit} IQD\n'
-            '💳 الحالي: {current_credit} IQD\n\n'
+            '💳 السابق: {previous_credit}\n'
+            '💳 الحالي: {current_credit}\n\n'
             '— الديون عليك —\n'
-            '🧾 ديون الساس: {sas_debts} IQD\n'
-            '📑 ديون أخرى: {other_debts} IQD\n'
-            '📊 المجموع: {total_debts} IQD';
+            '🧾 ديون الساس: {sas_debts}\n'
+            '📑 ديون أخرى: {other_debts}\n'
+            '📊 المجموع: {total_debts}';
       case 'subscriber_info':
         return 'مرحباً {subscriber_name} 👋\n\n'
             '📋 معلومات اشتراكك:\n\n'
             '👤 اسم المستخدم: {username}\n'
             '📦 الباقة: {package_name}\n'
-            '💰 سعر الباقة: {package_price} IQD\n'
+            '💰 سعر الباقة: {package_price}\n'
             '📅 تاريخ الانتهاء: {expiry_date}\n'
             '⏰ الأيام المتبقية: {days_remaining}\n\n'
             '💳 الحساب:\n'
-            '• الدين المستحق: {debt_amount} IQD\n'
-            '• الخصم: {discount_amount} IQD\n'
-            '• الرصيد: {credit_amount} IQD\n\n'
+            '• الدين المستحق: {debt_amount}\n'
+            '• الخصم: {discount_amount}\n'
+            '• الرصيد: {credit_amount}\n\n'
             'للاستفسار يرجى التواصل معنا 🙏';
       default:
         return '';
