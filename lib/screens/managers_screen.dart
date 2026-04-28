@@ -944,8 +944,13 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     final total = sas + other;
     final managerName =
         manager.fullName.isNotEmpty ? manager.fullName : manager.username;
+    // The Arabic comma after the name is load-bearing — server.js's
+    // nameExpr in /api/whatsapp/messages uses SUBSTRING_INDEX between
+    // "عزيزي " and "،" to derive the recipient_name shown in the
+    // logs list. Without the ،, the regex grabs the rest of the
+    // message body and the log entry renders as a wall of text.
     final message = [
-      'عزيزي المدير $managerName 👋',
+      'عزيزي المدير $managerName، 👋',
       '',
       '💳 رصيدك الحالي: ${_formatCurrency(manager.credit)}',
       '',
