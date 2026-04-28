@@ -132,6 +132,11 @@ class _ManagerFinancialNoticeData {
       '{current_debt}': _formatCurrency(currentDebt),
       '{sas_debts}': _formatCurrency(sasDebts),
       '{other_debts}': _formatCurrency(otherDebts),
+      // Alias of currentDebt — same value, exposed under a more
+      // explicit name. Admins who write templates around the SAS /
+      // other breakdown reach for "total_debts" naturally; the legacy
+      // {current_debt} stays for older templates.
+      '{total_debts}': _formatCurrency(sasDebts + otherDebts),
       '{movement_description}': movementDescription,
     };
     var result = raw;
