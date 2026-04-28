@@ -40,6 +40,21 @@ enum _ManagerBalanceActionType { deposit, withdraw }
 
 enum _ManagerFinancialNoticeKind { cashDeposit, loanDeposit, debtPayment }
 
+/// Reads the cached custom-debts summary and returns the remaining
+/// total for [managerId] (the manager-as-debtor row). Returns 0 when
+/// the summary hasn't loaded yet — the deposit / pay sheets all fetch
+/// it on mount, so by the time the admin hits "save" it's typically
+/// warm. Out-of-date values just under-report the "ديون أخرى" line in
+/// one notification — the next message will be accurate.
+double _customDebtTotalFor(WidgetRef ref, int managerId) {
+  final summary = ref.read(managerDebtsSummaryProvider).valueOrNull;
+  if (summary == null) return 0;
+  for (final e in summary.perDebtor) {
+    if (e.debtorAdminId == managerId) return e.totalRemaining;
+  }
+  return 0;
+}
+
 class _ManagerFinancialNoticeData {
   final ManagerModel manager;
   final double amount;
@@ -49,13 +64,12 @@ class _ManagerFinancialNoticeData {
   final double previousDebt;
   final double currentCredit;
   final double currentDebt;
-  // Three breakdowns surfaced via template placeholders:
-  //   {sas_debts}   = sasDebts     → SAS4-tracked subscriber debts on
-  //                                  this admin's account with the manager
-  //   {other_debts} = otherDebts   → custom inter-admin debts
-  //                                  (the "ديون أخرى" sheet)
-  //   {total_debts} = sasDebts +
-  //                   otherDebts   → grand total
+  // Breakdown of what the manager owes the admin AFTER the operation:
+  //   {sas_debts}   = sasDebts     → SAS-tracked debt slice
+  //   {other_debts} = otherDebts   → custom "ديون أخرى" slice
+  // Their sum equals `currentDebt` — callers MUST pass values that
+  // satisfy `currentDebt == sasDebts + otherDebts` so the placeholders
+  // don't disagree with each other in the rendered message.
   final double sasDebts;
   final double otherDebts;
 
@@ -71,8 +85,6 @@ class _ManagerFinancialNoticeData {
     this.sasDebts = 0,
     this.otherDebts = 0,
   });
-
-  double get totalDebts => sasDebts + otherDebts;
 
   bool get isLoanDeposit => kind == _ManagerFinancialNoticeKind.loanDeposit;
   bool get isDebtPayment => kind == _ManagerFinancialNoticeKind.debtPayment;
@@ -120,7 +132,6 @@ class _ManagerFinancialNoticeData {
       '{current_debt}': _formatCurrency(currentDebt),
       '{sas_debts}': _formatCurrency(sasDebts),
       '{other_debts}': _formatCurrency(otherDebts),
-      '{total_debts}': _formatCurrency(totalDebts),
       '{movement_description}': movementDescription,
     };
     var result = raw;
@@ -2146,6 +2157,13 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
 
     if (success) {
       if (_isDeposit) {
+        // Build a consistent before/after picture: every value below
+        // is a grand total (SAS slice + custom "ديون أخرى" slice). The
+        // operation only touches the SAS slice (loan deposit) — custom
+        // stays put.
+        final priorSas = widget.manager.debt;
+        final priorOther = _customDebtTotalFor(ref, widget.manager.id);
+        final newSas = priorSas + (_isLoan ? amount : 0);
         await _autoSendManagerNotice(
           context: context,
           ref: ref,
@@ -2159,13 +2177,11 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                 : _ManagerFinancialNoticeKind.cashDeposit,
             notes: _notesController.text.trim(),
             previousCredit: widget.manager.credit,
-            previousDebt: widget.manager.debt,
+            previousDebt: priorSas + priorOther,
             currentCredit: widget.manager.credit + amount,
-            currentDebt: widget.manager.debt + (_isLoan ? amount : 0),
-            sasDebts: widget.manager.debt,
-            otherDebts: (widget.manager.totalDebt - widget.manager.debtForMe)
-                .clamp(0, double.infinity)
-                .toDouble(),
+            currentDebt: newSas + priorOther,
+            sasDebts: newSas,
+            otherDebts: priorOther,
           ),
         );
         if (!mounted) return;
@@ -2426,26 +2442,26 @@ class _ManagerDebtPaymentSheetState
       await _showManagerFinancialNoticeDialog(
         context: context,
         ref: ref,
-        notice: _ManagerFinancialNoticeData(
-          manager: widget.manager,
-          amount: amount,
-          kind: _ManagerFinancialNoticeKind.debtPayment,
-          notes: _notesController.text.trim(),
-          previousCredit: widget.manager.credit,
-          previousDebt: _outstandingDebt,
-          currentCredit: widget.manager.credit,
-          currentDebt:
-              (_outstandingDebt - amount).clamp(0, double.infinity).toDouble(),
-          // _debtInfo carries split totals; fall back to the manager
-          // model when the dedicated fetch hasn't returned yet.
-          sasDebts: (_debtInfo?.debtForMe.abs() ?? widget.manager.debtForMe)
-              .clamp(0, double.infinity)
-              .toDouble(),
-          otherDebts: ((_debtInfo?.totalDebt.abs() ?? widget.manager.totalDebt)
-                      - (_debtInfo?.debtForMe.abs() ?? widget.manager.debtForMe))
-                  .clamp(0, double.infinity)
-                  .toDouble(),
-        ),
+        // SAS-only payment sheet — only the SAS slice changes; the
+        // custom "ديون أخرى" slice is untouched. Compute the after-state
+        // grand total from the new SAS + the unchanged custom.
+        notice: () {
+          final priorSas = _outstandingDebt;
+          final priorOther = _customDebtTotalFor(ref, widget.manager.id);
+          final newSas = (priorSas - amount).clamp(0, double.infinity).toDouble();
+          return _ManagerFinancialNoticeData(
+            manager: widget.manager,
+            amount: amount,
+            kind: _ManagerFinancialNoticeKind.debtPayment,
+            notes: _notesController.text.trim(),
+            previousCredit: widget.manager.credit,
+            previousDebt: priorSas + priorOther,
+            currentCredit: widget.manager.credit,
+            currentDebt: newSas + priorOther,
+            sasDebts: newSas,
+            otherDebts: priorOther,
+          );
+        }(),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -2900,14 +2916,13 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
       // (a debt is being added; balance is unchanged) for the template
       // placeholders — admins can edit the manager_agent template if
       // they want different wording for "add debt".
-      final newTotalDebt = widget.currentTotalDebt + amount;
-      // The custom-debt sheet bumps "other debts" by `amount`, while
-      // SAS debts (the manager's framed_ip subscriber dues) stay
-      // unchanged.
-      final priorOtherDebts =
-          (widget.currentTotalDebt - widget.manager.debt)
-              .clamp(0, double.infinity)
-              .toDouble();
+      // Custom-debt sheet: SAS slice untouched, "ديون أخرى" grows by
+      // `amount`. The grand total currentDebt = new sas + new other.
+      final sas = widget.manager.debt;
+      final priorOther = (widget.currentTotalDebt - sas)
+          .clamp(0, double.infinity)
+          .toDouble();
+      final newOther = priorOther + amount;
       await _autoSendManagerNotice(
         context: context,
         ref: ref,
@@ -2919,11 +2934,11 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
           kind: _ManagerFinancialNoticeKind.loanDeposit,
           notes: _notesController.text.trim(),
           previousCredit: widget.manager.credit,
-          previousDebt: widget.currentTotalDebt,
+          previousDebt: sas + priorOther,
           currentCredit: widget.manager.credit,
-          currentDebt: newTotalDebt,
-          sasDebts: widget.manager.debt,
-          otherDebts: priorOtherDebts + amount,
+          currentDebt: sas + newOther,
+          sasDebts: sas,
+          otherDebts: newOther,
         ),
       );
       if (!mounted) return;
@@ -3156,10 +3171,19 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
     setState(() => _saving = false);
     if (ok) {
       // Auto-fire WA / push per the toggles (no confirmation dialog).
+      // Unified sheet: payment comes out of either slice based on
+      // _source. previousDebt / currentDebt are GRAND TOTALS so the
+      // manager always sees the full picture instead of just one
+      // slice. sasDebts / otherDebts give the breakdown after payment.
       final paidFromSas = _source == _PaySource.sas;
-      final previousTotal = widget.manager.debt + widget.customDebtTotal;
-      final currentTotal =
-          (previousTotal - amount).clamp(0, double.infinity).toDouble();
+      final priorSas = widget.manager.debt;
+      final priorOther = widget.customDebtTotal;
+      final newSas = paidFromSas
+          ? (priorSas - amount).clamp(0, double.infinity).toDouble()
+          : priorSas;
+      final newOther = paidFromSas
+          ? priorOther
+          : (priorOther - amount).clamp(0, double.infinity).toDouble();
       await _autoSendManagerNotice(
         context: context,
         ref: ref,
@@ -3171,25 +3195,11 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
           kind: _ManagerFinancialNoticeKind.debtPayment,
           notes: _notesController.text.trim(),
           previousCredit: widget.manager.credit,
-          previousDebt: paidFromSas ? widget.manager.debt : previousTotal,
+          previousDebt: priorSas + priorOther,
           currentCredit: widget.manager.credit,
-          currentDebt: paidFromSas
-              ? (widget.manager.debt - amount)
-                  .clamp(0, double.infinity)
-                  .toDouble()
-              : currentTotal,
-          // After-payment breakdown — payment came out of either the
-          // SAS slice or the custom slice depending on _source.
-          sasDebts: paidFromSas
-              ? (widget.manager.debt - amount)
-                  .clamp(0, double.infinity)
-                  .toDouble()
-              : widget.manager.debt,
-          otherDebts: paidFromSas
-              ? widget.customDebtTotal
-              : (widget.customDebtTotal - amount)
-                  .clamp(0, double.infinity)
-                  .toDouble(),
+          currentDebt: newSas + newOther,
+          sasDebts: newSas,
+          otherDebts: newOther,
         ),
       );
       if (!mounted) return;

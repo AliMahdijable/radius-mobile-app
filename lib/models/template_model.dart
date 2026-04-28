@@ -51,7 +51,6 @@ class TemplateModel {
     '{current_debt}',
     '{sas_debts}',
     '{other_debts}',
-    '{total_debts}',
     '{movement_description}',
   ];
 
@@ -107,7 +106,6 @@ class TemplateModel {
     '{current_debt}':        'الدين الحالي',
     '{sas_debts}':           'ديون الساس',
     '{other_debts}':         'ديون أخرى',
-    '{total_debts}':         'مجموع الديون',
     '{movement_description}': 'وصف الحركة',
   };
 
@@ -136,7 +134,6 @@ class TemplateModel {
     '{current_debt}':        '💸',
     '{sas_debts}':           '🧾',
     '{other_debts}':         '📑',
-    '{total_debts}':         '📊',
     '{movement_description}': '📝',
   };
 
