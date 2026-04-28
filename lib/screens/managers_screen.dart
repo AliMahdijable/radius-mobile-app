@@ -924,10 +924,13 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     }
   }
 
-  /// Manually fires the manager_agent WA template with current debt
-  /// breakdown — no transaction is recorded, no push notification is
-  /// sent. Skips the auto-send if WhatsApp isn't connected so the
-  /// admin gets a clear error instead of a silent failure.
+  /// Manually fires a slim "current state" message at the manager —
+  /// no transaction is recorded, no push notification is sent, and
+  /// the regular manager_agent template is intentionally bypassed
+  /// (that template assumes a movement just happened, with previous
+  /// vs current balances; an info ping just shows what the manager
+  /// owes today). Format is fixed: greeting + current credit + the
+  /// three-debt breakdown.
   Future<void> _sendManagerInfoMessage(
     ManagerModel manager, {
     double extraDebt = 0,
@@ -939,25 +942,34 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     final sas = manager.debt;
     final other = extraDebt;
     final total = sas + other;
-    final notice = _ManagerFinancialNoticeData(
-      manager: manager,
-      amount: 0,
-      kind: _ManagerFinancialNoticeKind.info,
-      notes: '',
-      previousCredit: manager.credit,
-      previousDebt: total,
-      currentCredit: manager.credit,
-      currentDebt: total,
-      sasDebts: sas,
-      otherDebts: other,
-    );
-    await _autoSendManagerNotice(
-      context: context,
+    final managerName =
+        manager.fullName.isNotEmpty ? manager.fullName : manager.username;
+    final message = [
+      'عزيزي المدير $managerName 👋',
+      '',
+      '💳 رصيدك الحالي: ${_formatCurrency(manager.credit)}',
+      '',
+      '— الديون عليك —',
+      '🧾 ديون الساس: ${_formatCurrency(sas)}',
+      '📑 ديون أخرى: ${_formatCurrency(other)}',
+      '📊 المجموع: ${_formatCurrency(total)}',
+    ].join('\n');
+
+    final result = await _sendManagerWhatsAppNotification(
       ref: ref,
-      sendWhatsApp: true,
-      sendPush: false,
-      notice: notice,
+      manager: manager,
+      message: message,
     );
+    if (!mounted) return;
+    if (result.success) {
+      AppSnackBar.whatsapp(context, 'تم إرسال واتساب للمدير');
+    } else {
+      AppSnackBar.whatsappError(
+        context,
+        'فشل إرسال واتساب',
+        detail: result.error,
+      );
+    }
   }
 
   @override
