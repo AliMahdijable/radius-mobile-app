@@ -49,6 +49,15 @@ class _ManagerFinancialNoticeData {
   final double previousDebt;
   final double currentCredit;
   final double currentDebt;
+  // Three breakdowns surfaced via template placeholders:
+  //   {sas_debts}   = sasDebts     → SAS4-tracked subscriber debts on
+  //                                  this admin's account with the manager
+  //   {other_debts} = otherDebts   → custom inter-admin debts
+  //                                  (the "ديون أخرى" sheet)
+  //   {total_debts} = sasDebts +
+  //                   otherDebts   → grand total
+  final double sasDebts;
+  final double otherDebts;
 
   const _ManagerFinancialNoticeData({
     required this.manager,
@@ -59,7 +68,11 @@ class _ManagerFinancialNoticeData {
     required this.previousDebt,
     required this.currentCredit,
     required this.currentDebt,
+    this.sasDebts = 0,
+    this.otherDebts = 0,
   });
+
+  double get totalDebts => sasDebts + otherDebts;
 
   bool get isLoanDeposit => kind == _ManagerFinancialNoticeKind.loanDeposit;
   bool get isDebtPayment => kind == _ManagerFinancialNoticeKind.debtPayment;
@@ -105,6 +118,9 @@ class _ManagerFinancialNoticeData {
       '{current_credit}': _formatCurrency(currentCredit),
       '{previous_debt}': _formatCurrency(previousDebt),
       '{current_debt}': _formatCurrency(currentDebt),
+      '{sas_debts}': _formatCurrency(sasDebts),
+      '{other_debts}': _formatCurrency(otherDebts),
+      '{total_debts}': _formatCurrency(totalDebts),
       '{movement_description}': movementDescription,
     };
     var result = raw;
@@ -2146,6 +2162,10 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
             previousDebt: widget.manager.debt,
             currentCredit: widget.manager.credit + amount,
             currentDebt: widget.manager.debt + (_isLoan ? amount : 0),
+            sasDebts: widget.manager.debt,
+            otherDebts: (widget.manager.totalDebt - widget.manager.debtForMe)
+                .clamp(0, double.infinity)
+                .toDouble(),
           ),
         );
         if (!mounted) return;
@@ -2416,6 +2436,15 @@ class _ManagerDebtPaymentSheetState
           currentCredit: widget.manager.credit,
           currentDebt:
               (_outstandingDebt - amount).clamp(0, double.infinity).toDouble(),
+          // _debtInfo carries split totals; fall back to the manager
+          // model when the dedicated fetch hasn't returned yet.
+          sasDebts: (_debtInfo?.debtForMe.abs() ?? widget.manager.debtForMe)
+              .clamp(0, double.infinity)
+              .toDouble(),
+          otherDebts: ((_debtInfo?.totalDebt.abs() ?? widget.manager.totalDebt)
+                      - (_debtInfo?.debtForMe.abs() ?? widget.manager.debtForMe))
+                  .clamp(0, double.infinity)
+                  .toDouble(),
         ),
       );
       if (!mounted) return;
@@ -2872,6 +2901,13 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
       // placeholders — admins can edit the manager_agent template if
       // they want different wording for "add debt".
       final newTotalDebt = widget.currentTotalDebt + amount;
+      // The custom-debt sheet bumps "other debts" by `amount`, while
+      // SAS debts (the manager's framed_ip subscriber dues) stay
+      // unchanged.
+      final priorOtherDebts =
+          (widget.currentTotalDebt - widget.manager.debt)
+              .clamp(0, double.infinity)
+              .toDouble();
       await _autoSendManagerNotice(
         context: context,
         ref: ref,
@@ -2886,6 +2922,8 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
           previousDebt: widget.currentTotalDebt,
           currentCredit: widget.manager.credit,
           currentDebt: newTotalDebt,
+          sasDebts: widget.manager.debt,
+          otherDebts: priorOtherDebts + amount,
         ),
       );
       if (!mounted) return;
@@ -3140,6 +3178,18 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
                   .clamp(0, double.infinity)
                   .toDouble()
               : currentTotal,
+          // After-payment breakdown — payment came out of either the
+          // SAS slice or the custom slice depending on _source.
+          sasDebts: paidFromSas
+              ? (widget.manager.debt - amount)
+                  .clamp(0, double.infinity)
+                  .toDouble()
+              : widget.manager.debt,
+          otherDebts: paidFromSas
+              ? widget.customDebtTotal
+              : (widget.customDebtTotal - amount)
+                  .clamp(0, double.infinity)
+                  .toDouble(),
         ),
       );
       if (!mounted) return;
