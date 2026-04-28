@@ -33,12 +33,17 @@ enum _ManagerActionType {
   // Phase 2: opens the unified movements timeline (deposits, debts,
   // payments, points) for this manager as a read-only bottom sheet.
   movements,
+  // Manual "send info" — fires the manager_agent WA template with
+  // current balances and the SAS / other / total debt breakdown,
+  // without recording any transaction. Only shown when the manager
+  // has any debt to surface.
+  sendInfo,
   delete,
 }
 
 enum _ManagerBalanceActionType { deposit, withdraw }
 
-enum _ManagerFinancialNoticeKind { cashDeposit, loanDeposit, debtPayment }
+enum _ManagerFinancialNoticeKind { cashDeposit, loanDeposit, debtPayment, info }
 
 /// Reads the cached custom-debts summary and returns the remaining
 /// total for [managerId] (the manager-as-debtor row). Returns 0 when
@@ -100,6 +105,8 @@ class _ManagerFinancialNoticeData {
         return 'loan_deposit';
       case _ManagerFinancialNoticeKind.debtPayment:
         return 'debt_payment';
+      case _ManagerFinancialNoticeKind.info:
+        return 'info';
     }
   }
 
@@ -110,12 +117,14 @@ class _ManagerFinancialNoticeData {
               _ManagerFinancialNoticeKind.cashDeposit => 'إضافة رصيد نقدي',
               _ManagerFinancialNoticeKind.loanDeposit => 'إضافة رصيد آجل',
               _ManagerFinancialNoticeKind.debtPayment => 'تسديد دين مدير',
+              _ManagerFinancialNoticeKind.info => 'استعلام عن الحساب',
             };
 
   String get actionTypeLabel => switch (kind) {
         _ManagerFinancialNoticeKind.cashDeposit => 'إيداع نقدي',
         _ManagerFinancialNoticeKind.loanDeposit => 'إيداع دين',
         _ManagerFinancialNoticeKind.debtPayment => 'تسديد دين',
+        _ManagerFinancialNoticeKind.info => 'معلومات الحساب',
       };
 
   String applyTemplate(String raw) {
@@ -175,6 +184,20 @@ class _ManagerFinancialNoticeData {
           if (hasPreviousDebt) 'الديون السابقة: ${_formatCurrency(previousDebt)}',
           'إجمالي الدين بعد التسديد: ${_formatCurrency(currentDebt)}',
           'وصف الحركة: $movementDescription',
+        ];
+        return lines.join('\n');
+      case _ManagerFinancialNoticeKind.info:
+        // Used as fallback only — the "send info" action always uses the
+        // admin's manager_agent template via applyTemplate, never this
+        // text. Kept so the switch is exhaustive.
+        final lines = <String>[
+          'عزيزي المدير $managerName،',
+          '',
+          'معلومات حسابك الحالية:',
+          'الرصيد: ${_formatCurrency(currentCredit)}',
+          'ديون الساس: ${_formatCurrency(sasDebts)}',
+          'ديون أخرى: ${_formatCurrency(otherDebts)}',
+          'مجموع الديون: ${_formatCurrency(sasDebts + otherDebts)}',
         ];
         return lines.join('\n');
     }
@@ -892,10 +915,49 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
         // too cramped for the timeline + per-row edit affordances.
         await context.push('/manager-movements', extra: manager);
         break;
+      case _ManagerActionType.sendInfo:
+        await _sendManagerInfoMessage(manager, extraDebt: extraDebt);
+        break;
       case _ManagerActionType.delete:
         await _confirmDeleteManager(manager);
         break;
     }
+  }
+
+  /// Manually fires the manager_agent WA template with current debt
+  /// breakdown — no transaction is recorded, no push notification is
+  /// sent. Skips the auto-send if WhatsApp isn't connected so the
+  /// admin gets a clear error instead of a silent failure.
+  Future<void> _sendManagerInfoMessage(
+    ManagerModel manager, {
+    double extraDebt = 0,
+  }) async {
+    if (manager.mobile.trim().isEmpty) {
+      AppSnackBar.warning(context, 'لا يوجد رقم هاتف محفوظ لهذا المدير');
+      return;
+    }
+    final sas = manager.debt;
+    final other = extraDebt;
+    final total = sas + other;
+    final notice = _ManagerFinancialNoticeData(
+      manager: manager,
+      amount: 0,
+      kind: _ManagerFinancialNoticeKind.info,
+      notes: '',
+      previousCredit: manager.credit,
+      previousDebt: total,
+      currentCredit: manager.credit,
+      currentDebt: total,
+      sasDebts: sas,
+      otherDebts: other,
+    );
+    await _autoSendManagerNotice(
+      context: context,
+      ref: ref,
+      sendWhatsApp: true,
+      sendPush: false,
+      notice: notice,
+    );
   }
 
   @override
@@ -1625,6 +1687,19 @@ class _ManagerListCard extends StatelessWidget {
                           onPressed: () =>
                               onActionSelected(_ManagerActionType.movements),
                         ),
+                        // Manual "send info" — surfaces the manager_agent
+                        // WA template with current debt breakdown. Only
+                        // visible when the manager actually has any debt
+                        // (SAS or "ديون أخرى"); otherwise there's nothing
+                        // useful to inform them about.
+                        if ((manager.debt + extraDebt) > 0)
+                          _ManagerActionButton(
+                            icon: Icons.send_to_mobile_rounded,
+                            label: 'إرسال معلومات',
+                            color: AppTheme.whatsappGreen,
+                            onPressed: () =>
+                                onActionSelected(_ManagerActionType.sendInfo),
+                          ),
                         _ManagerActionButton(
                           icon: Icons.delete_outline_rounded,
                           label: 'حذف',
