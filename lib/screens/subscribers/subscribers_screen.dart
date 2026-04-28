@@ -41,10 +41,18 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   int _pageSize = 25;
   int _currentPage = 0;
   String? _lastScrolledFilter;
-  // Device-health filter / sort. Both apply to the FULL subscriber list
-  // (every page, not just the visible 25), so the admin sees every
-  // affected sub no matter where in the pagination they sit.
-  String? _deviceFilter;
+  // Device-health sort. ONE picker, FOUR metrics (RX / Sig / CCQ /
+  // LAN), two directions. Earlier we shipped a dual filter+sort UI
+  // (13 chips total) that admins found noisy — collapsed to just
+  // sort, because "show problems only" was redundant with
+  // sorting-worst-first. Stored format: '<metric>_asc' or
+  // '<metric>_desc'. Examples on real values:
+  //   'rx_desc'  → highest RX first  (-18 → -22 → -30)
+  //   'rx_asc'   → lowest RX first   (-30 → -22 → -18)
+  //   'ccq_desc' → highest CCQ first (95 → 60 → 30)
+  //   'ccq_asc'  → lowest CCQ first  (30 → 60 → 95)
+  //   'sig_desc' → highest Sig first (-58 → -72 → -85)
+  //   'lan_desc' → fastest LAN first (1000 → 100 → 10)
   String? _deviceSort;
   // Cache of probe results keyed by subscriber username. Populated by
   // _runDeviceProbes when filter/sort is active. The actual provider's
@@ -727,40 +735,24 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     // post-frame callback so we don't trigger a state update during
     // build. The hash short-circuits the wave when the list shape
     // hasn't actually changed.
-    final deviceModeOn = _deviceFilter != null || _deviceSort != null;
+    final sortModeOn = _deviceSort != null;
     final listHash = _hashList(fullList);
-    if (deviceModeOn && listHash != _lastProbedHash) {
+    if (sortModeOn && listHash != _lastProbedHash) {
       _lastProbedHash = listHash;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _runDeviceProbes(fullList);
       });
-    } else if (!deviceModeOn && _lastProbedHash.isNotEmpty) {
-      // Filter/sort just turned off — reset so re-enabling it later
-      // forces a fresh wave.
+    } else if (!sortModeOn && _lastProbedHash.isNotEmpty) {
       _lastProbedHash = '';
     }
 
-    // Apply device filter (problems-only) on the full list, not on the
-    // visible page. Subs without an IP can't be probed so they drop out
-    // entirely; subs with no probe yet are hidden until the wave fills
-    // the cache and the next rebuild puts them back.
+    // Apply device sort to the FULL list. Rows without a probe (or
+    // whose probe doesn't have the requested metric — e.g. CCQ on an
+    // ONT) get null and sink to the bottom regardless of direction.
     var visibleList = fullList;
-    if (_deviceFilter != null) {
-      final fk = _deviceFilter!;
-      visibleList = visibleList.where((sub) {
-        if (sub.isOffline || (sub.ipAddress ?? '').trim().isEmpty) return false;
-        if (!_probeCache.containsKey(sub.username)) return false;
-        final snap = _probeCache[sub.username];
-        if (snap == null) return false;
-        return _matchesDeviceFilter(fk, snap);
-      }).toList();
-    }
-
-    // Apply device sort. Subs with no probe (or kind mismatch) get a
-    // null sort key and sink to the bottom regardless of direction.
     if (_deviceSort != null) {
       final sk = _deviceSort!;
-      final asc = _sortAscending(sk);
+      final asc = sk.endsWith('_asc');
       visibleList = [...visibleList]..sort((a, b) {
         final ka = _deviceSortKey(sk, _probeCache[a.username]);
         final kb = _deviceSortKey(sk, _probeCache[b.username]);
@@ -866,7 +858,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               ),
               const SizedBox(width: 8),
               _DeviceFilterButton(
-                active: _deviceFilter != null,
+                active: _deviceSort != null,
                 onTap: () => _showDeviceFilterSheet(context),
               ),
               const SizedBox(width: 8),
@@ -879,37 +871,26 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ),
 
-        if (_deviceFilter != null || _deviceSort != null)
+        if (_deviceSort != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
             child: _ActiveDeviceFilterBanner(
-              filterLabel: _deviceFilter == null
-                  ? null
-                  : _deviceFilterDefs
-                      .firstWhere((d) => d.key == _deviceFilter,
-                          orElse: () => _deviceFilterDefs.first)
-                      .label,
-              sortLabel: _deviceSort == null
-                  ? null
-                  : (() {
-                      final base = _deviceSort!.endsWith('_rev')
-                          ? _deviceSort!
-                              .substring(0, _deviceSort!.length - 4)
-                          : _deviceSort!;
-                      final def = _deviceSortDefs.firstWhere(
-                          (d) => d.key == base,
-                          orElse: () => _deviceSortDefs.first);
-                      final dirLabel = _deviceSort!.endsWith('_rev')
-                          ? 'الأفضل أولاً'
-                          : 'الأسوأ أولاً';
-                      return '${def.label} ($dirLabel)';
-                    })(),
+              sortLabel: (() {
+                final isAsc = _deviceSort!.endsWith('_asc');
+                final base = _deviceSort!.replaceFirst(
+                    RegExp(r'_(asc|desc)$'), '');
+                final def = _deviceSortMetrics.firstWhere(
+                  (d) => d.key == base,
+                  orElse: () => _deviceSortMetrics.first,
+                );
+                final dirLabel = isAsc ? 'الأدنى أولاً' : 'الأعلى أولاً';
+                return '${def.label} — $dirLabel';
+              })(),
               probing: _probing,
               probeProgress: _probeProgress,
               probeTotal: _probeTotal,
               onClear: () {
                 setState(() {
-                  _deviceFilter = null;
                   _deviceSort = null;
                   _currentPage = 0;
                 });
@@ -1164,25 +1145,15 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               ? const ShimmerList()
               : displayList.isEmpty
                   ? EmptyState(
-                      icon: _deviceFilter != null
-                          ? Icons.network_check_rounded
-                          : (_isSearchMode
-                              ? Icons.search_off
-                              : Icons.people_outline),
-                      title: _deviceFilter != null
-                          ? (_probing
-                              ? 'جاري فحص الأجهزة...'
-                              : 'لا يوجد مشترك يطابق الفلتر')
-                          : (_isSearchMode
-                              ? 'لا توجد نتائج'
-                              : 'لا يوجد مشتركين'),
-                      subtitle: _deviceFilter != null
-                          ? (_probing
-                              ? 'تم فحص $_probeProgress من $_probeTotal جهاز'
-                              : 'جرب فلتر مختلف أو اضغط × لإزالته')
-                          : (_isSearchMode
-                              ? 'جرب كلمة بحث مختلفة'
-                              : 'اسحب للأسفل لتحديث البيانات'),
+                      icon: _isSearchMode
+                          ? Icons.search_off
+                          : Icons.people_outline,
+                      title: _isSearchMode
+                          ? 'لا توجد نتائج'
+                          : 'لا يوجد مشتركين',
+                      subtitle: _isSearchMode
+                          ? 'جرب كلمة بحث مختلفة'
+                          : 'اسحب للأسفل لتحديث البيانات',
                     )
                   : RefreshIndicator(
                       onRefresh: () async {
@@ -1305,136 +1276,55 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                           color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text('فلتر / ترتيب الأجهزة', style: TextStyle(
+                        child: Text('ترتيب القائمة حسب الفحص', style: TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w700,
                           color: theme.colorScheme.onSurface,
                         )),
                       ),
-                      if (_deviceFilter != null || _deviceSort != null)
+                      if (_deviceSort != null)
                         TextButton.icon(
                           onPressed: () {
                             setState(() {
-                              _deviceFilter = null;
                               _deviceSort = null;
                               _currentPage = 0;
                             });
                             setSheetState(() {});
                           },
-                          icon: const Icon(Icons.clear_all_rounded, size: 16),
-                          label: const Text('إزالة الكل',
+                          icon: const Icon(Icons.clear_rounded, size: 16),
+                          label: const Text('إلغاء',
                               style: TextStyle(fontSize: 11)),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-
-                  // Filter section ─ "show only problems"
-                  Text('عرض مشاكل فقط', style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.primary,
-                  )),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8, runSpacing: 8,
-                    children: [
-                      _DeviceFilterPick(
-                        label: 'بدون فلتر',
-                        icon: Icons.clear_rounded,
-                        selected: _deviceFilter == null,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        onTap: () {
-                          setState(() {
-                            _deviceFilter = null;
-                            _currentPage = 0;
-                          });
-                          setSheetState(() {});
-                        },
-                      ),
-                      for (final f in _deviceFilterDefs)
-                        _DeviceFilterPick(
-                          label: f.label,
-                          icon: f.icon,
-                          selected: _deviceFilter == f.key,
-                          color: f.color,
-                          onTap: () {
-                            setState(() {
-                              _deviceFilter = f.key;
-                              _currentPage = 0;
-                            });
-                            setSheetState(() {});
-                          },
-                        ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 18),
-                  Divider(
-                    color: theme.colorScheme.onSurface.withOpacity(0.08),
-                    height: 1,
+                  const SizedBox(height: 4),
+                  Text(
+                    'اختر مقياساً ثم اتجاه الترتيب',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withOpacity(0.55),
+                    ),
                   ),
                   const SizedBox(height: 14),
 
-                  // Sort section ─ rank visible list by metric
-                  Row(
-                    children: [
-                      Text('ترتيب حسب الفحص', style: TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.primary,
-                      )),
-                      const SizedBox(width: 8),
-                      Text(
-                        '(الأسوأ أولاً افتراضياً، اضغط مرة ثانية للعكس)',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8, runSpacing: 8,
-                    children: [
-                      _DeviceFilterPick(
-                        label: 'بدون ترتيب',
-                        icon: Icons.clear_rounded,
-                        selected: _deviceSort == null,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        onTap: () {
-                          setState(() {
-                            _deviceSort = null;
-                            _currentPage = 0;
-                          });
-                          setSheetState(() {});
-                        },
-                      ),
-                      for (final s in _deviceSortDefs)
-                        _DeviceFilterPick(
-                          label: s.label,
-                          icon: s.icon,
-                          selected: _deviceSort == s.key ||
-                              _deviceSort == '${s.key}_rev',
-                          color: s.color,
-                          onTap: () {
-                            setState(() {
-                              // Tap toggles between worst-first (key)
-                              // and best-first ("${key}_rev") so the
-                              // admin can flip the direction without a
-                              // second control.
-                              if (_deviceSort == s.key) {
-                                _deviceSort = '${s.key}_rev';
-                              } else if (_deviceSort == '${s.key}_rev') {
-                                _deviceSort = null;
-                              } else {
-                                _deviceSort = s.key;
-                              }
-                              _currentPage = 0;
-                            });
-                            setSheetState(() {});
-                          },
-                        ),
-                    ],
-                  ),
+                  for (final m in _deviceSortMetrics)
+                    _SortMetricRow(
+                      def: m,
+                      activeKey: _deviceSort,
+                      onPickAsc: () {
+                        setState(() {
+                          _deviceSort = '${m.key}_asc';
+                          _currentPage = 0;
+                        });
+                        setSheetState(() {});
+                      },
+                      onPickDesc: () {
+                        setState(() {
+                          _deviceSort = '${m.key}_desc';
+                          _currentPage = 0;
+                        });
+                        setSheetState(() {});
+                      },
+                    ),
                 ],
               ),
             );
@@ -1445,117 +1335,82 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   }
 }
 
-// All device-health filter options, grouped by device kind. Each one
-// matches a metric on DeviceHealthSnapshot (headline/secondary/tertiary)
-// and counts a row as a "match" if its health is warn or bad — i.e. the
-// admin is looking for problems, not green/healthy units.
-const List<_DeviceFilterDef> _deviceFilterDefs = [
-  _DeviceFilterDef('any_problem', 'أي مشكلة',
-      Icons.report_problem_rounded, Color(0xFFC62828)),
-  _DeviceFilterDef('ont_rx', 'الضوئي - RX سيء',
-      Icons.fiber_manual_record_rounded, Color(0xFF6A1B9A)),
-  _DeviceFilterDef('ont_tx', 'الضوئي - TX سيء',
-      Icons.upload_rounded, Color(0xFF6A1B9A)),
-  _DeviceFilterDef('ont_temp', 'الضوئي - حرارة عالية',
-      Icons.thermostat_rounded, Color(0xFFE65100)),
-  _DeviceFilterDef('ubnt_sig', 'النانو - إشارة سيئة',
-      Icons.signal_cellular_alt_rounded, Color(0xFF1565C0)),
-  _DeviceFilterDef('ubnt_ccq', 'النانو - CCQ منخفض',
-      Icons.show_chart_rounded, Color(0xFF1565C0)),
-  _DeviceFilterDef('ubnt_lan', 'النانو - LAN ضعيف',
-      Icons.lan_rounded, Color(0xFF1565C0)),
+/// Four metrics the admin can sort by — picked because they're what
+/// shows up in the `_ConnectionHealthPill` chips on each card and
+/// they're the values the admin has working knowledge of. Dropped
+/// from the previous set: ONT TX (rarely diagnostic), ONT Temp (rarely
+/// the bottleneck on the field). Both still resolve in the snapshot
+/// — they're just not exposed as sort keys.
+///
+/// Worked example using admin@popq's typical row values:
+///
+///   user                  kind    RX     Sig    CCQ    LAN
+///   yousif.moh@popq      ONT    -19.5    —      —     —
+///   ali.h@popq           ONT    -22.4    —      —     —
+///   saed.abs@popq        ONT    -26.7    —      —     —
+///   karar.wale@popq      Ubnt    —     -58     92    100Mbps
+///   ahmed.mheasan@popq   Ubnt    —     -72     45    10Mbps
+///
+///   sort=rx_desc  → yousif(-19.5), ali(-22.4), saed(-26.7), [Ubnt rows null → end]
+///   sort=rx_asc   → saed(-26.7), ali(-22.4), yousif(-19.5), [Ubnt rows → end]
+///   sort=ccq_desc → karar(92), ahmed(45), [ONT rows → end]
+///   sort=ccq_asc  → ahmed(45), karar(92), [ONT rows → end]
+///   sort=sig_desc → karar(-58), ahmed(-72), [ONT rows → end]   (closer to 0 = better)
+///   sort=lan_desc → karar(100), ahmed(10), [ONT rows → end]    (Mbps int)
+const List<_DeviceSortMetric> _deviceSortMetrics = [
+  _DeviceSortMetric('rx',  'إشارة الضوئي', Icons.fiber_manual_record_rounded, Color(0xFF6A1B9A)),
+  _DeviceSortMetric('sig', 'إشارة النانو', Icons.signal_cellular_alt_rounded, Color(0xFF1565C0)),
+  _DeviceSortMetric('ccq', 'CCQ',           Icons.show_chart_rounded,         Color(0xFF1565C0)),
+  _DeviceSortMetric('lan', 'الإيثرنت',      Icons.lan_rounded,                Color(0xFF1565C0)),
 ];
 
-// Sort definitions. Each one ranks the FULL filtered subscriber list by
-// a numeric metric pulled out of the probe snapshot — RX power, signal,
-// CCQ, etc. The admin taps once for "worst first", taps again for
-// "best first" (the screen tracks this by appending "_rev" to the key).
-const List<_DeviceFilterDef> _deviceSortDefs = [
-  _DeviceFilterDef('sort_ont_rx', 'RX الضوئي',
-      Icons.fiber_manual_record_rounded, Color(0xFF6A1B9A)),
-  _DeviceFilterDef('sort_ont_tx', 'TX الضوئي',
-      Icons.upload_rounded, Color(0xFF6A1B9A)),
-  _DeviceFilterDef('sort_ont_temp', 'الحرارة',
-      Icons.thermostat_rounded, Color(0xFFE65100)),
-  _DeviceFilterDef('sort_ubnt_sig', 'الإشارة',
-      Icons.signal_cellular_alt_rounded, Color(0xFF1565C0)),
-  _DeviceFilterDef('sort_ubnt_ccq', 'CCQ',
-      Icons.show_chart_rounded, Color(0xFF1565C0)),
-  _DeviceFilterDef('sort_ubnt_lan', 'سرعة LAN',
-      Icons.lan_rounded, Color(0xFF1565C0)),
-];
-
-bool _matchesDeviceFilter(String key, DeviceHealthSnapshot snap) {
-  bool isProblem(String h) => h == 'bad' || h == 'warn';
-  switch (key) {
-    case 'any_problem':
-      return isProblem(snap.overallHealth);
-    case 'ont_rx':
-      return snap.kind == DeviceKind.ont && isProblem(snap.headlineHealth);
-    case 'ont_tx':
-      return snap.kind == DeviceKind.ont && isProblem(snap.secondaryHealth);
-    case 'ont_temp':
-      return snap.kind == DeviceKind.ont && isProblem(snap.tertiaryHealth);
-    case 'ubnt_sig':
-      return snap.kind == DeviceKind.ubiquiti && isProblem(snap.headlineHealth);
-    case 'ubnt_ccq':
-      return snap.kind == DeviceKind.ubiquiti && isProblem(snap.secondaryHealth);
-    case 'ubnt_lan':
-      return snap.kind == DeviceKind.ubiquiti && isProblem(snap.tertiaryHealth);
-  }
-  return true;
-}
-
-// Numeric sort key for the active sort metric. Returns null when the
-// snapshot is missing or doesn't apply to the requested kind, which
-// pushes the row to the bottom regardless of direction.
+/// Numeric sort key for the active sort metric. Returns null when the
+/// row's snapshot is missing or doesn't carry the requested metric
+/// (e.g. CCQ on an ONT subscriber) — those rows sink to the bottom
+/// regardless of direction so they never crowd the meaningful values.
+///
+/// Sign conventions matter — the values below come straight from the
+/// device, no normalization:
+///   • RX (optical):    parsed from "-22.4" → -22.4   (negative; closer to 0 = better)
+///   • Signal (wireless): int -62                      (negative; closer to 0 = better)
+///   • CCQ:             int 92                         (positive; higher = better)
+///   • LAN:             int 100 / 1000                 (positive; higher = faster)
 double? _deviceSortKey(String key, DeviceHealthSnapshot? snap) {
   if (snap == null) return null;
-  // Strip the "_rev" suffix used by the screen to flag "best first".
-  final base = key.endsWith('_rev') ? key.substring(0, key.length - 4) : key;
+  final base = key.endsWith('_asc')
+      ? key.substring(0, key.length - 4)
+      : key.endsWith('_desc')
+          ? key.substring(0, key.length - 5)
+          : key;
   switch (base) {
-    case 'sort_ont_rx':
+    case 'rx':
       if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
       return double.tryParse(snap.ont!.rxPower);
-    case 'sort_ont_tx':
-      if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
-      return double.tryParse(snap.ont!.txPower);
-    case 'sort_ont_temp':
-      if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
-      return double.tryParse(snap.ont!.temperature);
-    case 'sort_ubnt_sig':
+    case 'sig':
       if (snap.kind != DeviceKind.ubiquiti || snap.ubiquiti == null) return null;
       return snap.ubiquiti!.signalDbm?.toDouble();
-    case 'sort_ubnt_ccq':
+    case 'ccq':
       if (snap.kind != DeviceKind.ubiquiti || snap.ubiquiti == null) return null;
       return snap.ubiquiti!.ccqPercent?.toDouble();
-    case 'sort_ubnt_lan':
+    case 'lan':
       if (snap.kind != DeviceKind.ubiquiti || snap.ubiquiti == null) return null;
       final s = snap.ubiquiti!.lanSpeed ?? '';
+      // Match the leading number — "100Mbps-Full" → 100, "1000Mbps" → 1000.
+      // Unplugged ports return -1 so they sink below 10Mbps in either
+      // sort direction (admin almost always wants them at the bottom).
       final m = RegExp(r'^(\d+)Mbps').firstMatch(s);
-      if (m == null) return snap.ubiquiti!.lanUp ? 0 : -1; // unplugged → bottom
+      if (m == null) return snap.ubiquiti!.lanUp ? 0 : -1;
       return double.tryParse(m.group(1)!);
   }
   return null;
 }
 
-// Whether the active sort direction is ascending. Worst-first per
-// metric: RX/TX/Sig/CCQ/LAN → ascending (lowest = worst); Temp →
-// descending (highest = worst). Reverse ("_rev") flips that.
-bool _sortAscending(String key) {
-  final reversed = key.endsWith('_rev');
-  final base = reversed ? key.substring(0, key.length - 4) : key;
-  // Default direction (worst-first):
-  final defaultAsc = base != 'sort_ont_temp'; // temp: desc, others: asc
-  return reversed ? !defaultAsc : defaultAsc;
-}
-
-class _DeviceFilterDef {
-  final String key;
-  final String label;
+class _DeviceSortMetric {
+  final String key;       // 'rx' / 'sig' / 'ccq' / 'lan'
+  final String label;     // user-facing Arabic label
   final IconData icon;
   final Color color;
-  const _DeviceFilterDef(this.key, this.label, this.icon, this.color);
+  const _DeviceSortMetric(this.key, this.label, this.icon, this.color);
 }
 
 class _DeviceFilterButton extends StatelessWidget {
@@ -1598,15 +1453,13 @@ class _DeviceFilterButton extends StatelessWidget {
 }
 
 class _ActiveDeviceFilterBanner extends StatelessWidget {
-  final String? filterLabel;
-  final String? sortLabel;
+  final String sortLabel;
   final bool probing;
   final int probeProgress;
   final int probeTotal;
   final VoidCallback onClear;
   const _ActiveDeviceFilterBanner({
-    this.filterLabel,
-    this.sortLabel,
+    required this.sortLabel,
     required this.probing,
     required this.probeProgress,
     required this.probeTotal,
@@ -1617,9 +1470,6 @@ class _ActiveDeviceFilterBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     const accent = Color(0xFFC62828);
-    final lines = <String>[];
-    if (filterLabel != null) lines.add('فلتر: $filterLabel');
-    if (sortLabel != null) lines.add('ترتيب: $sortLabel');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1638,7 +1488,7 @@ class _ActiveDeviceFilterBanner extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  lines.join(' • '),
+                  'ترتيب: $sortLabel',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -1684,15 +1534,76 @@ class _ActiveDeviceFilterBanner extends StatelessWidget {
   }
 }
 
-class _DeviceFilterPick extends StatelessWidget {
-  final String label;
+/// One row in the sort sheet: metric icon + label on the right (RTL),
+/// and two compact direction buttons on the left ("⬆ الأعلى" / "⬇ الأدنى").
+/// Tapping a direction immediately commits — no separate "save" button —
+/// so the admin sees the list reorder as soon as they tap.
+class _SortMetricRow extends StatelessWidget {
+  final _DeviceSortMetric def;
+  final String? activeKey;
+  final VoidCallback onPickAsc;
+  final VoidCallback onPickDesc;
+  const _SortMetricRow({
+    required this.def,
+    required this.activeKey,
+    required this.onPickAsc,
+    required this.onPickDesc,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ascSelected = activeKey == '${def.key}_asc';
+    final descSelected = activeKey == '${def.key}_desc';
+    final isAnyActive = ascSelected || descSelected;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(def.icon, size: 18,
+              color: isAnyActive ? def.color : theme.colorScheme.onSurface.withOpacity(0.6)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              def.label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isAnyActive ? FontWeight.w800 : FontWeight.w600,
+                color: isAnyActive ? def.color : theme.colorScheme.onSurface.withOpacity(0.85),
+              ),
+            ),
+          ),
+          _DirChip(
+            icon: Icons.arrow_upward_rounded,
+            label: 'الأعلى',
+            selected: descSelected,
+            color: def.color,
+            onTap: onPickDesc,
+          ),
+          const SizedBox(width: 6),
+          _DirChip(
+            icon: Icons.arrow_downward_rounded,
+            label: 'الأدنى',
+            selected: ascSelected,
+            color: def.color,
+            onTap: onPickAsc,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DirChip extends StatelessWidget {
   final IconData icon;
+  final String label;
   final bool selected;
   final Color color;
   final VoidCallback onTap;
-  const _DeviceFilterPick({
-    required this.label,
+  const _DirChip({
     required this.icon,
+    required this.label,
     required this.selected,
     required this.color,
     required this.onTap,
@@ -1703,31 +1614,28 @@ class _DeviceFilterPick extends StatelessWidget {
     final theme = Theme.of(context);
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.14)
+          color: selected ? color.withOpacity(0.16)
               : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: selected ? color.withOpacity(0.5) : Colors.transparent,
+            color: selected ? color.withOpacity(0.55) : Colors.transparent,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15,
-                color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.5)),
-            const SizedBox(width: 6),
+            Icon(icon, size: 14,
+                color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.55)),
+            const SizedBox(width: 4),
             Text(label, style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
               color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.7),
             )),
-            if (selected) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.check_rounded, size: 14, color: color),
-            ],
           ],
         ),
       ),
