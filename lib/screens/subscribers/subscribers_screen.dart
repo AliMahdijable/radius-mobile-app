@@ -726,6 +726,26 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         ref.watch(authProvider).user?.canAccessManagers ?? false;
     final theme = Theme.of(context);
 
+    // When a filter chip is set from OUTSIDE this screen (e.g. the
+    // admin tapped a KPI card on the dashboard), clear any stale
+    // search query. Without this, the screen kept showing the previous
+    // search results because _isSearchMode stays true and the build
+    // method below picks state.searchResults instead of the
+    // newly-filtered list.
+    ref.listen<String>(
+      subscribersProvider.select((s) => s.filter),
+      (prev, next) {
+        if (prev == next || prev == null) return;
+        if (!_isSearchMode && _searchController.text.isEmpty) return;
+        _searchController.clear();
+        ref.read(subscribersProvider.notifier).searchSubscribers('');
+        setState(() {
+          _isSearchMode = false;
+          _currentPage = 0;
+        });
+      },
+    );
+
     final fullList =
         _isSearchMode ? state.searchResults : state.filteredSubscribers;
 
