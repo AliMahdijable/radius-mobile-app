@@ -36,8 +36,12 @@ class SubscribersState {
     this.error,
     this.totalRecords = 0,
     this.filter = 'all',
-    this.sortBy = 'username',
-    this.sortDirection = 'asc',
+    // Default sort: newest activation first. remaining_days desc puts
+    // freshly-renewed subs at the top and pushes expired ones to the
+    // bottom — matches the admin's expected mental model when the
+    // "الكل" tab opens.
+    this.sortBy = 'remaining_days',
+    this.sortDirection = 'desc',
     this.lastPayments = const {},
     this.managerFilter,
     this.sas4OfflineCount,
@@ -1092,7 +1096,17 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   //   - debtors      → largest debt first
   //   - nearExpiry   → soonest to expire first
   // Users can still override via the sort picker while on the tab.
+  // Default sort per filter chip — applied automatically when the admin
+  // taps a chip so each tab opens in the order they expect (no need
+  // to also touch the sort dropdown). Per admin spec:
+  //   • all / active   → newest activation first (remaining_days desc)
+  //   • online         → longest connection time first
+  //   • nearExpiry     → closest to expiry first (lowest remaining)
+  //   • expired        → most recently expired first
+  //   • debtors        → largest debt first (debtAmount is negative,
+  //                       so ascending = most-negative = biggest debt)
   static const Map<String, (String, String)> _defaultSortByFilter = {
+    'all':         ('remaining_days', 'desc'),
     'active':      ('remaining_days', 'desc'),
     'online':      ('session_time',   'desc'),
     'expired':     ('expiration',     'desc'),
