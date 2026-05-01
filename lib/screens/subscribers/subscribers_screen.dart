@@ -945,33 +945,46 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: state.managerFilter,
-                        hint: Text('كل المدراء',
-                            style: TextStyle(fontSize: 12,
-                                color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                        isExpanded: true,
-                        icon: Icon(Icons.keyboard_arrow_down, size: 18,
-                            color: theme.colorScheme.onSurface.withOpacity(0.4)),
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface,
-                            fontFamily: 'Cairo'),
-                        items: [
-                          DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('كل المدراء', style: TextStyle(fontSize: 12,
-                                color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                          ),
-                          ...state.availableManagers.map((m) =>
-                            DropdownMenuItem(value: m,
-                              child: Text(m, style: const TextStyle(fontSize: 12))),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          ref.read(subscribersProvider.notifier).setManagerFilter(v);
-                          setState(() => _currentPage = 0);
-                        },
-                      ),
+                      child: Builder(builder: (_) {
+                        // Guard against the assertion that fires when the
+                        // current `managerFilter` username is no longer in
+                        // `availableManagers` (e.g. after a subscriber's
+                        // parent gets reassigned and the old parent now has
+                        // zero subscribers). In that case fall back to null
+                        // (the "كل المدراء" hint) instead of crashing.
+                        final filterValue = state.managerFilter != null &&
+                                state.availableManagers
+                                    .contains(state.managerFilter)
+                            ? state.managerFilter
+                            : null;
+                        return DropdownButton<String>(
+                          value: filterValue,
+                          hint: Text('كل المدراء',
+                              style: TextStyle(fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                          isExpanded: true,
+                          icon: Icon(Icons.keyboard_arrow_down, size: 18,
+                              color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface,
+                              fontFamily: 'Cairo'),
+                          items: [
+                            DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('كل المدراء', style: TextStyle(fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                            ),
+                            ...state.availableManagers.map((m) =>
+                              DropdownMenuItem(value: m,
+                                child: Text(m, style: const TextStyle(fontSize: 12))),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            ref.read(subscribersProvider.notifier).setManagerFilter(v);
+                            setState(() => _currentPage = 0);
+                          },
+                        );
+                      }),
                     ),
                   ),
                 ),

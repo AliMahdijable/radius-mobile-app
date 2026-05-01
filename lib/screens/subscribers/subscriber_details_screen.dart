@@ -608,7 +608,17 @@ class _SubscriberDetailsScreenState
                           Navigator.pop(ctx);
                           _showSnack(anySuccess ? 'تم التعديل بنجاح' : 'فشل بعض التعديلات',
                               success: anySuccess);
-                          if (id != null) await notifier.refreshSingleSubscriber(id);
+                          // When the parent changed, do a full reload so the
+                          // manager-filter dropdown and any per-manager
+                          // counts/groupings reflect the new ownership across
+                          // every page. Otherwise a single refresh is enough.
+                          final parentChanged = canPickParent &&
+                              selectedParentId != originalParentId;
+                          if (parentChanged) {
+                            await notifier.loadSubscribers();
+                          } else if (id != null) {
+                            await notifier.refreshSingleSubscriber(id);
+                          }
                           if (mounted) context.pop();
                         }
                       } finally {

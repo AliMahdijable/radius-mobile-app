@@ -293,7 +293,15 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           existing.profileId,
       'balance': _nonEmptyString(details['balance']) ?? existing.balance,
       'price': existing.price,
-      'parent_username': existing.parentUsername,
+      // Refresh parent_username from the SAS4 response when present (so a
+      // re-parent done from the Edit sheet is reflected on the list/cards
+      // immediately). Fall back to the existing value when SAS4 doesn't
+      // include it.
+      'parent_username': _nonEmptyString(details['parent_username']) ??
+          (details['parent_details'] is Map
+              ? _nonEmptyString(details['parent_details']['username'])
+              : null) ??
+          existing.parentUsername,
       'is_online': existing.isOnline,
       'enabled': details['enabled'] ?? existing.enabled,
       'framedipaddress':
