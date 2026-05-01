@@ -490,12 +490,13 @@ class SubscriberCard extends StatelessWidget {
   }
 
   static String _formatRemaining(SubscriberModel sub) {
-    final days = sub.remainingDays ?? 0;
-    if (days > 0) return '$days يوم';
-    // remaining_days = 0 → نحسب الساعات/الدقائق من تاريخ الانتهاء
-    if (sub.expiration != null && sub.expiration!.isNotEmpty) {
+    // Derive the precise breakdown straight from `expiration` so the card
+    // matches the actual expiration timestamp to the minute (e.g. "29 يوم و
+    // 23 س و 59 د") instead of rounding to whole days. Falls back to the
+    // integer `remaining_days` only when expiration can't be parsed.
+    final expStr = sub.expiration?.trim();
+    if (expStr != null && expStr.isNotEmpty) {
       try {
-        final expStr = sub.expiration!.trim();
         DateTime? expDate;
         if (expStr.contains('T') || expStr.contains('+')) {
           expDate = DateTime.tryParse(expStr);
@@ -505,14 +506,22 @@ class SubscriberCard extends StatelessWidget {
         if (expDate != null) {
           final diff = expDate.difference(DateTime.now());
           if (diff.isNegative) return 'منتهي';
-          final hours = diff.inHours;
+          final days = diff.inDays;
+          final hours = diff.inHours % 24;
           final minutes = diff.inMinutes % 60;
-          if (hours > 0) return '$hours س $minutes د';
-          if (minutes > 0) return '$minutes دقيقة';
-          return 'ينتهي الآن';
+          final parts = <String>[];
+          if (days > 0) parts.add('$days يوم');
+          if (hours > 0) parts.add('$hours س');
+          if (minutes > 0) parts.add('$minutes د');
+          if (parts.isEmpty) return 'ينتهي الآن';
+          // Use a thin space rather than "و" so the precise breakdown still
+          // fits inside the compact 10px-font remaining-days pill.
+          return parts.join(' ');
         }
       } catch (_) {}
     }
+    final days = sub.remainingDays ?? 0;
+    if (days > 0) return '$days يوم';
     return '0 يوم';
   }
 

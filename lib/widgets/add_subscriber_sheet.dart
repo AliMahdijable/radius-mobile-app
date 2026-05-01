@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../providers/auth_provider.dart';
+import '../providers/managers_provider.dart';
 import '../providers/subscribers_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
+import '../models/manager_model.dart';
 import '../models/subscriber_model.dart';
 import 'app_snackbar.dart';
 import 'contact_picker.dart';
@@ -30,13 +32,17 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   final _phoneCtrl = TextEditingController();
   final _expCtrl = TextEditingController();
   int? _selectedPackageId;
+  int? _selectedParentId;
+  List<ManagerModel> _parentManagers = const [];
   bool _isLoading = false;
   bool _loadingPackages = false;
+  bool _loadingParents = false;
 
   @override
   void initState() {
     super.initState();
     _ensurePackagesLoaded();
+    _loadParents();
   }
 
   Future<void> _ensurePackagesLoaded() async {
@@ -47,6 +53,27 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
       await ref.read(subscribersProvider.notifier).loadPackages();
       if (mounted) setState(() => _loadingPackages = false);
     }
+  }
+
+  Future<void> _loadParents() async {
+    if (!mounted) return;
+    setState(() => _loadingParents = true);
+    final list = await ref.read(managersProvider.notifier).fetchParentManagers();
+    if (!mounted) return;
+    final authUser = ref.read(authProvider).user;
+    final currentAdminId = int.tryParse(authUser?.id?.toString() ?? '');
+    setState(() {
+      _parentManagers = list;
+      // Default the new subscriber's parent to the currently logged-in admin,
+      // matching the prior behavior of createSubscriber when no parent_id was
+      // selected. Only set if the current admin actually appears in the list.
+      if (_selectedParentId == null &&
+          currentAdminId != null &&
+          list.any((m) => m.id == currentAdminId)) {
+        _selectedParentId = currentAdminId;
+      }
+      _loadingParents = false;
+    });
   }
 
   @override
@@ -113,6 +140,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           lastname: _lastnameCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
           expiration: expStr,
+          parentId: _selectedParentId,
         );
 
     if (!mounted) return;
@@ -279,6 +307,54 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             ),
             validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
           ),
+          const SizedBox(height: 12),
+
+          // تابع إلى (parent manager) — same dropdown style as the manager
+          // form's "تابع إلى" field. Defaults to the currently logged-in admin
+          // so behavior matches the prior auto-assignment in createSubscriber.
+          if (_loadingParents)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 10),
+                  Text('جاري تحميل المدراء...',
+                      style: TextStyle(fontSize: 12)),
+                ],
+              ),
+            )
+          else
+            DropdownButtonFormField<int?>(
+              value: _selectedParentId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'تابع إلى',
+                prefixIcon: Icon(Icons.account_tree_outlined, size: 20),
+              ),
+              items: _parentManagers
+                  .map(
+                    (m) => DropdownMenuItem<int?>(
+                      value: m.id,
+                      child: Text(
+                        m.fullName.isNotEmpty
+                            ? '${m.username} - ${m.fullName}'
+                            : m.username,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedParentId = v),
+            ),
           const SizedBox(height: 12),
 
           // تاريخ الانتهاء (date-picker تفاعلي) — مُحكم بنفس صلاحيات التعديل

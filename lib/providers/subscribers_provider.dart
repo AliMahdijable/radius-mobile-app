@@ -235,7 +235,15 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           ? DateTime.tryParse(raw)
           : DateTime.tryParse('${raw.replaceAll(' ', 'T')}+03:00');
       if (parsed == null) return null;
-      return parsed.difference(DateTime.now()).inDays;
+      final diff = parsed.difference(DateTime.now());
+      if (diff.isNegative) return diff.inDays;
+      // Use ceil rather than truncating `inDays`. SAS4 sets `expiration =
+      // server_now + N*86400s` exactly on activation; by the time the client
+      // parses the response, `client_now` is a few seconds later, so the diff
+      // is N days minus a tiny epsilon — `inDays` would drop a whole day
+      // (showing 29 instead of 30 right after activation). Ceil keeps that
+      // boundary stable.
+      return (diff.inSeconds / 86400.0).ceil();
     } catch (_) {
       return null;
     }
@@ -1377,16 +1385,18 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     required String lastname,
     required String phone,
     required String expiration,
+    int? parentId,
   }) async {
     try {
       final adminId = await _storage.getAdminId();
+      final resolvedParentId = parentId ?? int.tryParse(adminId ?? '');
       final payload = EncryptionService.encrypt({
         'username': username,
         'enabled': 1,
         'password': password,
         'confirm_password': password,
         'profile_id': profileId,
-        'parent_id': int.tryParse(adminId ?? ''),
+        'parent_id': resolvedParentId,
         'site_id': null,
         'mac_auth': 0,
         'allowed_macs': null,

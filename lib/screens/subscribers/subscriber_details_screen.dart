@@ -1656,6 +1656,13 @@ class _SubscriberDetailsScreenState
       if (exp == null) return 'غير محدد';
       final diff = exp.difference(DateTime.now());
       if (diff.isNegative) return 'منتهي';
+      // Within the last second of a day boundary (e.g. 29d 23h 59m 59s right
+      // after activation, when SAS4 set expiration = now + 30d exactly), round
+      // up so the user sees "30 يوم" not "29 يوم و 23 ساعة...".
+      final remainder = diff.inSeconds - (diff.inDays * 86400);
+      if (remainder >= 86399) {
+        return '${diff.inDays + 1} يوم';
+      }
       final days = diff.inDays;
       final hours = diff.inHours % 24;
       final minutes = diff.inMinutes % 60;
