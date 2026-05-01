@@ -15,8 +15,10 @@ import '../../core/network/dio_client.dart';
 import '../../core/services/storage_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/device_provider.dart';
+import '../../providers/managers_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
+import '../../models/manager_model.dart';
 import '../../providers/templates_provider.dart';
 import '../../providers/print_templates_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -179,6 +181,8 @@ class _SubscriberDetailsScreenState
     final canEditExpiration =
         (_authUser?.canAccessManagers ?? false) ||
             (_authUser?.canAccessPackages ?? false);
+    // "تابع إلى" يظهر فقط للمدراء الذين يملكون صلاحية إدارة المدراء.
+    final canPickParent = _authUser?.canAccessManagers ?? false;
     final id = _subscriberId;
     if (id == null) {
       _showSnack('معرف المشترك غير متوفر', success: false);
@@ -195,8 +199,12 @@ class _SubscriberDetailsScreenState
     if (ref.read(subscribersProvider).packages.isEmpty) {
       futures.add(notifier.loadPackages());
     }
+    final parentManagersFuture = canPickParent
+        ? ref.read(managersProvider.notifier).fetchParentManagers()
+        : Future<List<ManagerModel>>.value(const []);
 
     final results = await Future.wait(futures);
+    final parentManagers = await parentManagersFuture;
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
@@ -232,6 +240,13 @@ class _SubscriberDetailsScreenState
     int? selectedProfileId = originalProfileId is int
         ? originalProfileId
         : int.tryParse(originalProfileId?.toString() ?? '');
+    final originalParentId = details['parent_id'] is int
+        ? details['parent_id'] as int
+        : int.tryParse(details['parent_id']?.toString() ?? '');
+    int? selectedParentId = originalParentId != null &&
+            parentManagers.any((m) => m.id == originalParentId)
+        ? originalParentId
+        : null;
     bool saving = false;
     bool showAllPackages = false;
 
@@ -508,6 +523,38 @@ class _SubscriberDetailsScreenState
                         ),
                       ),
                   ],
+                  // تابع إلى — same gated dropdown as the Add form. Only
+                  // admins with canAccessManagers can change a subscriber's
+                  // parent; sub-managers don't see the field at all.
+                  if (canPickParent) ...[
+                    const SizedBox(height: 16),
+                    Text('تابع إلى', style: TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int?>(
+                      value: selectedParentId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.account_tree_outlined, size: 20),
+                        hintText: 'اختر المدير الأب',
+                      ),
+                      items: parentManagers
+                          .map(
+                            (m) => DropdownMenuItem<int?>(
+                              value: m.id,
+                              child: Text(
+                                m.fullName.isNotEmpty
+                                    ? '${m.username} - ${m.fullName}'
+                                    : m.username,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setSheet(() => selectedParentId = v),
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
@@ -536,6 +583,15 @@ class _SubscriberDetailsScreenState
                           details['expiration'] = expCtrl.text.trim();
                         } else {
                           details.remove('expiration');
+                        }
+                        if (canPickParent) {
+                          // Only forward parent_id when this admin is allowed
+                          // to change it; otherwise leave whatever SAS4
+                          // already has so we don't accidentally null it on a
+                          // sub-manager edit.
+                          details['parent_id'] = selectedParentId;
+                        } else {
+                          details.remove('parent_id');
                         }
                         if (pwCtrl.text.isNotEmpty) {
                           details['password'] = pwCtrl.text;

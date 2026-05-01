@@ -57,10 +57,13 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
 
   Future<void> _loadParents() async {
     if (!mounted) return;
+    final authUser = ref.read(authProvider).user;
+    // Skip the manager-tree fetch for admins who can't pick a parent
+    // anyway — sub-managers without canAccessManagers won't see the field.
+    if (!(authUser?.canAccessManagers ?? false)) return;
     setState(() => _loadingParents = true);
     final list = await ref.read(managersProvider.notifier).fetchParentManagers();
     if (!mounted) return;
-    final authUser = ref.read(authProvider).user;
     final currentAdminId = int.tryParse(authUser?.id?.toString() ?? '');
     setState(() {
       _parentManagers = list;
@@ -174,6 +177,9 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     final canEditExpiration =
         (authUser?.canAccessManagers ?? false) ||
             (authUser?.canAccessPackages ?? false);
+    // "تابع إلى" يظهر فقط للمدراء الذين يملكون صلاحية إدارة المدراء (أي
+    // الذين يستطيعون إنشاء مدراء فرعيين تحتهم).
+    final canPickParent = authUser?.canAccessManagers ?? false;
 
     final seen = <int>{};
     final uniquePkgs = packages.where((p) {
@@ -312,50 +318,54 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           // تابع إلى (parent manager) — same dropdown style as the manager
           // form's "تابع إلى" field. Defaults to the currently logged-in admin
           // so behavior matches the prior auto-assignment in createSubscriber.
-          if (_loadingParents)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(width: 10),
-                  Text('جاري تحميل المدراء...',
-                      style: TextStyle(fontSize: 12)),
-                ],
-              ),
-            )
-          else
-            DropdownButtonFormField<int?>(
-              value: _selectedParentId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'تابع إلى',
-                prefixIcon: Icon(Icons.account_tree_outlined, size: 20),
-              ),
-              items: _parentManagers
-                  .map(
-                    (m) => DropdownMenuItem<int?>(
-                      value: m.id,
-                      child: Text(
-                        m.fullName.isNotEmpty
-                            ? '${m.username} - ${m.fullName}'
-                            : m.username,
-                        overflow: TextOverflow.ellipsis,
+          // Only shown to admins who can manage sub-admins; sub-managers
+          // (without canAccessManagers) never see or change the parent.
+          if (canPickParent) ...[
+            if (_loadingParents)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                    SizedBox(width: 10),
+                    Text('جاري تحميل المدراء...',
+                        style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              )
+            else
+              DropdownButtonFormField<int?>(
+                value: _selectedParentId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'تابع إلى',
+                  prefixIcon: Icon(Icons.account_tree_outlined, size: 20),
+                ),
+                items: _parentManagers
+                    .map(
+                      (m) => DropdownMenuItem<int?>(
+                        value: m.id,
+                        child: Text(
+                          m.fullName.isNotEmpty
+                              ? '${m.username} - ${m.fullName}'
+                              : m.username,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedParentId = v),
-            ),
-          const SizedBox(height: 12),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedParentId = v),
+              ),
+            const SizedBox(height: 12),
+          ],
 
           // تاريخ الانتهاء (date-picker تفاعلي) — مُحكم بنفس صلاحيات التعديل
           TextField(
