@@ -2603,12 +2603,46 @@ class _SubscriberDetailsScreenState
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _HeaderStat(
-                            label: 'الأيام المتبقية',
-                            value: sub.isExpired
-                                ? 'منتهي'
-                                : '${sub.remainingDays ?? 0}',
-                          ),
+                          () {
+                            // Compute precise breakdown straight from
+                            // expiration: big number = whole days, sub-line =
+                            // remaining hours+minutes within the day, so the
+                            // header matches the actual expiration timestamp.
+                            String value = '${sub.remainingDays ?? 0}';
+                            String? sub2;
+                            if (!sub.isExpired) {
+                              final raw = sub.expiration?.trim() ?? '';
+                              if (raw.isNotEmpty) {
+                                DateTime? exp;
+                                if (raw.contains('T') || raw.contains('+')) {
+                                  exp = DateTime.tryParse(raw);
+                                } else {
+                                  exp = DateTime.tryParse(
+                                      '${raw.replaceAll(' ', 'T')}+03:00');
+                                }
+                                if (exp != null) {
+                                  final diff =
+                                      exp.difference(DateTime.now());
+                                  if (!diff.isNegative) {
+                                    value = '${diff.inDays}';
+                                    final h = diff.inHours % 24;
+                                    final m = diff.inMinutes % 60;
+                                    final parts = <String>[];
+                                    if (h > 0) parts.add('$h س');
+                                    if (m > 0) parts.add('$m د');
+                                    if (parts.isNotEmpty) {
+                                      sub2 = parts.join(' ');
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            return _HeaderStat(
+                              label: 'الأيام المتبقية',
+                              value: sub.isExpired ? 'منتهي' : value,
+                              subValue: sub2,
+                            );
+                          }(),
                           Container(width: 1, height: 30,
                               color: Colors.white.withOpacity(0.2)),
                           _HeaderStat(
@@ -3072,7 +3106,8 @@ class _InfoChip extends StatelessWidget {
 class _HeaderStat extends StatelessWidget {
   final String label;
   final String value;
-  const _HeaderStat({required this.label, required this.value});
+  final String? subValue;
+  const _HeaderStat({required this.label, required this.value, this.subValue});
 
   @override
   Widget build(BuildContext context) {
@@ -3083,6 +3118,16 @@ class _HeaderStat extends StatelessWidget {
               color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700,
             ),
             textAlign: TextAlign.center),
+        if (subValue != null && subValue!.isNotEmpty) ...[
+          const SizedBox(height: 1),
+          Text(subValue!,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.85),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center),
+        ],
         const SizedBox(height: 2),
         Text(label,
             style: TextStyle(
