@@ -648,7 +648,6 @@ class ManagersScreen extends ConsumerStatefulWidget {
 class _ManagersScreenState extends ConsumerState<ManagersScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
-  int? _selectedManagerId;
   bool _showAdvancedFilters = false;
   static const List<(String value, String label, String shortLabel)> _sortItems = [
     ('username', 'اسم المستخدم', 'المستخدم'),
@@ -700,10 +699,6 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           direction: direction,
         );
     if (!mounted) return;
-    final ids = ref.read(managersProvider).managers.map((e) => e.id).toSet();
-    if (_selectedManagerId != null && !ids.contains(_selectedManagerId)) {
-      setState(() => _selectedManagerId = null);
-    }
   }
 
   void _handleSearchChanged(String value) {
@@ -872,10 +867,177 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     );
 
     if (result == true && mounted) {
-      setState(() => _selectedManagerId = null);
       AppSnackBar.success(context, 'تم حذف المدير بنجاح');
       await _reloadManagers();
     }
+  }
+
+  // Bottom-sheet grid of operations for a manager — replaces the old
+  // inline expand-and-show-buttons UX so the targets are tappable
+  // (the inline OutlinedButtons were 32px tall and easy to mis-tap).
+  void _showManagerActionsSheet(
+    BuildContext anchorCtx,
+    ManagerModel manager, {
+    double extraDebt = 0,
+  }) {
+    final canWithdraw = manager.credit > 0;
+    final hasAnyDebt = (manager.debt + extraDebt) > 0;
+
+    final actions = <_ManagerSheetAction>[
+      _ManagerSheetAction(
+        icon: Icons.edit_outlined,
+        label: 'تعديل',
+        color: AppTheme.primary,
+        type: _ManagerActionType.edit,
+      ),
+      _ManagerSheetAction(
+        icon: Icons.add_card_rounded,
+        label: 'رصيد',
+        color: AppTheme.successColor,
+        type: _ManagerActionType.deposit,
+      ),
+      if (canWithdraw)
+        _ManagerSheetAction(
+          icon: Icons.remove_circle_outline_rounded,
+          label: 'سحب',
+          color: AppTheme.warningColor,
+          type: _ManagerActionType.withdraw,
+        ),
+      if (hasAnyDebt)
+        _ManagerSheetAction(
+          icon: Icons.payments_outlined,
+          label: 'تسديد',
+          color: AppTheme.infoColor,
+          type: _ManagerActionType.payDebt,
+        ),
+      _ManagerSheetAction(
+        icon: Icons.stars_rounded,
+        label: 'نقاط',
+        color: AppTheme.secondary,
+        type: _ManagerActionType.addPoints,
+      ),
+      _ManagerSheetAction(
+        icon: Icons.receipt_long_rounded,
+        label: 'ديون أخرى',
+        color: AppTheme.infoColor,
+        type: _ManagerActionType.otherDebts,
+      ),
+      _ManagerSheetAction(
+        icon: Icons.timeline_rounded,
+        label: 'حركات',
+        color: AppTheme.teal600,
+        type: _ManagerActionType.movements,
+      ),
+      if (hasAnyDebt)
+        _ManagerSheetAction(
+          icon: Icons.send_to_mobile_rounded,
+          label: 'إرسال معلومات',
+          color: AppTheme.whatsappGreen,
+          type: _ManagerActionType.sendInfo,
+        ),
+      _ManagerSheetAction(
+        icon: Icons.delete_outline_rounded,
+        label: 'حذف',
+        color: AppTheme.dangerColor,
+        type: _ManagerActionType.delete,
+      ),
+    ];
+
+    final managerName = manager.fullName.isNotEmpty
+        ? manager.fullName
+        : manager.username;
+
+    showModalBottomSheet(
+      useSafeArea: true,
+      context: anchorCtx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        final theme = Theme.of(sheetCtx);
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              bottomSheetBottomInset(sheetCtx, extra: 16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.admin_panel_settings_outlined,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        managerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'العمليات',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface
+                        .withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                GridView.count(
+                  crossAxisCount: 4,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 0.85,
+                  children: actions
+                      .map(
+                        (a) => _ManagerSheetItem(
+                          icon: a.icon,
+                          label: a.label,
+                          color: a.color,
+                          onTap: () {
+                            Navigator.pop(sheetCtx);
+                            _handleManagerAction(
+                              manager,
+                              a.type,
+                              extraDebt: extraDebt,
+                            );
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _handleManagerAction(
@@ -1298,23 +1460,16 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                               const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final manager = state.managers[index];
-                            final selected = manager.id == _selectedManagerId;
-
                             final extra =
                                 customDebtByManager[manager.id] ?? 0;
                             return _ManagerListCard(
                               manager: manager,
-                              selected: selected,
                               extraDebt: extra,
-                              onTap: () {
-                                setState(() {
-                                  _selectedManagerId =
-                                      selected ? null : manager.id;
-                                });
-                              },
-                              onActionSelected: (action) =>
-                                  _handleManagerAction(manager, action,
-                                      extraDebt: extra),
+                              onTap: () => _showManagerActionsSheet(
+                                context,
+                                manager,
+                                extraDebt: extra,
+                              ),
                             );
                           },
                         ),
@@ -1416,20 +1571,16 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
 
 class _ManagerListCard extends StatelessWidget {
   final ManagerModel manager;
-  final bool selected;
   // Sum of remaining custom debts (open + partial) — folded into the
   // displayed debt badge so the parent admin sees one combined total
   // instead of having to add SAS4 debt + custom debts in their head.
   final double extraDebt;
   final VoidCallback onTap;
-  final ValueChanged<_ManagerActionType> onActionSelected;
 
   const _ManagerListCard({
     required this.manager,
-    required this.selected,
     this.extraDebt = 0,
     required this.onTap,
-    required this.onActionSelected,
   });
 
   @override
@@ -1440,19 +1591,14 @@ class _ManagerListCard extends StatelessWidget {
         manager.fullName != manager.username &&
         !manager.fullName.contains(manager.username);
     final compact = MediaQuery.sizeOf(context).width < 390;
-    final borderColor = selected
-        ? theme.colorScheme.primary
-        : theme.colorScheme.outline.withValues(alpha: 0.14);
-    final background = selected
-        ? theme.colorScheme.primary.withValues(alpha: 0.04)
-        : theme.cardTheme.color ?? theme.colorScheme.surface;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+    return Container(
       decoration: BoxDecoration(
-        color: background,
+        color: theme.cardTheme.color ?? theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -1531,27 +1677,16 @@ class _ManagerListCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
+                  Container(
                     padding: EdgeInsets.all(compact ? 4 : 6),
                     decoration: BoxDecoration(
-                      color: selected
-                          ? theme.colorScheme.primary.withValues(alpha: 0.10)
-                          : theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.4),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: AnimatedRotation(
-                      turns: selected ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: Icon(
-                        Icons.expand_more_rounded,
-                        size: compact ? 18 : 20,
-                        color: selected
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface
-                                .withValues(alpha: 0.72),
-                      ),
+                    child: Icon(
+                      Icons.more_horiz_rounded,
+                      size: compact ? 18 : 20,
+                      color: theme.colorScheme.primary,
                     ),
                   ),
                 ],
@@ -1576,13 +1711,13 @@ class _ManagerListCard extends StatelessWidget {
                       label: manager.aclName!,
                       color: AppTheme.infoColor,
                     ),
-                  if (selected && manager.mobile.isNotEmpty)
+                  if (manager.mobile.isNotEmpty)
                     _InfoBadge(
                       icon: Icons.phone_outlined,
                       label: manager.mobile,
                       color: AppTheme.primary,
                     ),
-                  if (selected && manager.company.isNotEmpty)
+                  if (manager.company.isNotEmpty)
                     _InfoBadge(
                       icon: Icons.business_outlined,
                       label: manager.company,
@@ -1634,104 +1769,6 @@ class _ManagerListCard extends StatelessWidget {
                       color: AppTheme.dangerColor,
                     ),
                 ],
-              ),
-              AnimatedCrossFade(
-                firstChild: const SizedBox.shrink(),
-                secondChild: Column(
-                  children: [
-                    SizedBox(height: compact ? 8 : 10),
-                    const Divider(height: 1),
-                    SizedBox(height: compact ? 8 : 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _ManagerActionButton(
-                          icon: Icons.edit_outlined,
-                          label: 'تعديل',
-                          color: AppTheme.primary,
-                          onPressed: () =>
-                              onActionSelected(_ManagerActionType.edit),
-                        ),
-                        _ManagerActionButton(
-                          icon: Icons.add_card_rounded,
-                          label: 'رصيد',
-                          color: AppTheme.successColor,
-                          onPressed: () =>
-                              onActionSelected(_ManagerActionType.deposit),
-                        ),
-                        _ManagerActionButton(
-                          icon: Icons.remove_circle_outline_rounded,
-                          label: 'سحب',
-                          color: AppTheme.warningColor,
-                          onPressed: manager.credit > 0
-                              ? () => onActionSelected(
-                                    _ManagerActionType.withdraw,
-                                  )
-                              : null,
-                        ),
-                        _ManagerActionButton(
-                          icon: Icons.payments_outlined,
-                          label: 'تسديد',
-                          color: AppTheme.infoColor,
-                          // Enabled when EITHER source has a balance to
-                          // pay — the dispatcher routes to the right
-                          // sheet based on which one actually has debt.
-                          onPressed: (manager.debt + extraDebt) > 0
-                              ? () => onActionSelected(
-                                    _ManagerActionType.payDebt,
-                                  )
-                              : null,
-                        ),
-                        _ManagerActionButton(
-                          icon: Icons.stars_rounded,
-                          label: 'نقاط',
-                          color: AppTheme.secondary,
-                          onPressed: () =>
-                              onActionSelected(_ManagerActionType.addPoints),
-                        ),
-                        _ManagerActionButton(
-                          icon: Icons.receipt_long_rounded,
-                          label: 'ديون أخرى',
-                          color: AppTheme.infoColor,
-                          onPressed: () =>
-                              onActionSelected(_ManagerActionType.otherDebts),
-                        ),
-                        _ManagerActionButton(
-                          icon: Icons.timeline_rounded,
-                          label: 'حركات',
-                          color: AppTheme.teal600,
-                          onPressed: () =>
-                              onActionSelected(_ManagerActionType.movements),
-                        ),
-                        // Manual "send info" — surfaces the manager_agent
-                        // WA template with current debt breakdown. Only
-                        // visible when the manager actually has any debt
-                        // (SAS or "ديون أخرى"); otherwise there's nothing
-                        // useful to inform them about.
-                        if ((manager.debt + extraDebt) > 0)
-                          _ManagerActionButton(
-                            icon: Icons.send_to_mobile_rounded,
-                            label: 'إرسال معلومات',
-                            color: AppTheme.whatsappGreen,
-                            onPressed: () =>
-                                onActionSelected(_ManagerActionType.sendInfo),
-                          ),
-                        _ManagerActionButton(
-                          icon: Icons.delete_outline_rounded,
-                          label: 'حذف',
-                          color: AppTheme.dangerColor,
-                          onPressed: () =>
-                              onActionSelected(_ManagerActionType.delete),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                crossFadeState: selected
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
-                duration: const Duration(milliseconds: 180),
               ),
             ],
           ),
@@ -3889,45 +3926,6 @@ class _ManagersMiniStatChip extends StatelessWidget {
   }
 }
 
-class _ManagerActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback? onPressed;
-
-  const _ManagerActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: onPressed == null ? Colors.grey : color,
-        side: BorderSide(
-          color: (onPressed == null ? Colors.grey : color)
-              .withValues(alpha: 0.28),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        minimumSize: const Size(68, 32),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-        textStyle: const TextStyle(
-          fontFamily: AppTheme.fontFamily,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-    );
-  }
-}
-
 class _InfoBadge extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -4098,6 +4096,72 @@ class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+class _ManagerSheetAction {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final _ManagerActionType type;
+  const _ManagerSheetAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.type,
+  });
+}
+
+class _ManagerSheetItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ManagerSheetItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
