@@ -267,7 +267,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               const SizedBox(width: 6),
                               Text(f.label, style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                                 color: isSelected
                                     ? theme.colorScheme.primary
                                     : theme.colorScheme.onSurface.withOpacity(0.7),
@@ -646,7 +646,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           SizedBox(
             width: 95,
             child: Text(label, style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w500,
+              fontSize: 12, fontWeight: FontWeight.w600,
               color: theme.colorScheme.onSurface.withOpacity(0.5),
             )),
           ),
@@ -655,7 +655,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               value,
               textDirection: isLtr ? TextDirection.ltr : null,
               style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w600,
+                fontSize: 13, fontWeight: FontWeight.w700,
                 color: valueColor ?? theme.colorScheme.onSurface.withOpacity(0.85),
               ),
             ),
@@ -693,7 +693,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.w500,
+                  fontSize: 10, fontWeight: FontWeight.w600,
                   color: theme.colorScheme.onSurface.withOpacity(0.5),
                 )),
                 const SizedBox(height: 2),
@@ -975,7 +975,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                           isExpanded: true,
                           icon: Icon(Icons.keyboard_arrow_down, size: 18,
                               color: theme.colorScheme.onSurface.withOpacity(0.4)),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                               color: theme.colorScheme.onSurface,
                               fontFamily: 'Cairo'),
                           items: [
@@ -1081,7 +1081,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                           style: TextStyle(
                             fontSize: 11,
                             color: theme.colorScheme.onSurface.withOpacity(0.65),
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1117,7 +1117,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   '${startIdx + 1}-$endIdx من $totalItems',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurface.withOpacity(0.5),
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     fontSize: 11,
                   ),
                 ),
@@ -1160,7 +1160,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       isDense: true,
                       menuMaxHeight: 200,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         fontSize: 11,
                         color: theme.colorScheme.onSurface,
                       ),
@@ -1619,7 +1619,7 @@ class _SortMetricRow extends StatelessWidget {
               def.label,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: isAnyActive ? FontWeight.w800 : FontWeight.w600,
+                fontWeight: isAnyActive ? FontWeight.w800 : FontWeight.w700,
                 color: isAnyActive ? def.color : theme.colorScheme.onSurface.withOpacity(0.85),
               ),
             ),
@@ -1683,7 +1683,7 @@ class _DirChip extends StatelessWidget {
             const SizedBox(width: 4),
             Text(label, style: TextStyle(
               fontSize: 11,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
               color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.7),
             )),
           ],
@@ -1807,7 +1807,7 @@ class _DirectionBtn extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
               color: selected
                   ? theme.colorScheme.primary
                   : theme.colorScheme.onSurface.withOpacity(0.7),
@@ -1880,7 +1880,7 @@ class _FilterChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 color: selected
                     ? activeColor
                     : theme.colorScheme.onSurface.withOpacity(0.6),
