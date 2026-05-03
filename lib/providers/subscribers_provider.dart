@@ -114,7 +114,27 @@ class SubscribersState {
           result = (a.debtAmount).compareTo(b.debtAmount);
           break;
         case 'remaining_days':
-          result = (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0);
+          // Sort by the precise expiration timestamp (down to the minute)
+          // rather than the truncated integer `remainingDays`, otherwise
+          // all subs with "1 day X minutes" tie on integer 1 and end up in
+          // arbitrary order even though the card shows distinct
+          // minute-level remainders. Falls back to integer days when the
+          // expiration string is missing/unparseable.
+          final ax = DateTime.tryParse(
+                  (a.expiration ?? '').replaceAll(' ', 'T'))
+              ?.millisecondsSinceEpoch;
+          final bx = DateTime.tryParse(
+                  (b.expiration ?? '').replaceAll(' ', 'T'))
+              ?.millisecondsSinceEpoch;
+          if (ax != null && bx != null) {
+            result = ax.compareTo(bx);
+          } else if (ax != null) {
+            result = -1;
+          } else if (bx != null) {
+            result = 1;
+          } else {
+            result = (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0);
+          }
           break;
         case 'session_time':
           result = (a.sessionTime ?? 0).compareTo(b.sessionTime ?? 0);
