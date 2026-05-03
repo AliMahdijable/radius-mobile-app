@@ -267,7 +267,7 @@ class SubscriberCard extends StatelessWidget {
                         style: TextStyle(
                           color: daysColor,
                           fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     );
@@ -392,7 +392,7 @@ class SubscriberCard extends StatelessWidget {
                       'دين: ${AppHelpers.formatMoney(subscriber.debtAmount.abs())}',
                       style: const TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: Colors.red,
                       ),
                     ),
@@ -411,7 +411,7 @@ class SubscriberCard extends StatelessWidget {
                       'رصيد: +${AppHelpers.formatMoney(subscriber.debtAmount)}',
                       style: const TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: Colors.green,
                       ),
                     ),
@@ -608,8 +608,11 @@ class SubscriberCard extends StatelessWidget {
             textDirection: isLtr ? TextDirection.ltr : null,
             style: TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: textColor ?? theme.colorScheme.onSurface.withOpacity(0.55),
+              fontWeight: FontWeight.w800,
+              // Was 0.55 — at that opacity the w700 read as visually thin.
+              // Lift to 0.78 so the weight actually shows on phone/date row.
+              color: textColor ??
+                  theme.colorScheme.onSurface.withOpacity(0.78),
             ),
           ),
         ],
@@ -763,7 +766,7 @@ class _OnlineRow extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(subscriber.ipAddress ?? '—',
                               style: const TextStyle(fontSize: 11,
-                                  color: AppTheme.teal600, fontWeight: FontWeight.w700)),
+                                  color: AppTheme.teal600, fontWeight: FontWeight.w800)),
                           const SizedBox(width: 3),
                           const Icon(Icons.open_in_new_rounded, size: 9, color: AppTheme.teal400),
                         ],
@@ -773,7 +776,7 @@ class _OnlineRow extends StatelessWidget {
                     Icon(Icons.timer_outlined, size: 12, color: muted),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatDuration(subscriber.sessionTime),
-                        style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w700)),
+                        style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w800)),
                   ],
                 ),
                 const SizedBox(height: 5),
@@ -783,12 +786,12 @@ class _OnlineRow extends StatelessWidget {
                     const Icon(Icons.download_rounded, size: 12, color: AppTheme.teal600),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatBytes(subscriber.downloadBytes),
-                        style: const TextStyle(fontSize: 11, color: AppTheme.teal600, fontWeight: FontWeight.w700)),
+                        style: const TextStyle(fontSize: 11, color: AppTheme.teal600, fontWeight: FontWeight.w800)),
                     const SizedBox(width: 14),
                     Icon(Icons.upload_rounded, size: 12, color: AppTheme.infoColor),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatBytes(subscriber.uploadBytes),
-                        style: TextStyle(fontSize: 11, color: AppTheme.infoColor, fontWeight: FontWeight.w700)),
+                        style: TextStyle(fontSize: 11, color: AppTheme.infoColor, fontWeight: FontWeight.w800)),
                     if (subscriber.deviceVendor != null &&
                         subscriber.deviceVendor != 'unknown') ...[
                       const SizedBox(width: 10),

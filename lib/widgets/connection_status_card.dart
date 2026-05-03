@@ -334,9 +334,17 @@ class _MetricsInlineRow extends StatelessWidget {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant)),
           const SizedBox(width: 3),
-          Text(value, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: color)),
         ],
       ),
     );
