@@ -2987,6 +2987,35 @@ class _SubscriberDetailsScreenState
     }
   }
 
+  // Opens the subscriber movements timeline (تفعيل/تمديد/تسديد دين/إضافة دين)
+  // as a 75%-height bottom sheet. Pulls a 5-year window of activity_logs
+  // from the same backend endpoint that powers the account-statement report,
+  // so admins see the same history whether they open this from the card or
+  // from reports.
+  void _showMovementsSheet() {
+    final sub = _readCurrentSubscriber();
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      useSafeArea: true,
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: _SubscriberMovementsSheetContent(subscriber: sub),
+        );
+      },
+    );
+  }
+
   void _showActionsSheet(bool isEnabled) {
     final sub = _readCurrentSubscriber();
     final actions = [
@@ -2996,6 +3025,12 @@ class _SubscriberDetailsScreenState
       _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
       if (sub.hasDebt)
         _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
+      _FabAction(
+        Icons.history_rounded,
+        'سجل الحركات',
+        AppTheme.teal600,
+        _showMovementsSheet,
+      ),
       if (sub.hasDebt)
         _FabAction(
           Icons.notifications_active_outlined,
@@ -3966,6 +4001,528 @@ class _PrintReceiptCheckbox extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Subscriber movements sheet — timeline of activate/extend/pay/add-debt
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SubscriberMovementsSheetContent extends ConsumerStatefulWidget {
+  final SubscriberModel subscriber;
+  const _SubscriberMovementsSheetContent({required this.subscriber});
+
+  @override
+  ConsumerState<_SubscriberMovementsSheetContent> createState() =>
+      _SubscriberMovementsSheetContentState();
+}
+
+class _SubscriberMovementsSheetContentState
+    extends ConsumerState<_SubscriberMovementsSheetContent> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _all = const [];
+  String _typeFilter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final dio = ref.read(backendDioProvider);
+      // Wide window: 5 years back → today. account-statement endpoint
+      // requires both bounds; this captures the entire realistic history
+      // without paging.
+      final now = DateTime.now();
+      final from = DateTime(now.year - 5, now.month, now.day);
+      String fmt(DateTime d) =>
+          '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      final res = await dio.get(
+        ApiConstants.accountStatement,
+        queryParameters: {
+          'username': widget.subscriber.username,
+          'user_id': widget.subscriber.idx ?? '',
+          'date_from': '${fmt(from)} 00:00:00',
+          'date_to': '${fmt(now)} 23:59:59',
+        },
+      );
+      if (res.data?['success'] == true && res.data?['data'] != null) {
+        final data = res.data['data'];
+        final txs = (data['transactions'] as List? ?? const [])
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (!mounted) return;
+        setState(() {
+          _all = txs;
+          _loading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _error = 'فشل جلب الحركات';
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'خطأ في الاتصال';
+        _loading = false;
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_typeFilter == 'all') return _all;
+    return _all
+        .where((t) =>
+            (t['action_type'] ?? '').toString().toUpperCase() == _typeFilter)
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sub = widget.subscriber;
+    final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 10),
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Icon(Icons.history_rounded,
+                  size: 20, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'سجل الحركات',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'تحديث',
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                onPressed: _loading ? null : _load,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _MovFilterChip(
+                label: 'الكل',
+                value: 'all',
+                current: _typeFilter,
+                onTap: (v) => setState(() => _typeFilter = v),
+              ),
+              const SizedBox(width: 6),
+              _MovFilterChip(
+                label: 'تفعيل',
+                value: 'SUBSCRIBER_ACTIVATE',
+                current: _typeFilter,
+                onTap: (v) => setState(() => _typeFilter = v),
+              ),
+              const SizedBox(width: 6),
+              _MovFilterChip(
+                label: 'تمديد',
+                value: 'SUBSCRIBER_EXTEND',
+                current: _typeFilter,
+                onTap: (v) => setState(() => _typeFilter = v),
+              ),
+              const SizedBox(width: 6),
+              _MovFilterChip(
+                label: 'تسديد',
+                value: 'BALANCE_DEDUCT',
+                current: _typeFilter,
+                onTap: (v) => setState(() => _typeFilter = v),
+              ),
+              const SizedBox(width: 6),
+              _MovFilterChip(
+                label: 'إضافة دين',
+                value: 'BALANCE_ADD',
+                current: _typeFilter,
+                onTap: (v) => setState(() => _typeFilter = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Divider(height: 1),
+        Expanded(child: _buildBody()),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded,
+                size: 48, color: Colors.redAccent),
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      );
+    }
+    final list = _filtered;
+    if (list.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined,
+                size: 48,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.25)),
+            const SizedBox(height: 8),
+            Text(
+              _typeFilter == 'all'
+                  ? 'لا توجد حركات لعرضها'
+                  : 'لا توجد حركات بهذا النوع',
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Group by date label (today/yesterday/yyyy-MM-dd) preserving the
+    // server-provided DESC order.
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    final order = <String>[];
+    for (final t in list) {
+      final key = _dateGroupKey(t['created_at']?.toString() ?? '');
+      if (!grouped.containsKey(key)) {
+        grouped[key] = [];
+        order.add(key);
+      }
+      grouped[key]!.add(t);
+    }
+
+    final items = <Widget>[];
+    for (final key in order) {
+      items.add(_DateHeader(label: key));
+      for (final t in grouped[key]!) {
+        items.add(_MovementTile(txn: t));
+      }
+    }
+
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        12, 8, 12, bottomSheetBottomInset(context, extra: 12),
+      ),
+      children: items,
+    );
+  }
+
+  String _dateGroupKey(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '—';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(d).inDays;
+    if (diff == 0) return 'اليوم';
+    if (diff == 1) return 'أمس';
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+}
+
+class _MovFilterChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final String current;
+  final ValueChanged<String> onTap;
+  const _MovFilterChip({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == current;
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+              : theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                : Colors.transparent,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateHeader extends StatelessWidget {
+  final String label;
+  const _DateHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: theme.colorScheme.outline.withValues(alpha: 0.12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MovementTile extends StatelessWidget {
+  final Map<String, dynamic> txn;
+  const _MovementTile({required this.txn});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final type = (txn['action_type'] ?? '').toString().toUpperCase();
+    final desc = AppHelpers.formatNumbersInText(
+      txn['description']?.toString() ?? '',
+    );
+    final admin = txn['admin_name']?.toString() ?? '';
+    final notes = txn['notes']?.toString() ?? '';
+    final createdAt = txn['created_at']?.toString() ?? '';
+    final rawAmt = txn['amount'];
+    final amount = (rawAmt is num)
+        ? rawAmt.toDouble().abs()
+        : double.tryParse(
+                  (rawAmt?.toString() ?? '')
+                      .replaceAll(RegExp(r'[^0-9.\-]'), ''),
+                )
+                ?.abs() ??
+            0;
+
+    final isDebt = type == 'BALANCE_ADD' ||
+        (type == 'SUBSCRIBER_ACTIVATE' &&
+            desc.toLowerCase().contains('غير نقدي'));
+
+    final (icon, color, label) = switch (type) {
+      'SUBSCRIBER_ACTIVATE' =>
+        (Icons.bolt, AppTheme.successColor, 'تفعيل'),
+      'SUBSCRIBER_EXTEND' =>
+        (Icons.autorenew, AppTheme.teal600, 'تمديد'),
+      'BALANCE_DEDUCT' || 'DEBT_PAY' =>
+        (Icons.payments_outlined, Colors.green, 'تسديد دين'),
+      'BALANCE_ADD' =>
+        (Icons.add_card_rounded, AppTheme.warningColor, 'إضافة دين'),
+      _ => (Icons.receipt_long_outlined, theme.colorScheme.primary, type),
+    };
+
+    String formattedTime = '';
+    final dt = DateTime.tryParse(createdAt);
+    if (dt != null) {
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      formattedTime = '$h:$m';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color ?? theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.10),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (formattedTime.isNotEmpty)
+                      Text(
+                        formattedTime,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.5),
+                        ),
+                      ),
+                  ],
+                ),
+                if (desc.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    desc,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5, height: 1.35),
+                  ),
+                ],
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    notes,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
+                if (admin.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'المنفذ: $admin',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color:
+                          theme.colorScheme.primary.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (amount > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '${isDebt ? '-' : '+'}${AppHelpers.formatMoney(amount)}',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: isDebt ? Colors.red : Colors.green,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
