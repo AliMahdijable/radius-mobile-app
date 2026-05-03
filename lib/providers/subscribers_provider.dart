@@ -1302,6 +1302,18 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     state = state.copyWith(sortBy: field, sortDirection: direction);
   }
 
+  /// Re-applies the per-filter default sort for the currently active
+  /// filter tab. Called by the subscribers screen after clearing the
+  /// device-health sort so the list snaps back to the expected order
+  /// (e.g. remaining_days desc on "active") instead of staying in
+  /// whatever order the device sort produced.
+  void resetSortToFilterDefault() {
+    final def = _defaultSortByFilter[state.filter];
+    if (def != null) {
+      state = state.copyWith(sortBy: def.$1, sortDirection: def.$2);
+    }
+  }
+
   Future<void> loadPackages() async {
     try {
       final adminId = await _storage.getAdminId();

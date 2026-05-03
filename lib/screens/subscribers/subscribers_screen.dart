@@ -910,8 +910,18 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               probeProgress: _probeProgress,
               probeTotal: _probeTotal,
               onClear: () {
+                // Cancel any in-flight probe wave so progress callbacks
+                // don't keep firing after we've returned to default sort,
+                // then re-apply the per-filter default sort explicitly so
+                // the list snaps back to (e.g.) remaining_days desc on
+                // "active" instead of staying in the device-sort order.
+                _probeRunId += 1;
+                ref
+                    .read(subscribersProvider.notifier)
+                    .resetSortToFilterDefault();
                 setState(() {
                   _deviceSort = null;
+                  _probing = false;
                   _currentPage = 0;
                 });
               },
@@ -1317,8 +1327,15 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       if (_deviceSort != null)
                         TextButton.icon(
                           onPressed: () {
+                            // Same teardown as the banner's "إلغاء" — cancel
+                            // probes + restore per-filter default sort.
+                            _probeRunId += 1;
+                            ref
+                                .read(subscribersProvider.notifier)
+                                .resetSortToFilterDefault();
                             setState(() {
                               _deviceSort = null;
+                              _probing = false;
                               _currentPage = 0;
                             });
                             setSheetState(() {});
