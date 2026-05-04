@@ -166,6 +166,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final wa = ref.watch(whatsappProvider);
     final authState = ref.watch(authProvider);
     final subsState = ref.watch(subscribersProvider);
+    final canDailyActivations =
+        authState.user?.hasEmployeePermission('reports.daily_activations') ?? true;
     final theme = Theme.of(context);
     final realDebtors = subsState.subscribers.where((s) => s.hasDebt).length;
     final realTotalDebt = subsState.subscribers.where((s) => s.hasDebt).fold<double>(0, (sum, s) => sum + s.debtAmount.abs());
@@ -257,61 +259,63 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 14),
+                if (canDailyActivations) ...[
+                  const SizedBox(height: 14),
 
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: theme.cardTheme.color,
-                    borderRadius: BorderRadius.circular(16),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: theme.cardTheme.color,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.infoColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.today_rounded,
+                                  color: AppTheme.infoColor, size: 20),
+                            ),
+                            const SizedBox(width: 10),
+                            Text('نشاط اليوم',
+                                style: theme.textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _TodayStatItem(
+                                label: 'تفعيلات',
+                                value: '${dash.todayActivations}',
+                                icon: Icons.add_circle_outline,
+                                color: AppTheme.successColor,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _TodayStatItem(
+                                label: 'تمديدات',
+                                value: '${dash.todayExtensions}',
+                                icon: Icons.autorenew_rounded,
+                                color: AppTheme.infoColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.infoColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.today_rounded,
-                                color: AppTheme.infoColor, size: 20),
-                          ),
-                          const SizedBox(width: 10),
-                          Text('نشاط اليوم',
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _TodayStatItem(
-                              label: 'تفعيلات',
-                              value: '${dash.todayActivations}',
-                              icon: Icons.add_circle_outline,
-                              color: AppTheme.successColor,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _TodayStatItem(
-                              label: 'تمديدات',
-                              value: '${dash.todayExtensions}',
-                              icon: Icons.autorenew_rounded,
-                              color: AppTheme.infoColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                ],
 
-                if (dash.recentActivities.isNotEmpty) ...[
+                if (canDailyActivations && dash.recentActivities.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text('آخر العمليات',
                       style: theme.textTheme.titleMedium
