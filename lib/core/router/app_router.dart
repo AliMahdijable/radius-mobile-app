@@ -20,7 +20,7 @@ import '../../screens/debt_export_screen.dart';
 import '../../screens/debt_import_screen.dart';
 import '../../screens/managers_screen.dart';
 import '../../screens/packages_screen.dart';
-import '../../screens/print_templates_screen.dart';
+import '../../screens/receipts_archive_screen.dart';
 import '../../screens/devices/device_defaults_screen.dart';
 import '../../screens/devices/ont_device_screen.dart';
 import '../../screens/devices/ubiquiti_device_screen.dart';
@@ -153,9 +153,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/managers',
         builder: (context, state) => const ManagersScreen(),
       ),
+      // /print-templates: مزال من الموبايل — التصميم/التعديل فقط بالويب.
+      // الموبايل يقرأ القالب النشط للطباعة ولكن ما عنده محرّر.
       GoRoute(
-        path: '/print-templates',
-        builder: (context, state) => const PrintTemplatesScreen(),
+        path: '/receipts-archive',
+        builder: (context, state) => const ReceiptsArchiveScreen(),
       ),
       GoRoute(
         path: '/employees',

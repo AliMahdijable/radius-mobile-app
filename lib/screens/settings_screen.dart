@@ -57,13 +57,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final version = (info?['version'] as String? ?? '').trim();
       final buildNumber = '${info?['buildNumber'] ?? ''}'.trim();
       final versionLabel = _buildVersionLabel(version, buildNumber);
-      debugPrint(
-        'Loaded app version: version="$version", build="$buildNumber", label="$versionLabel"',
-      );
       if (!mounted) return;
-      setState(() {
-        _appVersion = versionLabel;
-      });
+      setState(() => _appVersion = versionLabel);
     } catch (error, stackTrace) {
       debugPrint('Failed to load app version: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -115,7 +110,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         builder: (ctx, ref, _) {
           final settings = ref.watch(settingsProvider);
           final theme = Theme.of(ctx);
-
           return Padding(
             padding: bottomSheetContentPadding(
               ctx,
@@ -147,12 +141,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           color: AppTheme.whatsappGreen, size: 22),
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      'ميزات واتساب',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    Text('ميزات واتساب',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -219,229 +210,250 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showDebtExportDialog() {
-    context.push('/debt-export');
-  }
-
-  void _showDebtImportDialog() {
-    context.push('/debt-import');
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final authState = ref.watch(authProvider);
     final user = authState.user;
-    // الموظف لازم يحمل managers.view (للقسمين: إدارة المدراء + تسعير
-    // الباقات). الأدمن العادي يكتفي بـcanAccessManagers من SAS4 perms.
     bool empCan(String key) => user?.hasEmployeePermission(key) ?? true;
     final theme = Theme.of(context);
     final canAccessManagers = authState.user?.canAccessManagers ?? false;
+    final isEmployee = user?.isEmployee == true;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      children: [
-        _SectionTitle(title: 'المظهر'),
-        const SizedBox(height: 8),
-        _SettingTile(
-          icon: Icons.dark_mode_outlined,
-          title: 'الوضع الداكن',
-          trailing: Switch.adaptive(
-            value: themeMode == ThemeMode.dark,
-            onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
-            activeColor: theme.colorScheme.primary,
-          ),
-        ),
-        _SettingTile(
-          icon: Icons.notifications_active_outlined,
-          title: 'إشعارات الجهاز',
-          subtitle:
-              'استقبال تنبيهات الجهاز للاشتراكات، مع ربط التنبيهات الفورية داخل التطبيق عندما يدعم الجهاز ذلك.',
-          trailing: !_fcmLoaded
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Switch.adaptive(
-                  value: _fcmEnabled,
-                  onChanged: ref.watch(authProvider).status ==
-                          AuthStatus.authenticated
-                      ? _onFcmChanged
-                      : null,
-                  activeColor: theme.colorScheme.primary,
-                ),
-        ),
+    // ── حساب visibility الأقسام مسبقاً عشان نخفي القسم الفارغ ─────────
+    final hasAdministration =
+        empCan('discounts.view') ||
+        (canAccessManagers && empCan('managers.view')) ||
+        (!isEmployee || empCan('employees.view')) ||
+        (canAccessManagers && empCan('packages.view'));
 
-        const SizedBox(height: 8),
-        if (empCan('discounts.view'))
-          _SettingTile(
-            icon: Icons.discount_rounded,
-            title: 'قائمة الخصومات',
-            subtitle: 'إدارة خصومات المشتركين',
-            onTap: () => context.push('/discounts'),
-          ),
-        if (canAccessManagers && empCan('managers.view'))
-          _SettingTile(
-            icon: Icons.admin_panel_settings_outlined,
-            title: 'المدراء الفرعيون',
-            subtitle: 'إظهار وإدارة قسم الأدمنية الفرعية',
-            onTap: () => context.push('/managers'),
-          ),
-        // الموظفون: للأدمن فقط (الموظف لا يدير موظفين بشكل افتراضي)
-        if (user?.isEmployee != true || empCan('employees.view'))
-          _SettingTile(
-            icon: Icons.badge_outlined,
-            title: 'الموظفون',
-            subtitle: 'إنشاء/تعديل حسابات الموظفين وصلاحياتهم',
-            onTap: () => context.push('/employees'),
-          ),
-        if (canAccessManagers && empCan('packages.view'))
-          _SettingTile(
-            icon: Icons.price_change_rounded,
-            title: 'تسعير الباقات',
-            subtitle: 'إدارة أسعار الباقات للمدراء',
-            onTap: () => context.push('/packages'),
-          ),
-        if (empCan('reports.expenses'))
-          _SettingTile(
-            icon: Icons.account_balance_wallet_rounded,
-            title: 'الصرفيات',
-            subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
-            onTap: () => context.push('/expenses'),
-          ),
-        // الإعدادات الافتراضية للأجهزة + إعدادات الإشعارات تفضيلات شخصية
-        // للمستخدم؛ ما تحتاج صلاحية. الموظف عنده Ubiquiti/ONT/push
-        // الخاصة فيه (مو الأب).
-        _SettingTile(
-          icon: Icons.router_rounded,
-          title: 'الإعدادات الافتراضية لأجهزتك',
-          subtitle: 'بيانات دخول Ubiquiti و ONT لكل مشتركيك',
-          onTap: () => context.push('/device-defaults'),
-        ),
-        if (empCan('print_templates.edit'))
-          _SettingTile(
-            icon: Icons.print_rounded,
-            title: 'قوالب الطباعة',
-            subtitle: 'إدارة قوالب وصولات الطباعة',
-            onTap: () => context.push('/print-templates'),
-          ),
-        _SettingTile(
-          icon: Icons.notifications_active_rounded,
-          title: 'إعدادات الإشعارات',
-          subtitle: 'تفعيل/إيقاف Push + ساعات صمت',
-          iconColor: Colors.indigo,
-          onTap: () => context.push('/notification-settings'),
-        ),
-
-        // قسم WhatsApp يظهر فقط لو الفاعل يملك أي whatsapp.* perm.
-        if (user == null ||
-            !user.isEmployee ||
-            user.hasAnyEmployeePermission(const [
+    final hasWhatsapp = !isEmployee ||
+        (user?.hasAnyEmployeePermission(const [
               'whatsapp.connect',
               'whatsapp.send',
+              'whatsapp.broadcast',
               'whatsapp.templates',
               'whatsapp.schedules',
-            ])) ...[
-          const SizedBox(height: 20),
-          _SectionTitle(title: 'إدارة واتساب'),
-          const SizedBox(height: 8),
-          if (empCan('whatsapp.templates'))
-            _SettingTile(
-              icon: Icons.tune_rounded,
-              title: 'ميزات واتساب',
-              subtitle: 'التحكم بالإرسال التلقائي',
-              iconColor: AppTheme.whatsappGreen,
-              onTap: _showFeaturesModal,
-            ),
-          if (empCan('whatsapp.connect'))
-            _SettingTile(
-              icon: Icons.link,
-              title: 'اتصال واتساب',
-              onTap: () => context.push('/whatsapp-connection'),
-            ),
-          // نطاق الإرسال = إعداد إداري لجلسة واتساب الأب: يحدّد أي مدراء
-          // فرعيين يغطيهم. الموظف لا يمسّ هذا حتى لو عنده whatsapp.send.
-          // فقط الأدمن (مع canAccessManagers) يشوفه.
-          if (canAccessManagers && user?.isEmployee != true)
-            _SettingTile(
-              icon: Icons.share_location_rounded,
-              title: 'نطاق الإرسال',
-              subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
-              iconColor: AppTheme.whatsappGreen,
-              onTap: () => context.push('/whatsapp-send-scope'),
-            ),
-          if (empCan('whatsapp.schedules'))
-            _SettingTile(
-              icon: Icons.schedule,
-              title: 'الجدولة',
-              onTap: () => context.push('/schedules'),
-            ),
-          if (empCan('whatsapp.templates'))
-            _SettingTile(
-              icon: Icons.description_outlined,
-              title: 'قوالب الرسائل',
-              onTap: () => context.push('/templates'),
-            ),
-          if (empCan('whatsapp.broadcast'))
-            _SettingTile(
-              icon: Icons.campaign,
-              title: 'بث الرسائل',
-              onTap: () => context.push('/broadcast'),
-            ),
-          if (empCan('whatsapp.send'))
-            _SettingTile(
-              icon: Icons.history,
-              title: 'سجل الرسائل',
-              onTap: () => context.push('/message-logs'),
-            ),
-        ],
+            ]) ??
+            false);
 
-        // قسم "إدارة الديون" يخص الأدمن فقط (تصدير/استيراد ديون المشتركين
-        // = bulk operations، و"ديون عليّ" حساب شخصي للأدمن من والده). الموظف
-        // ليس له علاقة بأي من الثلاث.
-        if (user?.isEmployee != true) ...[
-          const SizedBox(height: 20),
-          _SectionTitle(title: 'إدارة الديون'),
-          const SizedBox(height: 8),
-          if (empCan('debts.import'))
-            _SettingTile(
-              icon: Icons.file_download_outlined,
-              title: 'تصدير ديون المشتركين',
-              subtitle: 'تصدير ملف CSV بالمشتركين المديونين',
-              onTap: _showDebtExportDialog,
-            ),
-          if (empCan('debts.import'))
-            _SettingTile(
-              icon: Icons.file_upload_outlined,
-              title: 'استيراد ديون المشتركين',
-              subtitle: 'استيراد ديون من ملف CSV',
-              onTap: _showDebtImportDialog,
-            ),
-          // Personal ledger — any admin can see debts the parent recorded
-          // against them. Intentionally placed at the bottom of the
-          // section so it feels like a "my account" view, not a main action.
-          _SettingTile(
-            icon: Icons.receipt_long_outlined,
-            title: 'ديون عليّ',
-            subtitle: 'ديون مسجلة عليك من قبل المدير الرئيسي',
-            onTap: () => context.push('/my-debts'),
-          ),
-        ],
+    final hasArchives = empCan('reports.expenses') || true; // archive always
 
-        const SizedBox(height: 20),
-
-        _SectionTitle(title: 'حول'),
-        const SizedBox(height: 8),
-        _SettingTile(
-          icon: Icons.info_outline,
-          title: 'عن التطبيق',
-          subtitle: _appVersion == null
-              ? 'MyServices Radius'
-              : 'MyServices Radius v$_appVersion',
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+      children: [
+        // 1) المظهر والإشعارات (مفتوحة بشكل افتراضي — الأكثر استعمالاً)
+        _SettingsSection(
+          title: 'المظهر والإشعارات',
+          icon: Icons.palette_outlined,
+          initiallyExpanded: true,
+          children: [
+            _SettingTile(
+              icon: Icons.dark_mode_outlined,
+              title: 'الوضع الداكن',
+              trailing: Switch.adaptive(
+                value: themeMode == ThemeMode.dark,
+                onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
+                activeColor: theme.colorScheme.primary,
+              ),
+            ),
+            _SettingTile(
+              icon: Icons.notifications_active_outlined,
+              title: 'إشعارات الجهاز',
+              subtitle:
+                  'استقبال تنبيهات الجهاز للاشتراكات + الإشعارات الفورية داخل التطبيق.',
+              trailing: !_fcmLoaded
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Switch.adaptive(
+                      value: _fcmEnabled,
+                      onChanged: ref.watch(authProvider).status ==
+                              AuthStatus.authenticated
+                          ? _onFcmChanged
+                          : null,
+                      activeColor: theme.colorScheme.primary,
+                    ),
+            ),
+            _SettingTile(
+              icon: Icons.notifications_active_rounded,
+              title: 'إعدادات الإشعارات',
+              subtitle: 'تفعيل/إيقاف Push + ساعات صمت',
+              iconColor: Colors.indigo,
+              onTap: () => context.push('/notification-settings'),
+            ),
+            _SettingTile(
+              icon: Icons.router_rounded,
+              title: 'الإعدادات الافتراضية لأجهزتك',
+              subtitle: 'بيانات دخول Ubiquiti و ONT',
+              onTap: () => context.push('/device-defaults'),
+            ),
+          ],
         ),
 
-        const SizedBox(height: 20),
+        // 2) الإدارة — موظفون / مدراء فرعيون / باقات / خصومات
+        if (hasAdministration)
+          _SettingsSection(
+            title: 'الإدارة',
+            icon: Icons.tune_rounded,
+            children: [
+              if (!isEmployee || empCan('employees.view'))
+                _SettingTile(
+                  icon: Icons.badge_outlined,
+                  title: 'الموظفون',
+                  subtitle: 'إنشاء/تعديل حسابات الموظفين وصلاحياتهم',
+                  onTap: () => context.push('/employees'),
+                ),
+              if (canAccessManagers && empCan('managers.view'))
+                _SettingTile(
+                  icon: Icons.admin_panel_settings_outlined,
+                  title: 'المدراء الفرعيون',
+                  subtitle: 'إظهار وإدارة قسم الأدمنية الفرعية',
+                  onTap: () => context.push('/managers'),
+                ),
+              if (canAccessManagers && empCan('packages.view'))
+                _SettingTile(
+                  icon: Icons.price_change_rounded,
+                  title: 'تسعير الباقات',
+                  subtitle: 'إدارة أسعار الباقات للمدراء',
+                  onTap: () => context.push('/packages'),
+                ),
+              if (empCan('discounts.view'))
+                _SettingTile(
+                  icon: Icons.discount_rounded,
+                  title: 'قائمة الخصومات',
+                  subtitle: 'إدارة خصومات المشتركين',
+                  onTap: () => context.push('/discounts'),
+                ),
+            ],
+          ),
+
+        // 3) التواصل — كل ما يخص واتساب
+        if (hasWhatsapp)
+          _SettingsSection(
+            title: 'التواصل (واتساب)',
+            icon: Icons.message_rounded,
+            iconColor: AppTheme.whatsappGreen,
+            children: [
+              if (empCan('whatsapp.connect'))
+                _SettingTile(
+                  icon: Icons.link,
+                  title: 'اتصال واتساب',
+                  subtitle: 'ربط/فصل الجلسة',
+                  onTap: () => context.push('/whatsapp-connection'),
+                ),
+              if (empCan('whatsapp.templates'))
+                _SettingTile(
+                  icon: Icons.tune_rounded,
+                  title: 'ميزات واتساب',
+                  subtitle: 'التحكم بالإرسال التلقائي',
+                  iconColor: AppTheme.whatsappGreen,
+                  onTap: _showFeaturesModal,
+                ),
+              if (canAccessManagers && !isEmployee)
+                _SettingTile(
+                  icon: Icons.share_location_rounded,
+                  title: 'نطاق الإرسال',
+                  subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
+                  iconColor: AppTheme.whatsappGreen,
+                  onTap: () => context.push('/whatsapp-send-scope'),
+                ),
+              if (empCan('whatsapp.templates'))
+                _SettingTile(
+                  icon: Icons.description_outlined,
+                  title: 'قوالب الرسائل',
+                  onTap: () => context.push('/templates'),
+                ),
+              if (empCan('whatsapp.schedules'))
+                _SettingTile(
+                  icon: Icons.schedule,
+                  title: 'الجدولة',
+                  onTap: () => context.push('/schedules'),
+                ),
+              if (empCan('whatsapp.broadcast'))
+                _SettingTile(
+                  icon: Icons.campaign,
+                  title: 'بث الرسائل',
+                  onTap: () => context.push('/broadcast'),
+                ),
+              if (empCan('whatsapp.send'))
+                _SettingTile(
+                  icon: Icons.history,
+                  title: 'سجل الرسائل',
+                  onTap: () => context.push('/message-logs'),
+                ),
+            ],
+          ),
+
+        // 4) الأرشيف والسجلات — وصولات + صرفيات
+        if (hasArchives)
+          _SettingsSection(
+            title: 'الأرشيف والسجلات',
+            icon: Icons.folder_open_rounded,
+            children: [
+              _SettingTile(
+                icon: Icons.receipt_long_rounded,
+                title: 'أرشيف الوصولات',
+                subtitle: 'كل ما طُبع من تفعيل/تمديد/تسديد دين',
+                iconColor: AppTheme.primary,
+                onTap: () => context.push('/receipts-archive'),
+              ),
+              if (empCan('reports.expenses'))
+                _SettingTile(
+                  icon: Icons.account_balance_wallet_rounded,
+                  title: 'الصرفيات',
+                  subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
+                  onTap: () => context.push('/expenses'),
+                ),
+            ],
+          ),
+
+        // 5) إدارة الديون — أدمن فقط
+        if (!isEmployee)
+          _SettingsSection(
+            title: 'إدارة الديون',
+            icon: Icons.receipt_long_outlined,
+            children: [
+              if (empCan('debts.import'))
+                _SettingTile(
+                  icon: Icons.file_download_outlined,
+                  title: 'تصدير ديون المشتركين',
+                  subtitle: 'تصدير ملف CSV بالمشتركين المديونين',
+                  onTap: () => context.push('/debt-export'),
+                ),
+              if (empCan('debts.import'))
+                _SettingTile(
+                  icon: Icons.file_upload_outlined,
+                  title: 'استيراد ديون المشتركين',
+                  subtitle: 'استيراد ديون من ملف CSV',
+                  onTap: () => context.push('/debt-import'),
+                ),
+              _SettingTile(
+                icon: Icons.account_balance_outlined,
+                title: 'ديون عليّ',
+                subtitle: 'ديون مسجلة عليك من قبل المدير الرئيسي',
+                onTap: () => context.push('/my-debts'),
+              ),
+            ],
+          ),
+
+        // 6) حول
+        _SettingsSection(
+          title: 'حول',
+          icon: Icons.info_outline,
+          children: [
+            _SettingTile(
+              icon: Icons.info_outline,
+              title: 'عن التطبيق',
+              subtitle: _appVersion == null
+                  ? 'MyServices Radius'
+                  : 'MyServices Radius v$_appVersion',
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
 
         SizedBox(
           height: AppTheme.actionButtonHeight,
@@ -459,9 +471,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     ElevatedButton(
                       onPressed: () => Navigator.pop(ctx, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                       child: const Text('خروج'),
                     ),
                   ],
@@ -480,10 +490,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
             },
             icon: const Icon(Icons.logout, color: Colors.red),
-            label: const Text(
-              'تسجيل الخروج',
-              style: TextStyle(fontFamily: 'Cairo', color: Colors.red),
-            ),
+            label: const Text('تسجيل الخروج',
+                style: TextStyle(fontFamily: 'Cairo', color: Colors.red)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.red),
             ),
@@ -494,17 +502,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
+/// قسم قابل للطي. الـheader يحمل أيقونة + عنوان، والـchildren tiles عادية.
+/// تطبيق ExpansionTile يخفي القائمة الطويلة ويسرّع التصفح.
+class _SettingsSection extends StatelessWidget {
   final String title;
-  const _SectionTitle({required this.title});
+  final IconData icon;
+  final Color? iconColor;
+  final bool initiallyExpanded;
+  final List<Widget> children;
+
+  const _SettingsSection({
+    required this.title,
+    required this.icon,
+    required this.children,
+    this.iconColor,
+    this.initiallyExpanded = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
+    final theme = Theme.of(context);
+    final color = iconColor ?? theme.colorScheme.primary;
+    final visibleChildren = children.whereType<Widget>().toList();
+    if (visibleChildren.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: theme.colorScheme.onSurface.withValues(alpha: .06)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        // إخفاء divider الافتراضي للـExpansionTile حتى يكون الكارت نظيف.
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
+          title: Text(title,
+              style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15)),
+          children: visibleChildren,
+        ),
+      ),
     );
   }
 }
@@ -530,36 +583,42 @@ class _SettingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeColor = iconColor ?? Theme.of(context).colorScheme.primary;
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+        dense: true,
         leading: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color: themeColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(9),
           ),
-          child: Icon(icon, color: themeColor, size: 20),
+          child: Icon(icon, color: themeColor, size: 18),
         ),
         title: Text(title,
-            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14)),
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5)),
         subtitle: subtitle != null
-            ? Text(subtitle!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12))
+            ? Text(subtitle!,
+                style:
+                    const TextStyle(fontFamily: 'Cairo', fontSize: 11))
             : null,
         trailing: trailing ??
             (onTap != null
                 ? Icon(Icons.arrow_forward_ios,
-                    size: 14,
+                    size: 12,
                     color: Theme.of(context)
                         .colorScheme
                         .onSurface
                         .withOpacity(0.3))
                 : null),
         onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -598,8 +657,12 @@ class _FeatureToggle extends StatelessWidget {
           child: Icon(icon, color: AppTheme.whatsappGreen, size: 20),
         ),
         title: Text(title,
-            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w600,
+                fontSize: 14)),
+        subtitle: Text(subtitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
         value: value,
         activeColor: AppTheme.whatsappGreen,
         onChanged: onChanged,

@@ -19,6 +19,7 @@ import '../../providers/managers_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../models/manager_model.dart';
+import '../../providers/receipt_archive_provider.dart';
 import '../../providers/templates_provider.dart';
 import '../../providers/print_templates_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -157,7 +158,16 @@ class _SubscriberDetailsScreenState
     }
   }
 
-  Future<void> _printReceiptNow(ReceiptData data) async {
+  /// يطبع الوصل ويأرشفه. الأرشفة fire-and-forget — فشلها ما يبطّل الطباعة.
+  /// كل عملية تطبع وصل (تفعيل/تمديد/تسديد دين/إضافة دين) تنتهي بصف بـ
+  /// printed_receipts بالـbackend، يتعرض بشاشة "أرشيف الوصولات".
+  Future<void> _printReceiptNow(
+    ReceiptData data, {
+    required ReceiptOperation operation,
+    ReceiptPaymentMethod paymentMethod = ReceiptPaymentMethod.cash,
+    String? subscriberId,
+    String? subscriberUsername,
+  }) async {
     if (!mounted) return;
     try {
       final ptState = ref.read(printTemplatesProvider);
@@ -168,6 +178,17 @@ class _SubscriberDetailsScreenState
       await ReceiptPrinter.printReceipt(
         data: data,
         htmlTemplate: activeTemplate?.content,
+      );
+      // بعد ما تنفّذ الطباعة (المستخدم يقدر يلغي قبل الإرسال للطابعة، لكن
+      // المهم أن البيانات اكتملت وتم build الوصل) → نحفظ نسخة للأرشيف.
+      await archivePrintedReceipt(
+        ref,
+        data: data,
+        operation: operation,
+        paymentMethod: paymentMethod,
+        subscriberId: subscriberId,
+        subscriberUsername: subscriberUsername,
+        templateId: activeTemplate?.id,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
@@ -1044,17 +1065,27 @@ class _SubscriberDetailsScreenState
                           });
                         final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
                         if (printReceipt) {
-                          await _printReceiptNow(ReceiptData(
-                            subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                            phoneNumber: currentSub.displayPhone,
-                            packageName: currentSub.profileName ?? '',
-                            packagePrice: extPrice,
-                            paidAmount: method == 'credit' ? extPrice : 0,
-                            debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                            remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                            expiryDate: expDate,
-                            operationType: 'activation',
-                          ));
+                          await _printReceiptNow(
+                            ReceiptData(
+                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                              phoneNumber: currentSub.displayPhone,
+                              packageName: currentSub.profileName ?? '',
+                              packagePrice: extPrice,
+                              paidAmount: method == 'credit' ? extPrice : 0,
+                              debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                              remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                              expiryDate: expDate,
+                              operationType: 'extension',
+                            ),
+                            operation: ReceiptOperation.extend,
+                            paymentMethod: method == 'partial'
+                                ? ReceiptPaymentMethod.partial
+                                : (method == 'credit'
+                                    ? ReceiptPaymentMethod.credit
+                                    : ReceiptPaymentMethod.cash),
+                            subscriberId: currentSub.idx,
+                            subscriberUsername: currentSub.username,
+                          );
                         }
                         if (mounted) context.pop();
                       }
@@ -1667,17 +1698,27 @@ class _SubscriberDetailsScreenState
                           '{days_remaining}': freshRemDays,
                         });
                         if (printReceipt) {
-                          await _printReceiptNow(ReceiptData(
-                            subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                            phoneNumber: currentSub.displayPhone,
-                            packageName: profileName,
-                            packagePrice: userPrice,
-                            paidAmount: actualPaidAmount,
-                            debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                            remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                            expiryDate: fresh?['expiration']?.toString() ?? '',
-                            operationType: 'activation',
-                          ));
+                          await _printReceiptNow(
+                            ReceiptData(
+                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                              phoneNumber: currentSub.displayPhone,
+                              packageName: profileName,
+                              packagePrice: userPrice,
+                              paidAmount: actualPaidAmount,
+                              debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                              remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                              expiryDate: fresh?['expiration']?.toString() ?? '',
+                              operationType: 'activation',
+                            ),
+                            operation: ReceiptOperation.activate,
+                            paymentMethod: !isCash
+                                ? ReceiptPaymentMethod.credit
+                                : (isPartialCash
+                                    ? ReceiptPaymentMethod.partial
+                                    : ReceiptPaymentMethod.cash),
+                            subscriberId: currentSub.idx,
+                            subscriberUsername: currentSub.username,
+                          );
                         }
                         if (mounted) context.pop();
                       }
@@ -2244,17 +2285,23 @@ class _SubscriberDetailsScreenState
                                 '{payment_date}': paymentDateStr,
                               });
                             if (printReceipt) {
-                              await _printReceiptNow(ReceiptData(
-                                subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                                phoneNumber: currentSub.displayPhone,
-                                packageName: currentSub.profileName ?? '',
-                                packagePrice: 0,
-                                paidAmount: payAmount,
-                                debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                                remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                                expiryDate: fresh?['expiration']?.toString() ?? '',
-                                operationType: 'debt_payment',
-                              ));
+                              await _printReceiptNow(
+                                ReceiptData(
+                                  subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                  phoneNumber: currentSub.displayPhone,
+                                  packageName: currentSub.profileName ?? '',
+                                  packagePrice: 0,
+                                  paidAmount: payAmount,
+                                  debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                                  remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                                  expiryDate: fresh?['expiration']?.toString() ?? '',
+                                  operationType: 'debt_payment',
+                                ),
+                                operation: ReceiptOperation.payDebt,
+                                paymentMethod: ReceiptPaymentMethod.cash,
+                                subscriberId: currentSub.idx,
+                                subscriberUsername: currentSub.username,
+                              );
                             }
                             if (mounted) context.pop();
                           }
@@ -2537,14 +2584,20 @@ class _SubscriberDetailsScreenState
                             }
                             final currentSub = _readCurrentSubscriber();
                             if (printReceipt) {
-                              await _printReceiptNow(ReceiptData(
-                                subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
-                                phoneNumber: currentSub.displayPhone,
-                                packageName: currentSub.profileName ?? '',
-                                debtAmount: btnAmount,
-                                remainingAmount: btnAmount,
-                                operationType: 'debt_add',
-                              ));
+                              await _printReceiptNow(
+                                ReceiptData(
+                                  subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                  phoneNumber: currentSub.displayPhone,
+                                  packageName: currentSub.profileName ?? '',
+                                  debtAmount: btnAmount,
+                                  remainingAmount: btnAmount,
+                                  operationType: 'debt_add',
+                                ),
+                                operation: ReceiptOperation.addDebt,
+                                paymentMethod: ReceiptPaymentMethod.credit,
+                                subscriberId: currentSub.idx,
+                                subscriberUsername: currentSub.username,
+                              );
                             }
                             if (mounted) context.pop();
                           }
