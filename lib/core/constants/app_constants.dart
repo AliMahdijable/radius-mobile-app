@@ -9,6 +9,14 @@ class AppConstants {
   static const String storagePermissions = 'permissions';
   static const String storageCanAccessManagers = 'canAccessManagers';
   static const String storageCanAccessPackages = 'canAccessPackages';
+  // Employee context (مفعّلة فقط لما يكون الفاعل موظفاً، لا أدمن).
+  static const String storageIsEmployee = 'auth_is_employee';
+  static const String storageEmployeeId = 'auth_employee_id';
+  static const String storageEmployeeUsername = 'auth_employee_username';
+  static const String storageEmployeeFullName = 'auth_employee_full_name';
+  /// JSON-encoded Map<String,bool> لصلاحيات الموظف الـ40 (subscribers.activate, ...).
+  /// الأدمن العادي يبقى عنده SAS4 perms فقط ويُعتبر "كل شيء = true" للموظف-style.
+  static const String storageEmployeePermissions = 'auth_employee_permissions';
   static const String storageThemeMode = 'themeMode';
   static const String storageServerUrl = 'serverUrl';
   static const String storageRememberMe = 'rememberMe';

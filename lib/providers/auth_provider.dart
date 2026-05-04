@@ -185,16 +185,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // ✅ تفعيل الإشعارات بشكل افتراضي عند التحقق من الجلسة
       await _storage.setFcmEnabled(true);
 
-      final access = await _fetchPermissions(token);
+      // استرجاع سياق الموظف (لو موجود) قبل قرار جلب SAS4 perms.
+      final isEmp = await _storage.getIsEmployee();
+      final empPerms = isEmp ? await _storage.getEmployeePermissions() : const <String, bool>{};
+      final access = isEmp
+          ? _PermissionAccess(
+              permissions: const [],
+              canAccessManagers: true,
+              canAccessPackages: true,
+            )
+          : await _fetchPermissions(token);
       final user = UserModel(
         id: adminId,
         username: username ?? '',
-        role: 'admin',
+        role: isEmp ? 'employee' : 'admin',
         token: token,
         expiresAt: expiry ?? '',
         permissions: access.permissions,
         canAccessManagers: access.canAccessManagers,
         canAccessPackages: access.canAccessPackages,
+        isEmployee: isEmp,
+        employeeId: isEmp ? await _storage.getEmployeeId() : null,
+        employeeUsername: isEmp ? await _storage.getEmployeeUsername() : null,
+        employeeFullName: isEmp ? await _storage.getEmployeeFullName() : null,
+        employeePermissions: empPerms,
       );
       _resetSessionScopedProviders();
       _socket.disconnect();
@@ -281,7 +295,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (response.data['success'] == true) {
         final user = UserModel.fromJson(response.data);
-        final access = await _fetchPermissions(user.token);
+        // الموظف لا يحتاج SAS4 perms (الـmiddleware بالـbackend يبدّل
+        // التوكن لتوكن الأب تلقائياً)؛ إنّما نخزّن صلاحياته الـ40 من الـlogin response.
+        final access = user.isEmployee
+            ? _PermissionAccess(
+                permissions: const [],
+                // نمرّر canAccess كـtrue لكي ما تنحجب صفحات لمجرد أنه ما عنده SAS4 prm.
+                canAccessManagers: true,
+                canAccessPackages: true,
+              )
+            : await _fetchPermissions(user.token);
 
         // ✅ تفعيل الإشعارات بشكل افتراضي عند تسجيل الدخول
         await _storage.setFcmEnabled(true);
@@ -294,6 +317,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           permissions: access.permissions,
           canAccessManagers: access.canAccessManagers,
           canAccessPackages: access.canAccessPackages,
+          isEmployee: user.isEmployee,
+          employeeId: user.employeeId,
+          employeeUsername: user.employeeUsername,
+          employeeFullName: user.employeeFullName,
+          employeePermissions: user.employeePermissions,
         );
 
         _resetSessionScopedProviders();

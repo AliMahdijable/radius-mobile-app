@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import '../services/storage_service.dart';
 import '../services/session_refresh_service.dart';
 import '../services/session_events.dart';
@@ -53,6 +54,23 @@ class AuthInterceptor extends Interceptor {
       'ERROR: ${err.response?.statusCode} ${err.requestOptions.uri} - ${err.message}',
       name: 'HTTP',
     );
+
+    // 403 من backend مع code=PERMISSION_DENIED → الموظف ما عنده صلاحية.
+    // نُظهر toast بالرسالة العربية ولا نفعّل تجديد التوكن.
+    if (err.response?.statusCode == 403) {
+      final data = err.response?.data;
+      if (data is Map && data['code'] == 'PERMISSION_DENIED') {
+        final msg = (data['message']?.toString() ?? 'لا تملك صلاحية لهذه العملية');
+        try {
+          Fluttertoast.showToast(
+            msg: msg,
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.CENTER,
+          );
+        } catch (_) { /* ignore */ }
+      }
+      return handler.next(err);
+    }
 
     if (err.response?.statusCode != 401) {
       return handler.next(err);

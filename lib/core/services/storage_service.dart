@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/app_constants.dart';
@@ -70,6 +71,11 @@ class StorageService {
     List<String> permissions = const [],
     bool canAccessManagers = false,
     bool canAccessPackages = false,
+    bool isEmployee = false,
+    int? employeeId,
+    String? employeeUsername,
+    String? employeeFullName,
+    Map<String, bool> employeePermissions = const {},
   }) async {
     final sp = await _sp;
     await Future.wait([
@@ -80,7 +86,48 @@ class StorageService {
       sp.setStringList(AppConstants.storagePermissions, permissions),
       sp.setBool(AppConstants.storageCanAccessManagers, canAccessManagers),
       sp.setBool(AppConstants.storageCanAccessPackages, canAccessPackages),
+      sp.setBool(AppConstants.storageIsEmployee, isEmployee),
+      if (employeeId != null)
+        sp.setInt(AppConstants.storageEmployeeId, employeeId)
+      else
+        sp.remove(AppConstants.storageEmployeeId),
+      if (employeeUsername != null)
+        sp.setString(AppConstants.storageEmployeeUsername, employeeUsername)
+      else
+        sp.remove(AppConstants.storageEmployeeUsername),
+      if (employeeFullName != null)
+        sp.setString(AppConstants.storageEmployeeFullName, employeeFullName)
+      else
+        sp.remove(AppConstants.storageEmployeeFullName),
+      sp.setString(
+        AppConstants.storageEmployeePermissions,
+        jsonEncode(employeePermissions),
+      ),
     ]);
+  }
+
+  Future<bool> getIsEmployee() async =>
+      (await _sp).getBool(AppConstants.storageIsEmployee) ?? false;
+
+  Future<int?> getEmployeeId() async =>
+      (await _sp).getInt(AppConstants.storageEmployeeId);
+
+  Future<String?> getEmployeeUsername() async =>
+      (await _sp).getString(AppConstants.storageEmployeeUsername);
+
+  Future<String?> getEmployeeFullName() async =>
+      (await _sp).getString(AppConstants.storageEmployeeFullName);
+
+  Future<Map<String, bool>> getEmployeePermissions() async {
+    final raw = (await _sp).getString(AppConstants.storageEmployeePermissions);
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v == true));
+      }
+    } catch (_) { /* ignore corrupt JSON */ }
+    return const {};
   }
 
   Future<void> clearAll() async {
@@ -92,6 +139,11 @@ class StorageService {
     await sp.remove(AppConstants.storagePermissions);
     await sp.remove(AppConstants.storageCanAccessManagers);
     await sp.remove(AppConstants.storageCanAccessPackages);
+    await sp.remove(AppConstants.storageIsEmployee);
+    await sp.remove(AppConstants.storageEmployeeId);
+    await sp.remove(AppConstants.storageEmployeeUsername);
+    await sp.remove(AppConstants.storageEmployeeFullName);
+    await sp.remove(AppConstants.storageEmployeePermissions);
     final appNotificationKeys = sp
         .getKeys()
         .where(
