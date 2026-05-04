@@ -238,6 +238,127 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     setState(() => _currentIndex = 1);
   }
 
+  /// Bottom nav. يخفي "إضافة" لو ما عنده subscribers.add، و"التقارير"
+  /// لو ما عنده أي reports.* perm. الـ_currentIndex يبقى يشير لـscreen index
+  /// الثابت (0=dashboard, 1=subs, 2=add, 3=reports, 4=settings) ونعمل remap
+  /// بين الـvisible position والـscreen index.
+  Widget _buildBottomNav(ThemeData theme) {
+    final user = ref.watch(authProvider).user;
+    final canAdd = user?.hasEmployeePermission('subscribers.add') ?? true;
+    final canReports = user?.hasAnyEmployeePermission(const [
+          'reports.activity_log',
+          'reports.daily_activations',
+          'reports.activations',
+          'reports.financial',
+          'reports.sessions',
+          'reports.account_statement',
+        ]) ??
+        true;
+
+    // قائمة المداخل (screenIndex, destination, visible)
+    final items = <_NavEntry>[
+      _NavEntry(
+        screenIdx: 0,
+        visible: true,
+        destination: const NavigationDestination(
+          icon: Icon(Icons.dashboard_outlined),
+          selectedIcon: Icon(Icons.dashboard),
+          label: 'الرئيسية',
+        ),
+      ),
+      _NavEntry(
+        screenIdx: 1,
+        visible: true,
+        destination: const NavigationDestination(
+          icon: Icon(Icons.people_outline),
+          selectedIcon: Icon(Icons.people),
+          label: 'المشتركين',
+        ),
+      ),
+      _NavEntry(
+        screenIdx: 2,
+        visible: canAdd,
+        destination: NavigationDestination(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primary,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.person_add_alt_1,
+                color: Colors.white, size: 22),
+          ),
+          selectedIcon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.teal800,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.person_add_alt_1,
+                color: Colors.white, size: 22),
+          ),
+          label: 'إضافة',
+        ),
+      ),
+      _NavEntry(
+        screenIdx: 3,
+        visible: canReports,
+        destination: const NavigationDestination(
+          icon: Icon(Icons.assessment_outlined),
+          selectedIcon: Icon(Icons.assessment),
+          label: 'التقارير',
+        ),
+      ),
+      _NavEntry(
+        screenIdx: 4,
+        visible: true,
+        destination: const NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: 'الإعدادات',
+        ),
+      ),
+    ];
+    final visibleEntries = items.where((e) => e.visible).toList();
+    // حول _currentIndex (screen idx) لـvisible position. إذا الشاشة الحالية
+    // مخفية الآن (مثلاً الموظف فاقد reports وكنت تقف على /reports)، نقع على 0.
+    int visibleIdx =
+        visibleEntries.indexWhere((e) => e.screenIdx == _currentIndex);
+    if (visibleIdx < 0) {
+      visibleIdx = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _currentIndex = visibleEntries.first.screenIdx);
+      });
+    }
+
+    return NavigationBar(
+      selectedIndex: visibleIdx,
+      onDestinationSelected: (visiblePos) {
+        final entry = visibleEntries[visiblePos];
+        final i = entry.screenIdx;
+        if (i != 0) _alertsDismissed = false;
+        if (i == 2) {
+          _openAddSubscriberSheet();
+          return;
+        }
+        if (i == 0) {
+          final auth = ref.read(authProvider);
+          if (auth.user != null) {
+            ref.read(dashboardProvider.notifier).loadDashboard(
+                  adminId: auth.user!.id,
+                  token: auth.user!.token,
+                );
+          }
+        }
+        if (i == 3) {
+          ref.read(reportsProvider.notifier).triggerRefresh();
+        }
+        setState(() => _currentIndex = i);
+      },
+      destinations: visibleEntries.map((e) => e.destination).toList(),
+    );
+  }
+
   Future<void> _openAddSubscriberSheet() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -786,86 +907,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           const SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) {
-          if (i != 0) _alertsDismissed = false;
-          if (i == 2) {
-            // الموظف لازم يحمل subscribers.add. الأدمن العادي يمر دائماً.
-            final user = ref.read(authProvider).user;
-            if (user != null && !user.hasEmployeePermission('subscribers.add')) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('لا تملك صلاحية إضافة مشتركين'),
-                duration: Duration(seconds: 2),
-              ));
-              return;
-            }
-            // بدل التنقل لصفحة "إضافة"، نفتح bottom sheet مثل مودل التعديل
-            _openAddSubscriberSheet();
-            return;
-          }
-          if (i == 0) {
-            final auth = ref.read(authProvider);
-            if (auth.user != null) {
-              ref.read(dashboardProvider.notifier).loadDashboard(
-                adminId: auth.user!.id,
-                token: auth.user!.token,
-              );
-            }
-          }
-          if (i == 3) {
-            ref.read(reportsProvider.notifier).triggerRefresh();
-          }
-          setState(() => _currentIndex = i);
-        },
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'الرئيسية',
-          ),
-          // المشتركين: no badge — the same "urgent subscribers" count
-          // already appears in two louder places (the bell icon top-right
-          // and the red "قريب الانتهاء" card on the dashboard), so a
-          // third indicator on the nav tab was noise.
-          const NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'المشتركين',
-          ),
-          NavigationDestination(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.primary,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(Icons.person_add_alt_1,
-                  color: Colors.white, size: 22),
-            ),
-            selectedIcon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.teal800,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(Icons.person_add_alt_1,
-                  color: Colors.white, size: 22),
-            ),
-            label: 'إضافة',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.assessment_outlined),
-            selectedIcon: Icon(Icons.assessment),
-            label: 'التقارير',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'الإعدادات',
-          ),
-        ],
-      ),
+      bottomNavigationBar: _buildBottomNav(theme),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
               heroTag: 'dashboard_search',
@@ -879,6 +921,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     ),
     );
   }
+}
+
+/// Bottom-nav entry. screenIdx يحدد أي child بـIndexedStack يمثل (0..4).
+/// visible يخفي/يظهر الإدخال حسب الصلاحية.
+class _NavEntry {
+  final int screenIdx;
+  final bool visible;
+  final NavigationDestination destination;
+  const _NavEntry({
+    required this.screenIdx,
+    required this.visible,
+    required this.destination,
+  });
 }
 
 String _formatNotificationTime(String? value) {
