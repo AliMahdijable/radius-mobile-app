@@ -11,6 +11,7 @@ import '../../providers/reports_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
+import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class AccountStatementTab extends ConsumerStatefulWidget {
@@ -31,6 +32,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
 
   late String _dateFrom;
   late String _dateTo;
+  String _employeeId = 'all';
   int _txnPage = 1;
   int _txnPerPage = 10;
 
@@ -109,6 +111,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           dateFrom: _dateFrom,
           dateTo: _dateTo,
           actionTypes: _selectedActionTypes.toList(),
+          employeeId: _employeeId,
         );
   }
 
@@ -396,6 +399,15 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                         .withValues(alpha: .4)),
               ]),
             ),
+          ),
+          const SizedBox(height: 8),
+          EmployeeFilterDropdown(
+            value: _employeeId,
+            padding: EdgeInsets.zero,
+            onChanged: (v) {
+              setState(() { _employeeId = v; _txnPage = 1; });
+              _reload();
+            },
           ),
           const SizedBox(height: 12),
 

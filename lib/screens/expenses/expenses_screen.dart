@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../core/utils/helpers.dart';
 import '../../models/admin_expense.dart';
 import '../../providers/expenses_provider.dart';
+import '../../widgets/employee_filter_dropdown.dart';
 
 /// Admin's own expense ledger. The list is sorted newest first and the
 /// header shows the period total — which is what the financial reports
@@ -20,9 +21,10 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   DateTime? _from;
   DateTime? _to;
+  String _employeeId = 'all';
 
   ExpensesRangeArgs get _args =>
-      ExpensesRangeArgs(from: _from, to: _to);
+      ExpensesRangeArgs(from: _from, to: _to, employeeId: _employeeId);
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +45,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             onFromChanged: (d) => setState(() => _from = d),
             onToChanged: (d) => setState(() => _to = d),
             onClear: () => setState(() { _from = null; _to = null; }),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: EmployeeFilterDropdown(
+              value: _employeeId,
+              padding: EdgeInsets.zero,
+              onChanged: (v) => setState(() => _employeeId = v),
+            ),
           ),
           _TotalBanner(asyncPage: asyncPage),
           Expanded(

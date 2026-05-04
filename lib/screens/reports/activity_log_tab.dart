@@ -12,6 +12,7 @@ import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
+import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class ActivityLogTab extends ConsumerStatefulWidget {
@@ -29,6 +30,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
   late String _dateFrom;
   late String _dateTo;
   String _managerId = 'all';
+  String _employeeId = 'all';
   String _activityType = 'all';
   int _page = 1;
   int _perPage = 10;
@@ -75,6 +77,9 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
       } else if (adminId != null) {
         final allIds = [adminId, ...managers.map((m) => m.id)];
         params['user_ids'] = allIds.toSet().join(',');
+      }
+      if (_employeeId != 'all') {
+        params['employee_id'] = _employeeId;
       }
 
       final response = await dio.get('/api/activities', queryParameters: params);
@@ -302,8 +307,22 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
           ]),
         ),
 
+        // فلتر الموظف — يختفي تلقائياً لو ما عنده موظفين أو الفاعل موظف
+        // ما عنده employees.view (الـwidget يفحص بنفسه).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+          child: EmployeeFilterDropdown(
+            value: _employeeId,
+            padding: EdgeInsets.zero,
+            onChanged: (v) {
+              setState(() => _employeeId = v);
+              _fetchActivities();
+            },
+          ),
+        ),
+
         // Active filters indicator
-        if (_managerId != 'all' || _activityType != 'all')
+        if (_managerId != 'all' || _activityType != 'all' || _employeeId != 'all')
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
             child: Wrap(spacing: 6, children: [
@@ -313,6 +332,14 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                       style: const TextStyle(fontSize: 10)),
                   deleteIcon: const Icon(Icons.close, size: 14),
                   onDeleted: () { setState(() => _managerId = 'all'); _fetchActivities(); },
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              if (_employeeId != 'all')
+                Chip(
+                  label: const Text('موظف محدّد', style: TextStyle(fontSize: 10)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: () { setState(() => _employeeId = 'all'); _fetchActivities(); },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),

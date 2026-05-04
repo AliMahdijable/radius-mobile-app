@@ -209,6 +209,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     String? managerId,
     List<String>? actionTypes,
     String? userManager,
+    String? employeeId,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -229,6 +230,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       }
       if (userManager != null && userManager.isNotEmpty) {
         params['user_manager'] = userManager;
+      }
+      if (employeeId != null && employeeId != 'all') {
+        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(
@@ -258,7 +262,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   }
 
   // ── Daily Activations ─────────────────────────────────────────────
-  Future<void> fetchDailyActivations({String? managerId}) async {
+  Future<void> fetchDailyActivations({String? managerId, String? employeeId}) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final adminId = await _getAdminId();
@@ -267,6 +271,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
         params['admin_id'] = managerId;
       } else if (adminId != null) {
         params['admin_id'] = adminId;
+      }
+      if (employeeId != null && employeeId != 'all') {
+        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(
@@ -301,6 +308,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   // ── Activations Report ────────────────────────────────────────────
   Future<void> fetchActivationsReport(String dateFrom, String dateTo, {
     String? managerId,
+    String? employeeId,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -315,6 +323,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       } else if (adminId != null) {
         final allIds = [adminId, ...state.managers.map((m) => m.id)];
         params['user_ids'] = allIds.toSet().join(',');
+      }
+      if (employeeId != null && employeeId != 'all') {
+        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(
@@ -429,6 +440,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     required String dateFrom,
     required String dateTo,
     List<String>? actionTypes,
+    String? employeeId,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -440,6 +452,9 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       };
       if (actionTypes != null && actionTypes.isNotEmpty) {
         params['action_types'] = actionTypes.join(',');
+      }
+      if (employeeId != null && employeeId != 'all') {
+        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(

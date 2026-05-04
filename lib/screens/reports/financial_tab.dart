@@ -8,6 +8,7 @@ import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
+import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class FinancialTab extends ConsumerStatefulWidget {
@@ -24,6 +25,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   bool _loaded = false;
   String _managerId = 'all';
   String _userManagerId = 'all';
+  String _employeeId = 'all';
   String _searchQuery = '';
   final Set<String> _selectedActionTypes = {};
   int _logsPage = 1;
@@ -68,6 +70,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           managerId: _managerId,
           actionTypes: _selectedActionTypes.isNotEmpty ? _selectedActionTypes.toList() : null,
           userManager: _userManagerId != 'all' ? _userManagerId : null,
+          employeeId: _employeeId,
         );
     if (mounted) setState(() => _loaded = true);
   }
@@ -211,8 +214,19 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           ]),
           const SizedBox(height: 8),
 
+          // Employee filter
+          EmployeeFilterDropdown(
+            value: _employeeId,
+            padding: EdgeInsets.zero,
+            onChanged: (v) {
+              setState(() { _employeeId = v; _logsPage = 1; });
+              _load();
+            },
+          ),
+          const SizedBox(height: 8),
+
           // Active filter chips
-          if (_managerId != 'all' || _userManagerId != 'all' || _selectedActionTypes.isNotEmpty)
+          if (_managerId != 'all' || _userManagerId != 'all' || _employeeId != 'all' || _selectedActionTypes.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Wrap(spacing: 6, runSpacing: 4, children: [
@@ -225,6 +239,11 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   _RemovableChip(
                     label: 'مدير المستخدم: $_userManagerId',
                     onRemove: () { setState(() => _userManagerId = 'all'); _load(); },
+                  ),
+                if (_employeeId != 'all')
+                  _RemovableChip(
+                    label: 'موظف محدد',
+                    onRemove: () { setState(() => _employeeId = 'all'); _load(); },
                   ),
                 ..._selectedActionTypes.map((t) {
                   final lbl = _actionTypeOptions.firstWhere((o) => o['value'] == t, orElse: () => {'label': t})['label']!;

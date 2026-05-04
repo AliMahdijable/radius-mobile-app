@@ -8,6 +8,7 @@ import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
+import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class ActivationsTab extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
   late String _dateTo;
   String _filter = 'all';
   String _managerId = 'all';
+  String _employeeId = 'all';
   String _searchQuery = '';
   bool _loaded = false;
   int _page = 1;
@@ -55,6 +57,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
     await ref.read(reportsProvider.notifier).fetchActivationsReport(
           _dateFrom, _dateTo,
           managerId: _managerId,
+          employeeId: _employeeId,
         );
     if (mounted) setState(() { _loaded = true; _page = 1; });
   }
@@ -177,19 +180,39 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
           ]),
           const SizedBox(height: 8),
 
+          // Employee filter
+          EmployeeFilterDropdown(
+            value: _employeeId,
+            padding: EdgeInsets.zero,
+            onChanged: (v) {
+              setState(() { _employeeId = v; _page = 1; });
+              _load();
+            },
+          ),
+          const SizedBox(height: 8),
+
           // Active filter chips
-          if (_managerId != 'all')
+          if (_managerId != 'all' || _employeeId != 'all')
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Wrap(spacing: 6, children: [
-                Chip(
-                  label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
-                      style: const TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(Icons.close, size: 14),
-                  onDeleted: () { setState(() => _managerId = 'all'); _load(); },
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
+                if (_managerId != 'all')
+                  Chip(
+                    label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
+                        style: const TextStyle(fontSize: 10)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () { setState(() => _managerId = 'all'); _load(); },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                if (_employeeId != 'all')
+                  Chip(
+                    label: const Text('موظف محدد', style: TextStyle(fontSize: 10)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () { setState(() => _employeeId = 'all'); _load(); },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
               ]),
             ),
 

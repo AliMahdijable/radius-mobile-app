@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
 import '../../providers/reports_provider.dart';
+import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class DailyActivationsTab extends ConsumerStatefulWidget {
@@ -19,6 +20,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
     with AutomaticKeepAliveClientMixin {
   bool _loaded = false;
   String _managerId = 'all';
+  String _employeeId = 'all';
   String _searchQuery = '';
   int _page = 1;
   int _perPage = 10;
@@ -46,6 +48,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
   Future<void> _load() async {
     await ref.read(reportsProvider.notifier).fetchDailyActivations(
           managerId: _managerId,
+          employeeId: _employeeId,
         );
     if (mounted) setState(() { _loaded = true; _page = 1; });
   }
@@ -143,18 +146,40 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
           ]),
           const SizedBox(height: 10),
 
+          // Employee filter
+          EmployeeFilterDropdown(
+            value: _employeeId,
+            padding: EdgeInsets.zero,
+            onChanged: (v) {
+              setState(() { _employeeId = v; _page = 1; });
+              _load();
+            },
+          ),
+          const SizedBox(height: 8),
+
           // Active filters
-          if (_managerId != 'all')
+          if (_managerId != 'all' || _employeeId != 'all')
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Chip(
-                label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
-                    style: const TextStyle(fontSize: 10)),
-                deleteIcon: const Icon(Icons.close, size: 14),
-                onDeleted: () { setState(() => _managerId = 'all'); _load(); },
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+              child: Wrap(spacing: 6, children: [
+                if (_managerId != 'all')
+                  Chip(
+                    label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
+                        style: const TextStyle(fontSize: 10)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () { setState(() => _managerId = 'all'); _load(); },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                if (_employeeId != 'all')
+                  Chip(
+                    label: const Text('موظف محدد', style: TextStyle(fontSize: 10)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () { setState(() => _employeeId = 'all'); _load(); },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+              ]),
             ),
 
           Row(children: [
