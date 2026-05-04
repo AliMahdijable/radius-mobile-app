@@ -231,6 +231,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final authState = ref.watch(authProvider);
+    final user = authState.user;
+    // الموظف لازم يحمل managers.view (للقسمين: إدارة المدراء + تسعير
+    // الباقات). الأدمن العادي يكتفي بـcanAccessManagers من SAS4 perms.
+    bool empCan(String key) => user?.hasEmployeePermission(key) ?? true;
     final theme = Theme.of(context);
     final canAccessManagers = authState.user?.canAccessManagers ?? false;
 
@@ -276,14 +280,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: 'إدارة خصومات المشتركين',
           onTap: () => context.push('/discounts'),
         ),
-        if (canAccessManagers)
+        if (canAccessManagers && empCan('managers.view'))
           _SettingTile(
             icon: Icons.admin_panel_settings_outlined,
             title: 'المدراء الفرعيون',
             subtitle: 'إظهار وإدارة قسم الأدمنية الفرعية',
             onTap: () => context.push('/managers'),
           ),
-        if (canAccessManagers)
+        if (canAccessManagers && empCan('packages.view'))
           _SettingTile(
             icon: Icons.price_change_rounded,
             title: 'تسعير الباقات',

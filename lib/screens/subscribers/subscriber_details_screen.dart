@@ -3018,20 +3018,29 @@ class _SubscriberDetailsScreenState
 
   void _showActionsSheet(bool isEnabled) {
     final sub = _readCurrentSubscriber();
-    final actions = [
-      _FabAction(Icons.edit_outlined, 'تعديل', AppTheme.primary, _showEditSheet),
-      _FabAction(Icons.bolt, 'تفعيل', AppTheme.successColor, _activateSubscriber),
-      _FabAction(Icons.autorenew, 'تمديد', AppTheme.teal600, _extendSubscription),
-      _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
-      if (sub.hasDebt)
+    // فحص صلاحية الفاعل (موظف أو أدمن). الأدمن دائماً = true (full access).
+    final user = ref.read(authProvider).user;
+    bool can(String key) => user?.hasEmployeePermission(key) ?? true;
+
+    final actions = <_FabAction>[
+      if (can('subscribers.edit'))
+        _FabAction(Icons.edit_outlined, 'تعديل', AppTheme.primary, _showEditSheet),
+      if (can('subscribers.activate'))
+        _FabAction(Icons.bolt, 'تفعيل', AppTheme.successColor, _activateSubscriber),
+      if (can('subscribers.extend'))
+        _FabAction(Icons.autorenew, 'تمديد', AppTheme.teal600, _extendSubscription),
+      if (can('subscribers.add_debt'))
+        _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
+      if (sub.hasDebt && can('subscribers.pay_debt'))
         _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
-      _FabAction(
-        Icons.history_rounded,
-        'سجل الحركات',
-        AppTheme.teal600,
-        _showMovementsSheet,
-      ),
-      if (sub.hasDebt)
+      if (can('subscribers.view_activity'))
+        _FabAction(
+          Icons.history_rounded,
+          'سجل الحركات',
+          AppTheme.teal600,
+          _showMovementsSheet,
+        ),
+      if (sub.hasDebt && can('subscribers.send_whatsapp'))
         _FabAction(
           Icons.notifications_active_outlined,
           'تذكير دين',
@@ -3040,29 +3049,33 @@ class _SubscriberDetailsScreenState
             _sendWhatsAppFromTemplate('debt_reminder');
           },
         ),
-      if (sub.isNearExpiry)
+      if (sub.isNearExpiry && can('subscribers.send_whatsapp'))
         _FabAction(
           Icons.alarm_rounded,
           'تذكير انتهاء',
           Colors.deepOrange,
           () => _sendWhatsAppFromTemplate('expiry_warning'),
         ),
-      _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
+      if (can('subscribers.generate_link'))
+        _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
       // إرسال قالب "معلومات المشترك" الكامل عبر واتساب — يختلف عن "توليد
       // رابط" الذي يبعث URL قصير العمر؛ هنا الرسالة ذاتها تحمل التفاصيل.
-      _FabAction(
-        Icons.info_outline_rounded,
-        'إرسال المعلومات',
-        Colors.blueAccent,
-        () => _sendWhatsAppFromTemplate('subscriber_info'),
-      ),
-      _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
-      _FabAction(
-        isEnabled ? Icons.block : Icons.check_circle_outline,
-        isEnabled ? 'تعطيل' : 'تفعيل حساب',
-        isEnabled ? AppTheme.warningColor : AppTheme.successColor,
-        () => _toggleSubscriber(enable: !isEnabled),
-      ),
+      if (can('subscribers.send_whatsapp'))
+        _FabAction(
+          Icons.info_outline_rounded,
+          'إرسال المعلومات',
+          Colors.blueAccent,
+          () => _sendWhatsAppFromTemplate('subscriber_info'),
+        ),
+      if (can('subscribers.delete'))
+        _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
+      if (can('subscribers.toggle'))
+        _FabAction(
+          isEnabled ? Icons.block : Icons.check_circle_outline,
+          isEnabled ? 'تعطيل' : 'تفعيل حساب',
+          isEnabled ? AppTheme.warningColor : AppTheme.successColor,
+          () => _toggleSubscriber(enable: !isEnabled),
+        ),
     ];
 
     showModalBottomSheet(

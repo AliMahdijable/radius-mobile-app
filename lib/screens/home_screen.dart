@@ -759,6 +759,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         onDestinationSelected: (i) {
           if (i != 0) _alertsDismissed = false;
           if (i == 2) {
+            // الموظف لازم يحمل subscribers.add. الأدمن العادي يمر دائماً.
+            final user = ref.read(authProvider).user;
+            if (user != null && !user.hasEmployeePermission('subscribers.add')) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('لا تملك صلاحية إضافة مشتركين'),
+                duration: Duration(seconds: 2),
+              ));
+              return;
+            }
             // بدل التنقل لصفحة "إضافة"، نفتح bottom sheet مثل مودل التعديل
             _openAddSubscriberSheet();
             return;
