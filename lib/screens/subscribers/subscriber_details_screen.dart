@@ -986,12 +986,14 @@ class _SubscriberDetailsScreenState
                 Row(children: [
                   Expanded(child: _MethodBtn(
                     icon: Icons.star_rounded, label: 'بالنقاط',
+                    accentColor: Colors.amber.shade700, // ذهبي — نقاط مكافأة
                     selected: method == 'reward_points',
                     onTap: () => setSheet(() => method = 'reward_points'),
                   )),
                   const SizedBox(width: 8),
                   Expanded(child: _MethodBtn(
                     icon: Icons.account_balance_wallet_rounded, label: 'برصيد المدير',
+                    accentColor: AppTheme.teal600, // فيروزي — رصيد المدير
                     selected: method == 'credit',
                     onTap: () => setSheet(() => method = 'credit'),
                   )),
@@ -1393,17 +1395,26 @@ class _SubscriberDetailsScreenState
                     color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
                 const SizedBox(height: 8),
                 Row(children: [
-                  Expanded(child: _MethodBtn(icon: Icons.money_rounded, label: 'نقدي',
+                  Expanded(child: _MethodBtn(
+                    icon: Icons.money_rounded,
+                    label: 'نقدي',
+                    accentColor: AppTheme.successColor, // أخضر — تحصيل كامل
                     selected: isCash && !isPartialCash,
                     onTap: () => setSheet(() { isCash = true; isPartialCash = false; partialCtrl.clear(); }),
                   )),
                   const SizedBox(width: 6),
-                  Expanded(child: _MethodBtn(icon: Icons.tune_rounded, label: 'جزئي',
+                  Expanded(child: _MethodBtn(
+                    icon: Icons.tune_rounded,
+                    label: 'جزئي',
+                    accentColor: AppTheme.warningColor, // برتقالي — تحصيل جزئي
                     selected: isCash && isPartialCash,
                     onTap: () => setSheet(() { isCash = true; isPartialCash = true; }),
                   )),
                   const SizedBox(width: 6),
-                  Expanded(child: _MethodBtn(icon: Icons.schedule_rounded, label: 'آجل',
+                  Expanded(child: _MethodBtn(
+                    icon: Icons.schedule_rounded,
+                    label: 'آجل',
+                    accentColor: AppTheme.dangerColor, // أحمر — يضاف كدين
                     selected: !isCash,
                     onTap: () => setSheet(() { isCash = false; isPartialCash = false; partialCtrl.clear(); }),
                   )),
@@ -3284,42 +3295,48 @@ class _MethodBtn extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  /// لون مميز لكل طريقة دفع (نقدي=أخضر، جزئي=برتقالي، آجل=أحمر).
+  /// لو null، يقع على لون primary من الثيم.
+  final Color? accentColor;
   const _MethodBtn({
     required this.icon, required this.label,
     required this.selected, required this.onTap,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = accentColor ?? theme.colorScheme.primary;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: selected
-              ? theme.colorScheme.primary.withOpacity(0.12)
+              ? accent.withOpacity(0.14)
               : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected
-                ? theme.colorScheme.primary.withOpacity(0.4)
-                : Colors.transparent,
+                ? accent.withOpacity(0.55)
+                : accent.withOpacity(0.18),
+            width: selected ? 1.5 : 1,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 16, color: selected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withOpacity(0.5)),
+                ? accent
+                : accent.withOpacity(0.55)),
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withOpacity(0.7),
+                  ? accent
+                  : accent.withOpacity(0.75),
             )),
           ],
         ),
