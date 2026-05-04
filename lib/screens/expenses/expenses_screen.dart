@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 
+import '../../core/theme/app_theme.dart';
+import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/helpers.dart';
 import '../../models/admin_expense.dart';
 import '../../providers/expenses_provider.dart';
+import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/employee_filter_dropdown.dart';
 
 /// Admin's own expense ledger. The list is sorted newest first and the
@@ -39,21 +42,56 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       ),
       body: Column(
         children: [
-          _FilterRow(
-            from: _from,
-            to: _to,
-            onFromChanged: (d) => setState(() => _from = d),
-            onToChanged: (d) => setState(() => _to = d),
-            onClear: () => setState(() { _from = null; _to = null; }),
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-            child: EmployeeFilterDropdown(
-              value: _employeeId,
-              padding: EdgeInsets.zero,
-              onChanged: (v) => setState(() => _employeeId = v),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: GestureDetector(
+              onTap: _showFilterSheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: .3),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Icon(Icons.filter_list_rounded, size: 16, color: cs.primary),
+                  const SizedBox(width: 6),
+                  Text('الفلاتر',
+                      style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: .75))),
+                  const Spacer(),
+                  Text(_summarizeFilters(),
+                      style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .5)),
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(width: 4),
+                  Icon(Icons.tune, size: 14, color: cs.onSurface.withValues(alpha: .4)),
+                ]),
+              ),
             ),
           ),
+          if (_from != null || _to != null || _employeeId != 'all')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Wrap(spacing: 6, children: [
+                if (_from != null || _to != null)
+                  Chip(
+                    label: Text(
+                      '${_from != null ? intl.DateFormat('y-MM-dd').format(_from!) : '...'} — ${_to != null ? intl.DateFormat('y-MM-dd').format(_to!) : '...'}',
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () => setState(() { _from = null; _to = null; }),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                if (_employeeId != 'all')
+                  Chip(
+                    label: const Text('موظف محدّد', style: TextStyle(fontSize: 10)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () => setState(() => _employeeId = 'all'),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+              ]),
+            ),
           _TotalBanner(asyncPage: asyncPage),
           Expanded(
             child: asyncPage.when(
@@ -90,6 +128,94 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  String _summarizeFilters() {
+    final parts = <String>[];
+    if (_from != null || _to != null) {
+      final f = _from != null ? intl.DateFormat('y-MM-dd').format(_from!) : '...';
+      final t = _to != null ? intl.DateFormat('y-MM-dd').format(_to!) : '...';
+      parts.add('$f → $t');
+    }
+    if (_employeeId != 'all') parts.add('موظف');
+    return parts.isEmpty ? 'الكل' : parts.join(' • ');
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      useSafeArea: true,
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        String from = _from != null ? intl.DateFormat('yyyy-MM-dd').format(_from!) : '';
+        String to = _to != null ? intl.DateFormat('yyyy-MM-dd').format(_to!) : '';
+        String emp = _employeeId;
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          return SafeArea(
+            child: Padding(
+              padding: bottomSheetContentPadding(ctx, horizontal: 20, top: 20, extraBottom: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(child: Container(width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 16),
+                  Text('الفلاتر', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 14),
+
+                  Text('فترة سريعة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: .6))),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('اليوم', style: TextStyle(fontSize: 11)),
+                        onPressed: () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); },
+                        visualDensity: VisualDensity.compact),
+                    ActionChip(label: const Text('آخر 7 أيام', style: TextStyle(fontSize: 11)),
+                        onPressed: () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); },
+                        visualDensity: VisualDensity.compact),
+                    ActionChip(label: const Text('آخر 30 يوم', style: TextStyle(fontSize: 11)),
+                        onPressed: () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); },
+                        visualDensity: VisualDensity.compact),
+                    ActionChip(label: const Text('مسح', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setSheet(() { from = ''; to = ''; }),
+                        visualDensity: VisualDensity.compact),
+                  ]),
+                  const SizedBox(height: 10),
+                  DateRangePickerRow(
+                    fromDate: from,
+                    toDate: to,
+                    onFromChanged: (v) => setSheet(() => from = v),
+                    onToChanged: (v) => setSheet(() => to = v),
+                  ),
+                  const SizedBox(height: 14),
+
+                  EmployeeFilterDropdown(
+                    value: emp,
+                    padding: EdgeInsets.zero,
+                    onChanged: (v) => setSheet(() => emp = v),
+                  ),
+                  const SizedBox(height: 14),
+
+                  SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        _from = from.isEmpty ? null : DateTime.tryParse(from);
+                        _to = to.isEmpty ? null : DateTime.tryParse(to);
+                        _employeeId = emp;
+                      });
+                    },
+                    child: const Text('تطبيق'),
+                  )),
+                ],
+              ),
+            ),
+          );
+        });
+      },
     );
   }
 
@@ -174,62 +300,6 @@ class _TotalBanner extends StatelessWidget {
             child: Text('$count حركة', style: const TextStyle(fontSize: 12)),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FilterRow extends StatelessWidget {
-  final DateTime? from;
-  final DateTime? to;
-  final ValueChanged<DateTime?> onFromChanged;
-  final ValueChanged<DateTime?> onToChanged;
-  final VoidCallback onClear;
-  const _FilterRow({
-    required this.from,
-    required this.to,
-    required this.onFromChanged,
-    required this.onToChanged,
-    required this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Row(
-        children: [
-          Expanded(child: _dateField(context, label: 'من', value: from, onChanged: onFromChanged)),
-          const SizedBox(width: 6),
-          Expanded(child: _dateField(context, label: 'إلى', value: to, onChanged: onToChanged)),
-          IconButton(icon: const Icon(Icons.clear), onPressed: onClear),
-        ],
-      ),
-    );
-  }
-
-  Widget _dateField(BuildContext context,
-      {required String label, required DateTime? value, required ValueChanged<DateTime?> onChanged}) {
-    final text = value == null ? '—' : intl.DateFormat('y-MM-dd').format(value);
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: value ?? DateTime.now(),
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2100),
-        );
-        if (picked != null) onChanged(picked);
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          border: const OutlineInputBorder(),
-        ),
-        child: Text(text, style: const TextStyle(fontSize: 13)),
       ),
     );
   }

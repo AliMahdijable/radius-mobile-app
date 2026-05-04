@@ -307,20 +307,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
           ]),
         ),
 
-        // فلتر الموظف — يختفي تلقائياً لو ما عنده موظفين أو الفاعل موظف
-        // ما عنده employees.view (الـwidget يفحص بنفسه).
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-          child: EmployeeFilterDropdown(
-            value: _employeeId,
-            padding: EdgeInsets.zero,
-            onChanged: (v) {
-              setState(() => _employeeId = v);
-              _fetchActivities();
-            },
-          ),
-        ),
-
         // Active filters indicator
         if (_managerId != 'all' || _activityType != 'all' || _employeeId != 'all')
           Padding(
@@ -411,6 +397,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         String from = _dateFrom;
         String to = _dateTo;
         String mgr = _managerId;
+        String emp = _employeeId;
         String aType = _activityType;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
@@ -492,6 +479,13 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                     const SizedBox(height: 14),
                   ],
 
+                  EmployeeFilterDropdown(
+                    value: emp,
+                    padding: EdgeInsets.zero,
+                    onChanged: (v) => setSheet(() => emp = v),
+                  ),
+                  const SizedBox(height: 14),
+
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -499,6 +493,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                         _dateFrom = from;
                         _dateTo = to;
                         _managerId = mgr;
+                        _employeeId = emp;
                         _activityType = aType;
                         _page = 1;
                       });
