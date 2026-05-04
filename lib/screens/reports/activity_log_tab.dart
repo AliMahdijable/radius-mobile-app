@@ -510,6 +510,8 @@ class _ActivityRow extends StatelessWidget {
     final target = fullname.isNotEmpty ? fullname : username;
     final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final admin = activity['admin_username']?.toString() ?? '';
+    final empUsername = activity['acting_employee_username']?.toString() ?? '';
+    final empFullName = activity['acting_employee_full_name']?.toString() ?? '';
     final time = activity['created_at']?.toString() ?? '';
 
     String formattedTime = time;
@@ -554,8 +556,52 @@ class _ActivityRow extends StatelessWidget {
                     child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                         maxLines: 2, overflow: TextOverflow.ellipsis)),
               if (admin.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(top: 2),
-                    child: Text('المدير: $admin', style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .7)))),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 4,
+                    children: [
+                      Text(
+                        empUsername.isNotEmpty
+                            ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
+                            : 'المدير: $admin',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary.withValues(alpha: .8),
+                        ),
+                      ),
+                      if (empUsername.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            'موظف',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      if (empUsername.isNotEmpty && admin.isNotEmpty)
+                        Text(
+                          '· تابع لـ $admin',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: .5),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
             ]),
           ),
         ],

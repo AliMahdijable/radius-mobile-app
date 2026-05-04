@@ -216,8 +216,11 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canAccessManagers =
-        ref.watch(authProvider).user?.canAccessManagers ?? false;
+    final user = ref.watch(authProvider).user;
+    final canAccessManagers = user?.canAccessManagers ?? false;
+    // الموظف بحاجة packages.edit_prices لحفظ التغييرات. الأدمن العادي =
+    // كل شيء مسموح. لو الفاعل موظف بدون الصلاحية، الحقول read-only.
+    final canEditPrices = user?.hasEmployeePermission('packages.edit_prices') ?? true;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -259,7 +262,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
             style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         centerTitle: true,
         actions: [
-          if (_isDirty && !_saving)
+          if (_isDirty && !_saving && canEditPrices)
             IconButton(
               onPressed: _save,
               icon: const Icon(Icons.save_rounded),
@@ -350,7 +353,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                 width: double.infinity,
                 height: AppTheme.actionButtonHeight,
                 child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _save,
+                  onPressed: (_saving || !canEditPrices) ? null : _save,
                   icon: _saving
                       ? const SizedBox(
                           width: 18,

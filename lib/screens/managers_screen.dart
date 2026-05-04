@@ -883,64 +883,75 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     final canWithdraw = manager.credit > 0;
     final hasAnyDebt = (manager.debt + extraDebt) > 0;
 
+    // فحص صلاحية الفاعل (موظف أو أدمن). الأدمن دائماً = full access.
+    final user = ref.read(authProvider).user;
+    bool can(String key) => user?.hasEmployeePermission(key) ?? true;
+
     final actions = <_ManagerSheetAction>[
-      _ManagerSheetAction(
-        icon: Icons.edit_outlined,
-        label: 'تعديل',
-        color: AppTheme.primary,
-        type: _ManagerActionType.edit,
-      ),
-      _ManagerSheetAction(
-        icon: Icons.add_card_rounded,
-        label: 'رصيد',
-        color: AppTheme.successColor,
-        type: _ManagerActionType.deposit,
-      ),
-      if (canWithdraw)
+      if (can('managers.edit'))
+        _ManagerSheetAction(
+          icon: Icons.edit_outlined,
+          label: 'تعديل',
+          color: AppTheme.primary,
+          type: _ManagerActionType.edit,
+        ),
+      if (can('managers.deposit'))
+        _ManagerSheetAction(
+          icon: Icons.add_card_rounded,
+          label: 'رصيد',
+          color: AppTheme.successColor,
+          type: _ManagerActionType.deposit,
+        ),
+      if (canWithdraw && can('managers.withdraw'))
         _ManagerSheetAction(
           icon: Icons.remove_circle_outline_rounded,
           label: 'سحب',
           color: AppTheme.warningColor,
           type: _ManagerActionType.withdraw,
         ),
-      if (hasAnyDebt)
+      // تسديد ديون المدير = نوع آخر من البالانس، نتبع managers.deposit
+      if (hasAnyDebt && can('managers.deposit'))
         _ManagerSheetAction(
           icon: Icons.payments_outlined,
           label: 'تسديد',
           color: AppTheme.infoColor,
           type: _ManagerActionType.payDebt,
         ),
-      _ManagerSheetAction(
-        icon: Icons.stars_rounded,
-        label: 'نقاط',
-        color: AppTheme.secondary,
-        type: _ManagerActionType.addPoints,
-      ),
-      _ManagerSheetAction(
-        icon: Icons.receipt_long_rounded,
-        label: 'ديون أخرى',
-        color: AppTheme.infoColor,
-        type: _ManagerActionType.otherDebts,
-      ),
+      if (can('managers.add_points'))
+        _ManagerSheetAction(
+          icon: Icons.stars_rounded,
+          label: 'نقاط',
+          color: AppTheme.secondary,
+          type: _ManagerActionType.addPoints,
+        ),
+      // ديون أخرى = عرض manager_debts ledger، تتبع reports.manager_debts
+      if (can('reports.manager_debts'))
+        _ManagerSheetAction(
+          icon: Icons.receipt_long_rounded,
+          label: 'ديون أخرى',
+          color: AppTheme.infoColor,
+          type: _ManagerActionType.otherDebts,
+        ),
       _ManagerSheetAction(
         icon: Icons.timeline_rounded,
         label: 'حركات',
         color: AppTheme.teal600,
         type: _ManagerActionType.movements,
       ),
-      if (hasAnyDebt)
+      if (hasAnyDebt && can('subscribers.send_whatsapp'))
         _ManagerSheetAction(
           icon: Icons.send_to_mobile_rounded,
           label: 'إرسال معلومات',
           color: AppTheme.whatsappGreen,
           type: _ManagerActionType.sendInfo,
         ),
-      _ManagerSheetAction(
-        icon: Icons.delete_outline_rounded,
-        label: 'حذف',
-        color: AppTheme.dangerColor,
-        type: _ManagerActionType.delete,
-      ),
+      if (can('managers.delete'))
+        _ManagerSheetAction(
+          icon: Icons.delete_outline_rounded,
+          label: 'حذف',
+          color: AppTheme.dangerColor,
+          type: _ManagerActionType.delete,
+        ),
     ];
 
     final managerName = manager.fullName.isNotEmpty
@@ -1188,11 +1199,15 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.small(
-        onPressed: () => _openManagerForm(),
-        tooltip: 'إضافة مدير',
-        child: const Icon(Icons.person_add_alt_1_rounded),
-      ),
+      floatingActionButton: (ref.watch(authProvider).user
+                  ?.hasEmployeePermission('managers.add') ??
+              true)
+          ? FloatingActionButton.small(
+              onPressed: () => _openManagerForm(),
+              tooltip: 'إضافة مدير',
+              child: const Icon(Icons.person_add_alt_1_rounded),
+            )
+          : null,
       body: Column(
         children: [
           if (state.loading && state.managers.isNotEmpty)
