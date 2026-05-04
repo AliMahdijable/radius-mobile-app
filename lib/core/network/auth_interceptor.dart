@@ -21,12 +21,23 @@ class AuthInterceptor extends Interceptor {
       await SessionRefreshService.ensureValidSession(_storage);
     }
 
-    final token = await _storage.getToken();
+    // التمييز بين backend Dio و sas4 Dio بحسب الـbaseUrl. الموظف عنده JWT
+    // كـtoken رئيسي + SAS4 token مخزَّن منفصل للاستدعاءات المباشرة لـSAS4.
+    final isSas4Direct = options.baseUrl.contains('reseller-supernet.net') ||
+        options.uri.host.contains('reseller-supernet.net');
+    String? token;
+    if (isSas4Direct) {
+      // استدعاء مباشر لـSAS4 — نستخدم SAS4 token المخزَّن. للأدمن العادي
+      // هو نفسه الـtoken الرئيسي. للموظف هو توكن الأب.
+      token = await _storage.getSas4Token() ?? await _storage.getToken();
+    } else {
+      token = await _storage.getToken();
+    }
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
       options.headers['x-auth-token'] = token;
       dev.log(
-        'REQUEST: ${options.method} ${options.uri} [Token: ${token.substring(0, 20)}...]',
+        'REQUEST: ${options.method} ${options.uri} [Token: ${token.substring(0, 20)}... isSas4=$isSas4Direct]',
         name: 'HTTP',
       );
     } else {

@@ -76,6 +76,7 @@ class StorageService {
     String? employeeUsername,
     String? employeeFullName,
     Map<String, bool> employeePermissions = const {},
+    String? sas4Token,
   }) async {
     final sp = await _sp;
     await Future.wait([
@@ -103,8 +104,18 @@ class StorageService {
         AppConstants.storageEmployeePermissions,
         jsonEncode(employeePermissions),
       ),
+      if (sas4Token != null && sas4Token.isNotEmpty)
+        sp.setString(AppConstants.storageSas4Token, sas4Token)
+      else
+        sp.remove(AppConstants.storageSas4Token),
     ]);
   }
+
+  Future<String?> getSas4Token() async =>
+      (await _sp).getString(AppConstants.storageSas4Token);
+
+  Future<void> saveSas4Token(String token) async =>
+      (await _sp).setString(AppConstants.storageSas4Token, token);
 
   Future<bool> getIsEmployee() async =>
       (await _sp).getBool(AppConstants.storageIsEmployee) ?? false;
@@ -144,6 +155,7 @@ class StorageService {
     await sp.remove(AppConstants.storageEmployeeUsername);
     await sp.remove(AppConstants.storageEmployeeFullName);
     await sp.remove(AppConstants.storageEmployeePermissions);
+    await sp.remove(AppConstants.storageSas4Token);
     final appNotificationKeys = sp
         .getKeys()
         .where(

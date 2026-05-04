@@ -309,6 +309,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // ✅ تفعيل الإشعارات بشكل افتراضي عند تسجيل الدخول
         await _storage.setFcmEnabled(true);
 
+        // sas4Token يجي مع response الموظف من الـbackend (توكن الأب).
+        // الأدمن العادي يستخدم user.token كـsas4 token (هو نفسه SAS4).
+        final sas4Token = user.isEmployee
+            ? response.data['sas4Token']?.toString()
+            : user.token;
         await _storage.saveAll(
           token: user.token,
           expiresAt: user.expiresAt,
@@ -322,6 +327,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           employeeUsername: user.employeeUsername,
           employeeFullName: user.employeeFullName,
           employeePermissions: user.employeePermissions,
+          sas4Token: sas4Token,
         );
 
         _resetSessionScopedProviders();

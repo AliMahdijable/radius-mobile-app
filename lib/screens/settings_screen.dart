@@ -274,12 +274,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
 
         const SizedBox(height: 8),
-        _SettingTile(
-          icon: Icons.discount_rounded,
-          title: 'قائمة الخصومات',
-          subtitle: 'إدارة خصومات المشتركين',
-          onTap: () => context.push('/discounts'),
-        ),
+        if (empCan('discounts.view'))
+          _SettingTile(
+            icon: Icons.discount_rounded,
+            title: 'قائمة الخصومات',
+            subtitle: 'إدارة خصومات المشتركين',
+            onTap: () => context.push('/discounts'),
+          ),
         if (canAccessManagers && empCan('managers.view'))
           _SettingTile(
             icon: Icons.admin_panel_settings_outlined,
@@ -294,28 +295,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'إدارة أسعار الباقات للمدراء',
             onTap: () => context.push('/packages'),
           ),
-        _SettingTile(
-          icon: Icons.account_balance_wallet_rounded,
-          title: 'الصرفيات',
-          subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
-          onTap: () => context.push('/expenses'),
-        ),
-        // "ديون المدراء" was here. Now merged into the managers screen
-        // — each manager card has a "ديون أخرى" action that opens the
-        // same ledger pre-filtered to that sub-admin. Sub-admins still
-        // reach their own debts via "ديوني" below.
+        if (empCan('reports.expenses'))
+          _SettingTile(
+            icon: Icons.account_balance_wallet_rounded,
+            title: 'الصرفيات',
+            subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
+            onTap: () => context.push('/expenses'),
+          ),
+        // الإعدادات الافتراضية للأجهزة + إعدادات الإشعارات تفضيلات شخصية
+        // للمستخدم؛ ما تحتاج صلاحية. الموظف عنده Ubiquiti/ONT/push
+        // الخاصة فيه (مو الأب).
         _SettingTile(
           icon: Icons.router_rounded,
           title: 'الإعدادات الافتراضية لأجهزتك',
           subtitle: 'بيانات دخول Ubiquiti و ONT لكل مشتركيك',
           onTap: () => context.push('/device-defaults'),
         ),
-        _SettingTile(
-          icon: Icons.print_rounded,
-          title: 'قوالب الطباعة',
-          subtitle: 'إدارة قوالب وصولات الطباعة',
-          onTap: () => context.push('/print-templates'),
-        ),
+        if (empCan('print_templates.edit'))
+          _SettingTile(
+            icon: Icons.print_rounded,
+            title: 'قوالب الطباعة',
+            subtitle: 'إدارة قوالب وصولات الطباعة',
+            onTap: () => context.push('/print-templates'),
+          ),
         _SettingTile(
           icon: Icons.notifications_active_rounded,
           title: 'إعدادات الإشعارات',
@@ -324,52 +326,67 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onTap: () => context.push('/notification-settings'),
         ),
 
-        const SizedBox(height: 20),
-
-        _SectionTitle(title: 'إدارة واتساب'),
-        const SizedBox(height: 8),
-        _SettingTile(
-          icon: Icons.tune_rounded,
-          title: 'ميزات واتساب',
-          subtitle: 'التحكم بالإرسال التلقائي',
-          iconColor: AppTheme.whatsappGreen,
-          onTap: _showFeaturesModal,
-        ),
-        _SettingTile(
-          icon: Icons.link,
-          title: 'اتصال واتساب',
-          onTap: () => context.push('/whatsapp-connection'),
-        ),
-        // نطاق الإرسال يخص أصحاب المدراء الفرعيين فقط. الأدمن الفرعي
-        // ما عنده مدراء تحته فلا معنى للخيار عنده.
-        if (canAccessManagers)
-          _SettingTile(
-            icon: Icons.share_location_rounded,
-            title: 'نطاق الإرسال',
-            subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
-            iconColor: AppTheme.whatsappGreen,
-            onTap: () => context.push('/whatsapp-send-scope'),
-          ),
-        _SettingTile(
-          icon: Icons.schedule,
-          title: 'الجدولة',
-          onTap: () => context.push('/schedules'),
-        ),
-        _SettingTile(
-          icon: Icons.description_outlined,
-          title: 'قوالب الرسائل',
-          onTap: () => context.push('/templates'),
-        ),
-        _SettingTile(
-          icon: Icons.campaign,
-          title: 'بث الرسائل',
-          onTap: () => context.push('/broadcast'),
-        ),
-        _SettingTile(
-          icon: Icons.history,
-          title: 'سجل الرسائل',
-          onTap: () => context.push('/message-logs'),
-        ),
+        // قسم WhatsApp يظهر فقط لو الفاعل يملك أي whatsapp.* perm.
+        if (user == null ||
+            !user.isEmployee ||
+            user.hasAnyEmployeePermission(const [
+              'whatsapp.connect',
+              'whatsapp.send',
+              'whatsapp.templates',
+              'whatsapp.schedules',
+            ])) ...[
+          const SizedBox(height: 20),
+          _SectionTitle(title: 'إدارة واتساب'),
+          const SizedBox(height: 8),
+          if (empCan('whatsapp.templates'))
+            _SettingTile(
+              icon: Icons.tune_rounded,
+              title: 'ميزات واتساب',
+              subtitle: 'التحكم بالإرسال التلقائي',
+              iconColor: AppTheme.whatsappGreen,
+              onTap: _showFeaturesModal,
+            ),
+          if (empCan('whatsapp.connect'))
+            _SettingTile(
+              icon: Icons.link,
+              title: 'اتصال واتساب',
+              onTap: () => context.push('/whatsapp-connection'),
+            ),
+          // نطاق الإرسال يخص أصحاب المدراء الفرعيين فقط. الأدمن الفرعي
+          // ما عنده مدراء تحته فلا معنى للخيار عنده.
+          if (canAccessManagers && empCan('whatsapp.send'))
+            _SettingTile(
+              icon: Icons.share_location_rounded,
+              title: 'نطاق الإرسال',
+              subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
+              iconColor: AppTheme.whatsappGreen,
+              onTap: () => context.push('/whatsapp-send-scope'),
+            ),
+          if (empCan('whatsapp.schedules'))
+            _SettingTile(
+              icon: Icons.schedule,
+              title: 'الجدولة',
+              onTap: () => context.push('/schedules'),
+            ),
+          if (empCan('whatsapp.templates'))
+            _SettingTile(
+              icon: Icons.description_outlined,
+              title: 'قوالب الرسائل',
+              onTap: () => context.push('/templates'),
+            ),
+          if (empCan('whatsapp.send'))
+            _SettingTile(
+              icon: Icons.campaign,
+              title: 'بث الرسائل',
+              onTap: () => context.push('/broadcast'),
+            ),
+          if (empCan('whatsapp.send'))
+            _SettingTile(
+              icon: Icons.history,
+              title: 'سجل الرسائل',
+              onTap: () => context.push('/message-logs'),
+            ),
+        ],
 
         const SizedBox(height: 20),
 

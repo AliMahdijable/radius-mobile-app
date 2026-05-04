@@ -17,6 +17,9 @@ class AppConstants {
   /// JSON-encoded Map<String,bool> لصلاحيات الموظف الـ40 (subscribers.activate, ...).
   /// الأدمن العادي يبقى عنده SAS4 perms فقط ويُعتبر "كل شيء = true" للموظف-style.
   static const String storageEmployeePermissions = 'auth_employee_permissions';
+  /// توكن SAS4 للأب — يُستعمل بـsas4Dio للاستدعاءات المباشرة لـSAS4 لمّا
+  /// يكون الفاعل موظفاً. الأدمن العادي يبقى يستخدم نفس JWT كـSAS4 token.
+  static const String storageSas4Token = 'auth_sas4_token';
   static const String storageThemeMode = 'themeMode';
   static const String storageServerUrl = 'serverUrl';
   static const String storageRememberMe = 'rememberMe';
