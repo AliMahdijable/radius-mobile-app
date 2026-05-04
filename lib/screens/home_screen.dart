@@ -613,7 +613,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       });
     }
 
-    final managerName = authState.user?.username ?? '';
+    // الموظف يشوف اسمه العربي (full_name) كبادج رئيسي بدل اسم الأب.
+    // الأدمن العادي يبقى يشوف username الـSAS4 الخاص بيه.
+    final _u = authState.user;
+    final managerName = (_u != null && _u.isEmployee)
+        ? (_u.employeeFullName?.isNotEmpty == true
+            ? _u.employeeFullName!
+            : (_u.employeeUsername ?? _u.username))
+        : (_u?.username ?? '');
     final totalBellCount =
         appNotifications.unreadCount +
         (_alertsEnabled && !_alertsDismissed ? dash.totalAlerts : 0);
@@ -702,14 +709,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      managerName.isNotEmpty ? managerName : '—',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.7),
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          managerName.isNotEmpty ? managerName : '—',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.7),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (_u?.isEmployee == true) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'موظف',
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
