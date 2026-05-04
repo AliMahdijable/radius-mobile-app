@@ -86,6 +86,7 @@ class _EmployeeFilterDropdownState
         ),
         style: TextStyle(
           fontSize: 13,
+          fontFamily: 'Cairo',
           fontWeight: FontWeight.w600,
           color: theme.colorScheme.onSurface,
         ),

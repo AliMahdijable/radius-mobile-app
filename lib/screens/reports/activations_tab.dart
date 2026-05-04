@@ -180,17 +180,6 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
           ]),
           const SizedBox(height: 8),
 
-          // Employee filter
-          EmployeeFilterDropdown(
-            value: _employeeId,
-            padding: EdgeInsets.zero,
-            onChanged: (v) {
-              setState(() { _employeeId = v; _page = 1; });
-              _load();
-            },
-          ),
-          const SizedBox(height: 8),
-
           // Active filter chips
           if (_managerId != 'all' || _employeeId != 'all')
             Padding(
@@ -270,6 +259,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
         String from = _dateFrom;
         String to = _dateTo;
         String mgr = _managerId;
+        String emp = _employeeId;
         String flt = _filter;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
@@ -343,6 +333,13 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
                     const SizedBox(height: 14),
                   ],
 
+                  EmployeeFilterDropdown(
+                    value: emp,
+                    padding: EdgeInsets.zero,
+                    onChanged: (v) => setSheet(() => emp = v),
+                  ),
+                  const SizedBox(height: 14),
+
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -350,6 +347,7 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
                         _dateFrom = from;
                         _dateTo = to;
                         _managerId = mgr;
+                        _employeeId = emp;
                         _filter = flt;
                         _page = 1;
                       });

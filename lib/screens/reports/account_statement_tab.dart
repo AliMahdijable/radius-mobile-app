@@ -400,15 +400,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               ]),
             ),
           ),
-          const SizedBox(height: 8),
-          EmployeeFilterDropdown(
-            value: _employeeId,
-            padding: EdgeInsets.zero,
-            onChanged: (v) {
-              setState(() { _employeeId = v; _txnPage = 1; });
-              _reload();
-            },
-          ),
           const SizedBox(height: 12),
 
           if (state.loading)
@@ -502,6 +493,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
+        String emp = _employeeId;
         final types = Set<String>.from(_selectedActionTypes);
 
         return StatefulBuilder(builder: (ctx, setSheet) {
@@ -582,6 +574,13 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                     _TypeChip('تسديد دين', 'BALANCE_DEDUCT', types, setSheet),
                     _TypeChip('إضافة دين', 'BALANCE_ADD', types, setSheet),
                   ]),
+                  const SizedBox(height: 14),
+
+                  EmployeeFilterDropdown(
+                    value: emp,
+                    padding: EdgeInsets.zero,
+                    onChanged: (v) => setSheet(() => emp = v),
+                  ),
                   const SizedBox(height: 16),
 
                   SizedBox(
@@ -592,6 +591,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                           setState(() {
                             _dateFrom = from;
                             _dateTo = to;
+                            _employeeId = emp;
                             _selectedActionTypes
                               ..clear()
                               ..addAll(types);

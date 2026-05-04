@@ -146,17 +146,6 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
           ]),
           const SizedBox(height: 10),
 
-          // Employee filter
-          EmployeeFilterDropdown(
-            value: _employeeId,
-            padding: EdgeInsets.zero,
-            onChanged: (v) {
-              setState(() { _employeeId = v; _page = 1; });
-              _load();
-            },
-          ),
-          const SizedBox(height: 8),
-
           // Active filters
           if (_managerId != 'all' || _employeeId != 'all')
             Padding(
@@ -221,6 +210,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         String mgr = _managerId;
+        String emp = _employeeId;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
@@ -266,10 +256,17 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                     const SizedBox(height: 14),
                   ],
 
+                  EmployeeFilterDropdown(
+                    value: emp,
+                    padding: EdgeInsets.zero,
+                    onChanged: (v) => setSheet(() => emp = v),
+                  ),
+                  const SizedBox(height: 14),
+
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      setState(() { _managerId = mgr; _page = 1; });
+                      setState(() { _managerId = mgr; _employeeId = emp; _page = 1; });
                       _load();
                     },
                     child: const Text('تطبيق'),

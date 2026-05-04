@@ -214,17 +214,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           ]),
           const SizedBox(height: 8),
 
-          // Employee filter
-          EmployeeFilterDropdown(
-            value: _employeeId,
-            padding: EdgeInsets.zero,
-            onChanged: (v) {
-              setState(() { _employeeId = v; _logsPage = 1; });
-              _load();
-            },
-          ),
-          const SizedBox(height: 8),
-
           // Active filter chips
           if (_managerId != 'all' || _userManagerId != 'all' || _employeeId != 'all' || _selectedActionTypes.isNotEmpty)
             Padding(
@@ -358,6 +347,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
         String to = _dateTo;
         String mgr = _managerId;
         String userMgr = _userManagerId;
+        String emp = _employeeId;
         final types = Set<String>.from(_selectedActionTypes);
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
@@ -436,6 +426,13 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     const SizedBox(height: 14),
                   ],
 
+                  EmployeeFilterDropdown(
+                    value: emp,
+                    padding: EdgeInsets.zero,
+                    onChanged: (v) => setSheet(() => emp = v),
+                  ),
+                  const SizedBox(height: 14),
+
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -444,6 +441,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                         _dateTo = to;
                         _managerId = mgr;
                         _userManagerId = userMgr;
+                        _employeeId = emp;
                         _selectedActionTypes..clear()..addAll(types);
                         _logsPage = 1;
                       });
