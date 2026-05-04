@@ -28,6 +28,7 @@ import '../../screens/expenses/expenses_screen.dart';
 import '../../screens/debts/manager_debts_screen.dart';
 import '../../screens/debts/my_debts_screen.dart';
 import '../../screens/notification_settings_screen.dart';
+import '../../screens/employees_screen.dart';
 
 /// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -155,6 +156,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/print-templates',
         builder: (context, state) => const PrintTemplatesScreen(),
+      ),
+      GoRoute(
+        path: '/employees',
+        builder: (context, state) => const EmployeesScreen(),
       ),
     ],
   );

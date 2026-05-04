@@ -288,6 +288,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'إظهار وإدارة قسم الأدمنية الفرعية',
             onTap: () => context.push('/managers'),
           ),
+        // الموظفون: للأدمن فقط (الموظف لا يدير موظفين بشكل افتراضي)
+        if (user?.isEmployee != true || empCan('employees.view'))
+          _SettingTile(
+            icon: Icons.badge_outlined,
+            title: 'الموظفون',
+            subtitle: 'إنشاء/تعديل حسابات الموظفين وصلاحياتهم',
+            onTap: () => context.push('/employees'),
+          ),
         if (canAccessManagers && empCan('packages.view'))
           _SettingTile(
             icon: Icons.price_change_rounded,
