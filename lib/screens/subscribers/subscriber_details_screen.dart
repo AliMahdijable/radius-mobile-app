@@ -2952,7 +2952,7 @@ class _SubscriberDetailsScreenState
       }
 
       final token = linkResponse['token'];
-      final linkUrl = '${ApiConstants.backendUrl}/user-info/$token';
+      final linkUrl = '${ApiConstants.backendUrl}/v2/user-info/$token';
       debugPrint('[GEN-LINK] Generated link: $linkUrl');
 
       final subscriberName = '${sub.firstname} ${sub.lastname}'.trim();
