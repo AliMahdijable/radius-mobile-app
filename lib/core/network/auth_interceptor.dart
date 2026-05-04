@@ -100,8 +100,16 @@ class AuthInterceptor extends Interceptor {
 
       if (refreshResult != null) {
         final retryOptions = err.requestOptions;
-        retryOptions.headers['Authorization'] = 'Bearer ${refreshResult.token}';
-        retryOptions.headers['x-auth-token'] = refreshResult.token;
+        // اختار التوكن المناسب: استدعاء SAS4 مباشر يستعمل sas4Token الجديد،
+        // backend يستعمل JWT/الـtoken العادي. SessionRefreshService الآن
+        // يحدّث sas4Token بالستوريج، فنقرأ الفريش منه.
+        final isSas4Direct = retryOptions.baseUrl.contains('reseller-supernet.net') ||
+            retryOptions.uri.host.contains('reseller-supernet.net');
+        final retryToken = isSas4Direct
+            ? (await _storage.getSas4Token() ?? refreshResult.token)
+            : refreshResult.token;
+        retryOptions.headers['Authorization'] = 'Bearer $retryToken';
+        retryOptions.headers['x-auth-token'] = retryToken;
 
         final retryResponse = await _dio.fetch(retryOptions);
         return handler.resolve(retryResponse);

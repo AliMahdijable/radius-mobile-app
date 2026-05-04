@@ -1600,8 +1600,19 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       if (data is Map && data['status'] == 200 && data['data'] != null) {
         return Map<String, dynamic>.from(data['data']);
       }
+      dev.log(
+        'getActivationData unexpected payload: ${data is Map ? "status=${data['status']} message=${data['message']}" : data.runtimeType}',
+        name: 'SUBS',
+      );
       return null;
-    } catch (_) {
+    } on DioException catch (e) {
+      dev.log(
+        'getActivationData failed: ${e.response?.statusCode} ${e.requestOptions.uri} body=${e.response?.data}',
+        name: 'SUBS',
+      );
+      return null;
+    } catch (e) {
+      dev.log('getActivationData error: $e', name: 'SUBS');
       return null;
     }
   }

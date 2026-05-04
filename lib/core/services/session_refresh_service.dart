@@ -97,11 +97,28 @@ class SessionRefreshService {
         return null;
       }
 
-      await storage.saveToken(newToken);
       await storage.saveTokenExpiry(expiresAt);
+      // refresh-token يرجّع توكن SAS4 جديد دائماً (لأنه يعيد login بكلمة
+      // مرور الأب). للأدمن: token الرئيسي == sas4Token، نحفظه بالاثنين.
+      // للموظف: token الرئيسي يبقى JWT (ما نتدخل فيه)، بس نحدّث sas4Token
+      // حتى استدعاءات SAS4 المباشرة تستعمل الجديد.
+      final isEmployee = await storage.getIsEmployee();
+      if (isEmployee) {
+        await storage.saveSas4Token(newToken);
+      } else {
+        await storage.saveToken(newToken);
+        await storage.saveSas4Token(newToken);
+      }
+
+      // للموظف: refresh-token جدّد توكن SAS4 للأب لكن JWT الموظف هو الـtoken
+      // الرئيسي وما يتجدد هنا — نرجع التوكن الحالي للموظف (JWT) كي ما
+      // يكسر sessionState/checkAuth، وللأدمن نرجع SAS4 الجديد.
+      final returnToken = isEmployee
+          ? (await storage.getToken() ?? newToken)
+          : newToken;
 
       return SessionRefreshResult(
-        token: newToken,
+        token: returnToken,
         expiresAt: expiresAt,
         refreshed: true,
       );
