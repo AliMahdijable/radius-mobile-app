@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/messages_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../models/subscriber_model.dart';
@@ -275,6 +276,32 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = ref.watch(authProvider).user;
+    // دفاع بعمق: حتى لو وصل لنا deep-link أو nav-stack قديم، الموظف بدون
+    // whatsapp.broadcast ما يقدر يستعمل الشاشة. الـtile بالـsettings مخفي
+    // أصلاً، والـbackend يرفض بـ403، بس الواجهة تعرض رسالة بدلاً من توست.
+    if (!(user?.hasEmployeePermission('whatsapp.broadcast') ?? true)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('التبليغات')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline,
+                    size: 48,
+                    color: theme.colorScheme.onSurface.withValues(alpha: .3)),
+                const SizedBox(height: 12),
+                Text('لا تملك صلاحية بث الرسائل',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

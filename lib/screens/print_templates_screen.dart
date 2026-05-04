@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/receipt_printer.dart';
 import '../models/print_template_model.dart';
+import '../providers/auth_provider.dart';
 import '../providers/print_templates_provider.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -25,7 +26,36 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(printTemplatesProvider);
+    final user = ref.watch(authProvider).user;
     final theme = Theme.of(context);
+    // الصفحة بكاملها تتطلب print_templates.edit (الكتابة + الحذف + التبديل
+    // كلها تحتاج الصلاحية، والمشاهدة بدون قدرة فعل غير مفيدة هنا).
+    final canEdit = user?.hasEmployeePermission('print_templates.edit') ?? true;
+    if (!canEdit) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('قوالب الطباعة',
+              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline, size: 48,
+                    color: theme.colorScheme.onSurface.withOpacity(0.3)),
+                const SizedBox(height: 12),
+                const Text('لا تملك صلاحية تعديل قوالب الطباعة',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontFamily: 'Cairo')),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     final hasA4 = state.templates.any((t) => t.templateType == 'a4');
     final hasPOS = state.templates.any((t) => t.templateType == 'pos');

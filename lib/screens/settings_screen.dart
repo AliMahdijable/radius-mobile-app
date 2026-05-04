@@ -383,7 +383,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: 'قوالب الرسائل',
               onTap: () => context.push('/templates'),
             ),
-          if (empCan('whatsapp.send'))
+          if (empCan('whatsapp.broadcast'))
             _SettingTile(
               icon: Icons.campaign,
               title: 'بث الرسائل',
