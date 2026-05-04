@@ -352,9 +352,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: 'اتصال واتساب',
               onTap: () => context.push('/whatsapp-connection'),
             ),
-          // نطاق الإرسال يخص أصحاب المدراء الفرعيين فقط. الأدمن الفرعي
-          // ما عنده مدراء تحته فلا معنى للخيار عنده.
-          if (canAccessManagers && empCan('whatsapp.send'))
+          // نطاق الإرسال = إعداد إداري لجلسة واتساب الأب: يحدّد أي مدراء
+          // فرعيين يغطيهم. الموظف لا يمسّ هذا حتى لو عنده whatsapp.send.
+          // فقط الأدمن (مع canAccessManagers) يشوفه.
+          if (canAccessManagers && user?.isEmployee != true)
             _SettingTile(
               icon: Icons.share_location_rounded,
               title: 'نطاق الإرسال',
@@ -388,33 +389,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
         ],
 
-        const SizedBox(height: 20),
-
-        _SectionTitle(title: 'إدارة الديون'),
-        const SizedBox(height: 8),
-        _SettingTile(
-          icon: Icons.file_download_outlined,
-          title: 'تصدير ديون المشتركين',
-          subtitle: 'تصدير ملف CSV بالمشتركين المديونين',
-          onTap: _showDebtExportDialog,
-        ),
-        _SettingTile(
-          icon: Icons.file_upload_outlined,
-          title: 'استيراد ديون المشتركين',
-          subtitle: 'استيراد ديون من ملف CSV',
-          onTap: _showDebtImportDialog,
-        ),
-        // Personal ledger — any admin can see debts the parent recorded
-        // against them. No gate: unlike manager debts it's always safe to
-        // hit /my-debts; the endpoint just returns an empty list when
-        // nothing is owed. Intentionally placed at the bottom of the
-        // section so it feels like a "my account" view, not a main action.
-        _SettingTile(
-          icon: Icons.receipt_long_outlined,
-          title: 'ديون عليّ',
-          subtitle: 'ديون مسجلة عليك من قبل المدير الرئيسي',
-          onTap: () => context.push('/my-debts'),
-        ),
+        // قسم "إدارة الديون" يخص الأدمن فقط (تصدير/استيراد ديون المشتركين
+        // = bulk operations، و"ديون عليّ" حساب شخصي للأدمن من والده). الموظف
+        // ليس له علاقة بأي من الثلاث.
+        if (user?.isEmployee != true) ...[
+          const SizedBox(height: 20),
+          _SectionTitle(title: 'إدارة الديون'),
+          const SizedBox(height: 8),
+          if (empCan('debts.import'))
+            _SettingTile(
+              icon: Icons.file_download_outlined,
+              title: 'تصدير ديون المشتركين',
+              subtitle: 'تصدير ملف CSV بالمشتركين المديونين',
+              onTap: _showDebtExportDialog,
+            ),
+          if (empCan('debts.import'))
+            _SettingTile(
+              icon: Icons.file_upload_outlined,
+              title: 'استيراد ديون المشتركين',
+              subtitle: 'استيراد ديون من ملف CSV',
+              onTap: _showDebtImportDialog,
+            ),
+          // Personal ledger — any admin can see debts the parent recorded
+          // against them. Intentionally placed at the bottom of the
+          // section so it feels like a "my account" view, not a main action.
+          _SettingTile(
+            icon: Icons.receipt_long_outlined,
+            title: 'ديون عليّ',
+            subtitle: 'ديون مسجلة عليك من قبل المدير الرئيسي',
+            onTap: () => context.push('/my-debts'),
+          ),
+        ],
 
         const SizedBox(height: 20),
 
