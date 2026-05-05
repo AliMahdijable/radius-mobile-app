@@ -1097,7 +1097,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       onlineMap[o.username.toLowerCase()] = o;
     }
 
-    final localResults = state.subscribers.where(matchesQuery).map((s) {
+    // قيّد البحث على التبويب الحالي (online/active/expired/...) بدل قائمة
+    // المشتركين الكاملة. كان الـbug: المستخدم بتبويب "اونلاين" يبحث "ali"
+    // → يطلع كل المشتركين باسم ali حتى المنقطعين.
+    final scoped = state.filteredSubscribers;
+    final localResults = scoped.where(matchesQuery).map((s) {
       final online = onlineMap[s.username.toLowerCase()];
       if (online != null) {
         return SubscriberModel(
