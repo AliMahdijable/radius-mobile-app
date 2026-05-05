@@ -70,6 +70,8 @@ dependencies:
   # Icons
   iconsax: ^0.0.8
   cupertino_icons: ^1.0.8
+  # lucide — مطابقة 1-to-1 مع أيقونات الويب v2 (lucide-react)
+  lucide_icons_flutter: ^3.0.0
 
 dev_dependencies:
   flutter_test:

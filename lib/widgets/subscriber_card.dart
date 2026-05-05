@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../core/services/device_status_cache.dart';
 import '../core/utils/helpers.dart';
 import '../core/theme/app_theme.dart';
@@ -293,7 +294,7 @@ class SubscriberCard extends StatelessWidget {
                     );
                   }),
                   const SizedBox(width: 4),
-                  Icon(Icons.chevron_left, size: 14,
+                  Icon(LucideIcons.chevronLeft, size: 14,
                       color: theme.colorScheme.onSurface.withOpacity(0.15)),
                 ],
               ],
@@ -310,7 +311,7 @@ class SubscriberCard extends StatelessWidget {
                   if (hasProfile) ...[
                     _metaChip(
                       theme: theme,
-                      icon: Icons.wifi_rounded,
+                      icon: LucideIcons.wifi,
                       text: subscriber.profileName!,
                       iconColor: isDisabled ? Colors.grey : AppTheme.primary,
                       textColor: isDisabled ? Colors.grey : AppTheme.primary,
@@ -325,7 +326,7 @@ class SubscriberCard extends StatelessWidget {
                   if (hasPrice) ...[
                     _metaChip(
                       theme: theme,
-                      icon: Icons.sell_outlined,
+                      icon: LucideIcons.tag,
                       text: AppHelpers.formatMoney(subscriber.price),
                       iconColor: isDisabled ? Colors.grey : AppTheme.warningColor,
                       textColor: isDisabled ? Colors.grey : AppTheme.warningColor,
@@ -363,7 +364,7 @@ class SubscriberCard extends StatelessWidget {
                     if (hasExpiration)
                       _metaChip(
                         theme: theme,
-                        icon: Icons.event_outlined,
+                        icon: LucideIcons.calendar,
                         text: AppHelpers.formatExpiration(subscriber.expiration),
                         iconColor: isDisabled ? Colors.grey : daysColor,
                         isLtr: true,
@@ -371,7 +372,7 @@ class SubscriberCard extends StatelessWidget {
                     if (hasPhone)
                       _metaChip(
                         theme: theme,
-                        icon: Icons.phone_outlined,
+                        icon: LucideIcons.phone,
                         text: AppHelpers.formatPhone(subscriber.displayPhone),
                         iconColor: AppTheme.infoColor,
                         isLtr: true,
@@ -386,7 +387,7 @@ class SubscriberCard extends StatelessWidget {
                 padding: EdgeInsets.only(top: 4, right: badgeIndent),
                 child: Row(
                   children: [
-                    Icon(Icons.credit_card, size: 11, color: Colors.red.withOpacity(0.6)),
+                    Icon(LucideIcons.creditCard, size: 11, color: Colors.red.withOpacity(0.6)),
                     const SizedBox(width: 3),
                     Text(
                       'دين: ${AppHelpers.formatMoney(subscriber.debtAmount.abs())}',
@@ -404,7 +405,7 @@ class SubscriberCard extends StatelessWidget {
                 padding: EdgeInsets.only(top: 4, right: badgeIndent),
                 child: Row(
                   children: [
-                    Icon(Icons.account_balance_wallet, size: 11,
+                    Icon(LucideIcons.wallet, size: 11,
                         color: Colors.green.withOpacity(0.6)),
                     const SizedBox(width: 3),
                     Text(
@@ -762,18 +763,18 @@ class _OnlineRow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.lan_rounded, size: 12, color: AppTheme.teal600),
+                          const Icon(LucideIcons.network, size: 12, color: AppTheme.teal600),
                           const SizedBox(width: 4),
                           Text(subscriber.ipAddress ?? '—',
                               style: const TextStyle(fontSize: 11,
                                   color: AppTheme.teal600, fontWeight: FontWeight.w800)),
                           const SizedBox(width: 3),
-                          const Icon(Icons.open_in_new_rounded, size: 9, color: AppTheme.teal400),
+                          const Icon(LucideIcons.externalLink, size: 9, color: AppTheme.teal400),
                         ],
                       ),
                     ),
                     const SizedBox(width: 14),
-                    Icon(Icons.timer_outlined, size: 12, color: muted),
+                    Icon(LucideIcons.timer, size: 12, color: muted),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatDuration(subscriber.sessionTime),
                         style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w800)),
@@ -783,12 +784,12 @@ class _OnlineRow extends StatelessWidget {
                 // Download + Upload
                 Row(
                   children: [
-                    const Icon(Icons.download_rounded, size: 12, color: AppTheme.teal600),
+                    const Icon(LucideIcons.arrowDownToLine, size: 12, color: AppTheme.teal600),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatBytes(subscriber.downloadBytes),
                         style: const TextStyle(fontSize: 11, color: AppTheme.teal600, fontWeight: FontWeight.w800)),
                     const SizedBox(width: 14),
-                    Icon(Icons.upload_rounded, size: 12, color: AppTheme.infoColor),
+                    Icon(LucideIcons.arrowUpFromLine, size: 12, color: AppTheme.infoColor),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatBytes(subscriber.uploadBytes),
                         style: TextStyle(fontSize: 11, color: AppTheme.infoColor, fontWeight: FontWeight.w800)),
@@ -810,7 +811,7 @@ class _OnlineRow extends StatelessWidget {
           if (onDisconnect != null) ...[
             const SizedBox(width: 10),
             _ActionBtn(
-              icon: Icons.power_settings_new_rounded,
+              icon: LucideIcons.power,
               label: 'فصل',
               color: Colors.red,
               onTap: onDisconnect!,
@@ -909,7 +910,7 @@ class _LastPaymentRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 3, right: 46),
       child: Row(
         children: [
-          Icon(Icons.monetization_on_rounded, size: 10,
+          Icon(LucideIcons.dollarSign, size: 10,
               color: AppTheme.teal600.withOpacity(0.7)),
           const SizedBox(width: 3),
           Expanded(
@@ -970,7 +971,7 @@ class _ConnectionHealthPill extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: Icon(
-          Icons.refresh_rounded,
+          LucideIcons.refreshCw,
           size: 13,
           color: isLoading
               ? cs.onSurfaceVariant.withOpacity(0.35)

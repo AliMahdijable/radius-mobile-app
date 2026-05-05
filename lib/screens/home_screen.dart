@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dashboard_screen.dart';
@@ -261,8 +262,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         screenIdx: 0,
         visible: true,
         destination: const NavigationDestination(
-          icon: Icon(Icons.dashboard_outlined),
-          selectedIcon: Icon(Icons.dashboard),
+          icon: Icon(LucideIcons.layoutDashboard),
+          selectedIcon: Icon(LucideIcons.layoutDashboard),
           label: 'الرئيسية',
         ),
       ),
@@ -270,8 +271,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         screenIdx: 1,
         visible: true,
         destination: const NavigationDestination(
-          icon: Icon(Icons.people_outline),
-          selectedIcon: Icon(Icons.people),
+          icon: Icon(LucideIcons.users),
+          selectedIcon: Icon(LucideIcons.users),
           label: 'المشتركين',
         ),
       ),
@@ -285,7 +286,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               color: AppTheme.primary,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.person_add_alt_1,
+            child: const Icon(LucideIcons.userPlus,
                 color: Colors.white, size: 22),
           ),
           selectedIcon: Container(
@@ -294,7 +295,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               color: AppTheme.teal800,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.person_add_alt_1,
+            child: const Icon(LucideIcons.userPlus,
                 color: Colors.white, size: 22),
           ),
           label: 'إضافة',
@@ -304,8 +305,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         screenIdx: 3,
         visible: canReports,
         destination: const NavigationDestination(
-          icon: Icon(Icons.assessment_outlined),
-          selectedIcon: Icon(Icons.assessment),
+          icon: Icon(LucideIcons.chartLine),
+          selectedIcon: Icon(LucideIcons.chartLine),
           label: 'التقارير',
         ),
       ),
@@ -313,8 +314,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         screenIdx: 4,
         visible: true,
         destination: const NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
+          icon: Icon(LucideIcons.settings),
+          selectedIcon: Icon(LucideIcons.settings),
           label: 'الإعدادات',
         ),
       ),
