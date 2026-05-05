@@ -1,7 +1,7 @@
 name: rad_mysvcs
 description: MyServices Radius - ISP Subscriber Management
 publish_to: 'none'
-version: 1.2.8+33
+version: 1.4.7+53
 
 environment:
   sdk: '>=3.2.0 <4.0.0'

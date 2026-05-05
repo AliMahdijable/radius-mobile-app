@@ -427,7 +427,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 24),
+
+                      // فوتر — حقوق + نسخة. نفس صياغة v2 web (الإصدار الثاني).
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              '© 2026 — جميع الحقوق محفوظة لمجموعة خدماتي',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 11,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.5),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'MyServices • إدارة المشتركين',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),

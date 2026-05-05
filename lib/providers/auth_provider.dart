@@ -24,6 +24,13 @@ import 'whatsapp_provider.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
 
+/// يُرفع لمّا SAS4 يرفض التوكن المخزَّن (تغيّر باسورد المدير من اللوحة،
+/// أو إبطال الجلسة من شاشة "خروج من كل الأجهزة"). يلتقطه checkAuth
+/// ويفرض handleSessionExpired.
+class _TokenInvalidException implements Exception {
+  const _TokenInvalidException();
+}
+
 class _PermissionAccess {
   final List<String> permissions;
   final bool canAccessManagers;
@@ -111,9 +118,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _storage.saveCanAccessManagers(access.canAccessManagers);
       await _storage.saveCanAccessPackages(access.canAccessPackages);
       return access;
-    } catch (_) {
+    } on DioException catch (e) {
+      // 401/403 = SAS4 رفض التوكن (الباسورد تغيّر بالـSAS4 بانل، أو الجلسة
+      // أُبطلت). نرفع _TokenInvalidException ليلتقطها checkAuth ويفرض
+      // تسجيل خروج. أي خطأ آخر (تايم آوت، شبكة) → نلجأ للـcached perms.
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) {
+        dev.log('SAS4 rejected token (status=$code) — forcing logout', name: 'AUTH');
+        throw _TokenInvalidException();
+      }
       dev.log(
-        'Failed to fetch permissions from SAS4, using cached values instead.',
+        'Failed to fetch permissions (network/timeout): ${e.message} — using cached values',
         name: 'AUTH',
       );
       return _PermissionAccess(
@@ -121,6 +136,42 @@ class AuthNotifier extends StateNotifier<AuthState> {
         canAccessManagers: await _storage.getCanAccessManagers(),
         canAccessPackages: await _storage.getCanAccessPackages(),
       );
+    } catch (_) {
+      dev.log(
+        'Failed to fetch permissions from SAS4 (unknown error), using cached values instead.',
+        name: 'AUTH',
+      );
+      return _PermissionAccess(
+        permissions: await _storage.getPermissions(),
+        canAccessManagers: await _storage.getCanAccessManagers(),
+        canAccessPackages: await _storage.getCanAccessPackages(),
+      );
+    } finally {
+      dio.close();
+    }
+  }
+
+  /// التوكن مرفوض من SAS4 — ترفعها _fetchPermissions ليتم تسجيل خروج.
+  Future<void> _validateAdminToken(String sas4Token) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: ApiConstants.sas4ApiUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+    try {
+      final res = await dio.get(
+        ApiConstants.sas4Auth,
+        options: Options(
+          headers: {'Authorization': 'Bearer $sas4Token'},
+          // ما نخلي Dio يرمي على status codes — نفحصها يدوياً
+          validateStatus: (_) => true,
+        ),
+      );
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        throw _TokenInvalidException();
+      }
+    } on DioException {
+      // أخطاء شبكة → نتسامح، ما نطرد المستخدم بسبب انقطاع نت
     } finally {
       dio.close();
     }
@@ -188,6 +239,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // استرجاع سياق الموظف (لو موجود) قبل قرار جلب SAS4 perms.
       final isEmp = await _storage.getIsEmployee();
       final empPerms = isEmp ? await _storage.getEmployeePermissions() : const <String, bool>{};
+
+      // الموظف ما يحتاج SAS4 perms (نظامنا الداخلي)، لكن لازم نتأكد إن
+      // توكن الأب SAS4 لسه صالح (الأب ممكن يكون غيّر باسورده). نسوي
+      // فحص خفيف عبر _validateAdminToken بـsas4Token المخزَّن.
+      if (isEmp) {
+        final sas4Token = await _storage.getSas4Token();
+        if (sas4Token != null && sas4Token.isNotEmpty) {
+          await _validateAdminToken(sas4Token);
+        }
+      }
+
       final access = isEmp
           ? _PermissionAccess(
               permissions: const [],
@@ -222,6 +284,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _syncNotificationServices(forcePushSync: true);
       });
       _schedulePushResyncRetry();
+    } on _TokenInvalidException {
+      // التوكن مرفوض من SAS4 — إجبار خروج كامل + إعلام المستخدم.
+      await handleSessionExpired(
+        reason: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.',
+      );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -268,6 +335,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
         ),
         clearError: true,
       );
+    }
+
+    // فحص خفيف للتوكن مقابل SAS4 على كل resume — يمسك حالة "غيّر
+    // المدير الباسورد من اللوحة والتطبيق ما يدري". مفصول عن
+    // _syncNotificationServices حتى ما يتعطل الإشعارات لو الفحص فشل.
+    try {
+      final sas4Token = await _storage.getSas4Token() ?? token;
+      await _validateAdminToken(sas4Token);
+    } on _TokenInvalidException {
+      await handleSessionExpired(
+        reason: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.',
+      );
+      return;
     }
 
     await _syncNotificationServices();
