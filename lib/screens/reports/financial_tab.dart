@@ -271,14 +271,14 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   label: 'إجمالي الديون',
                   value: AppHelpers.formatMoney(debts),
                   icon: LucideIcons.banknote,
-                  accent: KpiAccent.violet,
+                  accent: KpiAccent.rose,
                 ),
               if (expenses > 0)
                 _KpiItem(
                   label: 'الصرفيات',
                   value: AppHelpers.formatMoney(expenses),
                   icon: LucideIcons.wallet,
-                  accent: KpiAccent.rose,
+                  accent: KpiAccent.amber,
                 ),
               if (managerDebtsOutstanding > 0)
                 _KpiItem(
