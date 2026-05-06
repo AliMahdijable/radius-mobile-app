@@ -363,7 +363,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         child: Row(
                                           children: [
                                             const Icon(
-                                              LucideIcons.alertCircle,
+                                              LucideIcons.circleAlert,
                                               color: Color(0xFFDC2626),
                                               size: 18,
                                             ),

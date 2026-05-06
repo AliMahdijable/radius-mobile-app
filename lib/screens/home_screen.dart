@@ -589,7 +589,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'انتهى اليوم',
                                   count: dash.expiredTodayCount,
                                   color: Colors.red,
-                                  icon: LucideIcons.alertCircle,
+                                  icon: LucideIcons.circleAlert,
                                 ),
                                 ...dash.expiredTodayList.map(
                                   (sub) => _AlertItem(
@@ -1003,7 +1003,7 @@ class _AppNotificationItem extends StatelessWidget {
     final icon = switch (notification.type) {
       'cash_deposit' => LucideIcons.wallet,
       'loan_deposit' => LucideIcons.fileText,
-      'withdraw_balance' => LucideIcons.minusCircle,
+      'withdraw_balance' => LucideIcons.circleMinus,
       'pay_debt' => LucideIcons.banknote,
       'add_points' => LucideIcons.star,
       _ => LucideIcons.bell,

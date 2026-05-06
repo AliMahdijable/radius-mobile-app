@@ -199,7 +199,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(LucideIcons.alertCircle,
+                        Icon(LucideIcons.circleAlert,
                             color: Colors.red.shade600, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
@@ -296,7 +296,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               child: _TodayStatItem(
                                 label: 'تفعيلات',
                                 value: '${dash.todayActivations}',
-                                icon: LucideIcons.plusCircle,
+                                icon: LucideIcons.circlePlus,
                                 color: AppTheme.successColor,
                               ),
                             ),
@@ -1124,7 +1124,7 @@ class _AlertsSummaryCard extends StatelessWidget {
           const SizedBox(height: 14),
           if (expiredTodayCount > 0)
             _AlertRow(
-              icon: LucideIcons.alertCircle,
+              icon: LucideIcons.circleAlert,
               color: Colors.red,
               label: 'انتهى اليوم',
               count: expiredTodayCount,

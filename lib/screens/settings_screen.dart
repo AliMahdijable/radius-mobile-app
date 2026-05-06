@@ -149,7 +149,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 _FeatureToggle(
-                  icon: LucideIcons.plusCircle,
+                  icon: LucideIcons.circlePlus,
                   title: 'إرسال عند التفعيل',
                   subtitle: 'إرسال رسالة ترحيب عند تفعيل مشترك جديد',
                   value: settings.features.sendOnActivation,
@@ -297,7 +297,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (hasAdministration)
           _SettingsSection(
             title: 'الإدارة',
-            icon: LucideIcons.sliders,
+            icon: LucideIcons.slidersHorizontal,
             children: [
               if (!isEmployee || empCan('employees.view'))
                 _SettingTile(
@@ -346,7 +346,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               if (empCan('whatsapp.templates'))
                 _SettingTile(
-                  icon: LucideIcons.sliders,
+                  icon: LucideIcons.slidersHorizontal,
                   title: 'ميزات واتساب',
                   subtitle: 'التحكم بالإرسال التلقائي',
                   iconColor: AppTheme.whatsappGreen,
