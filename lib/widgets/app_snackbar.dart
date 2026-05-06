@@ -1,387 +1,211 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:toastification/toastification.dart';
 import '../core/router/app_router.dart';
 import '../core/theme/app_theme.dart';
 
-enum _SnackType { success, error, warning, info, whatsapp, whatsappError }
-
+/// AppSnackBar — واجهة موحّدة لإشعارات in-app.
+///
+/// تستعمل toastification داخلياً (يدعم stacking + progress bar +
+/// flatColored design حديث + RTL + dark mode + auto-dismiss).
+///
+/// كل callers الكود الموجود تستعمل نفس الـAPI القديم
+/// (success/error/warning/info/whatsapp + Global versions للـDio
+/// interceptors). فلا تعديل في باقي الكود.
 class AppSnackBar {
   AppSnackBar._();
 
-  static OverlayEntry? _currentEntry;
-  static Timer? _dismissTimer;
-
+  // ─── الواجهة العامة (مع context) ───
   static void success(BuildContext context, String message, {String? detail}) =>
-      _show(context, message, _SnackType.success, detail: detail);
+      _show(context, message, _Kind.success, detail: detail);
 
   static void error(BuildContext context, String message, {String? detail}) =>
-      _show(context, message, _SnackType.error, detail: detail);
+      _show(context, message, _Kind.error, detail: detail);
 
   static void warning(BuildContext context, String message, {String? detail}) =>
-      _show(context, message, _SnackType.warning, detail: detail);
+      _show(context, message, _Kind.warning, detail: detail);
 
   static void info(BuildContext context, String message, {String? detail}) =>
-      _show(context, message, _SnackType.info, detail: detail);
+      _show(context, message, _Kind.info, detail: detail);
 
-  static void whatsapp(BuildContext context, String message,
-          {String? detail}) =>
-      _show(context, message, _SnackType.whatsapp, detail: detail);
+  static void whatsapp(BuildContext context, String message, {String? detail}) =>
+      _show(context, message, _Kind.whatsapp, detail: detail);
 
   static void whatsappError(BuildContext context, String message,
           {String? detail}) =>
-      _show(context, message, _SnackType.whatsappError, detail: detail);
+      _show(context, message, _Kind.whatsappError, detail: detail);
 
-  // ─── إصدارات بدون context (يستعملوا appNavigatorKey) ───
-  // مفيدة في الأماكن اللي ما عندنا BuildContext: dio interceptors،
-  // background services، callbacks خارج tree.
-  static void successGlobal(String message, {String? detail}) {
-    final ctx = appNavigatorKey.currentContext;
-    if (ctx != null) success(ctx, message, detail: detail);
-  }
+  // ─── إصدارات بدون context (Dio interceptors / background) ───
+  static void successGlobal(String message, {String? detail}) =>
+      _showGlobal(message, _Kind.success, detail: detail);
 
-  static void errorGlobal(String message, {String? detail}) {
-    final ctx = appNavigatorKey.currentContext;
-    if (ctx != null) error(ctx, message, detail: detail);
-  }
+  static void errorGlobal(String message, {String? detail}) =>
+      _showGlobal(message, _Kind.error, detail: detail);
 
-  static void warningGlobal(String message, {String? detail}) {
-    final ctx = appNavigatorKey.currentContext;
-    if (ctx != null) warning(ctx, message, detail: detail);
-  }
+  static void warningGlobal(String message, {String? detail}) =>
+      _showGlobal(message, _Kind.warning, detail: detail);
 
-  static void infoGlobal(String message, {String? detail}) {
-    final ctx = appNavigatorKey.currentContext;
-    if (ctx != null) info(ctx, message, detail: detail);
-  }
+  static void infoGlobal(String message, {String? detail}) =>
+      _showGlobal(message, _Kind.info, detail: detail);
 
+  /// مسح كل الإشعارات الظاهرة (نادر — toastification يدير stack تلقائياً).
   static void dismiss() {
-    _dismissTimer?.cancel();
-    _dismissTimer = null;
-    _currentEntry?.remove();
-    _currentEntry = null;
+    toastification.dismissAll();
   }
 
-  static void _showSnackBarMessenger(
-    BuildContext context,
-    String message,
-    _SnackType type, {
-    String? detail,
-    required Color accent,
-    required Duration duration,
-  }) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger.clearSnackBars();
-    final buf = StringBuffer(message);
-    if (detail != null && detail.isNotEmpty) {
-      buf.write('\n');
-      buf.write(detail);
-    }
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          buf.toString(),
-          style: const TextStyle(
-            fontFamily: 'Cairo',
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            height: 1.35,
-          ),
-        ),
-        backgroundColor: accent,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: duration,
-      ),
-    );
-  }
-
+  // ─── الداخلي ───
   static void _show(
     BuildContext context,
     String message,
-    _SnackType type, {
+    _Kind kind, {
     String? detail,
   }) {
-    dismiss();
+    _emit(message, kind, detail: detail);
+  }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  static void _showGlobal(String message, _Kind kind, {String? detail}) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null) return;
+    _emit(message, kind, detail: detail);
+  }
 
-    final (Color accent, Color bg, IconData icon) = switch (type) {
-      _SnackType.success => (
-          AppTheme.successColor,
-          const Color(0xFFE8F5E9),
-          Icons.check_circle_rounded,
-        ),
-      _SnackType.error => (
-          AppTheme.dangerColor,
-          const Color(0xFFFFEBEE),
-          Icons.error_rounded,
-        ),
-      _SnackType.warning => (
-          AppTheme.warningColor,
-          const Color(0xFFFFF8E1),
-          Icons.warning_amber_rounded,
-        ),
-      _SnackType.info => (
-          AppTheme.infoColor,
-          const Color(0xFFE3F2FD),
-          Icons.info_rounded,
-        ),
-      _SnackType.whatsapp => (
-          AppTheme.whatsappGreen,
-          const Color(0xFFE8F5E9),
-          Icons.chat_rounded,
-        ),
-      _SnackType.whatsappError => (
-          AppTheme.dangerColor,
-          const Color(0xFFFFEBEE),
-          Icons.chat_rounded,
-        ),
-    };
-
-    final duration = type == _SnackType.error ||
-            type == _SnackType.whatsappError ||
-            detail != null
+  static void _emit(String message, _Kind kind, {String? detail}) {
+    final spec = _specOf(kind);
+    final duration = (kind == _Kind.error || kind == _Kind.whatsappError || detail != null)
         ? const Duration(seconds: 4)
-        : const Duration(seconds: 3);
+        : const Duration(milliseconds: 2800);
 
-    OverlayState? overlay = Overlay.maybeOf(context, rootOverlay: true);
-    overlay ??= Navigator.maybeOf(context, rootNavigator: true)?.overlay;
-    overlay ??= appNavigatorKey.currentState?.overlay;
-
-    if (overlay == null) {
-      _showSnackBarMessenger(
-        context,
+    toastification.show(
+      type: spec.toastType,
+      style: ToastificationStyle.flatColored,
+      title: Text(
         message,
-        type,
-        detail: detail,
-        accent: accent,
-        duration: duration,
-      );
-      return;
-    }
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => _TopNotification(
-        message: message,
-        detail: detail,
-        accent: accent,
-        bg: isDark ? const Color(0xFF2A2A2A) : bg,
-        icon: icon,
-        textColor: isDark ? Colors.white : const Color(0xFF1A1A1A),
-        detailColor: isDark
-            ? Colors.white70
-            : const Color(0xFF1A1A1A).withValues(alpha: .7),
-        duration: duration,
-        onDismiss: () {
-          _dismissTimer?.cancel();
-          _dismissTimer = null;
-          if (_currentEntry == entry) {
-            entry.remove();
-            _currentEntry = null;
-          }
-        },
+        style: const TextStyle(
+          fontFamily: 'Cairo',
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          height: 1.35,
+        ),
       ),
+      description: (detail != null && detail.isNotEmpty)
+          ? Text(
+              detail,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+                height: 1.35,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            )
+          : null,
+      icon: Icon(spec.icon, color: spec.iconColor, size: 22),
+      primaryColor: spec.accent,
+      backgroundColor: spec.bg,
+      foregroundColor: spec.fg,
+      alignment: Alignment.topCenter,
+      direction: TextDirection.rtl,
+      autoCloseDuration: duration,
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: spec.accent.withValues(alpha: 0.35), width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: spec.accent.withValues(alpha: 0.18),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+      // Stacking: toastification بشكل افتراضي يكدّس الـtoasts الجديدة فوق
+      // الموجودة (stack تلقائي). كل toast يبقى مدّته ثم ينزاح.
+      showProgressBar: true,
+      pauseOnHover: true,
+      dragToClose: true,
+      applyBlurEffect: false,
+      closeButtonShowType: CloseButtonShowType.onHover,
+      closeOnClick: true,
     );
+  }
 
-    _currentEntry = entry;
-    try {
-      overlay.insert(entry);
-    } catch (_) {
-      _currentEntry = null;
-      _showSnackBarMessenger(
-        context,
-        message,
-        type,
-        detail: detail,
-        accent: accent,
-        duration: duration,
-      );
-      return;
+  static _Spec _specOf(_Kind kind) {
+    switch (kind) {
+      case _Kind.success:
+        return _Spec(
+          toastType: ToastificationType.success,
+          accent: AppTheme.successColor,
+          bg: const Color(0xFFE8F5E9),
+          fg: const Color(0xFF1B5E20),
+          iconColor: AppTheme.successColor,
+          icon: Icons.check_circle_rounded,
+        );
+      case _Kind.error:
+        return _Spec(
+          toastType: ToastificationType.error,
+          accent: AppTheme.dangerColor,
+          bg: const Color(0xFFFFEBEE),
+          fg: const Color(0xFFB71C1C),
+          iconColor: AppTheme.dangerColor,
+          icon: Icons.error_rounded,
+        );
+      case _Kind.warning:
+        return _Spec(
+          toastType: ToastificationType.warning,
+          accent: AppTheme.warningColor,
+          bg: const Color(0xFFFFF8E1),
+          fg: const Color(0xFFE65100),
+          iconColor: AppTheme.warningColor,
+          icon: Icons.warning_amber_rounded,
+        );
+      case _Kind.info:
+        return _Spec(
+          toastType: ToastificationType.info,
+          accent: AppTheme.infoColor,
+          bg: const Color(0xFFE3F2FD),
+          fg: const Color(0xFF0D47A1),
+          iconColor: AppTheme.infoColor,
+          icon: Icons.info_rounded,
+        );
+      case _Kind.whatsapp:
+        return _Spec(
+          toastType: ToastificationType.success,
+          accent: AppTheme.whatsappGreen,
+          bg: const Color(0xFFE8F5E9),
+          fg: const Color(0xFF1B5E20),
+          iconColor: AppTheme.whatsappGreen,
+          icon: Icons.chat_rounded,
+        );
+      case _Kind.whatsappError:
+        return _Spec(
+          toastType: ToastificationType.error,
+          accent: AppTheme.dangerColor,
+          bg: const Color(0xFFFFEBEE),
+          fg: const Color(0xFFB71C1C),
+          iconColor: AppTheme.dangerColor,
+          icon: Icons.chat_rounded,
+        );
     }
-
-    _dismissTimer = Timer(duration + const Duration(milliseconds: 400), () {
-      if (_currentEntry == entry) {
-        _currentEntry = null;
-      }
-    });
   }
 }
 
-class _TopNotification extends StatefulWidget {
-  final String message;
-  final String? detail;
+enum _Kind { success, error, warning, info, whatsapp, whatsappError }
+
+class _Spec {
+  final ToastificationType toastType;
   final Color accent;
   final Color bg;
+  final Color fg;
+  final Color iconColor;
   final IconData icon;
-  final Color textColor;
-  final Color detailColor;
-  final Duration duration;
-  final VoidCallback onDismiss;
-
-  const _TopNotification({
-    required this.message,
-    this.detail,
+  const _Spec({
+    required this.toastType,
     required this.accent,
     required this.bg,
+    required this.fg,
+    required this.iconColor,
     required this.icon,
-    required this.textColor,
-    required this.detailColor,
-    required this.duration,
-    required this.onDismiss,
   });
-
-  @override
-  State<_TopNotification> createState() => _TopNotificationState();
-}
-
-class _TopNotificationState extends State<_TopNotification>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<Offset> _slideAnim;
-  late final Animation<double> _fadeAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-      reverseDuration: const Duration(milliseconds: 250),
-    );
-
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-
-    _fadeAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
-    );
-
-    _ctrl.forward();
-
-    Future.delayed(widget.duration, () {
-      if (mounted) {
-        _ctrl.reverse().then((_) {
-          if (mounted) widget.onDismiss();
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _swipeDismiss() {
-    _ctrl.reverse().then((_) {
-      if (mounted) widget.onDismiss();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
-
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: SlideTransition(
-        position: _slideAnim,
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: GestureDetector(
-            onVerticalDragEnd: (d) {
-              if (d.primaryVelocity != null && d.primaryVelocity! < -100) {
-                _swipeDismiss();
-              }
-            },
-            onTap: _swipeDismiss,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                margin: EdgeInsets.only(
-                  top: topPadding + 8,
-                  left: 12,
-                  right: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: widget.bg,
-                  borderRadius: BorderRadius.circular(14),
-                  border:
-                      Border(top: BorderSide(color: widget.accent, width: 3)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.accent.withValues(alpha: .18),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: .08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: widget.accent.withValues(alpha: .12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child:
-                          Icon(widget.icon, color: widget.accent, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.message,
-                            style: TextStyle(
-                              color: widget.textColor,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                          if (widget.detail != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              widget.detail!,
-                              style: TextStyle(
-                                color: widget.detailColor,
-                                fontSize: 12,
-                                fontFamily: 'Cairo',
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.close, size: 18,
-                        color: widget.textColor.withValues(alpha: .4)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
