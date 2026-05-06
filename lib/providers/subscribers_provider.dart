@@ -478,6 +478,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
                 ? e['acctinputoctets']
                 : int.tryParse(e['acctinputoctets']?.toString() ?? ''),
             deviceVendor: e['oui']?.toString(),
+            // الخصم يجي من backend فقط — SAS4 ما عنده الخصم. كان السبب
+            // الفعلي لعدم ظهور chip الخصم: هذا الـmerger يبني model
+            // جديد بدون تمرير discount → قيمة الـbackend اللي فيها
+            // discount=10000 تضيع.
+            discount: backend?.discount,
           ));
         }
       } else {
