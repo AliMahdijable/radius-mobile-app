@@ -7,6 +7,7 @@ import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/employee_filter_dropdown.dart';
+import '../../widgets/kpi_card.dart';
 import '../../widgets/report_controls.dart';
 import '../../widgets/wa_status_badge.dart';
 
@@ -173,12 +174,31 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
               ]),
             ),
 
+          // Stats — تصميم مطابق لـv2 KPI (tinted bg + icon يسار).
           Row(children: [
-            _StatMini(label: 'الإجمالي', value: '${counts['total'] ?? 0}', color: AppTheme.primary),
+            Expanded(child: KpiCard(
+              icon: LucideIcons.zap,
+              label: 'الإجمالي',
+              value: '${counts['total'] ?? 0}',
+              accent: KpiAccent.primary,
+              compact: true,
+            )),
             const SizedBox(width: 8),
-            _StatMini(label: 'تفعيل', value: '${counts['activate'] ?? 0}', color: AppTheme.successColor),
+            Expanded(child: KpiCard(
+              icon: LucideIcons.circleCheck,
+              label: 'تفعيل',
+              value: '${counts['activate'] ?? 0}',
+              accent: KpiAccent.emerald,
+              compact: true,
+            )),
             const SizedBox(width: 8),
-            _StatMini(label: 'تمديد', value: '${counts['extend'] ?? 0}', color: AppTheme.warningColor),
+            Expanded(child: KpiCard(
+              icon: LucideIcons.repeat,
+              label: 'تمديد',
+              value: '${counts['extend'] ?? 0}',
+              accent: KpiAccent.amber,
+              compact: true,
+            )),
           ]),
           const SizedBox(height: 8),
 
@@ -283,27 +303,6 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
   }
 }
 
-class _StatMini extends StatelessWidget {
-  final String label; final String value; final Color color;
-  const _StatMini({required this.label, required this.value, required this.color});
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [color, color.withValues(alpha: .7)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(children: [
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70)),
-        ]),
-      ),
-    );
-  }
-}
 
 class _ActivationRow extends StatelessWidget {
   final Map<String, dynamic> record;

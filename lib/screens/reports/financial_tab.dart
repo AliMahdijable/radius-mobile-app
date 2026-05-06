@@ -10,6 +10,7 @@ import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/employee_filter_dropdown.dart';
+import '../../widgets/kpi_card.dart';
 import '../../widgets/report_controls.dart';
 
 class FinancialTab extends ConsumerStatefulWidget {
@@ -256,46 +257,48 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   label: 'إجمالي التحصيلات',
                   value: AppHelpers.formatMoney(collections),
                   icon: LucideIcons.trendingUp,
-                  colors: const [Color(0xFF10b981), Color(0xFF059669)],
+                  accent: KpiAccent.emerald,
                 ),
               if (activationsTotal > 0)
                 _KpiItem(
                   label: 'تفعيل + تمديد',
                   value: activationsTotal.toInt().toString(),
                   icon: LucideIcons.circleCheck,
-                  colors: const [Color(0xFFf59e0b), Color(0xFFd97706)],
+                  accent: KpiAccent.amber,
                 ),
               if (debts > 0)
                 _KpiItem(
                   label: 'إجمالي الديون',
                   value: AppHelpers.formatMoney(debts),
                   icon: LucideIcons.banknote,
-                  colors: const [Color(0xFF16a34a), Color(0xFF0f9d58)],
+                  accent: KpiAccent.violet,
                 ),
               if (expenses > 0)
                 _KpiItem(
                   label: 'الصرفيات',
                   value: AppHelpers.formatMoney(expenses),
                   icon: LucideIcons.wallet,
-                  colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
+                  accent: KpiAccent.rose,
                 ),
               if (managerDebtsOutstanding > 0)
                 _KpiItem(
                   label: 'ديون المدراء',
                   value: AppHelpers.formatMoney(managerDebtsOutstanding),
                   icon: LucideIcons.userCheck,
-                  colors: const [Color(0xFFf59e0b), Color(0xFFb45309)],
+                  accent: KpiAccent.amber,
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          // Net profit hero — always shown even when 0 because it's the
-          // bottom line number the admin opens the screen to see.
-          _KpiHero(
+          // Net profit hero — يظهر دائماً حتى لو 0 لأنه الرقم الأهم
+          // اللي المدير يفتح الشاشة عشانه. tinted blue يميّزه عن
+          // الـtiles فوقه بدون ما يصير صارخ.
+          KpiCard(
             label: 'صافي الربح',
             value: AppHelpers.formatMoney(netProfit),
             icon: LucideIcons.piggyBank,
-            colors: const [Color(0xFF0ea5e9), Color(0xFF0284c7)],
+            accent: KpiAccent.blue,
+            hero: true,
           ),
           const SizedBox(height: 20),
 
@@ -470,12 +473,12 @@ class _KpiItem {
   final String label;
   final String value;
   final IconData icon;
-  final List<Color> colors;
+  final KpiAccent accent;
   const _KpiItem({
     required this.label,
     required this.value,
     required this.icon,
-    required this.colors,
+    required this.accent,
   });
 }
 
@@ -501,16 +504,14 @@ class _KpiGrid extends StatelessWidget {
         final cols = constraints.maxWidth >= 600 ? 3 : 2;
         const spacing = 10.0;
         final tileWidth = (constraints.maxWidth - spacing * (cols - 1)) / cols;
-        // Aspect ratio tuned so the gradient tiles don't squish on small
-        // phones: ~2.1 gives enough headroom for two lines of text +
-        // icon without clipping the value.
-        final tileHeight = tileWidth / 2.1;
+        // الـKpiCard أفقي (icon يسار + label فوق value)، الارتفاع
+        // يتحدد ذاتياً حسب المحتوى — ما نقفله بـSizedBox عشان الكلام
+        // ما ينقص. نقفل العرض بس.
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
           children: items.map((it) => SizedBox(
             width: tileWidth,
-            height: tileHeight,
             child: _KpiTile(item: it),
           )).toList(),
         );
@@ -546,142 +547,18 @@ class _EmptyKpis extends StatelessWidget {
   }
 }
 
+/// تيلة الـKPI الفردية — wrapper نحيف على KpiCard المشترك.
 class _KpiTile extends StatelessWidget {
   final _KpiItem item;
   const _KpiTile({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: item.colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: item.colors.last.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(item.icon, size: 16, color: Colors.white),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  item.label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              item.value,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Hero card used for "صافي الربح" — sized to feel like a headline
-/// among the grid tiles, not a giant panel that dominates the screen.
-/// Intentionally compact: icon + label on one side, value on the other,
-/// all on a single row so total height matches the grid tiles above.
-class _KpiHero extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final List<Color> colors;
-  const _KpiHero({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.colors,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: colors.last.withOpacity(0.25),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.18),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(icon, color: Colors.white, size: 16),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: AlignmentDirectional.centerEnd,
-              child: Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return KpiCard(
+      label: item.label,
+      value: item.value,
+      icon: item.icon,
+      accent: item.accent,
     );
   }
 }

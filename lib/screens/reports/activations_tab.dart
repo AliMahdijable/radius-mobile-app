@@ -10,6 +10,7 @@ import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/employee_filter_dropdown.dart';
+import '../../widgets/kpi_card.dart';
 import '../../widgets/report_controls.dart';
 import '../../widgets/wa_status_badge.dart';
 
@@ -207,13 +208,31 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
               ]),
             ),
 
-          // Stats
+          // Stats — تصميم مطابق لـv2 KPI (tinted bg + icon يسار).
           Row(children: [
-            _StatChip('الإجمالي', '${all.length}', AppTheme.primary),
-            const SizedBox(width: 6),
-            _StatChip('تفعيل', '$activateCount', AppTheme.successColor),
-            const SizedBox(width: 6),
-            _StatChip('تمديد', '$extendCount', AppTheme.warningColor),
+            Expanded(child: KpiCard(
+              icon: LucideIcons.zap,
+              label: 'الإجمالي',
+              value: '${all.length}',
+              accent: KpiAccent.primary,
+              compact: true,
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: KpiCard(
+              icon: LucideIcons.circleCheck,
+              label: 'تفعيل',
+              value: '$activateCount',
+              accent: KpiAccent.emerald,
+              compact: true,
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: KpiCard(
+              icon: LucideIcons.repeat,
+              label: 'تمديد',
+              value: '$extendCount',
+              accent: KpiAccent.amber,
+              compact: true,
+            )),
           ]),
           const SizedBox(height: 10),
 
@@ -370,27 +389,6 @@ class _ActivationsTabState extends ConsumerState<ActivationsTab>
       ActionChip(label: Text(label, style: const TextStyle(fontSize: 11)), onPressed: onTap, visualDensity: VisualDensity.compact);
 }
 
-class _StatChip extends StatelessWidget {
-  final String label; final String value; final Color color;
-  const _StatChip(this.label, this.value, this.color);
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: .2)),
-        ),
-        child: Column(children: [
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-          Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: .7))),
-        ]),
-      ),
-    );
-  }
-}
 
 
 class _ActivationRow extends StatelessWidget {
