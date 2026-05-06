@@ -1,3 +1,38 @@
+/// canonical → SAS4 prm_* mapping (مطابق server/sas4Permissions.js).
+/// نستعمل المفاتيح الـcanonical في كل الـUI gates عشان نفس النظام مع الويب.
+const Map<String, String> kSasPermissionMap = {
+  'subscribers.view':            'prm_users_index',
+  'subscribers.create':          'prm_users_create',
+  'subscribers.edit':            'prm_users_update',
+  'subscribers.rename':          'prm_users_rename',
+  'subscribers.delete':          'prm_users_delete',
+  'subscribers.activate':        'prm_users_activate',
+  'subscribers.activate_credit': 'prm_users_activate_credit',
+  'subscribers.extend':          'prm_users_extend',
+  'subscribers.toggle':          'prm_users_enable_disable',
+  'subscribers.disconnect':      'prm_users_disconnect',
+  'subscribers.show_password':   'prm_users_show_password',
+  'subscribers.change_profile':  'prm_users_change_profile',
+  'subscribers.pay_debt':        'prm_users_deposit',
+  'subscribers.add_debt':        'prm_users_withdrawal',
+  'subscribers.history':         'prm_users_history',
+  'subscribers.add_traffic':     'prm_users_add_traffic',
+  'packages.view':               'prm_profiles_index',
+  'packages.create':             'prm_profiles_create',
+  'packages.edit':               'prm_profiles_update',
+  'packages.delete':             'prm_profiles_delete',
+  'managers.view':               'prm_managers_index',
+  'managers.create':             'prm_managers_create',
+  'managers.edit':               'prm_managers_update',
+  'managers.delete':             'prm_managers_delete',
+  'managers.deposit':            'prm_managers_deposit',
+  'managers.withdrawal':         'prm_managers_withdrawal',
+  'reports.activations':         'prm_report_activations',
+  'reports.sessions':            'prm_report_sessions',
+  'reports.users':               'prm_report_users',
+  'reports.financial':           'prm_billing',
+};
+
 class UserModel {
   final String id;
   final String username;
@@ -111,6 +146,20 @@ class UserModel {
     if (!isEmployee) return true;
     return keys.any((k) => employeePermissions[k] == true);
   }
+
+  /// فحص صلاحية أدمن SAS4 — يقبل canonical key (مثل 'subscribers.delete').
+  /// لو المفتاح مش في الـmap (ميزة محلية مثل send_whatsapp): يرجع true.
+  /// الموظف: نستعمل employeePermissions بدلها.
+  bool canSas(String canonicalKey) {
+    if (isEmployee) return employeePermissions[canonicalKey] == true;
+    final prm = kSasPermissionMap[canonicalKey];
+    if (prm == null) return true; // ميزة محلية، السماح افتراضي للأدمن
+    return permissions.contains(prm);
+  }
+
+  /// مزدوجة: الموظف يحتاج permission خاصته AND الأدمن SAS4 يسمح. للحالة الموحّدة:
+  /// الموظف يستعمل employeePermissions، الأدمن SAS — `can(key)` يغطّي كلاهما.
+  bool can(String canonicalKey) => canSas(canonicalKey);
 
   Map<String, dynamic> toJson() => {
         'id': id,

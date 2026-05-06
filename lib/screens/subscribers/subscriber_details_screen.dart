@@ -3081,9 +3081,12 @@ class _SubscriberDetailsScreenState
 
   void _showActionsSheet(bool isEnabled) {
     final sub = _readCurrentSubscriber();
-    // فحص صلاحية الفاعل (موظف أو أدمن). الأدمن دائماً = true (full access).
+    // فحص صلاحية الفاعل: موظف يستعمل employeePermissions، أدمن يستعمل
+    // SAS4 permissions (canSas يقيّم canonical key مثل 'subscribers.delete').
+    // المفاتيح المحلية (subscribers.send_whatsapp، generate_link) ترجع true
+    // افتراضياً للأدمن لأنها مش في SAS4.
     final user = ref.read(authProvider).user;
-    bool can(String key) => user?.hasEmployeePermission(key) ?? true;
+    bool can(String key) => user?.can(key) ?? true;
 
     final actions = <_FabAction>[
       if (can('subscribers.edit'))
