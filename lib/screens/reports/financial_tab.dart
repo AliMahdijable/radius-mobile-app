@@ -563,6 +563,11 @@ class _KpiTile extends StatelessWidget {
   }
 }
 
+/// كرت "تقرير حسب المدير" — هرمية بصرية واضحة:
+///   1. اسم المدير (header) + شارة "ربح/خسارة" حسب إشارة الصافي.
+///   2. الصافي كعنوان كبير ملوّن (أخضر للموجب، أحمر للسالب).
+///   3. الأرقام المالية الثانوية (إيرادات/ديون/صرفيات) بسطر افقي.
+///   4. الـcounters (تفعيل/تمديد) كنص مضغوط بسطر واحد بالأسفل.
 class _AdminRow extends StatelessWidget {
   final Map<String, dynamic> admin;
   const _AdminRow({required this.admin});
@@ -570,6 +575,7 @@ class _AdminRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final name = admin['admin_username']?.toString() ?? '—';
     final revenue = _toDouble(admin['revenue_total']);
     final debt = _toDouble(admin['debt_total']);
@@ -578,35 +584,179 @@ class _AdminRow extends StatelessWidget {
     final activations = _toInt(admin['activations_count']);
     final extends_ = _toInt(admin['extend_count']);
 
+    final isProfit = net >= 0;
+    final netColor = isProfit
+        ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
+        : (isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C));
+    final netBadgeBg = (isProfit ? const Color(0xFF10B981) : const Color(0xFFE11D48))
+        .withValues(alpha: 0.10);
+    final netBadgeBorder = (isProfit ? const Color(0xFF10B981) : const Color(0xFFE11D48))
+        .withValues(alpha: 0.25);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .06)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .07)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          // 3-column grid × 2 rows — compact and still reads well.
-          Row(children: [
-            _MiniStat('إيرادات', AppHelpers.formatMoney(revenue), Colors.green),
-            const SizedBox(width: 4),
-            _MiniStat('ديون', AppHelpers.formatMoney(debt), Colors.red),
-            const SizedBox(width: 4),
-            _MiniStat('صرفيات', AppHelpers.formatMoney(expenses), const Color(0xFFef4444)),
-          ]),
-          const SizedBox(height: 4),
-          Row(children: [
-            _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
-            const SizedBox(width: 4),
-            _MiniStat('تفعيل', '$activations', AppTheme.successColor),
-            const SizedBox(width: 4),
-            _MiniStat('تمديد', '$extends_', AppTheme.warningColor),
-          ]),
+          // Header: اسم المدير + شارة ربح/خسارة
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(LucideIcons.userCog,
+                      size: 16, color: theme.colorScheme.primary),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w800,
+                      fontFamily: 'Cairo',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: netBadgeBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: netBadgeBorder, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isProfit ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+                        size: 11, color: netColor,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        isProfit ? 'ربح' : 'خسارة',
+                        style: TextStyle(
+                          fontSize: 10.5, fontWeight: FontWeight.w800,
+                          color: netColor, fontFamily: 'Cairo',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // الصافي — العنوان الرئيسي
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'صافي الفترة',
+                  style: TextStyle(
+                    fontSize: 11.5, fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  AppHelpers.formatMoney(net),
+                  style: TextStyle(
+                    fontSize: 19, fontWeight: FontWeight.w900,
+                    color: netColor, fontFamily: 'Cairo',
+                    letterSpacing: -0.3, height: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // فاصل خفيف
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Container(
+              height: 1,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+            ),
+          ),
+
+          // الأرقام الثانوية: 3 أعمدة بسطر واحد
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Row(
+              children: [
+                _MiniMetric(
+                  label: 'إيرادات',
+                  value: AppHelpers.formatMoney(revenue),
+                  color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                ),
+                _Divider(),
+                _MiniMetric(
+                  label: 'ديون',
+                  value: AppHelpers.formatMoney(debt),
+                  color: isDark ? const Color(0xFFA78BFA) : const Color(0xFF6D28D9),
+                ),
+                _Divider(),
+                _MiniMetric(
+                  label: 'صرفيات',
+                  value: AppHelpers.formatMoney(expenses),
+                  color: isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C),
+                ),
+              ],
+            ),
+          ),
+
+          // counters — سطر مضغوط بأسفل
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.circleCheck, size: 12,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                const SizedBox(width: 4),
+                Text('تفعيل: ',
+                    style: TextStyle(fontSize: 11,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                        fontFamily: 'Cairo')),
+                Text('$activations',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                        fontFamily: 'Cairo')),
+                const SizedBox(width: 14),
+                Icon(LucideIcons.repeat, size: 12,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                const SizedBox(width: 4),
+                Text('تمديد: ',
+                    style: TextStyle(fontSize: 11,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                        fontFamily: 'Cairo')),
+                Text('$extends_',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                        fontFamily: 'Cairo')),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -626,34 +776,56 @@ class _AdminRow extends StatelessWidget {
   }
 }
 
-class _MiniStat extends StatelessWidget {
+class _MiniMetric extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _MiniStat(this.label, this.value, this.color);
+  const _MiniMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .08),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: .18)),
-        ),
-        child: Column(children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5, fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              fontFamily: 'Cairo',
+            ),
+          ),
+          const SizedBox(height: 3),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(value,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w800,
+                color: color, fontFamily: 'Cairo',
+                letterSpacing: -0.2, height: 1.0,
+              ),
+            ),
           ),
-          const SizedBox(height: 2),
-          Text(label,
-              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55))),
-        ]),
+        ],
       ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1, height: 28,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07),
     );
   }
 }
