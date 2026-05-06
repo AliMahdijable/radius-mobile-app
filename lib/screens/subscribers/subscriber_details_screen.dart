@@ -1925,12 +1925,18 @@ class _SubscriberDetailsScreenState
       final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
       final creditVal = sub.debtAmount > 0 ? _formatNumber(sub.debtAmount) : '0';
       final pkgPriceFormatted = _formatNumber(double.tryParse(sub.price ?? '0') ?? 0);
-      final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
+      // الاتفاق (2026-05-06):
+      //   {subscriber_name} = username (لاتيني)
+      //   {firstname}       = الاسم العربي (fullName)
+      // الـfallback يضمن إن كل واحد عنده قيمة معقولة لو الحقل ناقص.
+      final arabicName = sub.fullName.trim();
+      final subscriberNameVar = sub.username.isNotEmpty ? sub.username : arabicName;
+      final firstnameVar = arabicName.isNotEmpty ? arabicName : sub.username;
 
       String msg = match.first.messageContent;
       final vars = {
-        '{subscriber_name}': displayName,
-        '{firstname}': sub.firstname.isNotEmpty ? sub.firstname : sub.username,
+        '{subscriber_name}': subscriberNameVar,
+        '{firstname}': firstnameVar,
         '{lastname}': sub.lastname,
         '{phone}': sub.displayPhone,
         '{remaining_days}': _calcRemainingDays(sub.expiration),
