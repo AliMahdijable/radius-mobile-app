@@ -563,19 +563,27 @@ class _KpiTile extends StatelessWidget {
   }
 }
 
-/// كرت "تقرير حسب المدير" — هرمية بصرية واضحة:
-///   1. اسم المدير (header) + شارة "ربح/خسارة" حسب إشارة الصافي.
-///   2. الصافي كعنوان كبير ملوّن (أخضر للموجب، أحمر للسالب).
-///   3. الأرقام المالية الثانوية (إيرادات/ديون/صرفيات) بسطر افقي.
-///   4. الـcounters (تفعيل/تمديد) كنص مضغوط بسطر واحد بالأسفل.
-class _AdminRow extends StatelessWidget {
+/// كرت "تقرير حسب المدير" — collapsible.
+///   - مطوي افتراضياً عشان لمّا يكون عند الأدمن 20+ مدير الصفحة
+///     ما تطول. يضغط للتوسيع.
+///   - الـheader (اسم + صافي + chevron) دائماً ظاهر.
+///   - عند التوسيع: 3 أرقام مالية + counters تفعيل/تمديد.
+class _AdminRow extends StatefulWidget {
   final Map<String, dynamic> admin;
   const _AdminRow({required this.admin});
+
+  @override
+  State<_AdminRow> createState() => _AdminRowState();
+}
+
+class _AdminRowState extends State<_AdminRow> with SingleTickerProviderStateMixin {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final admin = widget.admin;
     final name = admin['admin_username']?.toString() ?? '—';
     final revenue = _toDouble(admin['revenue_total']);
     final debt = _toDouble(admin['debt_total']);
@@ -584,8 +592,7 @@ class _AdminRow extends StatelessWidget {
     final activations = _toInt(admin['activations_count']);
     final extends_ = _toInt(admin['extend_count']);
 
-    // اللون يدلّ على الإشارة: أخضر للموجب، أحمر للسالب — يغني عن
-    // أي label نصي ("ربح/خسارة").
+    // اللون يدلّ على الإشارة: أخضر للموجب، أحمر للسالب.
     final netColor = net >= 0
         ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
         : (isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C));
@@ -597,138 +604,155 @@ class _AdminRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .07)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header: اسم المدير فقط — لون "صافي الفترة" أدناه يكفي
-          // للدلالة على ربح/خسارة (أخضر vs أحمر).
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 30, height: 30,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(LucideIcons.userCog,
-                      size: 16, color: theme.colorScheme.primary),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w800,
-                      fontFamily: 'Cairo',
+          // Header — clickable للتوسيع/الطيّ
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    child: Icon(LucideIcons.userCog,
+                        size: 16, color: theme.colorScheme.primary),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          // الصافي — العنوان الرئيسي
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'صافي الفترة',
-                  style: TextStyle(
-                    fontSize: 11.5, fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontFamily: 'Cairo',
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13.5, fontWeight: FontWeight.w800,
+                            fontFamily: 'Cairo',
+                            height: 1.1,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'صافي الفترة',
+                          style: TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                            fontFamily: 'Cairo',
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  AppHelpers.formatMoney(net),
-                  style: TextStyle(
-                    fontSize: 19, fontWeight: FontWeight.w900,
-                    color: netColor, fontFamily: 'Cairo',
-                    letterSpacing: -0.3, height: 1.0,
+                  Text(
+                    AppHelpers.formatMoney(net),
+                    style: TextStyle(
+                      fontSize: 16.5, fontWeight: FontWeight.w900,
+                      color: netColor, fontFamily: 'Cairo',
+                      letterSpacing: -0.3, height: 1.0,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          // فاصل خفيف
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Container(
-              height: 1,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-            ),
-          ),
-
-          // الأرقام الثانوية: 3 أعمدة بسطر واحد
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: Row(
-              children: [
-                _MiniMetric(
-                  label: 'إيرادات',
-                  value: AppHelpers.formatMoney(revenue),
-                  color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
-                ),
-                _Divider(),
-                _MiniMetric(
-                  label: 'ديون',
-                  value: AppHelpers.formatMoney(debt),
-                  color: isDark ? const Color(0xFFA78BFA) : const Color(0xFF6D28D9),
-                ),
-                _Divider(),
-                _MiniMetric(
-                  label: 'صرفيات',
-                  value: AppHelpers.formatMoney(expenses),
-                  color: isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C),
-                ),
-              ],
-            ),
-          ),
-
-          // counters — سطر مضغوط بأسفل
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      LucideIcons.chevronDown,
+                      size: 18,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.circleCheck, size: 12,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
-                const SizedBox(width: 4),
-                Text('تفعيل: ',
-                    style: TextStyle(fontSize: 11,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                        fontFamily: 'Cairo')),
-                Text('$activations',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                        fontFamily: 'Cairo')),
-                const SizedBox(width: 14),
-                Icon(LucideIcons.repeat, size: 12,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
-                const SizedBox(width: 4),
-                Text('تمديد: ',
-                    style: TextStyle(fontSize: 11,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                        fontFamily: 'Cairo')),
-                Text('$extends_',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                        fontFamily: 'Cairo')),
-              ],
-            ),
+          ),
+
+          // المحتوى الموسّع — financials + counters.
+          // AnimatedSize يعطي transition سلس من 0 لـnatural height.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // فاصل
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 12),
+                        height: 1,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                      ),
+                      // 3 أرقام مالية
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                        child: Row(
+                          children: [
+                            _MiniMetric(
+                              label: 'إيرادات',
+                              value: AppHelpers.formatMoney(revenue),
+                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                            ),
+                            _Divider(),
+                            _MiniMetric(
+                              label: 'ديون',
+                              value: AppHelpers.formatMoney(debt),
+                              color: isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C),
+                            ),
+                            _Divider(),
+                            _MiniMetric(
+                              label: 'صرفيات',
+                              value: AppHelpers.formatMoney(expenses),
+                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // counters
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(LucideIcons.circleCheck, size: 12,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                            const SizedBox(width: 4),
+                            Text('تفعيل: ',
+                                style: TextStyle(fontSize: 11,
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                                    fontFamily: 'Cairo')),
+                            Text('$activations',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                                    fontFamily: 'Cairo')),
+                            const SizedBox(width: 14),
+                            Icon(LucideIcons.repeat, size: 12,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                            const SizedBox(width: 4),
+                            Text('تمديد: ',
+                                style: TextStyle(fontSize: 11,
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                                    fontFamily: 'Cairo')),
+                            Text('$extends_',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                                    fontFamily: 'Cairo')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
           ),
         ],
       ),
