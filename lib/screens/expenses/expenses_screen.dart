@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -37,7 +38,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       appBar: AppBar(title: const Text('الصرفيات')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context),
-        icon: const Icon(Icons.add),
+        icon: const Icon(LucideIcons.plus),
         label: const Text('إضافة'),
       ),
       body: Column(
@@ -53,7 +54,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(children: [
-                  Icon(Icons.filter_list_rounded, size: 16, color: cs.primary),
+                  Icon(LucideIcons.filter, size: 16, color: cs.primary),
                   const SizedBox(width: 6),
                   Text('الفلاتر',
                       style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: .75))),
@@ -62,7 +63,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .5)),
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(width: 4),
-                  Icon(Icons.tune, size: 14, color: cs.onSurface.withValues(alpha: .4)),
+                  Icon(LucideIcons.slidersHorizontal, size: 14, color: cs.onSurface.withValues(alpha: .4)),
                 ]),
               ),
             ),
@@ -77,7 +78,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       '${_from != null ? intl.DateFormat('y-MM-dd').format(_from!) : '...'} — ${_to != null ? intl.DateFormat('y-MM-dd').format(_to!) : '...'}',
                       style: const TextStyle(fontSize: 10),
                     ),
-                    deleteIcon: const Icon(Icons.close, size: 14),
+                    deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () => setState(() { _from = null; _to = null; }),
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -85,7 +86,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 if (_employeeId != 'all')
                   Chip(
                     label: const Text('موظف محدّد', style: TextStyle(fontSize: 10)),
-                    deleteIcon: const Icon(Icons.close, size: 14),
+                    deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () => setState(() => _employeeId = 'all'),
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -103,7 +104,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.inbox_outlined, size: 48, color: cs.onSurfaceVariant),
+                        Icon(LucideIcons.inbox, size: 48, color: cs.onSurfaceVariant),
                         const SizedBox(height: 12),
                         const Text('لا توجد صرفيات'),
                       ],
@@ -274,7 +275,7 @@ class _TotalBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.account_balance_wallet, color: cs.error),
+          Icon(LucideIcons.wallet, color: cs.error),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -335,7 +336,7 @@ class _ExpenseTile extends StatelessWidget {
                   color: cs.error.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.remove_circle_outline, color: cs.error, size: 20),
+                child: Icon(LucideIcons.circleMinus, color: cs.error, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -357,7 +358,7 @@ class _ExpenseTile extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: Icon(Icons.delete_outline, color: cs.error, size: 20),
+                icon: Icon(LucideIcons.trash2, color: cs.error, size: 20),
                 onPressed: onDelete,
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
@@ -473,7 +474,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
                 suffixText: 'IQD',
-                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
+                prefixIcon: Icon(LucideIcons.dollarSign, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -506,7 +507,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               controller: _note,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(Icons.note_outlined),
+                prefixIcon: Icon(LucideIcons.fileText),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -519,7 +520,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'التاريخ والوقت',
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: Icon(LucideIcons.calendar),
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),

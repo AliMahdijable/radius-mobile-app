@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -324,7 +325,7 @@ class _SubscriberDetailsScreenState
                       decoration: BoxDecoration(
                         color: AppTheme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.edit, color: AppTheme.primary, size: 20)),
+                      child: const Icon(LucideIcons.pencil, color: AppTheme.primary, size: 20)),
                     const SizedBox(width: 10),
                     Text('تعديل بيانات المشترك',
                         style: Theme.of(ctx).textTheme.titleMedium
@@ -343,7 +344,7 @@ class _SubscriberDetailsScreenState
                       textAlign: TextAlign.left,
                       decoration: const InputDecoration(
                         labelText: 'الاسم الأول',
-                        prefixIcon: Icon(Icons.person_outline, size: 20)),
+                        prefixIcon: Icon(LucideIcons.user, size: 20)),
                     )),
                     const SizedBox(width: 10),
                     Expanded(child: TextField(
@@ -360,10 +361,10 @@ class _SubscriberDetailsScreenState
                     textDirection: TextDirection.ltr, textAlign: TextAlign.left,
                     decoration: InputDecoration(
                       labelText: 'رقم الهاتف',
-                      prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                      prefixIcon: const Icon(LucideLucideIcons.phone, size: 20),
                       suffixIcon: IconButton(
                         tooltip: 'اختر من جهات الاتصال',
-                        icon: const Icon(Icons.contacts_rounded, size: 20),
+                        icon: const Icon(LucideIcons.contact, size: 20),
                         onPressed: () async {
                           final phone = await pickContactPhone(context);
                           if (phone != null && phone.isNotEmpty) {
@@ -385,7 +386,7 @@ class _SubscriberDetailsScreenState
                     textAlign: TextAlign.left,
                     decoration: const InputDecoration(
                       labelText: 'اسم المستخدم',
-                      prefixIcon: Icon(Icons.alternate_email, size: 20)),
+                      prefixIcon: Icon(LucideIcons.atSign, size: 20)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -394,7 +395,7 @@ class _SubscriberDetailsScreenState
                     textAlign: TextAlign.left,
                     decoration: const InputDecoration(
                       labelText: 'كلمة المرور',
-                      prefixIcon: Icon(Icons.lock_outline, size: 20)),
+                      prefixIcon: Icon(LucideIcons.lock, size: 20)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -439,9 +440,9 @@ class _SubscriberDetailsScreenState
                       helperText: canEditExpiration
                           ? 'اضغط لتغيير التاريخ والوقت'
                           : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
-                      prefixIcon: const Icon(Icons.calendar_today, size: 20),
+                      prefixIcon: const Icon(LucideIcons.calendar, size: 20),
                       suffixIcon: canEditExpiration
-                          ? const Icon(Icons.edit_calendar_rounded, size: 18)
+                          ? const Icon(LucideIcons.calendarClock, size: 18)
                           : null,
                     ),
                   ),
@@ -457,7 +458,7 @@ class _SubscriberDetailsScreenState
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                          const Icon(LucideIcons.info, size: 16, color: Colors.orange),
                           const SizedBox(width: 8),
                           const Text('لا توجد باقات متاحة',
                               style: TextStyle(fontSize: 13, color: Colors.orange)),
@@ -467,7 +468,7 @@ class _SubscriberDetailsScreenState
                               await notifier.loadPackages();
                               setSheet(() {});
                             },
-                            child: const Icon(Icons.refresh, size: 16, color: Colors.orange),
+                            child: const Icon(LucideIcons.refreshCw, size: 16, color: Colors.orange),
                           ),
                         ],
                       ),
@@ -494,7 +495,7 @@ class _SubscriberDetailsScreenState
                       iconEnabledColor:
                           Theme.of(ctx).colorScheme.onSurface.withOpacity(0.7),
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.wifi_rounded, size: 18),
+                        prefixIcon: const Icon(LucideLucideIcons.wifi, size: 18),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 10),
@@ -557,7 +558,7 @@ class _SubscriberDetailsScreenState
                       value: selectedParentId,
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.account_tree_outlined, size: 20),
+                        prefixIcon: Icon(LucideIcons.network, size: 20),
                         hintText: 'اختر المدير الأب',
                       ),
                       items: parentManagers
@@ -648,7 +649,7 @@ class _SubscriberDetailsScreenState
                     icon: saving
                         ? const SizedBox(width: 20, height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.save),
+                        : const Icon(LucideIcons.save),
                     label: Text(saving ? 'جاري الحفظ...' : 'حفظ التعديلات'),
                   )),
                   const SizedBox(height: 20),
@@ -698,7 +699,7 @@ class _SubscriberDetailsScreenState
                 width: 1.5),
             ),
             child: Row(children: [
-              Icon(isSelected ? Icons.check_circle : Icons.circle_outlined,
+              Icon(isSelected ? LucideIcons.circleCheck : LucideIcons.circle,
                   size: 18, color: isSelected ? AppTheme.primary : Colors.grey),
               const SizedBox(width: 10),
               Expanded(child: Row(children: [
@@ -908,7 +909,7 @@ class _SubscriberDetailsScreenState
                     decoration: BoxDecoration(
                       color: AppTheme.teal600.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.autorenew, color: AppTheme.teal600, size: 20)),
+                    child: const Icon(LucideIcons.repeat, color: AppTheme.teal600, size: 20)),
                   const SizedBox(width: 10),
                   Text('تمديد المشترك', style: Theme.of(ctx).textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w700)),
@@ -1005,14 +1006,14 @@ class _SubscriberDetailsScreenState
                 const SizedBox(height: 6),
                 Row(children: [
                   Expanded(child: _MethodBtn(
-                    icon: Icons.star_rounded, label: 'بالنقاط',
+                    icon: LucideLucideIcons.star, label: 'بالنقاط',
                     accentColor: Colors.amber.shade700, // ذهبي — نقاط مكافأة
                     selected: method == 'reward_points',
                     onTap: () => setSheet(() => method = 'reward_points'),
                   )),
                   const SizedBox(width: 8),
                   Expanded(child: _MethodBtn(
-                    icon: Icons.account_balance_wallet_rounded, label: 'برصيد المدير',
+                    icon: LucideIcons.wallet, label: 'برصيد المدير',
                     accentColor: AppTheme.teal600, // فيروزي — رصيد المدير
                     selected: method == 'credit',
                     onTap: () => setSheet(() => method = 'credit'),
@@ -1093,7 +1094,7 @@ class _SubscriberDetailsScreenState
                   icon: submitting
                       ? const SizedBox(width: 20, height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.autorenew),
+                      : const Icon(LucideIcons.repeat),
                   label: Text(submitting ? 'جاري التمديد...' : 'تمديد'),
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal600),
                 )),
@@ -1273,7 +1274,7 @@ class _SubscriberDetailsScreenState
                       gradient: const LinearGradient(
                         colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
                       borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 22)),
+                    child: const Icon(LucideIcons.zap, color: Colors.white, size: 22)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1299,14 +1300,14 @@ class _SubscriberDetailsScreenState
                   child: Column(children: [
                     Row(children: [
                       Expanded(child: _ActivationInfoTile(
-                        icon: Icons.wifi_rounded,
+                        icon: LucideLucideIcons.wifi,
                         label: 'الباقة',
                         value: profileName,
                         color: AppTheme.teal600,
                       )),
                       Container(width: 1, height: 40, color: AppTheme.teal600.withOpacity(0.1)),
                       Expanded(child: _ActivationInfoTile(
-                        icon: Icons.schedule_rounded,
+                        icon: LucideIcons.clock,
                         label: 'المدة',
                         value: profileDuration,
                         color: AppTheme.infoColor,
@@ -1322,7 +1323,7 @@ class _SubscriberDetailsScreenState
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.sell_rounded, size: 18, color: AppTheme.successColor),
+                          const Icon(LucideIcons.tag, size: 18, color: AppTheme.successColor),
                           const SizedBox(width: 8),
                           Text('السعر: ', style: TextStyle(fontSize: 13,
                               color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
@@ -1352,7 +1353,7 @@ class _SubscriberDetailsScreenState
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.request_quote_rounded, size: 16, color: AppTheme.warningColor),
+                            const Icon(LucideIcons.fileText, size: 16, color: AppTheme.warningColor),
                             const SizedBox(width: 6),
                             Text('التكلفة عليك: ',
                                 style: TextStyle(fontSize: 12,
@@ -1381,7 +1382,7 @@ class _SubscriberDetailsScreenState
                           border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
                         ),
                         child: Row(children: [
-                          const Icon(Icons.redeem_rounded, size: 18, color: AppTheme.secondary),
+                          const Icon(LucideIcons.gift, size: 18, color: AppTheme.secondary),
                           const SizedBox(width: 8),
                           Expanded(child: Text(
                             'خصم خاص: ${AppHelpers.formatMoney(discountAmount)}',
@@ -1406,7 +1407,7 @@ class _SubscriberDetailsScreenState
                     ),
                     child: Row(children: [
                       Icon(
-                        currentBalance < 0 ? Icons.warning_amber_rounded : Icons.account_balance_wallet_rounded,
+                        currentBalance < 0 ? LucideIcons.triangleAlert : LucideIcons.wallet,
                         size: 18, color: currentBalance < 0 ? Colors.red : Colors.green),
                       const SizedBox(width: 8),
                       Text(currentBalance < 0 ? 'دين سابق: ' : 'رصيد سابق: ',
@@ -1426,7 +1427,7 @@ class _SubscriberDetailsScreenState
                 const SizedBox(height: 8),
                 Row(children: [
                   Expanded(child: _MethodBtn(
-                    icon: Icons.money_rounded,
+                    icon: LucideIcons.banknote,
                     label: 'نقدي',
                     accentColor: AppTheme.successColor, // أخضر — تحصيل كامل
                     selected: isCash && !isPartialCash,
@@ -1434,7 +1435,7 @@ class _SubscriberDetailsScreenState
                   )),
                   const SizedBox(width: 6),
                   Expanded(child: _MethodBtn(
-                    icon: Icons.tune_rounded,
+                    icon: LucideIcons.slidersHorizontal,
                     label: 'جزئي',
                     accentColor: AppTheme.warningColor, // برتقالي — تحصيل جزئي
                     selected: isCash && isPartialCash,
@@ -1442,7 +1443,7 @@ class _SubscriberDetailsScreenState
                   )),
                   const SizedBox(width: 6),
                   Expanded(child: _MethodBtn(
-                    icon: Icons.schedule_rounded,
+                    icon: LucideIcons.clock,
                     label: 'آجل',
                     accentColor: AppTheme.dangerColor, // أحمر — يضاف كدين
                     selected: !isCash,
@@ -1461,9 +1462,9 @@ class _SubscriberDetailsScreenState
                     decoration: InputDecoration(
                       labelText: 'المبلغ المدفوع نقداً',
                       suffixText: 'IQD',
-                      prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                      prefixIcon: const Icon(LucideIcons.dollarSign, size: 20),
                       suffixIcon: IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
+                        icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           partialCtrl.clear();
                           partialFocus.unfocus();
@@ -1726,7 +1727,7 @@ class _SubscriberDetailsScreenState
                   icon: submitting
                       ? const SizedBox(width: 20, height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.bolt_rounded),
+                      : const Icon(LucideIcons.zap),
                   label: Text(submitting ? 'جاري التفعيل...' : 'تفعيل الآن'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.successColor,
@@ -2028,7 +2029,7 @@ class _SubscriberDetailsScreenState
                       gradient: const LinearGradient(
                         colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
                       borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.payments_rounded, color: Colors.white, size: 22)),
+                    child: const Icon(LucideIcons.banknote, color: Colors.white, size: 22)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2101,9 +2102,9 @@ class _SubscriberDetailsScreenState
                   decoration: InputDecoration(
                     labelText: 'المبلغ المسدد',
                     suffixText: 'IQD',
-                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                    prefixIcon: const Icon(LucideIcons.dollarSign, size: 20),
                     suffixIcon: !payAll ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
+                      icon: const Icon(LucideIcons.x, size: 18),
                       onPressed: () {
                         amountCtrl.clear();
                         amountFocusPay.unfocus();
@@ -2148,7 +2149,7 @@ class _SubscriberDetailsScreenState
                         color: payAll ? Colors.green.withOpacity(0.3) : Colors.transparent),
                     ),
                     child: Row(children: [
-                      Icon(payAll ? Icons.check_box : Icons.check_box_outline_blank,
+                      Icon(payAll ? LucideIcons.squareCheck : LucideIcons.square,
                           size: 20, color: payAll ? Colors.green : Colors.grey),
                       const SizedBox(width: 8),
                       const Text('تسديد كامل الدين', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -2170,7 +2171,7 @@ class _SubscriberDetailsScreenState
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(bottom: 20),
-                      child: Icon(Icons.note_outlined, size: 20)),
+                      child: Icon(LucideIcons.fileText, size: 20)),
                   ),
                 ),
 
@@ -2197,7 +2198,7 @@ class _SubscriberDetailsScreenState
                             decoration: BoxDecoration(
                               color: (livePreview >= 0 ? Colors.green : Colors.orange).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8)),
-                            child: Icon(livePreview >= 0 ? Icons.check_circle_rounded : Icons.timelapse_rounded,
+                            child: Icon(livePreview >= 0 ? LucideIcons.circleCheck : LucideIcons.timer,
                                 size: 18, color: livePreview >= 0 ? Colors.green : Colors.orange),
                           ),
                           const SizedBox(width: 10),
@@ -2309,7 +2310,7 @@ class _SubscriberDetailsScreenState
                       icon: submitting
                           ? const SizedBox(width: 20, height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.payments_rounded),
+                          : const Icon(LucideIcons.banknote),
                       label: Text(submitting ? 'جاري التسديد...' : 'تسديد'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green.shade700,
@@ -2388,7 +2389,7 @@ class _SubscriberDetailsScreenState
                       gradient: const LinearGradient(
                         colors: [Color(0xFFF9A825), Color(0xFFF57F17)]),
                       borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.add_card_rounded, color: Colors.white, size: 22)),
+                    child: const Icon(LucideIcons.plus, color: Colors.white, size: 22)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2406,7 +2407,7 @@ class _SubscriberDetailsScreenState
                 Row(children: [
                   if (currentDebt > 0)
                     Expanded(child: _DebtInfoCard(
-                      icon: Icons.trending_down_rounded,
+                      icon: LucideIcons.trendingDown,
                       label: 'الدين الحالي',
                       value: AppHelpers.formatMoney(currentDebt),
                       color: Colors.red,
@@ -2415,14 +2416,14 @@ class _SubscriberDetailsScreenState
                     const SizedBox(width: 10),
                   if (currentCredit > 0)
                     Expanded(child: _DebtInfoCard(
-                      icon: Icons.account_balance_wallet_rounded,
+                      icon: LucideIcons.wallet,
                       label: 'الرصيد الحالي',
                       value: AppHelpers.formatMoney(currentCredit),
                       color: Colors.green,
                     )),
                   if (currentDebt <= 0 && currentCredit <= 0)
                     Expanded(child: _DebtInfoCard(
-                      icon: Icons.check_circle_outline_rounded,
+                      icon: LucideIcons.circleCheck,
                       label: 'الرصيد',
                       value: 'لا يوجد دين أو رصيد',
                       color: Colors.grey,
@@ -2439,9 +2440,9 @@ class _SubscriberDetailsScreenState
                   decoration: InputDecoration(
                     labelText: 'قيمة الدين المضاف',
                     suffixText: 'IQD',
-                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
+                    prefixIcon: const Icon(LucideIcons.dollarSign, size: 20),
                     suffixIcon: IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
+                      icon: const Icon(LucideIcons.x, size: 18),
                       onPressed: () {
                         amountCtrl.clear();
                         amountFocusAdd.unfocus();
@@ -2475,7 +2476,7 @@ class _SubscriberDetailsScreenState
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(bottom: 20),
-                      child: Icon(Icons.note_outlined, size: 20)),
+                      child: Icon(LucideIcons.fileText, size: 20)),
                   ),
                 ),
 
@@ -2500,7 +2501,7 @@ class _SubscriberDetailsScreenState
                             decoration: BoxDecoration(
                               color: Colors.red.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8)),
-                            child: const Icon(Icons.warning_amber_rounded,
+                            child: const Icon(LucideIcons.triangleAlert,
                                 size: 18, color: Colors.red),
                           ),
                           const SizedBox(width: 10),
@@ -2518,7 +2519,7 @@ class _SubscriberDetailsScreenState
                                       decoration: TextDecoration.lineThrough)),
                                 const Padding(
                                   padding: EdgeInsets.symmetric(horizontal: 6),
-                                  child: Icon(Icons.arrow_forward, size: 14, color: Colors.red)),
+                                  child: Icon(LucideIcons.arrowLeft, size: 14, color: Colors.red)),
                                 Text(AppHelpers.formatMoney(livePreview.abs()),
                                     style: const TextStyle(fontSize: 14,
                                       fontWeight: FontWeight.w700, color: Colors.red)),
@@ -2605,7 +2606,7 @@ class _SubscriberDetailsScreenState
                       icon: submitting
                           ? const SizedBox(width: 20, height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.add_card_rounded),
+                          : const Icon(LucideIcons.plus),
                       label: Text(submitting ? 'جاري الإضافة...' : 'إضافة دين'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.warningColor,
@@ -2805,7 +2806,7 @@ class _SubscriberDetailsScreenState
                   title: 'معلومات الحساب',
                   children: [
                     _DetailRow(
-                      icon: Icons.person_outline,
+                      icon: LucideIcons.user,
                       label: 'اسم المستخدم',
                       value: sub.username,
                     ),
@@ -2820,12 +2821,12 @@ class _SubscriberDetailsScreenState
                       },
                     ),
                     _DetailRow(
-                      icon: Icons.wifi,
+                      icon: LucideIcons.wifi,
                       label: 'الباقة',
                       value: sub.profileName ?? '—',
                     ),
                     _DetailRow(
-                      icon: Icons.attach_money,
+                      icon: LucideIcons.dollarSign,
                       label: 'سعر الباقة',
                       value: sub.price != null
                           ? AppHelpers.formatMoney(sub.price)
@@ -2873,12 +2874,12 @@ class _SubscriberDetailsScreenState
                   title: 'حالة الاشتراك',
                   children: [
                     _DetailRow(
-                      icon: Icons.calendar_today,
+                      icon: LucideIcons.calendar,
                       label: 'تاريخ الانتهاء',
                       value: AppHelpers.formatExpiration(sub.expiration),
                     ),
                     _DetailRow(
-                      icon: Icons.credit_card,
+                      icon: LucideIcons.creditCard,
                       label: 'الدين / الرصيد',
                       value: sub.hasDebt
                           ? '${AppHelpers.formatMoney(sub.debtAmount.abs())} (مديون)'
@@ -2916,7 +2917,7 @@ class _SubscriberDetailsScreenState
                           ? '${AppHelpers.formatMoney(amountValue)} IQD'
                           : (RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc)?.group(0) ?? '');
                       return _DetailRow(
-                        icon: Icons.monetization_on_rounded,
+                        icon: LucideIcons.dollarSign,
                         label: 'آخر حركة مالية',
                         value:
                             '$movementLabel — $timeLabel${amountText.isNotEmpty ? ' — $amountText' : ''}',
@@ -2932,7 +2933,7 @@ class _SubscriberDetailsScreenState
       floatingActionButton: FloatingActionButton(
         onPressed: _isProcessing ? null : () => _showActionsSheet(isEnabled),
         backgroundColor: AppTheme.primary,
-        child: const Icon(Icons.apps_rounded, color: Colors.white, size: 26),
+        child: const Icon(LucideIcons.layoutGrid, color: Colors.white, size: 26),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
@@ -3090,25 +3091,25 @@ class _SubscriberDetailsScreenState
 
     final actions = <_FabAction>[
       if (can('subscribers.edit'))
-        _FabAction(Icons.edit_outlined, 'تعديل', AppTheme.primary, _showEditSheet),
+        _FabAction(LucideIcons.pencil, 'تعديل', AppTheme.primary, _showEditSheet),
       if (can('subscribers.activate'))
-        _FabAction(Icons.bolt, 'تفعيل', AppTheme.successColor, _activateSubscriber),
+        _FabAction(LucideIcons.zap, 'تفعيل', AppTheme.successColor, _activateSubscriber),
       if (can('subscribers.extend'))
-        _FabAction(Icons.autorenew, 'تمديد', AppTheme.teal600, _extendSubscription),
+        _FabAction(LucideIcons.repeat, 'تمديد', AppTheme.teal600, _extendSubscription),
       if (can('subscribers.add_debt'))
-        _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
+        _FabAction(LucideIcons.plus, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
       if (sub.hasDebt && can('subscribers.pay_debt'))
-        _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
+        _FabAction(LucideIcons.banknote, 'تسديد دين', Colors.green, _showPayDebtSheet),
       if (can('subscribers.view_activity'))
         _FabAction(
-          Icons.history_rounded,
+          LucideLucideIcons.history,
           'سجل الحركات',
           AppTheme.teal600,
           _showMovementsSheet,
         ),
       if (sub.hasDebt && can('subscribers.send_whatsapp'))
         _FabAction(
-          Icons.notifications_active_outlined,
+          LucideIcons.bellRing,
           'تذكير دين',
           Colors.orange,
           () {
@@ -3117,27 +3118,27 @@ class _SubscriberDetailsScreenState
         ),
       if (sub.isNearExpiry && can('subscribers.send_whatsapp'))
         _FabAction(
-          Icons.alarm_rounded,
+          LucideIcons.alarmClock,
           'تذكير انتهاء',
           Colors.deepOrange,
           () => _sendWhatsAppFromTemplate('expiry_warning'),
         ),
       if (can('subscribers.generate_link'))
-        _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
+        _FabAction(LucideIcons.link, 'توليد رابط', Colors.indigo, _generateInfoLink),
       // إرسال قالب "معلومات المشترك" الكامل عبر واتساب — يختلف عن "توليد
       // رابط" الذي يبعث URL قصير العمر؛ هنا الرسالة ذاتها تحمل التفاصيل.
       if (can('subscribers.send_whatsapp'))
         _FabAction(
-          Icons.info_outline_rounded,
+          LucideIcons.info,
           'إرسال المعلومات',
           Colors.blueAccent,
           () => _sendWhatsAppFromTemplate('subscriber_info'),
         ),
       if (can('subscribers.delete'))
-        _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
+        _FabAction(LucideIcons.trash2, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
       if (can('subscribers.toggle'))
         _FabAction(
-          isEnabled ? Icons.block : Icons.check_circle_outline,
+          isEnabled ? LucideIcons.ban : LucideIcons.circleCheck,
           isEnabled ? 'تعطيل' : 'تفعيل حساب',
           isEnabled ? AppTheme.warningColor : AppTheme.successColor,
           () => _toggleSubscriber(enable: !isEnabled),
@@ -3550,7 +3551,7 @@ class _IpDetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(Icons.lan_rounded, size: 16, color: accent),
+          Icon(LucideIcons.network, size: 16, color: accent),
           const SizedBox(width: 8),
           Text(
             'IP',
@@ -3594,7 +3595,7 @@ class _IpDetailRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.open_in_new_rounded,
+                          Icon(LucideIcons.externalLink,
                               size: 11, color: accent),
                         ],
                       ),
@@ -3613,7 +3614,7 @@ class _IpDetailRow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.schedule_rounded,
+                          Icon(LucideIcons.clock,
                               size: 11, color: AppTheme.successColor),
                           const SizedBox(width: 4),
                           Text(
@@ -3657,7 +3658,7 @@ class _NoIpHint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(Icons.lan_rounded, size: 16, color: accent),
+          Icon(LucideIcons.network, size: 16, color: accent),
           const SizedBox(width: 8),
           Text('IP', style: labelStyle),
           const SizedBox(width: 8),
@@ -3694,15 +3695,15 @@ class _StatusRow extends StatelessWidget {
     if (!isEnabled) {
       statusText = 'معطّل';
       statusColor = AppTheme.dangerColor;
-      statusIcon = Icons.block_rounded;
+      statusIcon = LucideIcons.ban;
     } else if (isExpired) {
       statusText = 'منتهي';
       statusColor = AppTheme.warningColor;
-      statusIcon = Icons.schedule_rounded;
+      statusIcon = LucideIcons.clock;
     } else {
       statusText = 'مفعّل';
       statusColor = AppTheme.successColor;
-      statusIcon = Icons.check_circle_rounded;
+      statusIcon = LucideIcons.circleCheck;
     }
 
     // الاتصال: متصل/غير متصل — لا نعرضه للمعطّل (بلا معنى)
@@ -3710,15 +3711,15 @@ class _StatusRow extends StatelessWidget {
     final connText = isOnline ? 'متصل' : 'غير متصل';
     final connColor = isOnline ? AppTheme.successColor : Colors.grey;
     final connIcon = isOnline
-        ? Icons.wifi_rounded
-        : Icons.wifi_off_rounded;
+        ? LucideLucideIcons.wifi
+        : LucideIcons.wifiOff;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.toggle_on_outlined,
+          Icon(LucideIcons.toggleRight,
               size: 18, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Text('الحالة',
@@ -3815,7 +3816,7 @@ class _DeviceNotesRow extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.sticky_note_2_outlined,
+              Icon(LucideIcons.fileText,
                   size: 14, color: cs.primary.withOpacity(0.75)),
               const SizedBox(width: 6),
               Flexible(
@@ -3922,7 +3923,7 @@ class _PhoneDetailRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              Icons.phone_outlined,
+              LucideLucideIcons.phone,
               size: 18,
               color: theme.colorScheme.primary,
             ),
@@ -3953,13 +3954,13 @@ class _PhoneDetailRow extends StatelessWidget {
                 if (enabled) ...[
                   const SizedBox(width: 8),
                   _PhoneActionIcon(
-                    icon: Icons.call_rounded,
+                    icon: LucideLucideIcons.phone,
                     color: AppTheme.teal600,
                     onTap: onCall,
                   ),
                   const SizedBox(width: 6),
                   _PhoneActionIcon(
-                    icon: Icons.chat_rounded,
+                    icon: LucideIcons.messageCircle,
                     color: AppTheme.whatsappGreen,
                     onTap: onWhatsApp,
                   ),
@@ -4074,7 +4075,7 @@ class _PrintReceiptCheckbox extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Icon(Icons.print_rounded, size: 18, color: primary),
+            Icon(LucideIcons.printer, size: 18, color: primary),
             const SizedBox(width: 6),
             const Text(
               'طباعة وصل تلقائياً',
@@ -4197,7 +4198,7 @@ class _SubscriberMovementsSheetContentState
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Icon(Icons.history_rounded,
+              Icon(LucideLucideIcons.history,
                   size: 20, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Expanded(
@@ -4224,7 +4225,7 @@ class _SubscriberMovementsSheetContentState
               ),
               IconButton(
                 tooltip: 'تحديث',
-                icon: const Icon(Icons.refresh_rounded, size: 20),
+                icon: const Icon(LucideIcons.refreshCw, size: 20),
                 onPressed: _loading ? null : _load,
               ),
             ],
@@ -4290,14 +4291,14 @@ class _SubscriberMovementsSheetContentState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline_rounded,
+            const Icon(LucideIcons.circleAlert,
                 size: 48, color: Colors.redAccent),
             const SizedBox(height: 8),
             Text(_error!, style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _load,
-              icon: const Icon(Icons.refresh_rounded, size: 16),
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
               label: const Text('إعادة المحاولة'),
             ),
           ],
@@ -4310,7 +4311,7 @@ class _SubscriberMovementsSheetContentState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined,
+            Icon(LucideIcons.inbox,
                 size: 48,
                 color: Theme.of(context)
                     .colorScheme
@@ -4485,14 +4486,14 @@ class _MovementTile extends StatelessWidget {
 
     final (icon, color, label) = switch (type) {
       'SUBSCRIBER_ACTIVATE' =>
-        (Icons.bolt, AppTheme.successColor, 'تفعيل'),
+        (LucideIcons.zap, AppTheme.successColor, 'تفعيل'),
       'SUBSCRIBER_EXTEND' =>
-        (Icons.autorenew, AppTheme.teal600, 'تمديد'),
+        (LucideIcons.repeat, AppTheme.teal600, 'تمديد'),
       'BALANCE_DEDUCT' || 'DEBT_PAY' =>
-        (Icons.payments_outlined, Colors.green, 'تسديد دين'),
+        (LucideIcons.banknote, Colors.green, 'تسديد دين'),
       'BALANCE_ADD' =>
-        (Icons.add_card_rounded, AppTheme.warningColor, 'إضافة دين'),
-      _ => (Icons.receipt_long_outlined, theme.colorScheme.primary, type),
+        (LucideIcons.plus, AppTheme.warningColor, 'إضافة دين'),
+      _ => (LucideIcons.receipt, theme.colorScheme.primary, type),
     };
 
     String formattedTime = '';

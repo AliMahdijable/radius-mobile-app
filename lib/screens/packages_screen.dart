@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
@@ -238,7 +239,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock_outline,
+                Icon(LucideIcons.lock,
                     size: 46,
                     color: theme.colorScheme.onSurface.withOpacity(0.35)),
                 const SizedBox(height: 12),
@@ -265,7 +266,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
           if (_isDirty && !_saving && canEditPrices)
             IconButton(
               onPressed: _save,
-              icon: const Icon(Icons.save_rounded),
+              icon: const Icon(LucideLucideIcons.save),
               tooltip: 'حفظ الأسعار',
             ),
           if (_saving)
@@ -310,7 +311,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                         value: _selectedManager?.id,
                         hint: const Text('اختر المدير',
                             style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
-                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        icon: const Icon(LucideIcons.chevronDown),
                         style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,
@@ -361,7 +362,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.save_rounded, size: 20),
+                      : const Icon(LucideLucideIcons.save, size: 20),
                   label: Text(
                     _saving ? 'جاري الحفظ...' : 'حفظ الأسعار',
                     style: const TextStyle(
@@ -394,7 +395,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inventory_2_outlined,
+            Icon(LucideIcons.package,
                 size: 64, color: theme.colorScheme.onSurface.withOpacity(0.2)),
             const SizedBox(height: 16),
             Text('اختر مديراً لعرض أسعار الباقات',
@@ -416,7 +417,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_rounded,
+            Icon(LucideIcons.inbox,
                 size: 64, color: theme.colorScheme.onSurface.withOpacity(0.2)),
             const SizedBox(height: 16),
             Text('لا توجد باقات لهذا المدير',
@@ -464,7 +465,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                         color: AppTheme.primary.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.wifi_rounded,
+                      child: const Icon(LucideLucideIcons.wifi,
                           size: 20, color: AppTheme.primary),
                     ),
                     const SizedBox(width: 10),

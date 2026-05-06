@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -345,7 +346,7 @@ class _NotifyToggles extends StatelessWidget {
           onChanged: whatsAppDisabled ? null : (v) => onWhatsAppChanged(v ?? false),
           title: Row(
             children: [
-              const Icon(Icons.whatshot, size: 16, color: Color(0xFF25D366)),
+              const Icon(LucideIcons.flame, size: 16, color: Color(0xFF25D366)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -366,7 +367,7 @@ class _NotifyToggles extends StatelessWidget {
           onChanged: (v) => onPushChanged(v ?? false),
           title: const Row(
             children: [
-              Icon(Icons.notifications_active_outlined,
+              Icon(LucideIcons.bellRing,
                   size: 16, color: Colors.blueGrey),
               SizedBox(width: 6),
               Expanded(
@@ -422,7 +423,7 @@ Future<void> _showManagerFinancialNoticeDialog({
             title: Row(
               children: [
                 Icon(
-                  Icons.mark_chat_read_rounded,
+                  LucideIcons.checkCheck,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 10),
@@ -490,7 +491,7 @@ Future<void> _showManagerFinancialNoticeDialog({
                   if (!canSendWhatsApp)
                     const _InlineInfoBanner(
                       color: AppTheme.warningColor,
-                      icon: Icons.phone_disabled_outlined,
+                      icon: LucideIcons.phoneOff,
                       text: 'لا يمكن إرسال واتساب لأن رقم هاتف المدير غير محفوظ.',
                     )
                   else
@@ -538,8 +539,8 @@ Future<void> _showManagerFinancialNoticeDialog({
                             )
                           : Icon(
                               whatsappSent
-                                  ? Icons.check_circle_rounded
-                                  : Icons.message_outlined,
+                                  ? LucideIcons.circleCheck
+                                  : LucideIcons.messageSquare,
                             ),
                       label: Text(
                         whatsappSent
@@ -597,8 +598,8 @@ Future<void> _showManagerFinancialNoticeDialog({
                             )
                           : Icon(
                               pushSent
-                                  ? Icons.notifications_active_rounded
-                                  : Icons.notifications_outlined,
+                                  ? LucideIcons.bellRing
+                                  : LucideIcons.bell,
                             ),
                       label: Text(
                         pushSent
@@ -890,21 +891,21 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     final actions = <_ManagerSheetAction>[
       if (can('managers.edit'))
         _ManagerSheetAction(
-          icon: Icons.edit_outlined,
+          icon: LucideIcons.pencil,
           label: 'تعديل',
           color: AppTheme.primary,
           type: _ManagerActionType.edit,
         ),
       if (can('managers.deposit'))
         _ManagerSheetAction(
-          icon: Icons.add_card_rounded,
+          icon: LucideIcons.plus,
           label: 'رصيد',
           color: AppTheme.successColor,
           type: _ManagerActionType.deposit,
         ),
       if (canWithdraw && can('managers.withdraw'))
         _ManagerSheetAction(
-          icon: Icons.remove_circle_outline_rounded,
+          icon: LucideIcons.circleMinus,
           label: 'سحب',
           color: AppTheme.warningColor,
           type: _ManagerActionType.withdraw,
@@ -912,14 +913,14 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
       // تسديد ديون المدير = نوع آخر من البالانس، نتبع managers.deposit
       if (hasAnyDebt && can('managers.deposit'))
         _ManagerSheetAction(
-          icon: Icons.payments_outlined,
+          icon: LucideIcons.banknote,
           label: 'تسديد',
           color: AppTheme.infoColor,
           type: _ManagerActionType.payDebt,
         ),
       if (can('managers.add_points'))
         _ManagerSheetAction(
-          icon: Icons.stars_rounded,
+          icon: LucideIcons.star,
           label: 'نقاط',
           color: AppTheme.secondary,
           type: _ManagerActionType.addPoints,
@@ -927,27 +928,27 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
       // ديون أخرى = عرض manager_debts ledger، تتبع reports.manager_debts
       if (can('reports.manager_debts'))
         _ManagerSheetAction(
-          icon: Icons.receipt_long_rounded,
+          icon: LucideIcons.receipt,
           label: 'ديون أخرى',
           color: AppTheme.infoColor,
           type: _ManagerActionType.otherDebts,
         ),
       _ManagerSheetAction(
-        icon: Icons.timeline_rounded,
+        icon: LucideIcons.activity,
         label: 'حركات',
         color: AppTheme.teal600,
         type: _ManagerActionType.movements,
       ),
       if (hasAnyDebt && can('subscribers.send_whatsapp'))
         _ManagerSheetAction(
-          icon: Icons.send_to_mobile_rounded,
+          icon: LucideIcons.smartphone,
           label: 'إرسال معلومات',
           color: AppTheme.whatsappGreen,
           type: _ManagerActionType.sendInfo,
         ),
       if (can('managers.delete'))
         _ManagerSheetAction(
-          icon: Icons.delete_outline_rounded,
+          icon: LucideIcons.trash2,
           label: 'حذف',
           color: AppTheme.dangerColor,
           type: _ManagerActionType.delete,
@@ -991,7 +992,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.admin_panel_settings_outlined,
+                      LucideIcons.shield,
                       size: 18,
                       color: theme.colorScheme.primary,
                     ),
@@ -1181,7 +1182,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
       return Scaffold(
         appBar: AppBar(title: const Text('المدراء الفرعيون')),
         body: const EmptyState(
-          icon: Icons.lock_outline,
+          icon: LucideIcons.lock,
           title: 'لا تملك صلاحية الوصول',
           subtitle: 'هذا القسم متاح فقط للمدراء الذين لديهم صلاحية إدارة المدراء.',
         ),
@@ -1195,7 +1196,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           IconButton(
             onPressed: state.loading ? null : () => _reloadManagers(),
             tooltip: 'تحديث',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(LucideIcons.refreshCw),
           ),
         ],
       ),
@@ -1205,7 +1206,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           ? FloatingActionButton.small(
               onPressed: () => _openManagerForm(),
               tooltip: 'إضافة مدير',
-              child: const Icon(Icons.person_add_alt_1_rounded),
+              child: const Icon(LucideIcons.userPlus),
             )
           : null,
       body: Column(
@@ -1241,7 +1242,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       ),
                                       hintText: 'بحث...',
                                       prefixIcon:
-                                          const Icon(Icons.search_rounded),
+                                          const Icon(LucideLucideIcons.search),
                                       suffixIcon:
                                           _searchController.text.isNotEmpty
                                               ? IconButton(
@@ -1252,7 +1253,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                                   },
                                                   padding: EdgeInsets.zero,
                                                   icon: const Icon(
-                                                    Icons.close_rounded,
+                                                    LucideIcons.x,
                                                   ),
                                                 )
                                               : null,
@@ -1273,8 +1274,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     },
                                     icon: Icon(
                                       _showAdvancedFilters
-                                          ? Icons.tune_rounded
-                                          : Icons.tune_outlined,
+                                          ? LucideIcons.slidersHorizontal
+                                          : LucideIcons.slidersHorizontal,
                                     ),
                                   ),
                                 ),
@@ -1287,7 +1288,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     onPressed: state.loading
                                         ? null
                                         : () => _reloadManagers(),
-                                    icon: const Icon(Icons.sync_rounded),
+                                    icon: const Icon(LucideIcons.refreshCw),
                                   ),
                                 ),
                               ],
@@ -1356,8 +1357,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       },
                                       icon: Icon(
                                         state.direction == 'asc'
-                                            ? Icons.arrow_upward_rounded
-                                            : Icons.arrow_downward_rounded,
+                                            ? LucideIcons.arrowUp
+                                            : LucideIcons.arrowDown,
                                       ),
                                     ),
                                   ),
@@ -1370,7 +1371,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                 runSpacing: 6,
                                 children: [
                                   _ManagersMiniStatChip(
-                                    icon: Icons.sort_rounded,
+                                    icon: LucideIcons.arrowUpDown,
                                     label:
                                         'فرز: ${_labelForSort(state.sortBy, compact: true)}',
                                     color: AppTheme.infoColor,
@@ -1378,8 +1379,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   ),
                                   _ManagersMiniStatChip(
                                     icon: state.direction == 'asc'
-                                        ? Icons.arrow_upward_rounded
-                                        : Icons.arrow_downward_rounded,
+                                        ? LucideIcons.arrowUp
+                                        : LucideIcons.arrowDown,
                                     label: state.direction == 'asc'
                                         ? 'تصاعدي'
                                         : 'تنازلي',
@@ -1387,7 +1388,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     neutral: true,
                                   ),
                                   _ManagersMiniStatChip(
-                                    icon: Icons.format_list_numbered_rounded,
+                                    icon: LucideIcons.listOrdered,
                                     label: '${state.rowsPerPage} عنصر',
                                     color: AppTheme.warningColor,
                                     neutral: true,
@@ -1407,17 +1408,17 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                   runSpacing: 6,
                   children: [
                     _ManagersMiniStatChip(
-                      icon: Icons.admin_panel_settings_outlined,
+                      icon: LucideIcons.shield,
                       label: 'المدراء ${state.totalCount}',
                       color: AppTheme.infoColor,
                     ),
                     _ManagersMiniStatChip(
-                      icon: Icons.account_balance_wallet_outlined,
+                      icon: LucideIcons.wallet,
                       label: 'رصيد ${_formatCurrency(visibleCredit)}',
                       color: AppTheme.successColor,
                     ),
                     _ManagersMiniStatChip(
-                      icon: Icons.trending_down_rounded,
+                      icon: LucideIcons.trendingDown,
                       label: 'دين ${_formatCurrency(visibleDebt)}',
                       color: AppTheme.warningColor,
                     ),
@@ -1427,7 +1428,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                   const SizedBox(height: 10),
                   _InlineInfoBanner(
                     color: AppTheme.dangerColor,
-                    icon: Icons.error_outline_rounded,
+                    icon: LucideIcons.circleAlert,
                     text: state.error!,
                   ),
                 ],
@@ -1443,7 +1444,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                         padding: const EdgeInsets.fromLTRB(12, 18, 12, 96),
                         children: [
                           EmptyState(
-                            icon: Icons.manage_accounts_outlined,
+                            icon: LucideIcons.userCog,
                             title: state.search.isNotEmpty
                                 ? 'لا توجد نتائج مطابقة'
                                 : 'لا يوجد مدراء حاليًا',
@@ -1458,7 +1459,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       setState(() {});
                                     },
                                     icon:
-                                        const Icon(Icons.filter_alt_off_rounded),
+                                        const Icon(LucideIcons.filterX),
                                     label: const Text('مسح الفلاتر'),
                                   )
                                 : null,
@@ -1537,7 +1538,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       page: state.currentPage - 1,
                                     )
                                 : null,
-                            icon: const Icon(Icons.chevron_right_rounded),
+                            icon: const Icon(LucideIcons.chevronRight),
                           ),
                           IconButton(
                             tooltip: 'التالي',
@@ -1547,7 +1548,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                           page: state.currentPage + 1,
                                         )
                                     : null,
-                            icon: const Icon(Icons.chevron_left_rounded),
+                            icon: const Icon(LucideIcons.chevronLeft),
                           ),
                         ],
                       );
@@ -1638,7 +1639,7 @@ class _ManagerListCard extends StatelessWidget {
                         backgroundColor:
                             AppTheme.primary.withValues(alpha: 0.12),
                         child: Icon(
-                          Icons.admin_panel_settings_outlined,
+                          LucideIcons.shield,
                           color: AppTheme.primary,
                           size: compact ? 16 : 18,
                         ),
@@ -1699,7 +1700,7 @@ class _ManagerListCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.more_horiz_rounded,
+                      LucideIcons.ellipsis,
                       size: compact ? 18 : 20,
                       color: theme.colorScheme.primary,
                     ),
@@ -1713,8 +1714,8 @@ class _ManagerListCard extends StatelessWidget {
                 children: [
                   _InfoBadge(
                     icon: manager.isActive
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.block_rounded,
+                        ? LucideIcons.circleCheck
+                        : LucideIcons.ban,
                     label: manager.isActive ? 'مفعّل' : 'معطّل',
                     color: manager.isActive
                         ? AppTheme.successColor
@@ -1722,19 +1723,19 @@ class _ManagerListCard extends StatelessWidget {
                   ),
                   if ((manager.aclName ?? '').isNotEmpty)
                     _InfoBadge(
-                      icon: Icons.verified_user_outlined,
+                      icon: LucideIcons.shieldCheck,
                       label: manager.aclName!,
                       color: AppTheme.infoColor,
                     ),
                   if (manager.mobile.isNotEmpty)
                     _InfoBadge(
-                      icon: Icons.phone_outlined,
+                      icon: LucideLucideIcons.phone,
                       label: manager.mobile,
                       color: AppTheme.primary,
                     ),
                   if (manager.company.isNotEmpty)
                     _InfoBadge(
-                      icon: Icons.business_outlined,
+                      icon: LucideIcons.building2,
                       label: manager.company,
                       color: AppTheme.warningColor,
                     ),
@@ -1746,17 +1747,17 @@ class _ManagerListCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   _ManagersMiniStatChip(
-                    icon: Icons.people_outline_rounded,
+                    icon: LucideIcons.users,
                     label: 'مشتركون ${manager.usersCount}',
                     color: AppTheme.infoColor,
                   ),
                   _ManagersMiniStatChip(
-                    icon: Icons.stars_rounded,
+                    icon: LucideIcons.star,
                     label: 'نقاط ${manager.rewardPoints}',
                     color: AppTheme.secondary,
                   ),
                   _ManagersMiniStatChip(
-                    icon: Icons.account_balance_wallet_outlined,
+                    icon: LucideIcons.wallet,
                     label: 'رصيد ${_formatCurrency(manager.credit)}',
                     color: AppTheme.successColor,
                   ),
@@ -1766,19 +1767,19 @@ class _ManagerListCard extends StatelessWidget {
                   // clean.
                   if (manager.debt > 0)
                     _ManagersMiniStatChip(
-                      icon: Icons.account_balance_outlined,
+                      icon: LucideIcons.banknote,
                       label: 'دين الساس ${_formatCurrency(manager.debt)}',
                       color: AppTheme.warningColor,
                     ),
                   if (extraDebt > 0)
                     _ManagersMiniStatChip(
-                      icon: Icons.receipt_long_rounded,
+                      icon: LucideIcons.receipt,
                       label: 'ديون أخرى ${_formatCurrency(extraDebt)}',
                       color: AppTheme.infoColor,
                     ),
                   if (manager.debt + extraDebt > 0)
                     _ManagersMiniStatChip(
-                      icon: Icons.summarize_rounded,
+                      icon: LucideIcons.fileText,
                       label:
                           'المجموع ${_formatCurrency(manager.debt + extraDebt)}',
                       color: AppTheme.dangerColor,
@@ -1963,8 +1964,8 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
     return _SheetScaffold(
       title: _isEdit ? 'تعديل مدير' : 'إضافة مدير جديد',
       icon: _isEdit
-          ? Icons.manage_accounts_outlined
-          : Icons.person_add_alt_1_rounded,
+          ? LucideIcons.userCog
+          : LucideIcons.userPlus,
       subtitle: _isEdit
           ? 'يمكنك تعديل بيانات المدير وصلاحياته وحالته من هنا.'
           : 'أنشئ مديرًا فرعيًا جديدًا وحدد بياناته وصلاحياته الأساسية.',
@@ -1980,14 +1981,14 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                 children: [
                   _SheetSectionCard(
                     title: 'بيانات الحساب',
-                    icon: Icons.account_circle_outlined,
+                    icon: LucideIcons.user,
                     child: Column(
                       children: [
                         TextFormField(
                           controller: _usernameController,
                           decoration: const InputDecoration(
                             labelText: 'اسم المستخدم',
-                            prefixIcon: Icon(Icons.person_outline_rounded),
+                            prefixIcon: Icon(LucideIcons.user),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -2001,7 +2002,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           value: _selectedAclId,
                           decoration: const InputDecoration(
                             labelText: 'مجموعة الصلاحيات',
-                            prefixIcon: Icon(Icons.verified_user_outlined),
+                            prefixIcon: Icon(LucideIcons.shieldCheck),
                           ),
                           items: _aclGroups
                               .map(
@@ -2022,7 +2023,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           value: _selectedParentId,
                           decoration: const InputDecoration(
                             labelText: 'تابع إلى',
-                            prefixIcon: Icon(Icons.account_tree_outlined),
+                            prefixIcon: Icon(LucideIcons.network),
                           ),
                           items: [
                             const DropdownMenuItem<int?>(
@@ -2064,14 +2065,14 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                   const SizedBox(height: 12),
                   _SheetSectionCard(
                     title: 'البيانات الشخصية',
-                    icon: Icons.badge_outlined,
+                    icon: LucideIcons.badgeCheck,
                     child: Column(
                       children: [
                         TextFormField(
                           controller: _firstnameController,
                           decoration: const InputDecoration(
                             labelText: 'الاسم الأول',
-                            prefixIcon: Icon(Icons.text_fields_rounded),
+                            prefixIcon: Icon(LucideIcons.type),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -2085,7 +2086,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           controller: _lastnameController,
                           decoration: const InputDecoration(
                             labelText: 'الاسم الأخير',
-                            prefixIcon: Icon(Icons.text_fields_rounded),
+                            prefixIcon: Icon(LucideIcons.type),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -2100,7 +2101,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           keyboardType: TextInputType.emailAddress,
                           decoration: const InputDecoration(
                             labelText: 'البريد الإلكتروني',
-                            prefixIcon: Icon(Icons.email_outlined),
+                            prefixIcon: Icon(LucideIcons.mail),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -2109,10 +2110,10 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
                             labelText: 'رقم الهاتف',
-                            prefixIcon: const Icon(Icons.phone_outlined),
+                            prefixIcon: const Icon(LucideLucideIcons.phone),
                             suffixIcon: IconButton(
                               tooltip: 'اختر من جهات الاتصال',
-                              icon: const Icon(Icons.contacts_rounded, size: 20),
+                              icon: const Icon(LucideIcons.contact, size: 20),
                               onPressed: () async {
                                 final phone = await pickContactPhone(context);
                                 if (phone != null && phone.isNotEmpty) {
@@ -2127,7 +2128,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           controller: _companyController,
                           decoration: const InputDecoration(
                             labelText: 'الشركة',
-                            prefixIcon: Icon(Icons.business_outlined),
+                            prefixIcon: Icon(LucideIcons.building2),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -2135,7 +2136,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           controller: _cityController,
                           decoration: const InputDecoration(
                             labelText: 'المدينة',
-                            prefixIcon: Icon(Icons.location_city_outlined),
+                            prefixIcon: Icon(LucideIcons.building),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -2144,7 +2145,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           maxLines: 2,
                           decoration: const InputDecoration(
                             labelText: 'العنوان',
-                            prefixIcon: Icon(Icons.home_outlined),
+                            prefixIcon: Icon(LucideIcons.house),
                           ),
                         ),
                       ],
@@ -2153,7 +2154,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                   const SizedBox(height: 12),
                   _SheetSectionCard(
                     title: _isEdit ? 'كلمة المرور والملاحظات' : 'كلمة المرور',
-                    icon: Icons.lock_outline_rounded,
+                    icon: LucideIcons.lock,
                     child: Column(
                       children: [
                         TextFormField(
@@ -2162,7 +2163,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           decoration: InputDecoration(
                             labelText:
                                 _isEdit ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور',
-                            prefixIcon: const Icon(Icons.lock_outline_rounded),
+                            prefixIcon: const Icon(LucideIcons.lock),
                           ),
                           validator: (value) {
                             final trimmed = value?.trim() ?? '';
@@ -2184,7 +2185,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                             obscureText: true,
                             decoration: const InputDecoration(
                               labelText: 'تأكيد كلمة المرور',
-                              prefixIcon: Icon(Icons.lock_reset_rounded),
+                              prefixIcon: Icon(LucideIcons.lockKeyholeOpen),
                             ),
                             validator: (value) {
                               if ((value ?? '').trim() !=
@@ -2201,7 +2202,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           maxLines: 3,
                           decoration: const InputDecoration(
                             labelText: 'ملاحظات',
-                            prefixIcon: Icon(Icons.note_alt_outlined),
+                            prefixIcon: Icon(LucideIcons.fileText),
                           ),
                         ),
                       ],
@@ -2222,8 +2223,8 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           onPressed: _saving ? null : _submit,
                           icon: Icon(
                             _isEdit
-                                ? Icons.save_outlined
-                                : Icons.person_add_alt_1_rounded,
+                                ? LucideIcons.save
+                                : LucideIcons.userPlus,
                           ),
                           label:
                               Text(_isEdit ? 'حفظ التعديلات' : 'إضافة المدير'),
@@ -2349,8 +2350,8 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
     return _SheetScaffold(
       title: _isDeposit ? 'إضافة رصيد' : 'سحب رصيد',
       icon: _isDeposit
-          ? Icons.add_card_rounded
-          : Icons.remove_circle_outline_rounded,
+          ? LucideIcons.plus
+          : LucideIcons.circleMinus,
       subtitle: _isDeposit
           ? 'أضف رصيدًا نقديًا أو آجلًا للمدير المحدد.'
           : 'اسحب مبلغًا من رصيد المدير الحالي.',
@@ -2361,7 +2362,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
           children: [
             _SheetSectionCard(
               title: 'ملخص المدير',
-              icon: Icons.person_outline_rounded,
+              icon: LucideIcons.user,
               child: Column(
                 children: [
                   _SummaryLine(
@@ -2390,7 +2391,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
             const SizedBox(height: 12),
             _SheetSectionCard(
               title: _isDeposit ? 'بيانات الإضافة' : 'بيانات السحب',
-              icon: Icons.payments_outlined,
+              icon: LucideIcons.banknote,
               child: Column(
                 children: [
                   TextFormField(
@@ -2403,11 +2404,11 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                       labelText: _isDeposit
                           ? 'المبلغ المراد إضافته'
                           : 'المبلغ المراد سحبه',
-                      prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                      prefixIcon: const Icon(LucideIcons.arrowRightLeft),
                       suffixIcon: _amountController.text.isEmpty
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.close_rounded, size: 18),
+                              icon: const Icon(LucideIcons.x, size: 18),
                               onPressed: () {
                                 _amountController.clear();
                                 setState(() {});
@@ -2448,7 +2449,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'ملاحظات',
-                      prefixIcon: Icon(Icons.note_alt_outlined),
+                      prefixIcon: Icon(LucideIcons.fileText),
                     ),
                   ),
                   if (_isDeposit) ...[
@@ -2495,8 +2496,8 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                     onPressed: _saving ? null : _submit,
                     icon: Icon(
                       _isDeposit
-                          ? Icons.add_card_rounded
-                          : Icons.remove_circle_outline_rounded,
+                          ? LucideIcons.plus
+                          : LucideIcons.circleMinus,
                     ),
                     label: Text(
                       _isDeposit ? 'تنفيذ الإضافة' : 'تنفيذ السحب',
@@ -2623,7 +2624,7 @@ class _ManagerDebtPaymentSheetState
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'تسديد دين',
-      icon: Icons.payments_outlined,
+      icon: LucideIcons.banknote,
       subtitle: 'سدّد كامل الدين أو جزءًا منه للمدير المحدد.',
       isLoading: _saving,
       child: _loadingDebt
@@ -2636,7 +2637,7 @@ class _ManagerDebtPaymentSheetState
                   children: [
                     const _InlineInfoBanner(
                       color: AppTheme.successColor,
-                      icon: Icons.check_circle_outline_rounded,
+                      icon: LucideIcons.circleCheck,
                       text: 'لا يوجد دين مستحق على هذا المدير حاليًا.',
                     ),
                     const SizedBox(height: 16),
@@ -2655,7 +2656,7 @@ class _ManagerDebtPaymentSheetState
                     children: [
                       _SheetSectionCard(
                         title: 'ملخص الدين',
-                        icon: Icons.account_balance_outlined,
+                        icon: LucideIcons.banknote,
                         child: Column(
                           children: [
                             _SummaryLine(
@@ -2685,7 +2686,7 @@ class _ManagerDebtPaymentSheetState
                       const SizedBox(height: 12),
                       _SheetSectionCard(
                         title: 'بيانات التسديد',
-                        icon: Icons.request_quote_outlined,
+                        icon: LucideIcons.fileText,
                         child: Column(
                           children: [
                             CheckboxListTile.adaptive(
@@ -2719,7 +2720,7 @@ class _ManagerDebtPaymentSheetState
                               decoration: const InputDecoration(
                                 labelText: 'المبلغ المراد تسديده',
                                 prefixIcon:
-                                    Icon(Icons.currency_exchange_rounded),
+                                    Icon(LucideIcons.arrowRightLeft),
                               ),
                               validator: (value) {
                                 final amount =
@@ -2736,7 +2737,7 @@ class _ManagerDebtPaymentSheetState
                               maxLines: 2,
                               decoration: const InputDecoration(
                                 labelText: 'ملاحظات',
-                                prefixIcon: Icon(Icons.note_alt_outlined),
+                                prefixIcon: Icon(LucideIcons.fileText),
                               ),
                             ),
                           ],
@@ -2755,7 +2756,7 @@ class _ManagerDebtPaymentSheetState
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _saving ? null : _submit,
-                              icon: const Icon(Icons.payments_outlined),
+                              icon: const Icon(LucideIcons.banknote),
                               label: const Text('تنفيذ التسديد'),
                             ),
                           ),
@@ -2823,7 +2824,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'إضافة نقاط',
-      icon: Icons.stars_rounded,
+      icon: LucideIcons.star,
       subtitle: 'أضف نقاطًا تشجيعية للمدير مع ملاحظة اختيارية.',
       isLoading: _saving,
       child: Form(
@@ -2832,7 +2833,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
           children: [
             _SheetSectionCard(
               title: 'بيانات العملية',
-              icon: Icons.emoji_events_outlined,
+              icon: LucideIcons.trophy,
               child: Column(
                 children: [
                   _SummaryLine(label: 'المدير', value: widget.manager.username),
@@ -2853,7 +2854,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
                       labelText: 'عدد النقاط',
-                      prefixIcon: Icon(Icons.stars_rounded),
+                      prefixIcon: Icon(LucideIcons.star),
                     ),
                     validator: (value) {
                       final points = int.tryParse((value ?? '').trim());
@@ -2869,7 +2870,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'ملاحظات',
-                      prefixIcon: Icon(Icons.note_alt_outlined),
+                      prefixIcon: Icon(LucideIcons.fileText),
                     ),
                   ),
                 ],
@@ -2888,7 +2889,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _saving ? null : _submit,
-                    icon: const Icon(Icons.stars_rounded),
+                    icon: const Icon(LucideIcons.star),
                     label: const Text('إضافة النقاط'),
                   ),
                 ),
@@ -2963,7 +2964,7 @@ class _DeleteManagerDialogState extends ConsumerState<_DeleteManagerDialog> {
               autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'اسم المستخدم',
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: Icon(LucideIcons.user),
               ),
               onSubmitted: (_) {
                 if (!_deleting) {
@@ -2993,7 +2994,7 @@ class _DeleteManagerDialogState extends ConsumerState<_DeleteManagerDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Icon(Icons.delete_outline),
+              : const Icon(LucideIcons.trash2),
           label: Text(_deleting ? 'جارٍ الحذف...' : 'حذف المدير'),
         ),
       ],
@@ -3102,7 +3103,7 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
     final dateFmt = intl.DateFormat('yyyy-MM-dd');
     return _SheetScaffold(
       title: 'إضافة دين',
-      icon: Icons.receipt_long_rounded,
+      icon: LucideIcons.receipt,
       // Compact layout per user request — no subtitle, no large summary
       // card. The single header line shows username + combined debt
       // (SAS4 + open custom) so the admin can see the total they're
@@ -3133,12 +3134,12 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
               inputFormatters: [_ThousandsSeparatorInputFormatter()],
               decoration: InputDecoration(
                 labelText: 'مبلغ الدين',
-                prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                prefixIcon: const Icon(LucideIcons.arrowRightLeft),
                 isDense: true,
                 suffixIcon: _amountController.text.isEmpty
                     ? null
                     : IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
+                        icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           _amountController.clear();
                           setState(() {});
@@ -3176,7 +3177,7 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
               maxLines: 1,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(Icons.note_alt_outlined),
+                prefixIcon: Icon(LucideIcons.fileText),
                 isDense: true,
               ),
             ),
@@ -3189,7 +3190,7 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 18),
+                    const Icon(LucideIcons.calendar, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -3197,7 +3198,7 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
                         style: const TextStyle(fontSize: 13),
                       ),
                     ),
-                    const Icon(Icons.edit_calendar_outlined, size: 18),
+                    const Icon(LucideIcons.calendarClock, size: 18),
                   ],
                 ),
               ),
@@ -3224,7 +3225,7 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _saving ? null : _submit,
-                    icon: const Icon(Icons.save_rounded),
+                    icon: const Icon(LucideLucideIcons.save),
                     label: const Text('حفظ الدين'),
                   ),
                 ),
@@ -3398,7 +3399,7 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
 
     return _SheetScaffold(
       title: 'تسديد دين',
-      icon: Icons.payments_outlined,
+      icon: LucideIcons.banknote,
       isLoading: _saving,
       child: Form(
         key: _formKey,
@@ -3424,12 +3425,12 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
                   ButtonSegment(
                     value: _PaySource.sas,
                     label: Text('دين الساس'),
-                    icon: Icon(Icons.account_balance_outlined, size: 16),
+                    icon: Icon(LucideIcons.banknote, size: 16),
                   ),
                   ButtonSegment(
                     value: _PaySource.custom,
                     label: Text('ديون أخرى'),
-                    icon: Icon(Icons.receipt_long_rounded, size: 16),
+                    icon: Icon(LucideIcons.receipt, size: 16),
                   ),
                 ],
                 selected: {_source},
@@ -3452,12 +3453,12 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
               decoration: InputDecoration(
                 labelText: 'مبلغ التسديد',
                 helperText: _maxLabel,
-                prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                prefixIcon: const Icon(LucideIcons.arrowRightLeft),
                 isDense: true,
                 suffixIcon: _amountController.text.isEmpty
                     ? null
                     : IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
+                        icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           _amountController.clear();
                           setState(() {});
@@ -3483,7 +3484,7 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
                           _amountController.text = formatter.format(_max);
                           setState(() {});
                         },
-                  icon: const Icon(Icons.done_all_rounded, size: 16),
+                  icon: const Icon(LucideIcons.checkCheck, size: 16),
                   label: const Text('تسديد كامل المبلغ'),
                 ),
               ],
@@ -3512,7 +3513,7 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
               maxLines: 1,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(Icons.note_alt_outlined),
+                prefixIcon: Icon(LucideIcons.fileText),
                 isDense: true,
               ),
             ),
@@ -3539,7 +3540,7 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _saving ? null : _submit,
-                    icon: const Icon(Icons.check_rounded),
+                    icon: const Icon(LucideLucideIcons.check),
                     label: const Text('تسديد'),
                   ),
                 ),
@@ -3581,7 +3582,7 @@ class _DebtSourcesBadges extends StatelessWidget {
         label: 'لا يوجد دين',
         amount: 0,
         color: Theme.of(context).colorScheme.onSurfaceVariant,
-        icon: Icons.check_circle_outline_rounded,
+        icon: LucideIcons.circleCheck,
       );
     }
     final children = <Widget>[
@@ -3591,7 +3592,7 @@ class _DebtSourcesBadges extends StatelessWidget {
             label: 'دين الساس',
             amount: sasAmount,
             color: AppTheme.warningColor,
-            icon: Icons.account_balance_outlined,
+            icon: LucideIcons.banknote,
             highlighted: highlightSas,
           ),
         ),
@@ -3602,7 +3603,7 @@ class _DebtSourcesBadges extends StatelessWidget {
             label: 'ديون أخرى',
             amount: customAmount,
             color: AppTheme.infoColor,
-            icon: Icons.receipt_long_rounded,
+            icon: LucideIcons.receipt,
             highlighted: highlightCustom,
           ),
         ),
@@ -3767,7 +3768,7 @@ class _SheetScaffold extends StatelessWidget {
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(false),
-                      icon: const Icon(Icons.close_rounded),
+                      icon: const Icon(LucideIcons.x),
                     ),
                   ],
                 ),
