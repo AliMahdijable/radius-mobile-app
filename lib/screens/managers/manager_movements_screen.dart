@@ -327,7 +327,7 @@ class _MovementCard extends ConsumerWidget {
       default:
         return (
           title: movement.rowType,
-          icon: LucideIcons.circleHelp,
+          icon: LucideIcons.circleQuestionMark,
           color: AppTheme.primary,
           sign: '',
         );
