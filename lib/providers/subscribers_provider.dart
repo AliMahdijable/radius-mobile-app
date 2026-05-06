@@ -1374,6 +1374,43 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         dev.log('/list/profile/5 failed: $e', name: 'PKG');
       }
 
+      // Step 2.5: Fallback لما _priceMap فاضي (sub-reseller، normal-reseller).
+      // /priceList/{adminId} يرجع فاضي للمدير الفرعي. نجلب الأسعار من
+      // /index/profile الذي يحتوي p.price مباشرة (يشتغل لكل المدراء).
+      // هذا يصلح bug admin@husxxx — كانت الباقات تطلع 0 ع كل مكان.
+      if (_priceMap.isEmpty && listProfileItems.isNotEmpty) {
+        try {
+          final encryptedPayload = EncryptionService.encrypt({
+            'page': 1, 'count': 200, 'sortBy': null, 'direction': 'asc',
+            'search': '',
+            'columns': ['id', 'name', 'price', 'sale_price', 'user_price'],
+          });
+          final r = await _sas4Dio.post(
+            ApiConstants.sas4Profiles,
+            data: {'payload': encryptedPayload},
+            options: Options(contentType: 'application/x-www-form-urlencoded'),
+          );
+          var d = r.data;
+          if (d is String) d = EncryptionService.decrypt(d);
+          final items = (d is Map && d['data'] is List) ? d['data'] as List : <dynamic>[];
+          for (final raw in items) {
+            if (raw is Map<String, dynamic>) {
+              final id = raw['id'] is int ? raw['id'] as int : int.tryParse(raw['id']?.toString() ?? '') ?? 0;
+              if (id <= 0) continue;
+              _priceMap[id] = {
+                'price': raw['price'],
+                'sale_price': raw['sale_price'],
+                'user_price': raw['user_price'],
+                'name': raw['name'],
+              };
+            }
+          }
+          dev.log('[/index/profile fallback] _priceMap now ${_priceMap.length} entries', name: 'PKG');
+        } catch (e) {
+          dev.log('/index/profile fallback failed: $e', name: 'PKG');
+        }
+      }
+
       // Step 3: Build packages.
       //   - If /list/profile/5 returned items → use them as the source (covers sub-managers)
       //     and enrich prices from _priceMap when the id matches.
@@ -1392,7 +1429,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           packages.add(PackageModel(
             idx: id,
             name: name,
-            price: (priced?['price'] ?? priced?['profile_price'] ?? item['price'])?.toString(),
+            price: (priced?['price'] ?? priced?['profile_price'] ?? priced?['sale_price'] ?? item['price'])?.toString(),
             userPrice: (priced?['user_price'] ?? item['user_price'])?.toString(),
           ));
         }

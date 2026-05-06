@@ -606,14 +606,13 @@ class _SubscriberDetailsScreenState
                           details.remove('expiration');
                         }
                         if (canPickParent) {
-                          // Only forward parent_id when this admin is allowed
-                          // to change it; otherwise leave whatever SAS4
-                          // already has so we don't accidentally null it on a
-                          // sub-manager edit.
+                          // المدير اللي يقدر يغيّر الـparent — نرسل المختار.
                           details['parent_id'] = selectedParentId;
-                        } else {
-                          details.remove('parent_id');
                         }
+                        // المدراء الفرعيون (normal-reseller): نُبقي parent_id
+                        // الأصلي اللي رجع من SAS4 — حذفه يخلّي SAS4 يرفض الـPUT
+                        // بـ403 message فارغ (تجربة admin@husxxx). v1 يفعل نفس
+                        // الشي (يحفظ كل الحقول الأصلية).
                         if (pwCtrl.text.isNotEmpty) {
                           details['password'] = pwCtrl.text;
                           details['confirm_password'] = pwCtrl.text;
