@@ -713,6 +713,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     _FilterDef('active', 'الفعالين', Icons.check_circle_rounded, AppTheme.teal600),
     _FilterDef('online', 'متصل', Icons.wifi_rounded, AppTheme.teal400),
     _FilterDef('offline', 'غير متصل', Icons.wifi_off_rounded, Color(0xFF90A4AE)),
+    _FilterDef('disabled', 'معطّل', Icons.block_rounded, Color(0xFF6D4C41)),
     _FilterDef('expired', 'المنتهي', Icons.timer_off_rounded, Color(0xFFC62828)),
     _FilterDef('debtors', 'المديونين', Icons.credit_card_off_rounded, Color(0xFFF57F17)),
     _FilterDef('nearExpiry', 'قريب الانتهاء', Icons.warning_amber_rounded, Colors.deepOrange),
@@ -824,6 +825,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         case 'active': return '${state.activeCount}';
         case 'online': return '${state.onlineCount}';
         case 'offline': return '${state.offlineCount}';
+        case 'disabled': return '${state.disabledCount}';
         case 'expired': return '${state.expiredCount}';
         case 'debtors': return '${state.debtorsCount}';
         case 'nearExpiry': return '${state.nearExpiryCount}';

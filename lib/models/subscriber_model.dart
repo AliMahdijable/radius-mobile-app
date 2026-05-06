@@ -130,9 +130,13 @@ class SubscriberModel {
 
   bool get isEnabled => enabled == null || enabled == 1;
 
+  bool get isDisabled => !isEnabled;
+
   bool get isOnline => isOnlineFlag == true;
 
-  bool get isOffline => isActive && isEnabled && !isOnline;
+  // غير متصل: ليس متصل وليس منتهي. المعطّل قطعاً غير متصل فيُضمّ هنا.
+  // (المعطّل له فلتر منفصل لو المدير يحتاج فقط المعطّلين.)
+  bool get isOffline => !isOnline && !isExpired;
 
   factory SubscriberModel.fromJson(Map<String, dynamic> json) {
     final profileDetails = json['profile_details'];

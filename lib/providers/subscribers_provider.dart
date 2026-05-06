@@ -83,6 +83,9 @@ class SubscribersState {
       case 'offline':
         list = source.where((s) => s.isOffline).toList();
         break;
+      case 'disabled':
+        list = source.where((s) => s.isDisabled).toList();
+        break;
       case 'debtors':
         list = source.where((s) => s.hasDebt).toList();
         break;
@@ -171,6 +174,7 @@ class SubscribersState {
   }
   int get debtorsCount => _managerScoped.where((s) => s.hasDebt).length;
   int get nearExpiryCount => _managerScoped.where((s) => s.isNearExpiry).length;
+  int get disabledCount => _managerScoped.where((s) => s.isDisabled).length;
 
   /// Sum of outstanding debt across subscribers in the current
   /// manager-filter scope (respects the "المدراء" dropdown so when the
