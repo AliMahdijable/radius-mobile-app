@@ -1850,18 +1850,11 @@ class _SubscriberDetailsScreenState
     if (!settingsSnapshot.hasLoaded && !settingsSnapshot.isLoading) {
       await ref.read(settingsProvider.notifier).loadFeatures();
     }
-    // Master switch يتقدّم على per-template flags — لو الأدمن طفّى
-    // التنبيهات كلياً، الرسالة تختلف عن "الميزة المعطّلة" عشان ما
-    // نضلل المستخدم نطلب منه يفعّل ميزة فردية.
+    // Master switch — لو الأدمن طفّى التنبيهات بإرادته، نسكت تماماً.
+    // التحذير في كل تفعيل/تمديد بـsnackbar يكون مزعج لأنه قرار واعٍ
+    // لا خطأ تكوين. يقدر يشوفها مغلقة من شاشة الإعدادات لمّا يحتاج.
     final featuresNow = ref.read(settingsProvider).features;
     if (!featuresNow.notificationsEnabled) {
-      if (mounted) {
-        AppSnackBar.warning(
-          context,
-          'تنبيهات الواتساب موقوفة',
-          detail: 'فعّل "تنبيهات الواتساب" من الإعدادات لاستئناف الإرسال.',
-        );
-      }
       return;
     }
     final featureEnabled = _featureValueForTemplate(templateType);
