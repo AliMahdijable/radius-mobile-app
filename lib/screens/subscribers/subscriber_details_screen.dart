@@ -1850,6 +1850,20 @@ class _SubscriberDetailsScreenState
     if (!settingsSnapshot.hasLoaded && !settingsSnapshot.isLoading) {
       await ref.read(settingsProvider.notifier).loadFeatures();
     }
+    // Master switch يتقدّم على per-template flags — لو الأدمن طفّى
+    // التنبيهات كلياً، الرسالة تختلف عن "الميزة المعطّلة" عشان ما
+    // نضلل المستخدم نطلب منه يفعّل ميزة فردية.
+    final featuresNow = ref.read(settingsProvider).features;
+    if (!featuresNow.notificationsEnabled) {
+      if (mounted) {
+        AppSnackBar.warning(
+          context,
+          'تنبيهات الواتساب موقوفة',
+          detail: 'فعّل "تنبيهات الواتساب" من الإعدادات لاستئناف الإرسال.',
+        );
+      }
+      return;
+    }
     final featureEnabled = _featureValueForTemplate(templateType);
     if (featureEnabled == false) {
       if (mounted) {
