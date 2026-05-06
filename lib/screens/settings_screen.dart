@@ -148,11 +148,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                // Master switch — يلتحق بكل الـtoggles أدناه. لمّا مغلق
+                // الباكند يتجاوز كل feature flag ويوقف كل الإشعارات
+                // (فورية + scheduled).
+                _MasterNotificationsToggle(
+                  enabled: settings.features.notificationsEnabled,
+                  onChanged: (v) => ref
+                      .read(settingsProvider.notifier)
+                      .updateFeature('notificationsEnabled', v),
+                ),
+                const SizedBox(height: 12),
                 _FeatureToggle(
                   icon: LucideIcons.circlePlus,
                   title: 'إرسال عند التفعيل',
                   subtitle: 'إرسال رسالة ترحيب عند تفعيل مشترك جديد',
                   value: settings.features.sendOnActivation,
+                  enabled: settings.features.notificationsEnabled,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
                       .updateFeature('sendOnActivation', v),
@@ -162,6 +173,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'إرسال عند التمديد',
                   subtitle: 'إرسال قالب "إشعار التمديد" عند تمديد/تجديد اشتراك',
                   value: settings.features.sendOnExtension,
+                  enabled: settings.features.notificationsEnabled,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
                       .updateFeature('sendOnExtension', v),
@@ -171,6 +183,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'تذكير انتهاء',
                   subtitle: 'إرسال تحذير قبل انتهاء الاشتراك',
                   value: settings.features.expiryReminder,
+                  enabled: settings.features.notificationsEnabled,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
                       .updateFeature('expiryReminder', v),
@@ -180,6 +193,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'تذكير ديون',
                   subtitle: 'إرسال تذكير تلقائي للمديونين',
                   value: settings.features.debtReminder,
+                  enabled: settings.features.notificationsEnabled,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
                       .updateFeature('debtReminder', v),
@@ -189,6 +203,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'إشعار انتهاء الخدمة',
                   subtitle: 'إرسال إشعار عند انتهاء الخدمة',
                   value: settings.features.serviceEndNotification,
+                  enabled: settings.features.notificationsEnabled,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
                       .updateFeature('serviceEndNotification', v),
@@ -198,6 +213,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'رسالة ترحيب',
                   subtitle: 'إرسال رسالة ترحيب للمشتركين الجدد',
                   value: settings.features.welcomeMessage,
+                  enabled: settings.features.notificationsEnabled,
                   onChanged: (v) => ref
                       .read(settingsProvider.notifier)
                       .updateFeature('welcomeMessage', v),
@@ -625,12 +641,71 @@ class _SettingTile extends StatelessWidget {
   }
 }
 
+/// Master switch — يستخدم لون مميّز (أخضر/أحمر) لتمييزه عن الـfeature
+/// flags الفرعية. لمّا مغلق نُعرَض الـtoggles الفرعية معطّلة بصرياً.
+class _MasterNotificationsToggle extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _MasterNotificationsToggle({
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = enabled ? AppTheme.whatsappGreen : Colors.redAccent;
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.45), width: 1),
+      ),
+      child: SwitchListTile.adaptive(
+        secondary: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            enabled ? LucideIcons.bell : LucideIcons.bellOff,
+            color: color,
+            size: 22,
+          ),
+        ),
+        title: const Text(
+          'تنبيهات الواتساب',
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w800,
+            fontSize: 15,
+          ),
+        ),
+        subtitle: Text(
+          enabled
+              ? 'مفعّلة — يمكن التحكم بكل ميزة أدناه'
+              : 'موقوفة بالكامل — لن يُرسل النظام أي إشعار',
+          style: const TextStyle(fontFamily: 'Cairo', fontSize: 11),
+        ),
+        value: enabled,
+        activeColor: AppTheme.whatsappGreen,
+        onChanged: onChanged,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+  }
+}
+
 class _FeatureToggle extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+  /// لمّا master switch مغلق، نعرض الـtoggles الفرعية معطّلة بصرياً
+  /// لإيضاح أن قيمها لا تؤثّر حالياً.
+  final bool enabled;
 
   const _FeatureToggle({
     required this.icon,
@@ -638,36 +713,40 @@ class _FeatureToggle extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: SwitchListTile.adaptive(
-        secondary: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.whatsappGreen.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: AppTheme.whatsappGreen, size: 20),
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
+          borderRadius: BorderRadius.circular(14),
         ),
-        title: Text(title,
-            style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w600,
-                fontSize: 14)),
-        subtitle: Text(subtitle,
-            style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
-        value: value,
-        activeColor: AppTheme.whatsappGreen,
-        onChanged: onChanged,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: SwitchListTile.adaptive(
+          secondary: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.whatsappGreen.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppTheme.whatsappGreen, size: 20),
+          ),
+          title: Text(title,
+              style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14)),
+          subtitle: Text(subtitle,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 11)),
+          value: value,
+          activeColor: AppTheme.whatsappGreen,
+          onChanged: enabled ? onChanged : null,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
       ),
     );
   }

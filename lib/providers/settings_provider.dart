@@ -86,6 +86,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final f = state.features;
     FeaturesModel updated;
     switch (key) {
+      case 'notificationsEnabled':
+        updated = f.copyWith(notificationsEnabled: value);
+        break;
       case 'sendOnActivation':
         updated = f.copyWith(sendOnActivation: value);
         break;

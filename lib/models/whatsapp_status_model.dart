@@ -46,6 +46,9 @@ class WhatsAppStatusModel {
 }
 
 class FeaturesModel {
+  /// Master switch — لو false يتجاوز الـbackend كل الـflags الفردية
+  /// وما يبعث أي إشعار. الافتراضي true عشان السلوك القديم ما ينكسر.
+  final bool notificationsEnabled;
   final bool sendOnActivation;
   final bool expiryReminder;
   final bool debtReminder;
@@ -54,6 +57,7 @@ class FeaturesModel {
   final bool sendOnExtension;
 
   const FeaturesModel({
+    this.notificationsEnabled = true,
     this.sendOnActivation = false,
     this.expiryReminder = false,
     this.debtReminder = false,
@@ -63,7 +67,10 @@ class FeaturesModel {
   });
 
   factory FeaturesModel.fromJson(Map<String, dynamic> json) {
+    // notificationsEnabled غايب من الـAPI القديم → نعتبر مفعّل افتراضياً.
+    final notif = json['notificationsEnabled'];
     return FeaturesModel(
+      notificationsEnabled: notif == null ? true : notif == true,
       sendOnActivation: json['sendOnActivation'] == true,
       expiryReminder: json['expiryReminder'] == true,
       debtReminder: json['debtReminder'] == true,
@@ -74,6 +81,7 @@ class FeaturesModel {
   }
 
   Map<String, dynamic> toJson() => {
+        'notificationsEnabled': notificationsEnabled,
         'sendOnActivation': sendOnActivation,
         'expiryReminder': expiryReminder,
         'debtReminder': debtReminder,
@@ -83,6 +91,7 @@ class FeaturesModel {
       };
 
   FeaturesModel copyWith({
+    bool? notificationsEnabled,
     bool? sendOnActivation,
     bool? expiryReminder,
     bool? debtReminder,
@@ -91,6 +100,7 @@ class FeaturesModel {
     bool? sendOnExtension,
   }) {
     return FeaturesModel(
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       sendOnActivation: sendOnActivation ?? this.sendOnActivation,
       expiryReminder: expiryReminder ?? this.expiryReminder,
       debtReminder: debtReminder ?? this.debtReminder,
