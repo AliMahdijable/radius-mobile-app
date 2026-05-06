@@ -2637,6 +2637,283 @@ class _SubscriberDetailsScreenState
     );
   }
 
+  // ── Quick Discount (خصم سريع) ────────────────────────────────────────
+  // مودال صغير لتعيين/تعديل/حذف خصم المشترك بدون فتح صفحة الخصومات
+  // كاملة. يعرض السعر الأصلي + الخصم الحالي + معاينة السعر بعد الخصم.
+  Future<void> _showQuickDiscountSheet() async {
+    final id = _subscriberId;
+    if (id == null) {
+      _showSnack('معرف المشترك غير متوفر', success: false);
+      return;
+    }
+    final sub = _readCurrentSubscriber();
+
+    setState(() => _isProcessing = true);
+    // نجلب السعر الأصلي + الخصم الحالي. كل واحدة بحالها بـtry/catch
+    // عشان فشل احدهن ما يقفل الفتحة الكاملة.
+    final dio = ref.read(backendDioProvider);
+    double originalPrice = _toDouble(sub.price ?? 0);
+    double currentDiscount = 0;
+    try {
+      final r = await dio.get('/api/v2/subscribers/$id/activation-data');
+      final actData = r.data?['data'] as Map<String, dynamic>?;
+      if (actData != null) {
+        final p = _toDouble(
+          actData['user_price'] ?? actData['price'] ?? actData['package_price'] ?? 0,
+        );
+        if (p > 0) originalPrice = p;
+      }
+    } catch (_) { /* تجاهل، نكمل بـsub.price */ }
+    if (sub.username.isNotEmpty) {
+      try {
+        final r = await dio.get('${ApiConstants.discounts}/${sub.username}');
+        final discData = r.data as Map<String, dynamic>?;
+        final amt = discData?['discount_amount'];
+        if (amt != null) currentDiscount = _toDouble(amt);
+      } catch (_) { /* لا يوجد خصم، نكمل بصفر */ }
+    }
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+
+    final amountCtrl = TextEditingController(
+      text: currentDiscount > 0 ? currentDiscount.toInt().toString() : '',
+    );
+    final amountFocus = FocusNode();
+    bool submitting = false;
+
+    showModalBottomSheet(
+      useSafeArea: true,
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
+            left: 20, right: 20, top: 16,
+          ),
+          child: StatefulBuilder(builder: (ctx, setSheet) {
+            final amountNum = _parseMoney(amountCtrl.text);
+            final isRemoval = currentDiscount > 0 && amountNum == 0;
+            final finalPrice = originalPrice > 0
+                ? (originalPrice - amountNum).clamp(0.0, double.infinity)
+                : 0.0;
+
+            // فوكس تلقائي بعد فتح الـsheet — مرة واحدة فقط.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!amountFocus.hasFocus && amountCtrl.text.isEmpty) {
+                amountFocus.requestFocus();
+              }
+            });
+
+            return SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Container(padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(LucideIcons.tag, color: Colors.teal, size: 22)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('خصم سريع', style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(sub.fullName,
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                    ],
+                  )),
+                ]),
+                const SizedBox(height: 16),
+
+                // السعر الأصلي + الخصم الحالي
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(children: [
+                    Row(children: [
+                      Text('السعر الأصلي',
+                          style: TextStyle(fontSize: 12,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                      const Spacer(),
+                      Text(originalPrice > 0 ? AppHelpers.formatMoney(originalPrice) : '—',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                    ]),
+                    if (currentDiscount > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Text('الخصم الحالي',
+                            style: TextStyle(fontSize: 11.5,
+                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                        const Spacer(),
+                        Text('-${AppHelpers.formatMoney(currentDiscount)}',
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+                                color: Colors.teal)),
+                      ]),
+                    ],
+                  ]),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: amountCtrl,
+                  focusNode: amountFocus,
+                  keyboardType: TextInputType.number,
+                  textDirection: TextDirection.ltr,
+                  inputFormatters: [_ThousandsFormatter()],
+                  decoration: InputDecoration(
+                    labelText: 'قيمة الخصم (0 = إلغاء)',
+                    suffixText: 'IQD',
+                    prefixIcon: const Icon(LucideIcons.tag, size: 20),
+                    suffixIcon: IconButton(
+                      icon: const Icon(LucideIcons.x, size: 18),
+                      onPressed: () {
+                        amountCtrl.clear();
+                        setSheet(() {});
+                      },
+                    ),
+                  ),
+                  onChanged: (_) => setSheet(() {}),
+                ),
+                const SizedBox(height: 10),
+
+                QuickAmountChips(
+                  amounts: const [1000.0, 2500.0, 5000.0, 10000.0, 15000.0, 20000.0],
+                  selectedAmount: amountNum,
+                  enabled: true,
+                  onAmountSelected: (v) {
+                    amountCtrl.text = v.toInt().toString();
+                    setSheet(() {});
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // معاينة السعر بعد الخصم
+                if (originalPrice > 0)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: amountNum > 0
+                          ? Colors.teal.withOpacity(0.08)
+                          : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: amountNum > 0
+                            ? Colors.teal.withOpacity(0.30)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: Row(children: [
+                      Text('السعر بعد الخصم',
+                          style: TextStyle(fontSize: 12,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+                      const Spacer(),
+                      if (amountNum > 0 && amountNum < originalPrice) ...[
+                        Text(AppHelpers.formatMoney(originalPrice),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              decoration: TextDecoration.lineThrough,
+                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.45),
+                            )),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(AppHelpers.formatMoney(finalPrice),
+                          style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800,
+                            color: amountNum > 0 ? Colors.teal : null,
+                          )),
+                    ]),
+                  ),
+
+                if (amountNum > 0 && originalPrice > 0 && amountNum >= originalPrice) ...[
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    const Icon(LucideIcons.triangleAlert, size: 14, color: Colors.orange),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text('الخصم يساوي أو يتجاوز السعر — السعر النهائي صفر',
+                        style: TextStyle(fontSize: 11.5, color: Colors.orange.shade800))),
+                  ]),
+                ],
+
+                const SizedBox(height: 18),
+                Row(children: [
+                  Expanded(child: OutlinedButton(
+                    onPressed: submitting ? null : () => Navigator.pop(sheetCtx),
+                    child: const Text('إلغاء'),
+                  )),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 2, child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isRemoval ? Colors.red.shade600 : Colors.teal,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: submitting
+                        ? const SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2,
+                                color: Colors.white))
+                        : Icon(isRemoval ? LucideIcons.trash2 : LucideIcons.tag, size: 18),
+                    label: Text(submitting
+                        ? 'جارٍ الحفظ…'
+                        : (isRemoval ? 'حذف الخصم' : (amountNum > 0 ? 'حفظ الخصم' : 'حفظ'))),
+                    onPressed: submitting ? null : () async {
+                      setSheet(() => submitting = true);
+                      try {
+                        final r = await dio.post(
+                          '/api/v2/subscribers/$id/discount',
+                          data: {'amount': amountNum},
+                        );
+                        if (r.data?['success'] == true) {
+                          if (mounted) {
+                            _showSnack(
+                              isRemoval
+                                  ? 'تم حذف الخصم'
+                                  : (amountNum > 0
+                                      ? 'تم حفظ خصم ${AppHelpers.formatMoney(amountNum)}'
+                                      : 'تم الحفظ'),
+                              success: true,
+                            );
+                          }
+                          if (mounted) Navigator.pop(sheetCtx);
+                          await ref.read(subscribersProvider.notifier)
+                              .refreshSingleSubscriber(id);
+                        } else {
+                          setSheet(() => submitting = false);
+                          if (mounted) {
+                            _showSnack(
+                              r.data?['message']?.toString() ?? 'فشل حفظ الخصم',
+                              success: false,
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        setSheet(() => submitting = false);
+                        if (mounted) _showSnack('فشل حفظ الخصم', success: false);
+                      }
+                    },
+                  )),
+                ]),
+                const SizedBox(height: 8),
+              ],
+            ));
+          }),
+        );
+      },
+    );
+  }
+
   // ── Toggle Enable/Disable ─────────────────────────────────────────────
   Future<void> _toggleSubscriber({required bool enable}) async {
     final id = _subscriberId;
@@ -3113,6 +3390,8 @@ class _SubscriberDetailsScreenState
         _FabAction(LucideIcons.plus, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
       if (sub.hasDebt && can('subscribers.pay_debt'))
         _FabAction(LucideIcons.banknote, 'تسديد دين', Colors.green, _showPayDebtSheet),
+      if (can('discounts.manage'))
+        _FabAction(LucideIcons.tag, 'خصم سريع', Colors.teal, _showQuickDiscountSheet),
       if (can('subscribers.view_activity'))
         _FabAction(
           LucideIcons.history,
