@@ -834,6 +834,45 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         }
       }
       dev.log('PriceList loaded: ${_priceMap.length} by ID, ${_priceByName.length} by name', name: 'SUBS');
+
+      // Fallback لـsub-reseller: priceList يرجع فاضي، نجلب أسعار من
+      // /index/profile (نفس fix loadPackages). يخلّي عرض السعر بكرت
+      // المشترك يشتغل لـadmin@husxxx وأمثاله.
+      if (_priceMap.isEmpty) {
+        try {
+          final encryptedPayload = EncryptionService.encrypt({
+            'page': 1, 'count': 200, 'sortBy': null, 'direction': 'asc',
+            'search': '',
+            'columns': ['id', 'name', 'price', 'sale_price', 'user_price'],
+          });
+          final r = await _sas4Dio.post(
+            ApiConstants.sas4Profiles,
+            data: {'payload': encryptedPayload},
+            options: Options(contentType: 'application/x-www-form-urlencoded'),
+          );
+          var d = r.data;
+          if (d is String) d = EncryptionService.decrypt(d);
+          final items2 = (d is Map && d['data'] is List) ? d['data'] as List : <dynamic>[];
+          for (final raw in items2) {
+            if (raw is Map<String, dynamic>) {
+              final id = raw['id'] is int ? raw['id'] as int : int.tryParse(raw['id']?.toString() ?? '') ?? 0;
+              if (id <= 0) continue;
+              final name = raw['name']?.toString();
+              _priceMap[id] = {
+                'id': id,
+                'name': name,
+                'price': raw['price'],
+                'sale_price': raw['sale_price'],
+                'user_price': raw['user_price'],
+              };
+              if (name != null && name.isNotEmpty) _priceByName[name] = _priceMap[id]!;
+            }
+          }
+          dev.log('PriceList /index/profile fallback: ${_priceMap.length} by ID', name: 'SUBS');
+        } catch (e) {
+          dev.log('PriceList fallback failed: $e', name: 'SUBS');
+        }
+      }
     } catch (e) {
       dev.log('loadPriceList error: $e', name: 'SUBS');
     }
