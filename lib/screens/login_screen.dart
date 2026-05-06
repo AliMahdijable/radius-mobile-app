@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
@@ -247,7 +248,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 decoration: InputDecoration(
                                   labelText: 'اسم المستخدم',
                                   prefixIcon: Icon(
-                                    Icons.person_outline_rounded,
+                                    LucideIcons.user,
                                     color: AppTheme.secondary,
                                     size: 22,
                                   ),
@@ -275,7 +276,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 decoration: InputDecoration(
                                   labelText: 'كلمة المرور',
                                   prefixIcon: Icon(
-                                    Icons.lock_outline_rounded,
+                                    LucideIcons.lock,
                                     color: AppTheme.secondary,
                                     size: 22,
                                   ),
@@ -283,8 +284,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   suffixIcon: IconButton(
                                     icon: Icon(
                                       _obscurePassword
-                                          ? Icons.visibility_off_outlined
-                                          : Icons.visibility_outlined,
+                                          ? LucideIcons.eyeOff
+                                          : LucideIcons.eye,
                                       color: Colors.grey.shade400,
                                       size: 20,
                                     ),
@@ -362,7 +363,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         child: Row(
                                           children: [
                                             const Icon(
-                                              Icons.error_outline_rounded,
+                                              LucideIcons.alertCircle,
                                               color: Color(0xFFDC2626),
                                               size: 18,
                                             ),

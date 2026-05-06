@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../providers/auth_provider.dart';
@@ -87,7 +88,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.wifi_off_rounded, size: 64, color: theme.colorScheme.outline),
+            Icon(LucideIcons.wifiOff, size: 64, color: theme.colorScheme.outline),
             const SizedBox(height: 16),
             Text('لا يوجد اتصال بالشبكة',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
@@ -99,7 +100,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _refresh,
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(LucideIcons.refreshCw),
               label: const Text('إعادة المحاولة'),
             ),
           ],
@@ -198,7 +199,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline,
+                        Icon(LucideIcons.alertCircle,
                             color: Colors.red.shade600, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
@@ -207,7 +208,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   color: Colors.red.shade700, fontSize: 12)),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.refresh, size: 20),
+                          icon: const Icon(LucideIcons.refreshCw, size: 20),
                           onPressed: _refresh,
                         ),
                       ],
@@ -279,7 +280,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 color: AppTheme.infoColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.today_rounded,
+                              child: const Icon(LucideIcons.calendar,
                                   color: AppTheme.infoColor, size: 20),
                             ),
                             const SizedBox(width: 10),
@@ -295,7 +296,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               child: _TodayStatItem(
                                 label: 'تفعيلات',
                                 value: '${dash.todayActivations}',
-                                icon: Icons.add_circle_outline,
+                                icon: LucideIcons.plusCircle,
                                 color: AppTheme.successColor,
                               ),
                             ),
@@ -304,7 +305,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               child: _TodayStatItem(
                                 label: 'تمديدات',
                                 value: '${dash.todayExtensions}',
-                                icon: Icons.autorenew_rounded,
+                                icon: LucideIcons.repeat,
                                 color: AppTheme.infoColor,
                               ),
                             ),
@@ -358,8 +359,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                             child: Icon(
                               isActivation
-                                  ? Icons.person_add_alt_1
-                                  : Icons.autorenew,
+                                  ? LucideIcons.userPlus
+                                  : LucideIcons.repeat,
                               size: 18,
                               color: accentColor,
                             ),
@@ -404,7 +405,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   Row(
                                     children: [
                                       Icon(
-                                        Icons.alternate_email_rounded,
+                                        LucideIcons.atSign,
                                         size: 13,
                                         color: theme.colorScheme.onSurface
                                             .withValues(alpha: 0.45),
@@ -430,7 +431,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      Icons.event_outlined,
+                                      LucideIcons.calendar,
                                       size: 13,
                                       color: theme.colorScheme.onSurface
                                           .withValues(alpha: 0.42),
@@ -571,19 +572,19 @@ class _SubscribersRingCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    _RingStatRow(color: AppTheme.teal600, icon: Icons.check_circle_rounded,
+                    _RingStatRow(color: AppTheme.teal600, icon: LucideIcons.circleCheck,
                       label: 'الفعالين', value: active, onTap: onTapActive, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: AppTheme.teal400, icon: Icons.wifi_rounded,
+                    _RingStatRow(color: AppTheme.teal400, icon: LucideIcons.wifi,
                       label: 'متصل الآن', value: online, onTap: onTapOnline, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: const Color(0xFF90A4AE), icon: Icons.wifi_off_rounded,
+                    _RingStatRow(color: const Color(0xFF90A4AE), icon: LucideIcons.wifiOff,
                       label: 'غير متصل', value: offline, onTap: onTapOffline, isLoading: isLoading || offlineLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: const Color(0xFFEF5350), icon: Icons.timer_off_rounded,
+                    _RingStatRow(color: const Color(0xFFEF5350), icon: LucideIcons.timerOff,
                       label: 'منتهي', value: expired, onTap: onTapExpired, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: Colors.deepOrange, icon: Icons.warning_amber_rounded,
+                    _RingStatRow(color: Colors.deepOrange, icon: LucideIcons.triangleAlert,
                       label: 'قريب الانتهاء', value: nearExpiry, onTap: onTapNearExpiry, isLoading: isLoading),
                   ],
                 ),
@@ -750,7 +751,7 @@ class _RingStatRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.chevron_left, size: 16,
+          Icon(LucideIcons.chevronLeft, size: 16,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.2)),
         ],
       ),
@@ -900,7 +901,7 @@ class _BalancePointsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.account_balance_wallet_rounded,
+              const Icon(LucideIcons.wallet,
                   color: Colors.white, size: 18),
               const SizedBox(width: 6),
               Text('الرصيد',
@@ -923,7 +924,7 @@ class _BalancePointsCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.stars_rounded, color: Colors.amber.shade300, size: 14),
+                Icon(LucideIcons.star, color: Colors.amber.shade300, size: 14),
                 const SizedBox(width: 4),
                 Text('$points نقطة',
                     style: TextStyle(
@@ -962,7 +963,7 @@ class _DebtCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.credit_card_off_rounded,
+                const Icon(LucideIcons.creditCard,
                     color: Colors.white, size: 18),
                 const SizedBox(width: 6),
                 Text('المديونين',
@@ -984,7 +985,7 @@ class _DebtCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.people_rounded,
+                Icon(LucideIcons.users,
                     color: Colors.white.withValues(alpha: 0.6), size: 14),
                 const SizedBox(width: 4),
                 Text('$debtors مشترك',
@@ -1031,7 +1032,7 @@ class _WhatsAppCompactBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.chat_rounded,
+          Icon(LucideIcons.messageCircle,
               color: isConnected ? AppTheme.whatsappGreen : Colors.grey,
               size: 18),
           const SizedBox(width: 8),
@@ -1094,7 +1095,7 @@ class _AlertsSummaryCard extends StatelessWidget {
                   color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.notifications_active,
+                child: const Icon(LucideIcons.bellRing,
                     color: Colors.orange, size: 20),
               ),
               const SizedBox(width: 10),
@@ -1123,7 +1124,7 @@ class _AlertsSummaryCard extends StatelessWidget {
           const SizedBox(height: 14),
           if (expiredTodayCount > 0)
             _AlertRow(
-              icon: Icons.error_outline,
+              icon: LucideIcons.alertCircle,
               color: Colors.red,
               label: 'انتهى اليوم',
               count: expiredTodayCount,
@@ -1139,7 +1140,7 @@ class _AlertsSummaryCard extends StatelessWidget {
                 height: 16),
           if (nearExpiryCount > 0)
             _AlertRow(
-              icon: Icons.warning_amber_rounded,
+              icon: LucideIcons.triangleAlert,
               color: Colors.orange,
               label: 'قريب الانتهاء',
               count: nearExpiryCount,

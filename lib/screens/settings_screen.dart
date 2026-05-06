@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -137,7 +138,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         color: AppTheme.whatsappGreen.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.message_rounded,
+                      child: const Icon(LucideIcons.messageCircle,
                           color: AppTheme.whatsappGreen, size: 22),
                     ),
                     const SizedBox(width: 10),
@@ -148,7 +149,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 _FeatureToggle(
-                  icon: Icons.add_circle_outline,
+                  icon: LucideIcons.plusCircle,
                   title: 'إرسال عند التفعيل',
                   subtitle: 'إرسال رسالة ترحيب عند تفعيل مشترك جديد',
                   value: settings.features.sendOnActivation,
@@ -157,7 +158,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       .updateFeature('sendOnActivation', v),
                 ),
                 _FeatureToggle(
-                  icon: Icons.autorenew,
+                  icon: LucideIcons.repeat,
                   title: 'إرسال عند التمديد',
                   subtitle: 'إرسال قالب "إشعار التمديد" عند تمديد/تجديد اشتراك',
                   value: settings.features.sendOnExtension,
@@ -166,7 +167,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       .updateFeature('sendOnExtension', v),
                 ),
                 _FeatureToggle(
-                  icon: Icons.warning_amber_outlined,
+                  icon: LucideIcons.triangleAlert,
                   title: 'تذكير انتهاء',
                   subtitle: 'إرسال تحذير قبل انتهاء الاشتراك',
                   value: settings.features.expiryReminder,
@@ -175,7 +176,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       .updateFeature('expiryReminder', v),
                 ),
                 _FeatureToggle(
-                  icon: Icons.credit_card,
+                  icon: LucideIcons.creditCard,
                   title: 'تذكير ديون',
                   subtitle: 'إرسال تذكير تلقائي للمديونين',
                   value: settings.features.debtReminder,
@@ -184,7 +185,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       .updateFeature('debtReminder', v),
                 ),
                 _FeatureToggle(
-                  icon: Icons.event_busy,
+                  icon: LucideIcons.calendarOff,
                   title: 'إشعار انتهاء الخدمة',
                   subtitle: 'إرسال إشعار عند انتهاء الخدمة',
                   value: settings.features.serviceEndNotification,
@@ -193,7 +194,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       .updateFeature('serviceEndNotification', v),
                 ),
                 _FeatureToggle(
-                  icon: Icons.waving_hand,
+                  icon: LucideIcons.handHeart,
                   title: 'رسالة ترحيب',
                   subtitle: 'إرسال رسالة ترحيب للمشتركين الجدد',
                   value: settings.features.welcomeMessage,
@@ -245,11 +246,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         // 1) المظهر والإشعارات (مفتوحة بشكل افتراضي — الأكثر استعمالاً)
         _SettingsSection(
           title: 'المظهر والإشعارات',
-          icon: Icons.palette_outlined,
+          icon: LucideIcons.palette,
           initiallyExpanded: true,
           children: [
             _SettingTile(
-              icon: Icons.dark_mode_outlined,
+              icon: LucideIcons.moon,
               title: 'الوضع الداكن',
               trailing: Switch.adaptive(
                 value: themeMode == ThemeMode.dark,
@@ -258,7 +259,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             _SettingTile(
-              icon: Icons.notifications_active_outlined,
+              icon: LucideIcons.bellRing,
               title: 'إشعارات الجهاز',
               subtitle:
                   'استقبال تنبيهات الجهاز للاشتراكات + الإشعارات الفورية داخل التطبيق.',
@@ -277,14 +278,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
             ),
             _SettingTile(
-              icon: Icons.notifications_active_rounded,
+              icon: LucideIcons.bellRing,
               title: 'إعدادات الإشعارات',
               subtitle: 'تفعيل/إيقاف Push + ساعات صمت',
               iconColor: Colors.indigo,
               onTap: () => context.push('/notification-settings'),
             ),
             _SettingTile(
-              icon: Icons.router_rounded,
+              icon: LucideIcons.router,
               title: 'الإعدادات الافتراضية لأجهزتك',
               subtitle: 'بيانات دخول Ubiquiti و ONT',
               onTap: () => context.push('/device-defaults'),
@@ -296,32 +297,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (hasAdministration)
           _SettingsSection(
             title: 'الإدارة',
-            icon: Icons.tune_rounded,
+            icon: LucideIcons.sliders,
             children: [
               if (!isEmployee || empCan('employees.view'))
                 _SettingTile(
-                  icon: Icons.badge_outlined,
+                  icon: LucideIcons.badgeCheck,
                   title: 'الموظفون',
                   subtitle: 'إنشاء/تعديل حسابات الموظفين وصلاحياتهم',
                   onTap: () => context.push('/employees'),
                 ),
               if (canAccessManagers && empCan('managers.view'))
                 _SettingTile(
-                  icon: Icons.admin_panel_settings_outlined,
+                  icon: LucideIcons.shield,
                   title: 'المدراء الفرعيون',
                   subtitle: 'إظهار وإدارة قسم الأدمنية الفرعية',
                   onTap: () => context.push('/managers'),
                 ),
               if (canAccessManagers && empCan('packages.view'))
                 _SettingTile(
-                  icon: Icons.price_change_rounded,
+                  icon: LucideIcons.tag,
                   title: 'تسعير الباقات',
                   subtitle: 'إدارة أسعار الباقات للمدراء',
                   onTap: () => context.push('/packages'),
                 ),
               if (empCan('discounts.view'))
                 _SettingTile(
-                  icon: Icons.discount_rounded,
+                  icon: LucideIcons.percent,
                   title: 'قائمة الخصومات',
                   subtitle: 'إدارة خصومات المشتركين',
                   onTap: () => context.push('/discounts'),
@@ -333,19 +334,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (hasWhatsapp)
           _SettingsSection(
             title: 'التواصل (واتساب)',
-            icon: Icons.message_rounded,
+            icon: LucideIcons.messageCircle,
             iconColor: AppTheme.whatsappGreen,
             children: [
               if (empCan('whatsapp.connect'))
                 _SettingTile(
-                  icon: Icons.link,
+                  icon: LucideIcons.link,
                   title: 'اتصال واتساب',
                   subtitle: 'ربط/فصل الجلسة',
                   onTap: () => context.push('/whatsapp-connection'),
                 ),
               if (empCan('whatsapp.templates'))
                 _SettingTile(
-                  icon: Icons.tune_rounded,
+                  icon: LucideIcons.sliders,
                   title: 'ميزات واتساب',
                   subtitle: 'التحكم بالإرسال التلقائي',
                   iconColor: AppTheme.whatsappGreen,
@@ -353,7 +354,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               if (canAccessManagers && !isEmployee)
                 _SettingTile(
-                  icon: Icons.share_location_rounded,
+                  icon: LucideIcons.mapPin,
                   title: 'نطاق الإرسال',
                   subtitle: 'حدد أي مدراء فرعيين يغطيهم هذا الواتساب',
                   iconColor: AppTheme.whatsappGreen,
@@ -361,25 +362,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               if (empCan('whatsapp.templates'))
                 _SettingTile(
-                  icon: Icons.description_outlined,
+                  icon: LucideIcons.fileText,
                   title: 'قوالب الرسائل',
                   onTap: () => context.push('/templates'),
                 ),
               if (empCan('whatsapp.schedules'))
                 _SettingTile(
-                  icon: Icons.schedule,
+                  icon: LucideIcons.clock,
                   title: 'الجدولة',
                   onTap: () => context.push('/schedules'),
                 ),
               if (empCan('whatsapp.broadcast'))
                 _SettingTile(
-                  icon: Icons.campaign,
+                  icon: LucideIcons.megaphone,
                   title: 'بث الرسائل',
                   onTap: () => context.push('/broadcast'),
                 ),
               if (empCan('whatsapp.send'))
                 _SettingTile(
-                  icon: Icons.history,
+                  icon: LucideIcons.history,
                   title: 'سجل الرسائل',
                   onTap: () => context.push('/message-logs'),
                 ),
@@ -390,10 +391,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (hasArchives)
           _SettingsSection(
             title: 'الأرشيف والسجلات',
-            icon: Icons.folder_open_rounded,
+            icon: LucideIcons.folderOpen,
             children: [
               _SettingTile(
-                icon: Icons.receipt_long_rounded,
+                icon: LucideIcons.receipt,
                 title: 'أرشيف الوصولات',
                 subtitle: 'كل ما طُبع من تفعيل/تمديد/تسديد دين',
                 iconColor: AppTheme.primary,
@@ -401,7 +402,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               if (empCan('reports.expenses'))
                 _SettingTile(
-                  icon: Icons.account_balance_wallet_rounded,
+                  icon: LucideIcons.wallet,
                   title: 'الصرفيات',
                   subtitle: 'تسجيل حركات الصرف — تُخصم من الإيرادات',
                   onTap: () => context.push('/expenses'),
@@ -413,24 +414,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (!isEmployee)
           _SettingsSection(
             title: 'إدارة الديون',
-            icon: Icons.receipt_long_outlined,
+            icon: LucideIcons.receipt,
             children: [
               if (empCan('debts.import'))
                 _SettingTile(
-                  icon: Icons.file_download_outlined,
+                  icon: LucideIcons.download,
                   title: 'تصدير ديون المشتركين',
                   subtitle: 'تصدير ملف CSV بالمشتركين المديونين',
                   onTap: () => context.push('/debt-export'),
                 ),
               if (empCan('debts.import'))
                 _SettingTile(
-                  icon: Icons.file_upload_outlined,
+                  icon: LucideIcons.upload,
                   title: 'استيراد ديون المشتركين',
                   subtitle: 'استيراد ديون من ملف CSV',
                   onTap: () => context.push('/debt-import'),
                 ),
               _SettingTile(
-                icon: Icons.account_balance_outlined,
+                icon: LucideIcons.banknote,
                 title: 'ديون عليّ',
                 subtitle: 'ديون مسجلة عليك من قبل المدير الرئيسي',
                 onTap: () => context.push('/my-debts'),
@@ -441,10 +442,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         // 6) حول
         _SettingsSection(
           title: 'حول',
-          icon: Icons.info_outline,
+          icon: LucideIcons.info,
           children: [
             _SettingTile(
-              icon: Icons.info_outline,
+              icon: LucideIcons.info,
               title: 'عن التطبيق',
               subtitle: _appVersion == null
                   ? 'MyServices Radius'
@@ -489,7 +490,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 });
               }
             },
-            icon: const Icon(Icons.logout, color: Colors.red),
+            icon: const Icon(LucideIcons.logOut, color: Colors.red),
             label: const Text('تسجيل الخروج',
                 style: TextStyle(fontFamily: 'Cairo', color: Colors.red)),
             style: OutlinedButton.styleFrom(
@@ -610,7 +611,7 @@ class _SettingTile extends StatelessWidget {
             : null,
         trailing: trailing ??
             (onTap != null
-                ? Icon(Icons.arrow_forward_ios,
+                ? Icon(LucideIcons.chevronLeft,
                     size: 12,
                     color: Theme.of(context)
                         .colorScheme

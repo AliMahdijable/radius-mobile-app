@@ -84,7 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   color: theme.colorScheme.primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.campaign_rounded, color: theme.colorScheme.primary),
+                child: Icon(LucideIcons.megaphone, color: theme.colorScheme.primary),
               ),
               const SizedBox(width: 10),
               Expanded(child: Text(ann.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
@@ -105,7 +105,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     }
                   } catch (_) {}
                 },
-                icon: const Icon(Icons.open_in_new, size: 18),
+                icon: const Icon(LucideIcons.externalLink, size: 18),
                 label: Text(ann.actionLabel ?? 'المزيد'),
               ),
             FilledButton(
@@ -438,7 +438,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: const Icon(
-                                      Icons.notifications_active,
+                                      LucideIcons.bellRing,
                                       color: AppTheme.primary,
                                       size: 22,
                                     ),
@@ -469,7 +469,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    icon: const Icon(Icons.close, size: 20),
+                                    icon: const Icon(LucideIcons.x, size: 20),
                                     onPressed: () => Navigator.pop(ctx),
                                   ),
                                 ],
@@ -520,7 +520,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                             .dismissAll();
                                       },
                                       icon: const Icon(
-                                        Icons.clear_all,
+                                        LucideIcons.listX,
                                         size: 16,
                                       ),
                                       label: const Text(
@@ -554,7 +554,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'إشعارات التطبيق',
                                   count: appNotificationCount,
                                   color: AppTheme.primary,
-                                  icon: Icons.notifications_rounded,
+                                  icon: LucideIcons.bell,
                                 ),
                                 ...visibleAppNotifs.map(
                                   // Each notification is swipeable. We use
@@ -589,7 +589,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'انتهى اليوم',
                                   count: dash.expiredTodayCount,
                                   color: Colors.red,
-                                  icon: Icons.error_outline,
+                                  icon: LucideIcons.alertCircle,
                                 ),
                                 ...dash.expiredTodayList.map(
                                   (sub) => _AlertItem(
@@ -600,7 +600,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         sub['username']?.toString() ?? '',
                                     detail: 'انتهى الاشتراك اليوم',
                                     color: Colors.red,
-                                    icon: Icons.timer_off_rounded,
+                                    icon: LucideIcons.timerOff,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -611,7 +611,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'قريب الانتهاء',
                                   count: dash.nearExpiryCount,
                                   color: Colors.orange,
-                                  icon: Icons.warning_amber_rounded,
+                                  icon: LucideIcons.triangleAlert,
                                 ),
                                 ...dash.nearExpiryList.map((sub) {
                                   final detail = _formatRemaining(
@@ -625,7 +625,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         sub['username']?.toString() ?? '',
                                     detail: detail,
                                     color: Colors.orange,
-                                    icon: Icons.schedule,
+                                    icon: LucideIcons.clock,
                                   );
                                 }),
                                 const SizedBox(height: 12),
@@ -637,7 +637,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   child: Column(
                                     children: [
                                       Icon(
-                                        Icons.notifications_off_outlined,
+                                        LucideIcons.bellOff,
                                         size: 48,
                                         color: theme.colorScheme.onSurface
                                             .withValues(alpha: 0.3),
@@ -662,7 +662,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   child: Column(
                                     children: [
                                       Icon(
-                                        Icons.check_circle_outline,
+                                        LucideIcons.circleCheck,
                                         size: 48,
                                         color: Colors.green.withValues(
                                           alpha: 0.5,
@@ -811,10 +811,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ? Badge(
                       label: Text('$totalBellCount',
                           style: const TextStyle(fontSize: 9)),
-                      child: Icon(Icons.notifications_outlined,
+                      child: Icon(LucideIcons.bell,
                           color: Colors.orange.shade700, size: 22),
                     )
-                  : Icon(Icons.notifications_none,
+                  : Icon(LucideIcons.bell,
                       color: theme.colorScheme.onSurface
                           .withValues(alpha: 0.4),
                       size: 22),
@@ -869,7 +869,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.chat_rounded,
+                          LucideIcons.messageCircle,
                           size: 10,
                           color: wa.status.connected
                               ? AppTheme.whatsappGreen
@@ -915,7 +915,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               backgroundColor: theme.colorScheme.primary,
               onPressed: () => showSubscriberSearchSheet(context),
               tooltip: 'بحث عن مشترك',
-              child: const Icon(Icons.search_rounded, color: Colors.white),
+              child: const Icon(LucideIcons.search, color: Colors.white),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
@@ -1001,12 +1001,12 @@ class _AppNotificationItem extends StatelessWidget {
       _ => AppTheme.primary,
     };
     final icon = switch (notification.type) {
-      'cash_deposit' => Icons.account_balance_wallet_rounded,
-      'loan_deposit' => Icons.request_quote_rounded,
-      'withdraw_balance' => Icons.remove_circle_outline_rounded,
-      'pay_debt' => Icons.paid_rounded,
-      'add_points' => Icons.stars_rounded,
-      _ => Icons.notifications_rounded,
+      'cash_deposit' => LucideIcons.wallet,
+      'loan_deposit' => LucideIcons.fileText,
+      'withdraw_balance' => LucideIcons.minusCircle,
+      'pay_debt' => LucideIcons.banknote,
+      'add_points' => LucideIcons.star,
+      _ => LucideIcons.bell,
     };
 
     return Container(
@@ -1159,7 +1159,7 @@ Widget _dismissBackground(ThemeData theme, {required bool alignStart}) {
       borderRadius: BorderRadius.circular(12),
     ),
     alignment: alignStart ? Alignment.centerLeft : Alignment.centerRight,
-    child: Icon(Icons.delete_sweep_rounded,
+    child: Icon(LucideIcons.trash2,
         color: Colors.redAccent, size: 22),
   );
 }
