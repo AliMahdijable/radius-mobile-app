@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/discounts_provider.dart';
 import '../providers/subscribers_provider.dart';
@@ -219,7 +220,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
             onPressed: () {
               ref.read(discountsProvider.notifier).loadDiscounts();
             },
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(LucideIcons.refreshCw),
             tooltip: 'تحديث',
           ),
         ],
@@ -267,7 +268,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                   color: AppTheme.teal50,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.add_circle_outline_rounded,
+                child: const Icon(LucideIcons.circlePlus,
                     color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 10),
@@ -328,7 +329,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               decoration: const InputDecoration(
                 labelText: 'مبلغ مخصص',
                 suffixText: 'IQD',
-                prefixIcon: Icon(Icons.edit_rounded),
+                prefixIcon: Icon(LucideIcons.pencil),
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -341,7 +342,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
             textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'بحث عن مشترك...',
-              prefixIcon: Icon(Icons.search_rounded),
+              prefixIcon: Icon(LucideIcons.search),
             ),
             onChanged: (v) => setState(() => _subscriberSearchQuery = v.toLowerCase()),
           ),
@@ -367,7 +368,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.discount_rounded),
+                    : const Icon(LucideIcons.percent),
                 label: Text(
                   'إضافة الخصم (${_selectedSubscribers.length})',
                 ),
@@ -402,7 +403,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               );
             });
           },
-          icon: const Icon(Icons.select_all_rounded, size: 18),
+          icon: const Icon(LucideIcons.checkCheck, size: 18),
           label: const Text('تحديد الكل'),
           style: TextButton.styleFrom(
             foregroundColor: AppTheme.primary,
@@ -412,7 +413,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
         const SizedBox(width: 4),
         TextButton.icon(
           onPressed: () => setState(() => _selectedSubscribers.clear()),
-          icon: const Icon(Icons.deselect_rounded, size: 18),
+          icon: const Icon(LucideIcons.squareDashed, size: 18),
           label: const Text('إلغاء التحديد'),
           style: TextButton.styleFrom(
             foregroundColor: Colors.grey,
@@ -552,7 +553,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                   color: AppTheme.teal50,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.discount_rounded,
+                child: const Icon(LucideIcons.percent,
                     color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 10),
@@ -567,7 +568,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               if (allDiscounts.isNotEmpty)
                 TextButton.icon(
                   onPressed: _confirmDeleteAll,
-                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                  icon: const Icon(LucideIcons.trash2, size: 18),
                   label: const Text('إزالة الكل'),
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.dangerColor,
@@ -586,7 +587,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 labelText: 'بحث في الخصومات...',
-                prefixIcon: Icon(Icons.search_rounded),
+                prefixIcon: Icon(LucideIcons.search),
               ),
               onChanged: (v) =>
                   setState(() => _discountSearchQuery = v.toLowerCase()),
@@ -600,7 +601,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.discount_outlined,
+                    Icon(LucideIcons.percent,
                         size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 8),
                     Text(
@@ -735,7 +736,7 @@ class _SubscriberSelectCard extends StatelessWidget {
                     ),
                   ),
                   if (isSelected)
-                    const Icon(Icons.check_circle_rounded,
+                    const Icon(LucideIcons.circleCheck,
                         color: AppTheme.primary, size: 18),
                 ],
               ),
@@ -828,7 +829,7 @@ class _DiscountCard extends StatelessWidget {
                   color: AppTheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.person_rounded,
+                child: const Icon(LucideIcons.user,
                     color: AppTheme.primary, size: 20),
               ),
               const SizedBox(width: 10),
@@ -858,14 +859,14 @@ class _DiscountCard extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onEdit,
-                icon: const Icon(Icons.edit_rounded, size: 20),
+                icon: const Icon(LucideIcons.pencil, size: 20),
                 color: AppTheme.infoColor,
                 tooltip: 'تعديل',
                 visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 onPressed: onDelete,
-                icon: const Icon(Icons.delete_rounded, size: 20),
+                icon: const Icon(LucideIcons.trash2, size: 20),
                 color: AppTheme.dangerColor,
                 tooltip: 'حذف',
                 visualDensity: VisualDensity.compact,
@@ -918,7 +919,7 @@ class _DiscountCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.access_time_rounded,
+                Icon(LucideIcons.clock,
                     size: 14, color: Colors.grey.shade400),
                 const SizedBox(width: 4),
                 Text(

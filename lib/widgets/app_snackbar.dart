@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 import '../core/router/app_router.dart';
 import '../core/theme/app_theme.dart';
@@ -140,7 +141,7 @@ class AppSnackBar {
           bg: const Color(0xFFE8F5E9),
           fg: const Color(0xFF1B5E20),
           iconColor: AppTheme.successColor,
-          icon: Icons.check_circle_rounded,
+          icon: LucideIcons.circleCheck,
         );
       case _Kind.error:
         return _Spec(
@@ -149,7 +150,7 @@ class AppSnackBar {
           bg: const Color(0xFFFFEBEE),
           fg: const Color(0xFFB71C1C),
           iconColor: AppTheme.dangerColor,
-          icon: Icons.error_rounded,
+          icon: LucideIcons.circleAlert,
         );
       case _Kind.warning:
         return _Spec(
@@ -158,7 +159,7 @@ class AppSnackBar {
           bg: const Color(0xFFFFF8E1),
           fg: const Color(0xFFE65100),
           iconColor: AppTheme.warningColor,
-          icon: Icons.warning_amber_rounded,
+          icon: LucideIcons.triangleAlert,
         );
       case _Kind.info:
         return _Spec(
@@ -167,7 +168,7 @@ class AppSnackBar {
           bg: const Color(0xFFE3F2FD),
           fg: const Color(0xFF0D47A1),
           iconColor: AppTheme.infoColor,
-          icon: Icons.info_rounded,
+          icon: LucideIcons.info,
         );
       case _Kind.whatsapp:
         return _Spec(
@@ -176,7 +177,7 @@ class AppSnackBar {
           bg: const Color(0xFFE8F5E9),
           fg: const Color(0xFF1B5E20),
           iconColor: AppTheme.whatsappGreen,
-          icon: Icons.chat_rounded,
+          icon: LucideIcons.messageCircle,
         );
       case _Kind.whatsappError:
         return _Spec(
@@ -185,7 +186,7 @@ class AppSnackBar {
           bg: const Color(0xFFFFEBEE),
           fg: const Color(0xFFB71C1C),
           iconColor: AppTheme.dangerColor,
-          icon: Icons.chat_rounded,
+          icon: LucideIcons.messageCircle,
         );
     }
   }

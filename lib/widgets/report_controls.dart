@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../core/theme/app_theme.dart';
 import '../providers/reports_provider.dart';
 
@@ -61,7 +62,7 @@ class PaginationBar extends StatelessWidget {
           ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.chevron_right, size: 20),
+            icon: const Icon(LucideIcons.chevronRight, size: 20),
             onPressed: currentPage > 1 ? () => onPageChanged(currentPage - 1) : null,
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
@@ -70,7 +71,7 @@ class PaginationBar extends StatelessWidget {
           Text('$currentPage / ${totalPages > 0 ? totalPages : 1}',
               style: TextStyle(fontSize: 11, color: muted)),
           IconButton(
-            icon: const Icon(Icons.chevron_left, size: 20),
+            icon: const Icon(LucideIcons.chevronLeft, size: 20),
             onPressed: currentPage < totalPages ? () => onPageChanged(currentPage + 1) : null,
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
@@ -111,7 +112,7 @@ class ManagerFilter extends StatelessWidget {
           isDense: true,
           isExpanded: true,
           style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: theme.colorScheme.onSurface),
-          icon: Icon(Icons.person_outline, size: 14, color: theme.colorScheme.primary),
+          icon: Icon(LucideIcons.user, size: 14, color: theme.colorScheme.primary),
           items: [
             const DropdownMenuItem(value: 'all', child: Text('جميع المدراء')),
             ...managers.map((m) => DropdownMenuItem(

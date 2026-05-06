@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/templates_provider.dart';
 import '../providers/auth_provider.dart';
@@ -319,7 +320,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                               setSheetState(() {});
                             }
                           },
-                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                          icon: const Icon(LucideIcons.sparkles, size: 16),
                           label: const Text(
                             'توليد قالب جاهز',
                             style: TextStyle(fontSize: 11.5),
@@ -492,7 +493,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
       appBar: AppBar(title: const Text('قوالب الرسائل')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showEditSheet(null),
-        child: const Icon(Icons.add),
+        child: const Icon(LucideIcons.plus),
       ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -501,7 +502,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.description_outlined,
+                      Icon(LucideIcons.fileText,
                           size: 64,
                           color:
                               theme.colorScheme.onSurface.withOpacity(0.2)),
@@ -510,7 +511,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => _showEditSheet(null),
-                        icon: const Icon(Icons.add),
+                        icon: const Icon(LucideIcons.plus),
                         label: const Text('إنشاء قالب'),
                       ),
                     ],
@@ -540,7 +541,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(10)),
-                                child: Icon(Icons.description, size: 18,
+                                child: Icon(LucideIcons.fileText, size: 18,
                                     color: theme.colorScheme.primary),
                               ),
                               const SizedBox(width: 10),
@@ -583,7 +584,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                                 },
                               ),
                               IconButton(
-                                icon: Icon(Icons.delete_outline,
+                                icon: Icon(LucideIcons.trash2,
                                     color: theme.colorScheme.error, size: 20),
                                 visualDensity: VisualDensity.compact,
                                 padding: EdgeInsets.zero,

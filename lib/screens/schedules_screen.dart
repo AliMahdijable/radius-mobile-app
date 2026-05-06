@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/schedules_provider.dart';
 import '../models/schedule_model.dart';
@@ -227,7 +228,7 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                 child: Column(
                   children: [
                     _ScheduleCard(
-                      icon: Icons.warning_amber_rounded,
+                      icon: LucideIcons.triangleAlert,
                       accentColor: AppTheme.warningColor,
                       title: 'تنبيه قرب انتهاء الاشتراك',
                       isEnabled: expirySchedule?.isEnabled ?? false,
@@ -253,7 +254,7 @@ class _SchedulesScreenState extends ConsumerState<SchedulesScreen> {
                     ),
                     const SizedBox(height: 16),
                     _ScheduleCard(
-                      icon: Icons.credit_card_rounded,
+                      icon: LucideIcons.creditCard,
                       accentColor: AppTheme.infoColor,
                       title: 'تذكير بالديون المستحقة',
                       isEnabled: debtSchedule?.isEnabled ?? false,
@@ -425,7 +426,7 @@ class _ScheduleCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: InputDecorator(
               decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.access_time_rounded),
+                prefixIcon: Icon(LucideIcons.clock),
                 hintText: 'اختر الوقت',
               ),
               child: Text(
@@ -451,7 +452,7 @@ class _ScheduleCard extends StatelessWidget {
               textDirection: TextDirection.ltr,
               textAlign: TextAlign.left,
               decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.calendar_today_rounded),
+                prefixIcon: Icon(LucideIcons.calendar),
                 hintText: '1 - 30',
               ),
             ),
@@ -473,7 +474,7 @@ class _ScheduleCard extends StatelessWidget {
                 Expanded(
                   child: _ModeOption(
                     label: 'أسبوعي',
-                    icon: Icons.date_range_rounded,
+                    icon: LucideIcons.calendarRange,
                     selected: mode == 'weekly',
                     accent: accentColor,
                     onTap: () => onModeChanged!('weekly'),
@@ -483,7 +484,7 @@ class _ScheduleCard extends StatelessWidget {
                 Expanded(
                   child: _ModeOption(
                     label: 'شهري',
-                    icon: Icons.calendar_month_rounded,
+                    icon: LucideIcons.calendar,
                     selected: mode == 'monthly',
                     accent: accentColor,
                     onTap: () => onModeChanged!('monthly'),
@@ -561,7 +562,7 @@ class _ScheduleCard extends StatelessWidget {
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: onSave,
-            icon: const Icon(Icons.save_rounded, size: 20),
+            icon: const Icon(LucideIcons.save, size: 20),
             label: const Text('حفظ الجدولة'),
           ),
         ],

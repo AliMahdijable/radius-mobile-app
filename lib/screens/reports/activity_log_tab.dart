@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/network/dio_client.dart';
@@ -120,58 +121,58 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
       case 'MANAGER_ADD':
         return _ActionStyle(
           'إضافة مدير',
-          Icons.person_add_alt_1_rounded,
+          LucideIcons.userPlus,
           Colors.blue,
         );
       case 'MANAGER_EDIT':
         if (targetType == 'MANAGER' && managerAction == 'add_points') {
           return _ActionStyle(
             'إضافة نقاط للمدير',
-            Icons.stars_rounded,
+            LucideIcons.star,
             Colors.teal,
           );
         }
-        return _ActionStyle('تعديل مدير', Icons.manage_accounts_rounded, Colors.indigo);
+        return _ActionStyle('تعديل مدير', LucideIcons.userCog, Colors.indigo);
       case 'MANAGER_DELETE':
-        return _ActionStyle('حذف مدير', Icons.person_remove_rounded, Colors.red);
+        return _ActionStyle('حذف مدير', LucideIcons.userMinus, Colors.red);
       case 'SUBSCRIBER_ACTIVATE':
-        return _ActionStyle('تفعيل مشترك', Icons.check_circle_rounded, Colors.green);
+        return _ActionStyle('تفعيل مشترك', LucideIcons.circleCheck, Colors.green);
       case 'SUBSCRIBER_EXTEND':
-        return _ActionStyle('تمديد مشترك', Icons.schedule_rounded, Colors.amber.shade700);
+        return _ActionStyle('تمديد مشترك', LucideIcons.clock, Colors.amber.shade700);
       case 'SUBSCRIBER_ADD':
-        return _ActionStyle('إضافة مشترك', Icons.person_add_rounded, Colors.blue);
+        return _ActionStyle('إضافة مشترك', LucideIcons.userPlus, Colors.blue);
       case 'SUBSCRIBER_EDIT':
-        return _ActionStyle('تعديل مشترك', Icons.edit_rounded, Colors.purple);
+        return _ActionStyle('تعديل مشترك', LucideIcons.pencil, Colors.purple);
       case 'SUBSCRIBER_DELETE':
-        return _ActionStyle('حذف مشترك', Icons.person_remove_rounded, Colors.red);
+        return _ActionStyle('حذف مشترك', LucideIcons.userMinus, Colors.red);
       case 'BALANCE_ADD':
         if (targetType == 'MANAGER') {
           return _ActionStyle(
             paymentType == 'loan' ? 'إضافة دين مدير' : 'إيداع للمدير',
             paymentType == 'loan'
-                ? Icons.account_balance_wallet_rounded
-                : Icons.savings_rounded,
+                ? LucideIcons.wallet
+                : LucideIcons.piggyBank,
             paymentType == 'loan' ? Colors.deepOrange : Colors.green,
           );
         }
-        return _ActionStyle('إضافة دين', Icons.add_circle_rounded, Colors.red);
+        return _ActionStyle('إضافة دين', LucideIcons.circlePlus, Colors.red);
       case 'BALANCE_DEDUCT':
         if (targetType == 'MANAGER') {
-          return _ActionStyle('سحب من المدير', Icons.remove_circle_outline_rounded, Colors.orange);
+          return _ActionStyle('سحب من المدير', LucideIcons.circleMinus, Colors.orange);
         }
-        return _ActionStyle('تسديد دين', Icons.remove_circle_rounded, Colors.green);
+        return _ActionStyle('تسديد دين', LucideIcons.circleMinus, Colors.green);
       case 'PAYMENT_ADD':
       case 'DEBT_PAY':
         if (targetType == 'MANAGER') {
-          return _ActionStyle('تسديد دين مدير', Icons.account_balance_wallet_rounded, Colors.green);
+          return _ActionStyle('تسديد دين مدير', LucideIcons.wallet, Colors.green);
         }
-        return _ActionStyle('تسديد دين', Icons.account_balance_wallet_rounded, Colors.green);
+        return _ActionStyle('تسديد دين', LucideIcons.wallet, Colors.green);
       case 'LOGIN':
-        return _ActionStyle('تسجيل دخول', Icons.login_rounded, Colors.indigo);
+        return _ActionStyle('تسجيل دخول', LucideIcons.logIn, Colors.indigo);
       case 'WHATSAPP_SEND_MESSAGE':
-        return _ActionStyle('رسالة واتساب', Icons.chat_rounded, AppTheme.whatsappGreen);
+        return _ActionStyle('رسالة واتساب', LucideIcons.messageCircle, AppTheme.whatsappGreen);
       default:
-        return _ActionStyle(type.isNotEmpty ? type : 'أخرى', Icons.settings_rounded, Colors.grey);
+        return _ActionStyle(type.isNotEmpty ? type : 'أخرى', LucideIcons.settings, Colors.grey);
     }
   }
 
@@ -290,20 +291,20 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                 onSubmitted: (_) => _fetchActivities(),
                 decoration: InputDecoration(
                   hintText: 'بحث في الحركات...',
-                  prefixIcon: const Icon(Icons.search, size: 20),
+                  prefixIcon: const Icon(LucideIcons.search, size: 20),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                   suffixIcon: IconButton(
-                    icon: const Icon(Icons.filter_list_rounded, size: 20),
+                    icon: const Icon(LucideIcons.funnel, size: 20),
                     onPressed: _showDateFilter,
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 6),
-            _SmallBtn(Icons.download_rounded, _exportCsv),
+            _SmallBtn(LucideIcons.download, _exportCsv),
             const SizedBox(width: 4),
-            _SmallBtn(Icons.refresh_rounded, _fetchActivities),
+            _SmallBtn(LucideIcons.refreshCw, _fetchActivities),
           ]),
         ),
 
@@ -316,7 +317,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                 Chip(
                   label: Text(managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name,
                       style: const TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(Icons.close, size: 14),
+                  deleteIcon: const Icon(LucideIcons.x, size: 14),
                   onDeleted: () { setState(() => _managerId = 'all'); _fetchActivities(); },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -324,7 +325,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
               if (_employeeId != 'all')
                 Chip(
                   label: const Text('موظف محدّد', style: TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(Icons.close, size: 14),
+                  deleteIcon: const Icon(LucideIcons.x, size: 14),
                   onDeleted: () { setState(() => _employeeId = 'all'); _fetchActivities(); },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -333,7 +334,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                 Chip(
                   label: Text(_activityTypeOptions.firstWhere((o) => o['value'] == _activityType, orElse: () => {'label': _activityType})['label']!,
                       style: const TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(Icons.close, size: 14),
+                  deleteIcon: const Icon(LucideIcons.x, size: 14),
                   onDeleted: () { setState(() => _activityType = 'all'); _fetchActivities(); },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -358,7 +359,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
               : _activities.isEmpty
                   ? Center(
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.assessment_outlined, size: 48,
+                        Icon(LucideIcons.chartLine, size: 48,
                             color: theme.colorScheme.onSurface.withValues(alpha: .2)),
                         const SizedBox(height: 8),
                         Text('لا توجد حركات',

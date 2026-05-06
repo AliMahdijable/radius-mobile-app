@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
@@ -186,7 +187,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                   TextField(
                     decoration: const InputDecoration(
                       labelText: 'عنوان IP',
-                      prefixIcon: Icon(Icons.language, size: 18),
+                      prefixIcon: Icon(LucideIcons.languages, size: 18),
                       isDense: true,
                     ),
                     textDirection: TextDirection.ltr,
@@ -197,7 +198,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                   TextField(
                     decoration: const InputDecoration(
                       labelText: 'اسم المستخدم',
-                      prefixIcon: Icon(Icons.person, size: 18),
+                      prefixIcon: Icon(LucideIcons.user, size: 18),
                       isDense: true,
                     ),
                     textDirection: TextDirection.ltr,
@@ -208,7 +209,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                   TextField(
                     decoration: const InputDecoration(
                       labelText: 'عنوان MAC',
-                      prefixIcon: Icon(Icons.router, size: 18),
+                      prefixIcon: Icon(LucideIcons.router, size: 18),
                       isDense: true,
                     ),
                     textDirection: TextDirection.ltr,
@@ -233,7 +234,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                         child: InputDecorator(
                           decoration: const InputDecoration(
                             labelText: 'من تاريخ',
-                            prefixIcon: Icon(Icons.calendar_today, size: 16),
+                            prefixIcon: Icon(LucideIcons.calendar, size: 16),
                             isDense: true,
                           ),
                           child: Text(fromDate.isEmpty ? '—' : fromDate,
@@ -258,7 +259,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                         child: InputDecorator(
                           decoration: const InputDecoration(
                             labelText: 'إلى تاريخ',
-                            prefixIcon: Icon(Icons.calendar_today, size: 16),
+                            prefixIcon: Icon(LucideIcons.calendar, size: 16),
                             isDense: true,
                           ),
                           child: Text(toDate.isEmpty ? '—' : toDate,
@@ -342,7 +343,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _showAdvancedSearch,
-                icon: const Icon(Icons.manage_search_rounded, size: 18),
+                icon: const Icon(LucideIcons.search, size: 18),
                 label: Text(
                   _hasAdvancedFilters ? 'تعديل البحث المتقدم' : 'البحث المتقدم',
                   overflow: TextOverflow.ellipsis,
@@ -357,7 +358,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
             ),
             if (_hasAdvancedFilters) ...[
               const SizedBox(width: 6),
-              _SmallBtn(Icons.close_rounded, () {
+              _SmallBtn(LucideIcons.x, () {
                 setState(() {
                   _advIp = '';
                   _advUsername = '';
@@ -369,9 +370,9 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
               }),
             ],
             const SizedBox(width: 4),
-            _SmallBtn(Icons.download_rounded, _exportCsv),
+            _SmallBtn(LucideIcons.download, _exportCsv),
             const SizedBox(width: 4),
-            _SmallBtn(Icons.refresh_rounded, () => _load(page: _page)),
+            _SmallBtn(LucideIcons.refreshCw, () => _load(page: _page)),
           ]),
         ),
 
@@ -397,7 +398,7 @@ class _SessionsTabState extends ConsumerState<SessionsTab>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.wifi_off_rounded,
+                          Icon(LucideIcons.wifiOff,
                               size: 48,
                               color: theme.colorScheme.onSurface
                                   .withValues(alpha: .2)),
@@ -481,19 +482,19 @@ class _SessionRow extends StatelessWidget {
           ]),
           const SizedBox(height: 6),
           Row(children: [
-            _InfoChip(Icons.play_arrow_rounded, startTime, Colors.green),
+            _InfoChip(LucideIcons.play, startTime, Colors.green),
             const SizedBox(width: 8),
             _InfoChip(
-                Icons.stop_rounded, stopTime, isOnline ? Colors.green : Colors.red),
+                LucideIcons.square, stopTime, isOnline ? Colors.green : Colors.red),
           ]),
           const SizedBox(height: 4),
           Row(children: [
-            _InfoChip(Icons.arrow_downward_rounded, dataIn, Colors.blue),
+            _InfoChip(LucideIcons.arrowDown, dataIn, Colors.blue),
             const SizedBox(width: 8),
-            _InfoChip(Icons.arrow_upward_rounded, dataOut, Colors.orange),
+            _InfoChip(LucideIcons.arrowUp, dataOut, Colors.orange),
             if (nasIp.isNotEmpty) ...[
               const SizedBox(width: 8),
-              _InfoChip(Icons.router_rounded, nasIp, Colors.grey),
+              _InfoChip(LucideIcons.router, nasIp, Colors.grey),
             ],
           ]),
           if (terminateCause.isNotEmpty && terminateCause != '—')

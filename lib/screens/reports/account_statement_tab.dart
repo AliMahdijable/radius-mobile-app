@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
@@ -269,12 +270,12 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'بحث عن مشترك...',
-                prefixIcon: const Icon(Icons.person_search_rounded, size: 20),
+                prefixIcon: const Icon(LucideIcons.userSearch, size: 20),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 suffixIcon: _selectedSub != null
                     ? IconButton(
-                        icon: const Icon(Icons.close, size: 16),
+                        icon: const Icon(LucideIcons.x, size: 16),
                         onPressed: () {
                           _searchCtrl.clear();
                           ref.read(reportsProvider.notifier).clearStatement();
@@ -290,13 +291,13 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           ),
           const SizedBox(width: 6),
           _SmallBtn(
-            Icons.picture_as_pdf_rounded,
+            LucideIcons.fileText,
             hasData ? _handleSharePdf : null,
             tooltip: 'مشاركة PDF',
           ),
           const SizedBox(width: 4),
           _SmallBtn(
-            Icons.print_rounded,
+            LucideIcons.printer,
             hasData ? _handlePrint : null,
             tooltip: 'طباعة',
           ),
@@ -306,7 +307,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                   child: Padding(padding: EdgeInsets.all(6),
                     child: CircularProgressIndicator(strokeWidth: 2)))
               : _SmallBtn(
-                  Icons.send_rounded,
+                  LucideIcons.send,
                   hasData ? _handleSendWhatsApp : null,
                   color: const Color(0xFF25D366),
                   tooltip: 'إرسال واتساب',
@@ -361,7 +362,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                   leading: CircleAvatar(
                     radius: 16,
                     backgroundColor: AppTheme.primary.withValues(alpha: .1),
-                    child: Icon(Icons.person,
+                    child: Icon(LucideIcons.user,
                         size: 16, color: AppTheme.primary),
                   ),
                   onTap: () => _selectSubscriber(sub),
@@ -385,7 +386,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(children: [
-                Icon(Icons.date_range,
+                Icon(LucideIcons.calendarRange,
                     size: 14, color: theme.colorScheme.primary),
                 const SizedBox(width: 4),
                 Expanded(
@@ -393,7 +394,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                       style: const TextStyle(fontSize: 11),
                       overflow: TextOverflow.ellipsis),
                 ),
-                Icon(Icons.filter_list_rounded,
+                Icon(LucideIcons.funnel,
                     size: 14,
                     color: theme.colorScheme.onSurface
                         .withValues(alpha: .4)),
@@ -435,7 +436,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Column(children: [
-                  Icon(Icons.receipt_long_rounded,
+                  Icon(LucideIcons.receipt,
                       size: 48,
                       color: theme.colorScheme.onSurface
                           .withValues(alpha: .2)),
@@ -466,7 +467,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 80),
             child: Column(children: [
-              Icon(Icons.person_search_rounded,
+              Icon(LucideIcons.userSearch,
                   size: 56,
                   color:
                       theme.colorScheme.onSurface.withValues(alpha: .15)),

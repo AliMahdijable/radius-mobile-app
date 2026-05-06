@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/dio_client.dart';
@@ -76,7 +77,7 @@ class _EmployeeFilterDropdownState
         isDense: true,
         decoration: InputDecoration(
           labelText: 'الموظف',
-          prefixIcon: const Icon(Icons.badge_outlined, size: 18),
+          prefixIcon: const Icon(LucideIcons.badgeCheck, size: 18),
           isDense: true,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -30,7 +31,7 @@ class ManagerMovementsScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'تحديث',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(LucideIcons.refreshCw),
             onPressed: () =>
                 ref.invalidate(managerMovementsProvider(manager.id)),
           ),
@@ -68,7 +69,7 @@ class ManagerMovementsScreen extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.inbox_outlined,
+                              LucideIcons.inbox,
                               size: 56,
                               color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                             ),
@@ -136,7 +137,7 @@ class _Header extends ConsumerWidget {
                   radius: 18,
                   backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
                   child: const Icon(
-                    Icons.admin_panel_settings_outlined,
+                    LucideIcons.shield,
                     color: AppTheme.primary,
                     size: 18,
                   ),
@@ -175,25 +176,25 @@ class _Header extends ConsumerWidget {
               runSpacing: 6,
               children: [
                 _StatPill(
-                  icon: Icons.account_balance_wallet_outlined,
+                  icon: LucideIcons.wallet,
                   label: 'الرصيد',
                   amount: manager.credit,
                   color: AppTheme.successColor,
                 ),
                 _StatPill(
-                  icon: Icons.account_balance_outlined,
+                  icon: LucideIcons.banknote,
                   label: 'دين الساس',
                   amount: manager.debt,
                   color: AppTheme.warningColor,
                 ),
                 _StatPill(
-                  icon: Icons.receipt_long_rounded,
+                  icon: LucideIcons.receipt,
                   label: 'ديون أخرى',
                   amount: customRemaining,
                   color: AppTheme.infoColor,
                 ),
                 _StatPill(
-                  icon: Icons.summarize_rounded,
+                  icon: LucideIcons.fileText,
                   label: 'مجموع الديون',
                   amount: totalDebt,
                   color: AppTheme.dangerColor,
@@ -270,63 +271,63 @@ class _MovementCard extends ConsumerWidget {
           case 'deposit_cash':
             return (
               title: 'إضافة رصيد نقدي',
-              icon: Icons.add_card_rounded,
+              icon: LucideIcons.plus,
               color: AppTheme.successColor,
               sign: '+',
             );
           case 'deposit_loan':
             return (
               title: 'إضافة رصيد آجل',
-              icon: Icons.add_card_rounded,
+              icon: LucideIcons.plus,
               color: AppTheme.warningColor,
               sign: '+',
             );
           case 'withdraw':
             return (
               title: 'سحب رصيد',
-              icon: Icons.remove_circle_outline_rounded,
+              icon: LucideIcons.circleMinus,
               color: AppTheme.dangerColor,
               sign: '-',
             );
           case 'points':
             return (
               title: 'نقاط',
-              icon: Icons.stars_rounded,
+              icon: LucideIcons.star,
               color: AppTheme.secondary,
               sign: '+',
             );
           case 'sas_pay_debt':
             return (
               title: 'تسديد دين الساس',
-              icon: Icons.account_balance_outlined,
+              icon: LucideIcons.banknote,
               color: AppTheme.warningColor,
               sign: '-',
             );
         }
         return (
           title: 'حركة',
-          icon: Icons.bolt_rounded,
+          icon: LucideIcons.zap,
           color: AppTheme.primary,
           sign: '',
         );
       case 'debt_created':
         return (
           title: 'دين جديد',
-          icon: Icons.receipt_long_rounded,
+          icon: LucideIcons.receipt,
           color: AppTheme.infoColor,
           sign: '+',
         );
       case 'debt_payment':
         return (
           title: 'تسديد دين آخر',
-          icon: Icons.payments_outlined,
+          icon: LucideIcons.banknote,
           color: AppTheme.infoColor,
           sign: '-',
         );
       default:
         return (
           title: movement.rowType,
-          icon: Icons.help_outline,
+          icon: LucideIcons.circleHelp,
           color: AppTheme.primary,
           sign: '',
         );
@@ -388,7 +389,7 @@ class _MovementCard extends ConsumerWidget {
                 Row(
                   children: [
                     Icon(
-                      Icons.schedule_rounded,
+                      LucideIcons.clock,
                       size: 12,
                       color: cs.onSurface.withValues(alpha: 0.55),
                     ),
@@ -464,7 +465,7 @@ class _MovementMenu extends ConsumerWidget {
     return PopupMenuButton<String>(
       tooltip: 'خيارات',
       icon: Icon(
-        Icons.more_vert_rounded,
+        LucideIcons.ellipsisVertical,
         size: 20,
         color: color.withValues(alpha: 0.7),
       ),
@@ -478,7 +479,7 @@ class _MovementMenu extends ConsumerWidget {
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.edit_outlined, size: 18),
+                  leading: Icon(LucideIcons.pencil, size: 18),
                   title: Text('تعديل المبلغ والملاحظة'),
                 ),
               ),
@@ -487,7 +488,7 @@ class _MovementMenu extends ConsumerWidget {
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_outline_rounded, size: 18),
+                  leading: Icon(LucideIcons.trash2, size: 18),
                   title: Text('حذف من السجل'),
                 ),
               ),
@@ -499,7 +500,7 @@ class _MovementMenu extends ConsumerWidget {
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.edit_outlined, size: 18),
+                  leading: Icon(LucideIcons.pencil, size: 18),
                   title: Text('تعديل الدين'),
                 ),
               ),
@@ -508,7 +509,7 @@ class _MovementMenu extends ConsumerWidget {
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_outline_rounded, size: 18),
+                  leading: Icon(LucideIcons.trash2, size: 18),
                   title: Text('حذف الدين'),
                 ),
               ),
@@ -520,7 +521,7 @@ class _MovementMenu extends ConsumerWidget {
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_outline_rounded, size: 18),
+                  leading: Icon(LucideIcons.trash2, size: 18),
                   title: Text('حذف التسديد'),
                 ),
               ),

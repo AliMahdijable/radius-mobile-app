@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
@@ -169,12 +170,12 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
             onChanged: (v) => setState(() { _searchQuery = v; _logsPage = 1; }),
             decoration: InputDecoration(
               hintText: 'بحث باسم المشترك أو المدير...',
-              prefixIcon: const Icon(Icons.search, size: 20),
+              prefixIcon: const Icon(LucideIcons.search, size: 20),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
+                      icon: const Icon(LucideIcons.x, size: 18),
                       onPressed: () => setState(() { _searchQuery = ''; _logsPage = 1; }),
                     )
                   : null,
@@ -194,23 +195,23 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
-                    Icon(Icons.date_range, size: 14, color: theme.colorScheme.primary),
+                    Icon(LucideIcons.calendarRange, size: 14, color: theme.colorScheme.primary),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text('$_dateFrom — $_dateTo',
                           style: const TextStyle(fontSize: 11),
                           overflow: TextOverflow.ellipsis),
                     ),
-                    Icon(Icons.tune, size: 14,
+                    Icon(LucideIcons.slidersHorizontal, size: 14,
                         color: theme.colorScheme.onSurface.withValues(alpha: .4)),
                   ]),
                 ),
               ),
             ),
             const SizedBox(width: 6),
-            _ActionBtn(Icons.download_rounded, 'تصدير', _exportCsv),
+            _ActionBtn(LucideIcons.download, 'تصدير', _exportCsv),
             const SizedBox(width: 4),
-            _ActionBtn(Icons.refresh_rounded, 'تحديث', _load),
+            _ActionBtn(LucideIcons.refreshCw, 'تحديث', _load),
           ]),
           const SizedBox(height: 8),
 
@@ -254,35 +255,35 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                 _KpiItem(
                   label: 'إجمالي التحصيلات',
                   value: AppHelpers.formatMoney(collections),
-                  icon: Icons.trending_up_rounded,
+                  icon: LucideIcons.trendingUp,
                   colors: const [Color(0xFF10b981), Color(0xFF059669)],
                 ),
               if (activationsTotal > 0)
                 _KpiItem(
                   label: 'تفعيل + تمديد',
                   value: activationsTotal.toInt().toString(),
-                  icon: Icons.check_circle_rounded,
+                  icon: LucideIcons.circleCheck,
                   colors: const [Color(0xFFf59e0b), Color(0xFFd97706)],
                 ),
               if (debts > 0)
                 _KpiItem(
                   label: 'إجمالي الديون',
                   value: AppHelpers.formatMoney(debts),
-                  icon: Icons.payments_rounded,
+                  icon: LucideIcons.banknote,
                   colors: const [Color(0xFF16a34a), Color(0xFF0f9d58)],
                 ),
               if (expenses > 0)
                 _KpiItem(
                   label: 'الصرفيات',
                   value: AppHelpers.formatMoney(expenses),
-                  icon: Icons.account_balance_wallet_rounded,
+                  icon: LucideIcons.wallet,
                   colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
                 ),
               if (managerDebtsOutstanding > 0)
                 _KpiItem(
                   label: 'ديون المدراء',
                   value: AppHelpers.formatMoney(managerDebtsOutstanding),
-                  icon: Icons.assignment_ind_rounded,
+                  icon: LucideIcons.userCheck,
                   colors: const [Color(0xFFf59e0b), Color(0xFFb45309)],
                 ),
             ],
@@ -293,7 +294,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           _KpiHero(
             label: 'صافي الربح',
             value: AppHelpers.formatMoney(netProfit),
-            icon: Icons.savings_rounded,
+            icon: LucideIcons.piggyBank,
             colors: const [Color(0xFF0ea5e9), Color(0xFF0284c7)],
           ),
           const SizedBox(height: 20),
@@ -531,7 +532,7 @@ class _EmptyKpis extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.bar_chart_rounded, size: 22, color: cs.onSurfaceVariant),
+          Icon(LucideIcons.chartBar, size: 22, color: cs.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -911,7 +912,7 @@ class _RemovableChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text(label, style: const TextStyle(fontSize: 10)),
-      deleteIcon: const Icon(Icons.close, size: 14),
+      deleteIcon: const Icon(LucideIcons.x, size: 14),
       onDeleted: onRemove,
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

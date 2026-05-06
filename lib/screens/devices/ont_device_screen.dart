@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/services/huawei_ont_service.dart';
 import '../../models/ont_info.dart';
@@ -62,7 +63,7 @@ class _OntDeviceScreenState extends State<OntDeviceScreen> {
         title: Text('ONT — ${widget.args.host}'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(LucideIcons.refreshCw),
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -100,13 +101,13 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+          Icon(LucideIcons.circleAlert, size: 48, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 12),
           Text(message, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(LucideIcons.refreshCw),
             label: const Text('إعادة المحاولة'),
           ),
         ],
@@ -132,7 +133,7 @@ class _OpticalCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.sensors, color: cs.primary),
+                Icon(LucideIcons.radio, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
                   'معلومات الضوء (Optical)',
@@ -265,7 +266,7 @@ class _OpticalCard extends StatelessWidget {
         ),
         _cell(
           Icon(
-            r.ok ? Icons.check_circle : Icons.cancel,
+            r.ok ? LucideIcons.circleCheck : LucideIcons.circleX,
             color: r.ok ? goodColor : badColor,
             size: 18,
           ),
@@ -315,7 +316,7 @@ class _VoipCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.phone, color: cs.primary),
+                Icon(LucideIcons.phone, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
                   'خطوط الهاتف (VoIP)',
@@ -341,13 +342,13 @@ class _VoipCard extends StatelessWidget {
     final IconData statusIcon;
     if (line.isUp) {
       statusColor = goodColor;
-      statusIcon = Icons.check_circle;
+      statusIcon = LucideIcons.circleCheck;
     } else if (line.isDisabled) {
       statusColor = cs.onSurfaceVariant;
-      statusIcon = Icons.remove_circle_outline;
+      statusIcon = LucideIcons.circleMinus;
     } else {
       statusColor = cs.error;
-      statusIcon = Icons.cancel;
+      statusIcon = LucideIcons.circleX;
     }
 
     final errorLabel = line.registerError.isEmpty ? '' : line.registerError.replaceAll('_', ' ');

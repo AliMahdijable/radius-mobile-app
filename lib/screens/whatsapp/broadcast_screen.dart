@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/messages_provider.dart';
@@ -35,7 +36,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'general',
     hasCustomMessage: true,
     hasSubscriberSelection: false,
-    icon: Icons.campaign,
+    icon: LucideIcons.megaphone,
   ),
   _TabType.specific: _TabConfig(
     key: 'specific',
@@ -43,7 +44,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'general',
     hasCustomMessage: true,
     hasSubscriberSelection: true,
-    icon: Icons.person_search,
+    icon: LucideIcons.userSearch,
   ),
   _TabType.expiredSpecific: _TabConfig(
     key: 'expired_specific',
@@ -51,7 +52,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'expired',
     hasCustomMessage: true,
     hasSubscriberSelection: true,
-    icon: Icons.timer_off,
+    icon: LucideIcons.timerOff,
   ),
   _TabType.debtors: _TabConfig(
     key: 'debtors',
@@ -59,7 +60,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'debtors',
     hasCustomMessage: false,
     hasSubscriberSelection: false,
-    icon: Icons.credit_card,
+    icon: LucideIcons.creditCard,
   ),
   _TabType.debtorsSpecific: _TabConfig(
     key: 'debtors_specific',
@@ -67,7 +68,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'debtors',
     hasCustomMessage: false,
     hasSubscriberSelection: true,
-    icon: Icons.credit_score,
+    icon: LucideIcons.creditCard,
   ),
 };
 
@@ -289,7 +290,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock_outline,
+                Icon(LucideIcons.lock,
                     size: 48,
                     color: theme.colorScheme.onSurface.withValues(alpha: .3)),
                 const SizedBox(height: 12),
@@ -384,7 +385,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
                       color: Colors.white,
                     ),
                   )
-                : const Icon(Icons.campaign),
+                : const Icon(LucideIcons.megaphone),
             label: Text(
               _submitting ? 'جاري الإرسال...' : 'بدء البث',
               style: const TextStyle(
@@ -414,7 +415,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (broadcast.isPaused)
-                const Icon(Icons.pause_circle, color: Colors.orange, size: 24)
+                const Icon(LucideIcons.circlePause, color: Colors.orange, size: 24)
               else
                 const SizedBox(
                   width: 20,
@@ -468,7 +469,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           OutlinedButton.icon(
             onPressed: () =>
                 ref.read(messagesProvider.notifier).cancelBroadcast(),
-            icon: const Icon(Icons.stop, color: Colors.red),
+            icon: const Icon(LucideIcons.square, color: Colors.red),
             label:
                 const Text('إيقاف البث', style: TextStyle(fontFamily: 'Cairo', color: Colors.red)),
             style: OutlinedButton.styleFrom(
@@ -491,7 +492,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
       ),
       child: Column(
         children: [
-          const Icon(Icons.check_circle, color: Colors.green, size: 40),
+          const Icon(LucideIcons.circleCheck, color: Colors.green, size: 40),
           const SizedBox(height: 10),
           const Text(
             'اكتمل البث',
@@ -530,10 +531,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           textAlign: TextAlign.left,
           decoration: InputDecoration(
             hintText: 'بحث عن مشترك...',
-            prefixIcon: const Icon(Icons.search),
+            prefixIcon: const Icon(LucideIcons.search),
             suffixIcon: (_searchQueries[tab] ?? '').isNotEmpty
                 ? IconButton(
-                    icon: const Icon(Icons.clear),
+                    icon: const Icon(LucideIcons.x),
                     onPressed: () {
                       _searchControllers[tab]!.clear();
                       setState(() => _searchQueries[tab] = '');
@@ -553,13 +554,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           children: [
             _ActionChip(
               label: 'تحديد الكل',
-              icon: Icons.select_all,
+              icon: LucideIcons.checkCheck,
               onTap: () => _selectAll(tab),
             ),
             const SizedBox(width: 8),
             _ActionChip(
               label: 'إلغاء التحديد',
-              icon: Icons.deselect,
+              icon: LucideIcons.squareDashed,
               onTap: () => _deselectAll(tab),
             ),
             const Spacer(),
@@ -661,7 +662,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: AppTheme.warningColor, size: 28),
+          Icon(LucideIcons.info, color: AppTheme.warningColor, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -782,7 +783,7 @@ class _SubscriberTile extends StatelessWidget {
                       ),
                       if (subscriber.displayPhone.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        Icon(Icons.phone, size: 12, color: Colors.grey[500]),
+                        Icon(LucideIcons.phone, size: 12, color: Colors.grey[500]),
                         const SizedBox(width: 2),
                         Text(
                           subscriber.displayPhone,

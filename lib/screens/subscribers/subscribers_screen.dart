@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -74,14 +75,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
   static const _sortFields = [
-    _SortFieldDef('username', 'اسم المستخدم', Icons.person_rounded),
-    _SortFieldDef('firstname', 'الاسم', Icons.badge_rounded),
-    _SortFieldDef('name', 'الباقة', Icons.inventory_2_rounded),
-    _SortFieldDef('mobile', 'رقم الهاتف', Icons.phone_rounded),
-    _SortFieldDef('expiration', 'تاريخ الانتهاء', Icons.event_rounded),
-    _SortFieldDef('remaining_days', 'الأيام المتبقية', Icons.schedule_rounded),
-    _SortFieldDef('notes', 'الديون', Icons.account_balance_wallet_rounded),
-    _SortFieldDef('parent_username', 'تابع إلى', Icons.supervisor_account_rounded),
+    _SortFieldDef('username', 'اسم المستخدم', LucideIcons.user),
+    _SortFieldDef('firstname', 'الاسم', LucideIcons.badgeCheck),
+    _SortFieldDef('name', 'الباقة', LucideIcons.package),
+    _SortFieldDef('mobile', 'رقم الهاتف', LucideIcons.phone),
+    _SortFieldDef('expiration', 'تاريخ الانتهاء', LucideIcons.calendar),
+    _SortFieldDef('remaining_days', 'الأيام المتبقية', LucideIcons.clock),
+    _SortFieldDef('notes', 'الديون', LucideIcons.wallet),
+    _SortFieldDef('parent_username', 'تابع إلى', LucideIcons.userCog),
   ];
 
   @override
@@ -225,7 +226,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Icon(Icons.sort_rounded, size: 20, color: theme.colorScheme.primary),
+                      Icon(LucideIcons.arrowUpDown, size: 20, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Text('ترتيب حسب', style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w700,
@@ -274,7 +275,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               )),
                               if (isSelected) ...[
                                 const SizedBox(width: 4),
-                                Icon(Icons.check_rounded, size: 14,
+                                Icon(LucideIcons.check, size: 14,
                                     color: theme.colorScheme.primary),
                               ],
                             ],
@@ -286,7 +287,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Icon(Icons.swap_vert_rounded, size: 20, color: theme.colorScheme.primary),
+                      Icon(LucideIcons.arrowUpDown, size: 20, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Text('الاتجاه', style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w700,
@@ -299,7 +300,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     children: [
                       Expanded(
                         child: _DirectionBtn(
-                          icon: Icons.arrow_upward_rounded,
+                          icon: LucideIcons.arrowUp,
                           label: 'تصاعدي',
                           selected: selectedDir == 'asc',
                           onTap: () {
@@ -313,7 +314,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _DirectionBtn(
-                          icon: Icons.arrow_downward_rounded,
+                          icon: LucideIcons.arrowDown,
                           label: 'تنازلي',
                           selected: selectedDir == 'desc',
                           onTap: () {
@@ -429,7 +430,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(ctx),
-                      icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                      icon: Icon(LucideIcons.x, color: theme.colorScheme.onSurface.withOpacity(0.4)),
                       style: IconButton.styleFrom(
                         backgroundColor: theme.colorScheme.onSurface.withOpacity(0.06),
                       ),
@@ -451,11 +452,11 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   ),
                   children: [
                     // Connection info section
-                    _sheetSection(theme, 'معلومات الاتصال', Icons.wifi_rounded),
+                    _sheetSection(theme, 'معلومات الاتصال', LucideIcons.wifi),
                     const SizedBox(height: 8),
                     _sheetInfoTile(
                       theme,
-                      icon: Icons.lan_rounded,
+                      icon: LucideIcons.network,
                       label: 'عنوان IP',
                       value: sub.ipAddress ?? '—',
                       valueColor: AppTheme.teal600,
@@ -466,12 +467,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             )
                           : null,
                       trailing: sub.ipAddress != null && sub.ipAddress!.isNotEmpty
-                          ? const Icon(Icons.open_in_new_rounded, size: 14, color: AppTheme.teal400)
+                          ? const Icon(LucideIcons.externalLink, size: 14, color: AppTheme.teal400)
                           : null,
                     ),
                     _sheetInfoTile(
                       theme,
-                      icon: Icons.router_rounded,
+                      icon: LucideIcons.router,
                       label: 'MAC Address',
                       value: sub.macAddress ?? '—',
                       isLtr: true,
@@ -486,20 +487,20 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
                     _sheetInfoTile(
                       theme,
-                      icon: Icons.timer_outlined,
+                      icon: LucideIcons.timer,
                       label: 'مدة الجلسة',
                       value: SubscriberCard.formatDuration(sub.sessionTime),
                     ),
 
                     const SizedBox(height: 16),
-                    _sheetSection(theme, 'الاستهلاك', Icons.data_usage_rounded),
+                    _sheetSection(theme, 'الاستهلاك', LucideIcons.chartPie),
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
                           child: _sheetStatCard(
                             theme,
-                            icon: Icons.download_rounded,
+                            icon: LucideIcons.download,
                             label: 'التحميل',
                             value: SubscriberCard.formatBytes(sub.downloadBytes),
                             color: AppTheme.teal600,
@@ -509,7 +510,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         Expanded(
                           child: _sheetStatCard(
                             theme,
-                            icon: Icons.upload_rounded,
+                            icon: LucideIcons.upload,
                             label: 'الرفع',
                             value: SubscriberCard.formatBytes(sub.uploadBytes),
                             color: AppTheme.infoColor,
@@ -519,12 +520,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
 
                     const SizedBox(height: 16),
-                    _sheetSection(theme, 'معلومات الاشتراك', Icons.inventory_2_rounded),
+                    _sheetSection(theme, 'معلومات الاشتراك', LucideIcons.package),
                     const SizedBox(height: 8),
                     if (sub.profileName != null && sub.profileName!.isNotEmpty)
                       _sheetInfoTile(
                         theme,
-                        icon: Icons.card_membership_rounded,
+                        icon: LucideIcons.idCard,
                         label: 'الباقة',
                         value: sub.profileName!,
                         valueColor: theme.colorScheme.primary,
@@ -532,14 +533,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     if (sub.expiration != null && sub.expiration!.isNotEmpty)
                       _sheetInfoTile(
                         theme,
-                        icon: Icons.event_rounded,
+                        icon: LucideIcons.calendar,
                         label: 'تاريخ الانتهاء',
                         value: AppHelpers.formatExpiration(sub.expiration),
                         isLtr: true,
                       ),
                     _sheetInfoTile(
                       theme,
-                      icon: Icons.schedule_rounded,
+                      icon: LucideIcons.clock,
                       label: 'الأيام المتبقية',
                       value: sub.isExpired
                           ? 'منتهي'
@@ -549,7 +550,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     if (sub.deviceVendor != null && sub.deviceVendor != 'unknown' && sub.deviceVendor!.isNotEmpty)
                       _sheetInfoTile(
                         theme,
-                        icon: Icons.devices_rounded,
+                        icon: LucideIcons.monitor,
                         label: 'اسم الجهاز',
                         value: sub.deviceVendor!,
                       ),
@@ -592,7 +593,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               }
                             }
                           },
-                          icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                          icon: const Icon(LucideIcons.power, size: 18),
                           label: const Text('فصل المستخدم', style: TextStyle(fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red,
@@ -709,14 +710,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   }
 
   static const _filters = [
-    _FilterDef('all', 'الكل', Icons.people_alt_rounded, AppTheme.primary),
-    _FilterDef('active', 'الفعالين', Icons.check_circle_rounded, AppTheme.teal600),
-    _FilterDef('online', 'متصل', Icons.wifi_rounded, AppTheme.teal400),
-    _FilterDef('offline', 'غير متصل', Icons.wifi_off_rounded, Color(0xFF90A4AE)),
-    _FilterDef('disabled', 'معطّل', Icons.block_rounded, Color(0xFF6D4C41)),
-    _FilterDef('expired', 'المنتهي', Icons.timer_off_rounded, Color(0xFFC62828)),
-    _FilterDef('debtors', 'المديونين', Icons.credit_card_off_rounded, Color(0xFFF57F17)),
-    _FilterDef('nearExpiry', 'قريب الانتهاء', Icons.warning_amber_rounded, Colors.deepOrange),
+    _FilterDef('all', 'الكل', LucideIcons.users, AppTheme.primary),
+    _FilterDef('active', 'الفعالين', LucideIcons.circleCheck, AppTheme.teal600),
+    _FilterDef('online', 'متصل', LucideIcons.wifi, AppTheme.teal400),
+    _FilterDef('offline', 'غير متصل', LucideIcons.wifiOff, Color(0xFF90A4AE)),
+    _FilterDef('disabled', 'معطّل', LucideIcons.ban, Color(0xFF6D4C41)),
+    _FilterDef('expired', 'المنتهي', LucideIcons.timerOff, Color(0xFFC62828)),
+    _FilterDef('debtors', 'المديونين', LucideIcons.creditCard, Color(0xFFF57F17)),
+    _FilterDef('nearExpiry', 'قريب الانتهاء', LucideIcons.triangleAlert, Colors.deepOrange),
   ];
 
   @override
@@ -859,10 +860,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   },
                   decoration: InputDecoration(
                     hintText: 'بحث عن مشترك...',
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: const Icon(LucideIcons.search),
                     suffixIcon: _isSearchMode
                         ? IconButton(
-                            icon: const Icon(Icons.close),
+                            icon: const Icon(LucideIcons.x),
                             onPressed: () {
                               _searchController.clear();
                               setState(() {
@@ -938,7 +939,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.admin_panel_settings_rounded, size: 16,
+                Icon(LucideIcons.shield, size: 16,
                     color: theme.colorScheme.onSurface.withOpacity(0.4)),
                 const SizedBox(width: 6),
                 Expanded(
@@ -975,7 +976,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               style: TextStyle(fontSize: 12,
                                   color: theme.colorScheme.onSurface.withOpacity(0.5))),
                           isExpanded: true,
-                          icon: Icon(Icons.keyboard_arrow_down, size: 18,
+                          icon: Icon(LucideIcons.chevronDown, size: 18,
                               color: theme.colorScheme.onSurface.withOpacity(0.4)),
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                               color: theme.colorScheme.onSurface,
@@ -1070,7 +1071,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       color: const Color(0xFFF57F17).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.credit_card_off_rounded,
+                    child: const Icon(LucideIcons.creditCard,
                         size: 18, color: Color(0xFFF57F17)),
                   ),
                   const SizedBox(width: 10),
@@ -1126,7 +1127,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                 const Spacer(),
                 if (totalPages > 1) ...[
                   _NavBtn(
-                    icon: Icons.chevron_right,
+                    icon: LucideIcons.chevronRight,
                     enabled: _currentPage > 0,
                     onTap: () => setState(() => _currentPage--),
                   ),
@@ -1141,7 +1142,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
                   ),
                   _NavBtn(
-                    icon: Icons.chevron_left,
+                    icon: LucideIcons.chevronLeft,
                     enabled: _currentPage < totalPages - 1,
                     onTap: () => setState(() => _currentPage++),
                   ),
@@ -1191,8 +1192,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               : displayList.isEmpty
                   ? EmptyState(
                       icon: _isSearchMode
-                          ? Icons.search_off
-                          : Icons.people_outline,
+                          ? LucideIcons.searchX
+                          : LucideIcons.users,
                       title: _isSearchMode
                           ? 'لا توجد نتائج'
                           : 'لا يوجد مشتركين',
@@ -1317,7 +1318,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      Icon(Icons.network_check_rounded, size: 20,
+                      Icon(LucideIcons.network, size: 20,
                           color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Expanded(
@@ -1342,7 +1343,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             });
                             setSheetState(() {});
                           },
-                          icon: const Icon(Icons.clear_rounded, size: 16),
+                          icon: const Icon(LucideIcons.x, size: 16),
                           label: const Text('إلغاء',
                               style: TextStyle(fontSize: 11)),
                         ),
@@ -1410,10 +1411,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
 ///   sort=sig_desc → karar(-58), ahmed(-72), [ONT rows → end]   (closer to 0 = better)
 ///   sort=lan_desc → karar(100), ahmed(10), [ONT rows → end]    (Mbps int)
 const List<_DeviceSortMetric> _deviceSortMetrics = [
-  _DeviceSortMetric('rx',  'إشارة الضوئي', Icons.fiber_manual_record_rounded, Color(0xFF6A1B9A)),
-  _DeviceSortMetric('sig', 'إشارة النانو', Icons.signal_cellular_alt_rounded, Color(0xFF1565C0)),
-  _DeviceSortMetric('ccq', 'CCQ',           Icons.show_chart_rounded,         Color(0xFF1565C0)),
-  _DeviceSortMetric('lan', 'الإيثرنت',      Icons.lan_rounded,                Color(0xFF1565C0)),
+  _DeviceSortMetric('rx',  'إشارة الضوئي', LucideIcons.circle, Color(0xFF6A1B9A)),
+  _DeviceSortMetric('sig', 'إشارة النانو', LucideIcons.signal, Color(0xFF1565C0)),
+  _DeviceSortMetric('ccq', 'CCQ',           LucideIcons.chartLine,         Color(0xFF1565C0)),
+  _DeviceSortMetric('lan', 'الإيثرنت',      LucideIcons.network,                Color(0xFF1565C0)),
 ];
 
 /// Numeric sort key for the active sort metric. Returns null when the
@@ -1489,7 +1490,7 @@ class _DeviceFilterButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.network_check_rounded, size: 18, color: accent),
+            Icon(LucideIcons.network, size: 18, color: accent),
             if (active) ...[
               const SizedBox(width: 4),
               Container(
@@ -1532,7 +1533,7 @@ class _ActiveDeviceFilterBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Icon(Icons.network_check_rounded, size: 14, color: accent),
+          const Icon(LucideIcons.network, size: 14, color: accent),
           const SizedBox(width: 6),
           Expanded(
             child: Column(
@@ -1577,7 +1578,7 @@ class _ActiveDeviceFilterBanner extends StatelessWidget {
             onTap: onClear,
             child: const Padding(
               padding: EdgeInsets.all(2),
-              child: Icon(Icons.close_rounded, size: 14, color: accent),
+              child: Icon(LucideIcons.x, size: 14, color: accent),
             ),
           ),
         ],
@@ -1627,7 +1628,7 @@ class _SortMetricRow extends StatelessWidget {
             ),
           ),
           _DirChip(
-            icon: Icons.arrow_upward_rounded,
+            icon: LucideIcons.arrowUp,
             label: 'الأعلى',
             selected: descSelected,
             color: def.color,
@@ -1635,7 +1636,7 @@ class _SortMetricRow extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           _DirChip(
-            icon: Icons.arrow_downward_rounded,
+            icon: LucideIcons.arrowDown,
             label: 'الأدنى',
             selected: ascSelected,
             color: def.color,
@@ -1759,10 +1760,10 @@ class _SortButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.sort_rounded, size: 18, color: theme.colorScheme.primary),
+            Icon(LucideIcons.arrowUpDown, size: 18, color: theme.colorScheme.primary),
             const SizedBox(width: 4),
             Icon(
-              isAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+              isAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown,
               size: 14, color: theme.colorScheme.primary,
             ),
           ],

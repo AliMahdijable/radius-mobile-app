@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -43,12 +44,12 @@ class _ManagerDebtDetailScreenState
         actions: [
           IconButton(
             tooltip: 'تعديل',
-            icon: const Icon(Icons.edit_outlined),
+            icon: const Icon(LucideIcons.pencil),
             onPressed: () => _openEdit(context, debt),
           ),
           IconButton(
             tooltip: 'حذف',
-            icon: const Icon(Icons.delete_outline),
+            icon: const Icon(LucideIcons.trash2),
             onPressed: () => _confirmDelete(context, debt),
           ),
         ],
@@ -187,7 +188,7 @@ class _DebtorHeader extends StatelessWidget {
               ),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.person_outline_rounded, color: cs.primary, size: 26),
+            child: Icon(LucideIcons.user, color: cs.primary, size: 26),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -202,7 +203,7 @@ class _DebtorHeader extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.calendar_month_rounded,
+                    Icon(LucideIcons.calendar,
                         size: 13, color: cs.onSurfaceVariant),
                     const SizedBox(width: 4),
                     Text(dateStr,
@@ -293,7 +294,7 @@ class _HeroRemaining extends StatelessWidget {
           Row(
             children: [
               Icon(
-                isDone ? Icons.check_circle_rounded : Icons.hourglass_bottom_rounded,
+                isDone ? LucideIcons.circleCheck : LucideIcons.hourglass,
                 color: heroColor,
                 size: 20,
               ),
@@ -376,7 +377,7 @@ class _SecondaryAmounts extends StatelessWidget {
       children: [
         Expanded(
           child: _MiniStat(
-            icon: Icons.request_quote_outlined,
+            icon: LucideIcons.fileText,
             label: 'المبلغ الأصلي',
             value: debt.amount,
             color: cs.primary,
@@ -385,7 +386,7 @@ class _SecondaryAmounts extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _MiniStat(
-            icon: Icons.savings_outlined,
+            icon: LucideIcons.piggyBank,
             label: 'المسدّد',
             value: debt.paidAmount,
             color: Colors.green.shade700,
@@ -470,7 +471,7 @@ class _ActionsRow extends StatelessWidget {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: onPartial,
-            icon: const Icon(Icons.payments_outlined, size: 18),
+            icon: const Icon(LucideIcons.banknote, size: 18),
             label: const Text('تسديد جزئي'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 13),
@@ -482,7 +483,7 @@ class _ActionsRow extends StatelessWidget {
         Expanded(
           child: FilledButton.icon(
             onPressed: onFull,
-            icon: const Icon(Icons.done_all, size: 18),
+            icon: const Icon(LucideIcons.checkCheck, size: 18),
             label: const Text('تسديد كامل'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 13),
@@ -511,7 +512,7 @@ class _WhatsAppButton extends StatelessWidget {
                 width: 16, height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Icon(Icons.send_rounded, size: 18),
+            : const Icon(LucideIcons.send, size: 18),
         label: Text(sending ? 'جاري الإرسال...' : 'إرسال تذكير واتساب'),
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.green.shade700,
@@ -545,7 +546,7 @@ class _PaymentsSection extends ConsumerWidget {
                 color: cs.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.history_rounded, size: 16, color: cs.primary),
+              child: Icon(LucideIcons.history, size: 16, color: cs.primary),
             ),
             const SizedBox(width: 8),
             const Text(
@@ -594,7 +595,7 @@ class _PaymentsSection extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+                    Icon(LucideIcons.info, size: 18, color: cs.onSurfaceVariant),
                     const SizedBox(width: 10),
                     Text(
                       'لا توجد تسديدات بعد',
@@ -726,7 +727,7 @@ class _PaymentRow extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.check_circle,
+                              const Icon(LucideIcons.circleCheck,
                                   color: Colors.green, size: 16),
                               const SizedBox(width: 5),
                               Text(
@@ -757,7 +758,7 @@ class _PaymentRow extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         child: Icon(
-                          Icons.delete_outline,
+                          LucideIcons.trash2,
                           size: 18,
                           color: Colors.red.shade300,
                         ),
@@ -821,7 +822,7 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
       title: Row(
         children: [
-          Icon(Icons.send_rounded, color: Colors.green.shade700, size: 20),
+          Icon(LucideIcons.send, color: Colors.green.shade700, size: 20),
           const SizedBox(width: 8),
           const Text('تذكير واتساب'),
         ],
@@ -849,7 +850,7 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
                         color: Colors.green.withOpacity(0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.phone_rounded, color: Colors.green.shade700, size: 18),
+                      child: Icon(LucideIcons.phone, color: Colors.green.shade700, size: 18),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -875,7 +876,7 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
                     ),
                     TextButton.icon(
                       onPressed: () => setState(() => _editing = true),
-                      icon: const Icon(Icons.edit, size: 14),
+                      icon: const Icon(LucideIcons.pencil, size: 14),
                       label: const Text('تعديل', style: TextStyle(fontSize: 12)),
                       style: TextButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -904,7 +905,7 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                      Icon(LucideIcons.info, size: 16, color: Colors.orange.shade700),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -924,7 +925,7 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
                 decoration: const InputDecoration(
                   labelText: 'رقم الواتساب',
                   hintText: '07801234567',
-                  prefixIcon: Icon(Icons.phone_outlined),
+                  prefixIcon: Icon(LucideIcons.phone),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -951,7 +952,7 @@ class _WhatsAppDialogState extends State<_WhatsAppDialog> {
             }
             Navigator.pop(context, v);
           },
-          icon: const Icon(Icons.send_rounded, size: 18),
+          icon: const Icon(LucideIcons.send, size: 18),
           label: const Text('إرسال'),
           style: FilledButton.styleFrom(
             backgroundColor: Colors.green.shade700,
@@ -1090,7 +1091,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
               decoration: const InputDecoration(
                 labelText: 'المبلغ المسدّد',
                 suffixText: 'IQD',
-                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
+                prefixIcon: Icon(LucideIcons.dollarSign, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -1101,7 +1102,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
               runSpacing: 6,
               children: [
                 ActionChip(
-                  avatar: const Icon(Icons.done_all, size: 16),
+                  avatar: const Icon(LucideIcons.checkCheck, size: 16),
                   label: Text('ملء (${_formatThousands(remaining.toStringAsFixed(0))})',
                       style: const TextStyle(fontSize: 12)),
                   onPressed: () => _setExact(remaining.toInt()),
@@ -1126,7 +1127,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
               controller: _note,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(Icons.note_outlined),
+                prefixIcon: Icon(LucideIcons.fileText),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -1139,7 +1140,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'تاريخ التسديد',
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: Icon(LucideIcons.calendar),
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
@@ -1161,7 +1162,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
                   width: 14, height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(Icons.save_outlined, size: 18),
+              : const Icon(LucideIcons.save, size: 18),
           label: Text(_saving ? 'حفظ...' : 'حفظ'),
         ),
       ],
@@ -1261,7 +1262,7 @@ class _EditDebtDialogState extends ConsumerState<_EditDebtDialog> {
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
                 suffixText: 'IQD',
-                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
+                prefixIcon: Icon(LucideIcons.dollarSign, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -1271,7 +1272,7 @@ class _EditDebtDialogState extends ConsumerState<_EditDebtDialog> {
               controller: _note,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة',
-                prefixIcon: Icon(Icons.note_outlined),
+                prefixIcon: Icon(LucideIcons.fileText),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -1284,7 +1285,7 @@ class _EditDebtDialogState extends ConsumerState<_EditDebtDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'تاريخ الدين',
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: Icon(LucideIcons.calendar),
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
@@ -1306,7 +1307,7 @@ class _EditDebtDialogState extends ConsumerState<_EditDebtDialog> {
                   width: 14, height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(Icons.save_outlined, size: 18),
+              : const Icon(LucideIcons.save, size: 18),
           label: Text(_saving ? 'حفظ...' : 'حفظ'),
         ),
       ],

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -127,14 +128,14 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         actions: [
           IconButton(
             tooltip: 'تحديث',
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(LucideIcons.refreshCw),
             onPressed: _loading ? null : _load,
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _loading || _catalog == null ? null : () => _openEditor(),
-        icon: const Icon(Icons.person_add_alt_1),
+        icon: const Icon(LucideIcons.userPlus),
         label: const Text('موظف جديد'),
       ),
       body: _loading
@@ -146,7 +147,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline,
+                        Icon(LucideIcons.circleAlert,
                             size: 48,
                             color: theme.colorScheme.error.withOpacity(0.6)),
                         const SizedBox(height: 12),
@@ -212,7 +213,7 @@ class _EmployeeCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
-                child: Icon(Icons.person, color: theme.colorScheme.primary),
+                child: Icon(LucideIcons.user, color: theme.colorScheme.primary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -267,13 +268,13 @@ class _EmployeeCard extends StatelessWidget {
                       runSpacing: 4,
                       children: [
                         _Chip(
-                          icon: Icons.security,
+                          icon: LucideIcons.shieldCheck,
                           text: '$activePerms صلاحية',
                           color: theme.colorScheme.primary,
                         ),
                         if (emp.phone?.isNotEmpty == true)
                           _Chip(
-                            icon: Icons.phone,
+                            icon: LucideIcons.phone,
                             text: emp.phone!,
                             color: Colors.grey,
                           ),
@@ -283,7 +284,7 @@ class _EmployeeCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
+                icon: const Icon(LucideIcons.trash2, size: 20),
                 color: AppTheme.dangerColor,
                 onPressed: onDelete,
                 tooltip: 'حذف',
@@ -506,7 +507,7 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
                       flex: 2,
                       child: ElevatedButton.icon(
                         onPressed: _saving ? null : _save,
-                        icon: const Icon(Icons.save_outlined),
+                        icon: const Icon(LucideIcons.save),
                         label: Text(_saving ? 'جاري الحفظ...' : 'حفظ'),
                       ),
                     ),
@@ -530,7 +531,7 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
           enabled: widget.existing == null, // username غير قابل للتعديل
           decoration: const InputDecoration(
             labelText: 'اسم المستخدم *',
-            prefixIcon: Icon(Icons.person_outline),
+            prefixIcon: Icon(LucideIcons.user),
             helperText: 'يستعمله الموظف لتسجيل الدخول',
           ),
           textDirection: TextDirection.ltr,
@@ -540,7 +541,7 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
           controller: _fullNameCtrl,
           decoration: const InputDecoration(
             labelText: 'الاسم العربي',
-            prefixIcon: Icon(Icons.badge_outlined),
+            prefixIcon: Icon(LucideIcons.badgeCheck),
             helperText: 'يظهر بالتقارير ووصل الطباعة',
           ),
         ),
@@ -550,7 +551,7 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
           keyboardType: TextInputType.phone,
           decoration: const InputDecoration(
             labelText: 'الهاتف',
-            prefixIcon: Icon(Icons.phone_outlined),
+            prefixIcon: Icon(LucideIcons.phone),
           ),
           textDirection: TextDirection.ltr,
         ),
@@ -562,7 +563,7 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
             labelText: widget.existing == null
                 ? 'كلمة المرور *'
                 : 'كلمة مرور جديدة (اختياري)',
-            prefixIcon: const Icon(Icons.lock_outline),
+            prefixIcon: const Icon(LucideIcons.lock),
             helperText: widget.existing == null
                 ? 'الموظف يستعملها مع اسم المستخدم'
                 : 'اتركه فارغاً إذا لا تريد تغييرها',
@@ -604,13 +605,13 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
           runSpacing: 6,
           children: widget.catalog.presets.entries.map((e) {
             return ActionChip(
-              avatar: const Icon(Icons.flash_on, size: 14),
+              avatar: const Icon(LucideIcons.zap, size: 14),
               label: Text(e.value.label),
               onPressed: () => _applyPreset(e.key),
             );
           }).toList()
             ..add(ActionChip(
-              avatar: const Icon(Icons.refresh, size: 14),
+              avatar: const Icon(LucideIcons.refreshCw, size: 14),
               label: const Text('استعادة الافتراضي'),
               onPressed: () => setState(() {
                 _perms = Map<String, bool>.from(widget.catalog.defaults);
@@ -648,7 +649,7 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.select_all, size: 18),
+                        icon: const Icon(LucideIcons.checkCheck, size: 18),
                         tooltip: 'الكل',
                         onPressed: () => setState(() {
                           for (final p in perms) {

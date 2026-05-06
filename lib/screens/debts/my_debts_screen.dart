@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/helpers.dart';
@@ -41,7 +42,7 @@ class MyDebtsScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade400),
+                        Icon(LucideIcons.circleCheck, size: 64, color: Colors.green.shade400),
                         const SizedBox(height: 12),
                         const Text('لا توجد ديون عليك',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -77,7 +78,7 @@ class MyDebtsScreen extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.account_balance_wallet_outlined,
+                      Icon(LucideIcons.wallet,
                           size: 32, color: Colors.redAccent),
                       const SizedBox(width: 12),
                       Expanded(

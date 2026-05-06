@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
@@ -65,7 +66,7 @@ class ConnectionStatusCard extends ConsumerWidget {
           radius: 16,
           child: Padding(
             padding: const EdgeInsets.all(4),
-            child: Icon(Icons.settings_outlined, size: 16, color: cs.onSurfaceVariant),
+            child: Icon(LucideIcons.settings, size: 16, color: cs.onSurfaceVariant),
           ),
         ),
         // Globe — opens the Ubiquiti admin page (http://<ip>) in the
@@ -77,7 +78,7 @@ class ConnectionStatusCard extends ConsumerWidget {
             radius: 16,
             child: Padding(
               padding: const EdgeInsets.all(4),
-              child: Icon(Icons.public, size: 16, color: cs.primary),
+              child: Icon(LucideIcons.globe, size: 16, color: cs.primary),
             ),
           ),
         // Refresh — disabled while a probe is in flight so the admin
@@ -90,7 +91,7 @@ class ConnectionStatusCard extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(4),
             child: Icon(
-              Icons.refresh_rounded,
+              LucideIcons.refreshCw,
               size: 16,
               color: isLoading
                   ? cs.onSurfaceVariant.withValues(alpha: 0.35)
@@ -104,7 +105,7 @@ class ConnectionStatusCard extends ConsumerWidget {
     final headerLeading = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.router_rounded, size: 16, color: cs.primary),
+        Icon(LucideIcons.router, size: 16, color: cs.primary),
         const SizedBox(width: 8),
         Text('الاتصال', style: labelStyle),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
@@ -90,12 +91,12 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
             onChanged: (v) => setState(() { _searchQuery = v; _page = 1; }),
             decoration: InputDecoration(
               hintText: 'بحث باسم المشترك...',
-              prefixIcon: const Icon(Icons.search, size: 20),
+              prefixIcon: const Icon(LucideIcons.search, size: 20),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
+                      icon: const Icon(LucideIcons.x, size: 18),
                       onPressed: () => setState(() { _searchQuery = ''; _page = 1; }),
                     )
                   : null,
@@ -115,7 +116,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
-                    Icon(Icons.filter_list_rounded, size: 14, color: theme.colorScheme.primary),
+                    Icon(LucideIcons.funnel, size: 14, color: theme.colorScheme.primary),
                     const SizedBox(width: 6),
                     Text('الفلاتر', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: .7))),
                     if (_managerId != 'all') ...[
@@ -127,7 +128,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                       ),
                     ],
                     const Spacer(),
-                    Icon(Icons.tune, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                    Icon(LucideIcons.slidersHorizontal, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
                   ]),
                 ),
               ),
@@ -140,7 +141,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                 borderRadius: BorderRadius.circular(10),
                 onTap: _load,
                 child: Padding(padding: const EdgeInsets.all(8),
-                    child: Icon(Icons.refresh_rounded, size: 18, color: theme.colorScheme.primary)),
+                    child: Icon(LucideIcons.refreshCw, size: 18, color: theme.colorScheme.primary)),
               ),
             ),
           ]),
@@ -155,7 +156,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                   Chip(
                     label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
                         style: const TextStyle(fontSize: 10)),
-                    deleteIcon: const Icon(Icons.close, size: 14),
+                    deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () { setState(() => _managerId = 'all'); _load(); },
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -163,7 +164,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                 if (_employeeId != 'all')
                   Chip(
                     label: const Text('موظف محدد', style: TextStyle(fontSize: 10)),
-                    deleteIcon: const Icon(Icons.close, size: 14),
+                    deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () { setState(() => _employeeId = 'all'); _load(); },
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -312,7 +313,7 @@ class _ActivationRow extends StatelessWidget {
     final isExtend = (record['action_type'] ?? '').toString() == 'SUBSCRIBER_EXTEND';
     final label = isExtend ? 'تمديد' : 'تفعيل';
     final color = isExtend ? AppTheme.warningColor : AppTheme.successColor;
-    final icon = isExtend ? Icons.schedule_rounded : Icons.check_circle_rounded;
+    final icon = isExtend ? LucideIcons.clock : LucideIcons.circleCheck;
     final firstname = (record['user_firstname'] ?? '').toString().trim();
     final lastname = (record['user_lastname'] ?? '').toString().trim();
     final fullname = [firstname, lastname].where((s) => s.isNotEmpty).join(' ');
@@ -380,7 +381,7 @@ class _EmptyState extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 60),
       child: Column(children: [
-        Icon(Icons.inbox_rounded, size: 48, color: theme.colorScheme.onSurface.withValues(alpha: .2)),
+        Icon(LucideIcons.inbox, size: 48, color: theme.colorScheme.onSurface.withValues(alpha: .2)),
         const SizedBox(height: 8),
         Text(message, style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: .4))),
       ]),

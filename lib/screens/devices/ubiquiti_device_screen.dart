@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/services/ubiquiti_service.dart';
 import '../../models/ubiquiti_info.dart';
@@ -54,7 +55,7 @@ class _UbiquitiDeviceScreenState extends State<UbiquitiDeviceScreen> {
       appBar: AppBar(
         title: Text('Ubiquiti — ${widget.args.host}'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loading ? null : _load),
+          IconButton(icon: const Icon(LucideIcons.refreshCw), onPressed: _loading ? null : _load),
         ],
       ),
       body: _loading
@@ -89,11 +90,11 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+          Icon(LucideIcons.circleAlert, size: 48, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 12),
           Text(message, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
-          FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+          FilledButton.icon(onPressed: onRetry, icon: const Icon(LucideIcons.refreshCw), label: const Text('إعادة المحاولة')),
         ],
       ),
     );
@@ -118,7 +119,7 @@ class _HeaderCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.router, size: 20),
+                const Icon(LucideIcons.router, size: 20),
                 const SizedBox(width: 8),
                 Text(status.hostname.isEmpty ? '—' : status.hostname,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
@@ -176,28 +177,28 @@ class _MetricsCard extends StatelessWidget {
         child: Row(
           children: [
             _Tile(
-              icon: Icons.network_check,
+              icon: LucideIcons.network,
               label: 'CCQ',
               value: status.ccqPercent != null ? '${status.ccqPercent}%' : '—',
               color: _ccqColor(cs),
             ),
             _divider(),
             _Tile(
-              icon: Icons.lan,
+              icon: LucideIcons.network,
               label: 'LAN',
               value: status.lanSpeedShort ?? '—',
               color: _lanColor(cs),
             ),
             _divider(),
             _Tile(
-              icon: Icons.arrow_upward,
+              icon: LucideIcons.arrowUp,
               label: 'TX',
               value: txStr,
               color: cs.onSurface,
             ),
             _divider(),
             _Tile(
-              icon: Icons.arrow_downward,
+              icon: LucideIcons.arrowDown,
               label: 'RX',
               value: rxStr,
               color: cs.onSurface,
@@ -265,7 +266,7 @@ class _WirelessCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.wifi, color: cs.primary),
+                Icon(LucideIcons.wifi, color: cs.primary),
                 const SizedBox(width: 8),
                 const Text('الاتصال اللاسلكي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -64,7 +65,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.lock_outline, size: 48, color: cs.onSurfaceVariant),
+                    Icon(LucideIcons.lock, size: 48, color: cs.onSurfaceVariant),
                     const SizedBox(height: 12),
                     const Text(
                       'هذه الخاصية متاحة فقط للمدراء الذين لديهم مدراء فرعيون.',
@@ -84,7 +85,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
           ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _openCreate(context, acc.subAdmins),
-            icon: const Icon(Icons.add_rounded),
+            icon: const Icon(LucideIcons.plus),
             label: const Text('إضافة دين'),
           ),
           body: RefreshIndicator(
@@ -123,7 +124,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.inbox_outlined,
+                              Icon(LucideIcons.inbox,
                                   size: 64, color: cs.onSurfaceVariant.withOpacity(0.5)),
                               const SizedBox(height: 12),
                               const Text(
@@ -202,7 +203,7 @@ class _SummaryGrid extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatCard(
-                  icon: Icons.hourglass_bottom_rounded,
+                  icon: LucideIcons.hourglass,
                   label: 'المتبقي',
                   valueText: AppHelpers.formatMoney(s.totalRemaining),
                   color: Colors.redAccent,
@@ -211,7 +212,7 @@ class _SummaryGrid extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatCard(
-                  icon: Icons.savings_outlined,
+                  icon: LucideIcons.piggyBank,
                   label: 'المسدّد',
                   valueText: AppHelpers.formatMoney(s.totalPaid),
                   color: Colors.green.shade700,
@@ -224,7 +225,7 @@ class _SummaryGrid extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatCard(
-                  icon: Icons.request_quote_outlined,
+                  icon: LucideIcons.fileText,
                   label: 'إجمالي الديون',
                   valueText: AppHelpers.formatMoney(s.totalAmount),
                   color: Theme.of(context).colorScheme.primary,
@@ -233,7 +234,7 @@ class _SummaryGrid extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatCard(
-                  icon: Icons.people_alt_outlined,
+                  icon: LucideIcons.users,
                   label: 'عدد المدراء',
                   valueText: s.debtorsCount.toString(),
                   color: Colors.deepPurple,
@@ -358,9 +359,9 @@ class _Filters extends StatelessWidget {
             DropdownButtonFormField<int?>(
               value: debtorFilter,
               isDense: true,
-              icon: const Icon(Icons.expand_more_rounded),
+              icon: const Icon(LucideIcons.chevronDown),
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.person_search_rounded, size: 18),
+                prefixIcon: const Icon(LucideIcons.userSearch, size: 18),
                 hintText: 'فلترة بمدير فرعي',
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -485,7 +486,7 @@ class _DebtCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.calendar_month_rounded,
+                            Icon(LucideIcons.calendar,
                                 size: 11, color: cs.onSurfaceVariant),
                             const SizedBox(width: 3),
                             Text(
@@ -717,7 +718,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               value: _debtorId,
               decoration: const InputDecoration(
                 labelText: 'المدير الفرعي',
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: Icon(LucideIcons.user),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -739,7 +740,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
                 suffixText: 'IQD',
-                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
+                prefixIcon: Icon(LucideIcons.dollarSign, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -768,7 +769,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               controller: _noteCtrl,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(Icons.note_outlined),
+                prefixIcon: Icon(LucideIcons.fileText),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -781,7 +782,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'تاريخ الدين',
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: Icon(LucideIcons.calendar),
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
@@ -803,7 +804,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
                   width: 14, height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(Icons.save_outlined, size: 18),
+              : const Icon(LucideIcons.save, size: 18),
           label: Text(_saving ? 'حفظ...' : 'حفظ'),
         ),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 
@@ -52,11 +53,11 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
 
   IconData _opIcon(String op) {
     switch (op) {
-      case 'activate': return Icons.bolt_rounded;
-      case 'extend':   return Icons.autorenew_rounded;
-      case 'pay_debt': return Icons.payments_rounded;
-      case 'add_debt': return Icons.add_card_rounded;
-      default:         return Icons.receipt_long_rounded;
+      case 'activate': return LucideIcons.zap;
+      case 'extend':   return LucideIcons.repeat;
+      case 'pay_debt': return LucideIcons.banknote;
+      case 'add_debt': return LucideIcons.plus;
+      default:         return LucideIcons.receipt;
     }
   }
 
@@ -137,13 +138,13 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
               textDirection: TextDirection.ltr,
               decoration: InputDecoration(
                 hintText: 'بحث (اسم/يوزر/تليفون)',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                prefixIcon: const Icon(LucideIcons.search, size: 20),
                 isDense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
+                        icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           _searchCtrl.clear();
                           setState(() => _query = '');
@@ -178,7 +179,7 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
                       '${_from != null ? intl.DateFormat('y-MM-dd').format(_from!) : '...'} — ${_to != null ? intl.DateFormat('y-MM-dd').format(_to!) : '...'}',
                       style: const TextStyle(fontSize: 10),
                     ),
-                    deleteIcon: const Icon(Icons.close, size: 14),
+                    deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () => setState(() {
                       _from = null;
                       _to = null;
@@ -194,7 +195,7 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
             child: Row(children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.date_range, size: 16),
+                  icon: const Icon(LucideIcons.calendarRange, size: 16),
                   label: Text(
                     _from == null && _to == null
                         ? 'اختر فترة زمنية'
@@ -224,7 +225,7 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.receipt_long_outlined, size: 56,
+                        Icon(LucideIcons.receipt, size: 56,
                             color: theme.colorScheme.onSurface.withValues(alpha: .25)),
                         const SizedBox(height: 12),
                         Text('لا توجد وصولات',
@@ -425,7 +426,7 @@ class _ReceiptRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: Icon(Icons.print_rounded,
+                icon: Icon(LucideIcons.printer,
                     size: 20, color: theme.colorScheme.primary),
                 onPressed: onReprint,
                 tooltip: 'إعادة طباعة',

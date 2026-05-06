@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -254,7 +255,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: AppTheme.infoColor, size: 28),
+                Icon(LucideIcons.info, color: AppTheme.infoColor, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -278,7 +279,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                 height: AppTheme.actionButtonHeight,
                 child: ElevatedButton.icon(
                   onPressed: _loadDebtors,
-                  icon: const Icon(Icons.download_rounded),
+                  icon: const Icon(LucideIcons.download),
                   label: const Text('تحميل بيانات المشتركين'),
                 ),
               ),
@@ -295,7 +296,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.people, color: theme.colorScheme.primary),
+                      Icon(LucideIcons.users, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -315,7 +316,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                           height: AppTheme.actionButtonHeight,
                           child: ElevatedButton.icon(
                             onPressed: _saveToPhone,
-                            icon: const Icon(Icons.save_alt_rounded, size: 20),
+                            icon: const Icon(LucideIcons.save, size: 20),
                             label: const Text(
                               'حفظ في الهاتف',
                               style: TextStyle(
@@ -332,7 +333,7 @@ class _DebtExportScreenState extends ConsumerState<DebtExportScreen> {
                           height: AppTheme.actionButtonHeight,
                           child: OutlinedButton.icon(
                             onPressed: _shareCsv,
-                            icon: const Icon(Icons.share_rounded, size: 20),
+                            icon: const Icon(LucideIcons.share2, size: 20),
                             label: const Text(
                               'مشاركة',
                               style: TextStyle(

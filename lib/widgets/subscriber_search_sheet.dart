@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme/app_theme.dart';
@@ -101,7 +102,7 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
               child: Row(
                 children: [
-                  Icon(Icons.search_rounded,
+                  Icon(LucideIcons.search,
                       color: theme.colorScheme.primary),
                   const SizedBox(width: 10),
                   Text(
@@ -130,11 +131,11 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: 'ابحث بالاسم أو المعرّف أو رقم الهاتف…',
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(LucideIcons.search),
                   suffixIcon: _q.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 18),
+                          icon: const Icon(LucideIcons.x, size: 18),
                           onPressed: () {
                             _ctrl.clear();
                             setState(() => _q = '');
@@ -252,7 +253,7 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   trailing: Icon(
-                                    Icons.chevron_left_rounded,
+                                    LucideIcons.chevronLeft,
                                     color: theme.colorScheme.primary,
                                   ),
                                 );

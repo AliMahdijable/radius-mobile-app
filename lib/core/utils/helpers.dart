@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart' as intl;
 import '../constants/app_constants.dart';
 
@@ -182,25 +183,25 @@ class AppHelpers {
   static IconData getMessageTypeIcon(String type) {
     switch (type) {
       case MessageTypes.debtReminder:
-        return Icons.credit_card;
+        return LucideIcons.creditCard;
       case MessageTypes.expiryWarning:
-        return Icons.warning_amber;
+        return LucideIcons.triangleAlert;
       case MessageTypes.serviceEnd:
-        return Icons.event_busy;
+        return LucideIcons.calendarOff;
       case MessageTypes.broadcast:
-        return Icons.campaign;
+        return LucideIcons.megaphone;
       case MessageTypes.manual:
-        return Icons.touch_app;
+        return LucideIcons.mousePointerClick;
       case MessageTypes.activationNotice:
-        return Icons.check_circle;
+        return LucideIcons.circleCheck;
       case MessageTypes.payment:
-        return Icons.payments;
+        return LucideIcons.banknote;
       case MessageTypes.welcomeMessage:
-        return Icons.waving_hand;
+        return LucideIcons.handHeart;
       case MessageTypes.renewal:
-        return Icons.autorenew;
+        return LucideIcons.repeat;
       default:
-        return Icons.message;
+        return LucideIcons.messageCircle;
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../providers/auth_provider.dart';
@@ -216,7 +217,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                   color: AppTheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.person_add_alt_1,
+                child: const Icon(LucideIcons.userPlus,
                     color: AppTheme.primary, size: 20),
               ),
               const SizedBox(width: 10),
@@ -243,7 +244,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 textAlign: TextAlign.left,
                 decoration: const InputDecoration(
                   labelText: 'الاسم الأول',
-                  prefixIcon: Icon(Icons.person_outline, size: 20),
+                  prefixIcon: Icon(LucideIcons.user, size: 20),
                 ),
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'مطلوب' : null,
@@ -268,10 +269,10 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             textAlign: TextAlign.left,
             decoration: InputDecoration(
               labelText: 'رقم الهاتف',
-              prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+              prefixIcon: const Icon(LucideIcons.phone, size: 20),
               suffixIcon: IconButton(
                 tooltip: 'اختر من جهات الاتصال',
-                icon: const Icon(Icons.contacts_rounded, size: 20),
+                icon: const Icon(LucideIcons.contact, size: 20),
                 onPressed: () async {
                   final phone = await pickContactPhone(context);
                   if (phone != null && phone.isNotEmpty) {
@@ -297,7 +298,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'اسم المستخدم',
-              prefixIcon: Icon(Icons.alternate_email, size: 20),
+              prefixIcon: Icon(LucideIcons.atSign, size: 20),
               hintText: 'user@domain',
             ),
             validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
@@ -309,7 +310,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'كلمة المرور',
-              prefixIcon: Icon(Icons.lock_outline, size: 20),
+              prefixIcon: Icon(LucideIcons.lock, size: 20),
             ),
             validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
           ),
@@ -347,7 +348,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'تابع إلى',
-                  prefixIcon: Icon(Icons.account_tree_outlined, size: 20),
+                  prefixIcon: Icon(LucideIcons.network, size: 20),
                 ),
                 items: _parentManagers
                     .map(
@@ -382,9 +383,9 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
               helperText: canEditExpiration
                   ? 'اختياري — إن لم يُحدَّد يبدأ من الآن'
                   : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
-              prefixIcon: const Icon(Icons.calendar_today, size: 20),
+              prefixIcon: const Icon(LucideIcons.calendar, size: 20),
               suffixIcon: canEditExpiration
-                  ? const Icon(Icons.edit_calendar_rounded, size: 18)
+                  ? const Icon(LucideIcons.calendarClock, size: 18)
                   : null,
             ),
           ),
@@ -424,7 +425,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.refresh, size: 18, color: Colors.orange),
+                    Icon(LucideIcons.refreshCw, size: 18, color: Colors.orange),
                     SizedBox(width: 8),
                     Text('لا توجد باقات — اضغط لإعادة التحميل',
                         style: TextStyle(fontSize: 13, color: Colors.orange)),
@@ -455,7 +456,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                   theme.cardTheme.color ?? theme.colorScheme.surface,
               iconEnabledColor: theme.colorScheme.onSurface.withOpacity(0.7),
               decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.wifi_rounded, size: 18),
+                prefixIcon: Icon(LucideIcons.wifi, size: 18),
                 hintText: 'اختر الباقة',
               ),
               items: uniquePkgs
@@ -504,7 +505,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.save),
+                  : const Icon(LucideIcons.save),
               label: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ المشترك'),
             ),
           ),

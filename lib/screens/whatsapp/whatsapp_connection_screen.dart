@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -98,8 +99,8 @@ class _WhatsAppConnectionScreenState
                     ),
                     child: Icon(
                       wa.status.connected
-                          ? Icons.check_circle
-                          : Icons.link_off,
+                          ? LucideIcons.circleCheck
+                          : LucideIcons.unlink,
                       size: 48,
                       color: wa.status.connected
                           ? Colors.white
@@ -180,7 +181,7 @@ class _WhatsAppConnectionScreenState
                     const SizedBox(height: 14),
                     OutlinedButton.icon(
                       onPressed: () => _shareQr(wa.qrCode!),
-                      icon: const Icon(Icons.ios_share_rounded, size: 18),
+                      icon: const Icon(LucideIcons.share2, size: 18),
                       label: const Text('مشاركة / حفظ الصورة'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.black87,
@@ -226,7 +227,7 @@ class _WhatsAppConnectionScreenState
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.red),
+                    const Icon(LucideIcons.circleAlert, color: Colors.red),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -251,7 +252,7 @@ class _WhatsAppConnectionScreenState
                       ? null
                       : () =>
                           ref.read(whatsappProvider.notifier).startSession(),
-                  icon: const Icon(Icons.qr_code_scanner),
+                  icon: const Icon(LucideIcons.scanLine),
                   label: const Text('بدء جلسة جديدة'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.whatsappGreen,
@@ -265,7 +266,7 @@ class _WhatsAppConnectionScreenState
                   onPressed: wa.isConnecting
                       ? null
                       : () => ref.read(whatsappProvider.notifier).reconnect(),
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(LucideIcons.refreshCw),
                   label: const Text('إعادة اتصال'),
                 ),
               ),
@@ -275,7 +276,7 @@ class _WhatsAppConnectionScreenState
                 child: OutlinedButton.icon(
                   onPressed: () =>
                       ref.read(whatsappProvider.notifier).disconnect(),
-                  icon: const Icon(Icons.link_off, color: Colors.red),
+                  icon: const Icon(LucideIcons.unlink, color: Colors.red),
                   label: const Text(
                     'قطع الاتصال',
                     style: TextStyle(color: Colors.red),

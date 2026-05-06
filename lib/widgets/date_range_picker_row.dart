@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart' as intl;
 
 /// Two-field "من تاريخ ... إلى تاريخ" row used across the Reports
@@ -57,7 +58,7 @@ class DateRangePickerRow extends StatelessWidget {
             child: InputDecorator(
               decoration: const InputDecoration(
                 labelText: 'من تاريخ',
-                prefixIcon: Icon(Icons.calendar_today, size: 16),
+                prefixIcon: Icon(LucideIcons.calendar, size: 16),
                 isDense: true,
               ),
               child: Text(
@@ -74,7 +75,7 @@ class DateRangePickerRow extends StatelessWidget {
             child: InputDecorator(
               decoration: const InputDecoration(
                 labelText: 'إلى تاريخ',
-                prefixIcon: Icon(Icons.calendar_today, size: 16),
+                prefixIcon: Icon(LucideIcons.calendar, size: 16),
                 isDense: true,
               ),
               child: Text(
