@@ -399,6 +399,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
               price: (pi?['user_price'] ?? pi?['price'])?.toString() ?? sub.price,
               parentUsername: sub.parentUsername,
               isOnlineFlag: sub.isOnlineFlag, enabled: sub.enabled,
+              discount: sub.discount,
             );
           }).toList();
         }
@@ -1122,6 +1123,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       parentUsername: sub.parentUsername,
       isOnlineFlag: sub.isOnlineFlag,
       enabled: sub.enabled,
+      discount: sub.discount,
     );
   }
 
@@ -1172,6 +1174,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           sessionTime: online.sessionTime,
           downloadBytes: online.downloadBytes, uploadBytes: online.uploadBytes,
           deviceVendor: online.deviceVendor,
+          discount: s.discount,
         );
       }
       return s;
@@ -1324,6 +1327,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
               sessionTime: o.sessionTime,
               downloadBytes: o.downloadBytes, uploadBytes: o.uploadBytes,
               deviceVendor: o.deviceVendor,
+              discount: match.discount,
             );
           }
           return o;
@@ -1356,6 +1360,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             parentUsername: s.parentUsername,
             isOnlineFlag: false,
             enabled: s.enabled,
+            discount: s.discount,
           );
         }
         return s;
