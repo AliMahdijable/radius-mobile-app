@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
+import '../core/network/dio_client.dart';
 import '../core/services/session_refresh_service.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/socket_service.dart';
@@ -75,6 +76,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._storage, this._socket, this._ref)
       : super(const AuthState());
+
+  /// يجلب صلاحيات الموظف الفريش من backend (عبر `/api/auth/me`).
+  /// نلجأ للـcache بالـstorage فقط لو الفحص فشل بسبب الشبكة. هذا
+  /// يضمن إن أي تعديل بصلاحيات الموظف يصل خلال ثوانٍ بدون re-login.
+  Future<Map<String, bool>> _fetchFreshEmployeePerms(Map<String, bool> cached) async {
+    try {
+      final dio = _ref.read(backendDioProvider);
+      final response = await dio.get(ApiConstants.authMe);
+      final data = response.data;
+      if (data is Map && data['success'] == true) {
+        final user = data['user'];
+        if (user is Map && user['isEmployee'] == true) {
+          final raw = user['permissions'];
+          if (raw is Map) {
+            final fresh = <String, bool>{};
+            raw.forEach((k, v) { fresh[k.toString()] = v == true; });
+            await _storage.saveEmployeePermissions(fresh);
+            dev.log('Refreshed employee perms (${fresh.values.where((v) => v).length} granted)',
+                name: 'AUTH');
+            return fresh;
+          }
+        }
+      }
+    } on DioException catch (e) {
+      dev.log('Employee perms refresh failed (${e.response?.statusCode}): ${e.message}',
+          name: 'AUTH');
+    } catch (e) {
+      dev.log('Employee perms refresh unknown error: $e', name: 'AUTH');
+    }
+    return cached;
+  }
 
   Future<_PermissionAccess> _fetchPermissions(String token) async {
     final dio = Dio(BaseOptions(
@@ -238,16 +270,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       // استرجاع سياق الموظف (لو موجود) قبل قرار جلب SAS4 perms.
       final isEmp = await _storage.getIsEmployee();
-      final empPerms = isEmp ? await _storage.getEmployeePermissions() : const <String, bool>{};
+      var empPerms = isEmp ? await _storage.getEmployeePermissions() : const <String, bool>{};
 
       // الموظف ما يحتاج SAS4 perms (نظامنا الداخلي)، لكن لازم نتأكد إن
       // توكن الأب SAS4 لسه صالح (الأب ممكن يكون غيّر باسورده). نسوي
       // فحص خفيف عبر _validateAdminToken بـsas4Token المخزَّن.
+      // وبنفس الوقت، نطلب صلاحيات الموظف الفريش من backend عشان أي
+      // تعديل من الأدمن يطلع فوراً (بدون re-login).
       if (isEmp) {
         final sas4Token = await _storage.getSas4Token();
         if (sas4Token != null && sas4Token.isNotEmpty) {
           await _validateAdminToken(sas4Token);
         }
+        empPerms = await _fetchFreshEmployeePerms(empPerms);
       }
 
       final access = isEmp
@@ -350,7 +385,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
+    // الموظف: حدّث الصلاحيات الفريش على كل resume — لو الأدمن غيّر
+    // صلاحياته أثناء التطبيق بـbackground ينعكس فوراً عند العودة.
+    final cur = state.user;
+    if (cur != null && cur.isEmployee) {
+      final fresh = await _fetchFreshEmployeePerms(cur.employeePermissions);
+      if (!_mapEquals(fresh, cur.employeePermissions)) {
+        state = state.copyWith(
+          user: cur.copyWith(employeePermissions: fresh),
+          clearError: true,
+        );
+      }
+    }
+
     await _syncNotificationServices();
+  }
+
+  bool _mapEquals(Map<String, bool> a, Map<String, bool> b) {
+    if (a.length != b.length) return false;
+    for (final k in a.keys) {
+      if (a[k] != b[k]) return false;
+    }
+    return true;
   }
 
   Future<bool> login(String username, String password) async {
