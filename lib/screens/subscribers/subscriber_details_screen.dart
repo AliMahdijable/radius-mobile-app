@@ -361,7 +361,7 @@ class _SubscriberDetailsScreenState
                     textDirection: TextDirection.ltr, textAlign: TextAlign.left,
                     decoration: InputDecoration(
                       labelText: 'رقم الهاتف',
-                      prefixIcon: const Icon(LucideLucideIcons.phone, size: 20),
+                      prefixIcon: const Icon(LucideIcons.phone, size: 20),
                       suffixIcon: IconButton(
                         tooltip: 'اختر من جهات الاتصال',
                         icon: const Icon(LucideIcons.contact, size: 20),
@@ -495,7 +495,7 @@ class _SubscriberDetailsScreenState
                       iconEnabledColor:
                           Theme.of(ctx).colorScheme.onSurface.withOpacity(0.7),
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(LucideLucideIcons.wifi, size: 18),
+                        prefixIcon: const Icon(LucideIcons.wifi, size: 18),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 10),
@@ -1006,7 +1006,7 @@ class _SubscriberDetailsScreenState
                 const SizedBox(height: 6),
                 Row(children: [
                   Expanded(child: _MethodBtn(
-                    icon: LucideLucideIcons.star, label: 'بالنقاط',
+                    icon: LucideIcons.star, label: 'بالنقاط',
                     accentColor: Colors.amber.shade700, // ذهبي — نقاط مكافأة
                     selected: method == 'reward_points',
                     onTap: () => setSheet(() => method = 'reward_points'),
@@ -1300,7 +1300,7 @@ class _SubscriberDetailsScreenState
                   child: Column(children: [
                     Row(children: [
                       Expanded(child: _ActivationInfoTile(
-                        icon: LucideLucideIcons.wifi,
+                        icon: LucideIcons.wifi,
                         label: 'الباقة',
                         value: profileName,
                         color: AppTheme.teal600,
@@ -3102,7 +3102,7 @@ class _SubscriberDetailsScreenState
         _FabAction(LucideIcons.banknote, 'تسديد دين', Colors.green, _showPayDebtSheet),
       if (can('subscribers.view_activity'))
         _FabAction(
-          LucideLucideIcons.history,
+          LucideIcons.history,
           'سجل الحركات',
           AppTheme.teal600,
           _showMovementsSheet,
@@ -3711,7 +3711,7 @@ class _StatusRow extends StatelessWidget {
     final connText = isOnline ? 'متصل' : 'غير متصل';
     final connColor = isOnline ? AppTheme.successColor : Colors.grey;
     final connIcon = isOnline
-        ? LucideLucideIcons.wifi
+        ? LucideIcons.wifi
         : LucideIcons.wifiOff;
 
     return Padding(
@@ -3923,7 +3923,7 @@ class _PhoneDetailRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              LucideLucideIcons.phone,
+              LucideIcons.phone,
               size: 18,
               color: theme.colorScheme.primary,
             ),
@@ -3954,7 +3954,7 @@ class _PhoneDetailRow extends StatelessWidget {
                 if (enabled) ...[
                   const SizedBox(width: 8),
                   _PhoneActionIcon(
-                    icon: LucideLucideIcons.phone,
+                    icon: LucideIcons.phone,
                     color: AppTheme.teal600,
                     onTap: onCall,
                   ),
@@ -4198,7 +4198,7 @@ class _SubscriberMovementsSheetContentState
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Icon(LucideLucideIcons.history,
+              Icon(LucideIcons.history,
                   size: 20, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Expanded(

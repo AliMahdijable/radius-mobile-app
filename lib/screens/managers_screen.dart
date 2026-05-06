@@ -1242,7 +1242,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       ),
                                       hintText: 'بحث...',
                                       prefixIcon:
-                                          const Icon(LucideLucideIcons.search),
+                                          const Icon(LucideIcons.search),
                                       suffixIcon:
                                           _searchController.text.isNotEmpty
                                               ? IconButton(
@@ -1459,7 +1459,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       setState(() {});
                                     },
                                     icon:
-                                        const Icon(LucideIcons.filterX),
+                                        const Icon(LucideIcons.funnelX),
                                     label: const Text('مسح الفلاتر'),
                                   )
                                 : null,
@@ -1729,7 +1729,7 @@ class _ManagerListCard extends StatelessWidget {
                     ),
                   if (manager.mobile.isNotEmpty)
                     _InfoBadge(
-                      icon: LucideLucideIcons.phone,
+                      icon: LucideIcons.phone,
                       label: manager.mobile,
                       color: AppTheme.primary,
                     ),
@@ -2110,7 +2110,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
                             labelText: 'رقم الهاتف',
-                            prefixIcon: const Icon(LucideLucideIcons.phone),
+                            prefixIcon: const Icon(LucideIcons.phone),
                             suffixIcon: IconButton(
                               tooltip: 'اختر من جهات الاتصال',
                               icon: const Icon(LucideIcons.contact, size: 20),
@@ -3225,7 +3225,7 @@ class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _saving ? null : _submit,
-                    icon: const Icon(LucideLucideIcons.save),
+                    icon: const Icon(LucideIcons.save),
                     label: const Text('حفظ الدين'),
                   ),
                 ),
@@ -3540,7 +3540,7 @@ class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _saving ? null : _submit,
-                    icon: const Icon(LucideLucideIcons.check),
+                    icon: const Icon(LucideIcons.check),
                     label: const Text('تسديد'),
                   ),
                 ),

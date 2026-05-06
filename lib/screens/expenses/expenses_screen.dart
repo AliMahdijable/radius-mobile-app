@@ -54,7 +54,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(children: [
-                  Icon(LucideIcons.filter, size: 16, color: cs.primary),
+                  Icon(LucideIcons.funnel, size: 16, color: cs.primary),
                   const SizedBox(width: 6),
                   Text('الفلاتر',
                       style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: .75))),

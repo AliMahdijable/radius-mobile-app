@@ -266,7 +266,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
           if (_isDirty && !_saving && canEditPrices)
             IconButton(
               onPressed: _save,
-              icon: const Icon(LucideLucideIcons.save),
+              icon: const Icon(LucideIcons.save),
               tooltip: 'حفظ الأسعار',
             ),
           if (_saving)
@@ -362,7 +362,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(LucideLucideIcons.save, size: 20),
+                      : const Icon(LucideIcons.save, size: 20),
                   label: Text(
                     _saving ? 'جاري الحفظ...' : 'حفظ الأسعار',
                     style: const TextStyle(
@@ -465,7 +465,7 @@ class _PackagesScreenState extends ConsumerState<PackagesScreen> {
                         color: AppTheme.primary.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(LucideLucideIcons.wifi,
+                      child: const Icon(LucideIcons.wifi,
                           size: 20, color: AppTheme.primary),
                     ),
                     const SizedBox(width: 10),
