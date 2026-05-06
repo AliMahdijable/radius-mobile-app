@@ -2652,11 +2652,12 @@ class _SubscriberDetailsScreenState
     final sub = _readCurrentSubscriber();
 
     setState(() => _isProcessing = true);
-    // نجلب السعر الأصلي + الخصم الحالي. كل واحدة بحالها بـtry/catch
-    // عشان فشل احدهن ما يقفل الفتحة الكاملة.
+    // نجلب السعر الأصلي + الخصم الحالي.
     final dio = ref.read(backendDioProvider);
     double originalPrice = _toDouble(sub.price ?? 0);
-    double currentDiscount = 0;
+    // الخصم الحالي يجي من model الـsub مباشرة (الـbackend يضيفه عبر
+    // /api/subscribers/with-phones). أسرع وأدق من نداء API ثاني.
+    double currentDiscount = sub.discount ?? 0;
     try {
       final r = await dio.get('/api/v2/subscribers/$id/activation-data');
       final actData = r.data?['data'] as Map<String, dynamic>?;
@@ -2667,10 +2668,13 @@ class _SubscriberDetailsScreenState
         if (p > 0) originalPrice = p;
       }
     } catch (_) { /* تجاهل، نكمل بـsub.price */ }
-    if (sub.username.isNotEmpty) {
+    // fallback: لو ما عرفنا الخصم من model، نسأل الـAPI. الـresponse
+    // مغلَّفة بـ{success, data: {...}}.
+    if (currentDiscount == 0 && sub.username.isNotEmpty) {
       try {
         final r = await dio.get('${ApiConstants.discounts}/${sub.username}');
-        final discData = r.data as Map<String, dynamic>?;
+        final wrap = r.data as Map<String, dynamic>?;
+        final discData = wrap?['data'] as Map<String, dynamic>?;
         final amt = discData?['discount_amount'];
         if (amt != null) currentDiscount = _toDouble(amt);
       } catch (_) { /* لا يوجد خصم، نكمل بصفر */ }
@@ -3124,19 +3128,20 @@ class _SubscriberDetailsScreenState
                       label: 'الباقة',
                       value: sub.profileName ?? '—',
                     ),
-                    _DetailRow(
-                      icon: LucideIcons.dollarSign,
-                      label: 'سعر الباقة',
-                      value: sub.price != null
-                          ? AppHelpers.formatMoney(sub.price)
-                          : '—',
-                    ),
-                    // الخصم النشط — يظهر فقط لو المشترك عنده خصم.
+                    // سعر الباقة — لو فيه خصم، السعر الأصلي مشطوب
+                    // بجانبه السعر النهائي (مع شارة "-X خصم").
                     if (sub.hasDiscount)
+                      _PriceWithDiscountRow(
+                        originalPrice: sub.price,
+                        discount: sub.discount!,
+                      )
+                    else
                       _DetailRow(
-                        icon: LucideIcons.percent,
-                        label: 'الخصم',
-                        value: '-${AppHelpers.formatMoney(sub.discount)}',
+                        icon: LucideIcons.dollarSign,
+                        label: 'سعر الباقة',
+                        value: sub.price != null
+                            ? AppHelpers.formatMoney(sub.price)
+                            : '—',
                       ),
                     _StatusRow(sub: sub),
                   ],
@@ -4198,6 +4203,76 @@ class _DetailRow extends StatelessWidget {
                   color: valueColor,
                 ),
                 textAlign: TextAlign.end),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// سطر يجمع سعر الباقة + الخصم + السعر النهائي. يحلّ محلّ سطر منفصل
+/// للخصم. السعر الأصلي مشطوب، يليه السعر النهائي بعد الخصم بلون أخضر.
+class _PriceWithDiscountRow extends StatelessWidget {
+  final String? originalPrice;
+  final double discount;
+
+  const _PriceWithDiscountRow({
+    required this.originalPrice,
+    required this.discount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final origNum = double.tryParse(originalPrice ?? '0') ?? 0;
+    final finalPrice = (origNum - discount).clamp(0, double.infinity);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(LucideIcons.dollarSign, size: 18, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 10),
+          Text('سعر الباقة',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              )),
+          const Spacer(),
+          // السعر الأصلي (مشطوب)
+          Text(
+            AppHelpers.formatMoney(origNum),
+            style: theme.textTheme.bodySmall?.copyWith(
+              decoration: TextDecoration.lineThrough,
+              color: theme.colorScheme.onSurface.withOpacity(0.45),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // الخصم — chip صغير
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.teal.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '-${AppHelpers.formatMoney(discount)}',
+              style: const TextStyle(
+                fontSize: 10.5, fontWeight: FontWeight.w800,
+                color: Colors.teal, fontFamily: 'Cairo',
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // السعر النهائي
+          Text(
+            AppHelpers.formatMoney(finalPrice),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Colors.green.shade700,
+            ),
           ),
         ],
       ),
