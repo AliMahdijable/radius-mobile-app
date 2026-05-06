@@ -228,7 +228,12 @@ class PackageModel {
     this.expirationAmount,
   });
 
+  /// السعر اللي يدفعه المشترك النهائي (priceList.user_price بـSAS4).
   String? get displayPrice => userPrice ?? price;
+
+  /// سعر الشراء/الكلفة من الأدمن (priceList.price بـSAS4) — للعرض
+  /// في نماذج الإضافة/التعديل حتى يعرف الأدمن كم يدفع لكل باقة.
+  String? get costPrice => price ?? userPrice;
 
   bool get isMonthly =>
       type == null || type == 'monthly' || type!.isEmpty;

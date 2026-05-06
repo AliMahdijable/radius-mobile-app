@@ -475,8 +475,9 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                               ),
                             ),
                             const SizedBox(width: 6),
+                            // سعر الشراء (كلفة الباقة على الأدمن).
                             Text(
-                              AppHelpers.formatMoney(pkg.displayPrice),
+                              AppHelpers.formatMoney(pkg.costPrice),
                               style: const TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,

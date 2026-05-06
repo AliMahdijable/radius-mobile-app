@@ -519,8 +519,9 @@ class _SubscriberDetailsScreenState
                                       ),
                                     ),
                                     const SizedBox(width: 6),
+                                    // نموذج التعديل يعرض سعر الشراء.
                                     Text(
-                                      AppHelpers.formatMoney(pkg.displayPrice),
+                                      AppHelpers.formatMoney(pkg.costPrice),
                                       style: const TextStyle(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w700,
@@ -720,7 +721,9 @@ class _SubscriberDetailsScreenState
                   ),
                 ],
               ])),
-              Text(AppHelpers.formatMoney(pkg.displayPrice),
+              // عرض سعر الشراء (الكلفة) في انتقاء الباقة بنماذج
+              // التعديل/الإضافة. سعر البيع يظهر بكرت المشترك.
+              Text(AppHelpers.formatMoney(pkg.costPrice),
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                   color: isSelected ? AppTheme.primary : AppTheme.teal600)),
             ]),
