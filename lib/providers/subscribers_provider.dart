@@ -964,8 +964,15 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         ? plName
         : sub.profileName;
 
-    // user_price from priceList ALWAYS takes priority over subscriber.price
-    final resolvedPrice = plPrice ?? sub.price;
+    // الـbackend (/api/subscribers/with-phones) يحسب سعر البيع الصحيح
+    // عبر activationData لكل profile_id (MAX of user_price + n_required).
+    // لا نطغى عليه — نستعمل priceMap كـfallback فقط إذا sub.price فاضي.
+    // قبلاً كان priceMap يطغى ويرجع cost (19k) بدل sale (35k) لـsub-reseller.
+    final hasBackendPrice = sub.price != null
+        && sub.price!.isNotEmpty
+        && sub.price != '0'
+        && sub.price != '0.00';
+    final resolvedPrice = hasBackendPrice ? sub.price : plPrice;
 
     if (resolvedName == sub.profileName && resolvedPrice == sub.price && resolvedId == sub.profileId) {
       return sub;
