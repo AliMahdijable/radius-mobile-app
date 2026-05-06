@@ -436,9 +436,11 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
   Widget _buildSubscribersGrid(ThemeData theme, bool isDark, SubscribersState subsState) {
     final filtered = _filterSubscribers(subsState);
     final discountsState = ref.read(discountsProvider);
-    final existingUsernames = discountsState.discounts
-        .map((d) => d.subscriberUsername)
-        .toSet();
+    // Map للقيمة بدل Set عشان نعرض المبلغ على بطاقة المشترك مباشرة.
+    final existingDiscounts = <String, double>{
+      for (final d in discountsState.discounts)
+        d.subscriberUsername: d.discountAmount,
+    };
 
     if (subsState.isLoading) {
       return const Padding(
@@ -478,23 +480,24 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
+          // 3 أعمدة بدل 2 + aspect أنحف → بطاقة مشترك مدمجة.
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 1.6,
+            crossAxisCount: 3,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 1.25,
           ),
           itemCount: visibleSubs.length,
           itemBuilder: (ctx, i) {
             final sub = visibleSubs[i];
             final isSelected = _selectedSubscribers.contains(sub.username);
-            final hasExisting = existingUsernames.contains(sub.username);
+            final existingAmount = existingDiscounts[sub.username];
 
             return _SubscriberSelectCard(
               username: sub.username,
               fullName: sub.fullName,
               packageName: sub.profileName,
-              hasExistingDiscount: hasExisting,
+              existingDiscountAmount: existingAmount,
               isSelected: isSelected,
               isDark: isDark,
               onTap: () {
@@ -682,7 +685,8 @@ class _SubscriberSelectCard extends StatelessWidget {
   final String username;
   final String fullName;
   final String? packageName;
-  final bool hasExistingDiscount;
+  /// مبلغ الخصم الحالي للمشترك (null لا يوجد خصم).
+  final double? existingDiscountAmount;
   final bool isSelected;
   final bool isDark;
   final VoidCallback onTap;
@@ -691,7 +695,7 @@ class _SubscriberSelectCard extends StatelessWidget {
     required this.username,
     required this.fullName,
     this.packageName,
-    required this.hasExistingDiscount,
+    this.existingDiscountAmount,
     required this.isSelected,
     required this.isDark,
     required this.onTap,
@@ -705,23 +709,25 @@ class _SubscriberSelectCard extends StatelessWidget {
     final bgColor = isSelected
         ? (isDark ? AppTheme.teal900.withValues(alpha: 0.3) : AppTheme.teal50)
         : (isDark ? const Color(0xFF252525) : const Color(0xFFF8FAFA));
+    final hasExisting = existingDiscountAmount != null && existingDiscountAmount! > 0;
 
     return Material(
       color: bgColor,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
           ),
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(7),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // أعلى: username + علامة التحديد
               Row(
                 children: [
                   Expanded(
@@ -730,59 +736,54 @@ class _SubscriberSelectCard extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                        fontSize: 11.5,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (isSelected)
                     const Icon(LucideIcons.circleCheck,
-                        color: AppTheme.primary, size: 18),
+                        color: AppTheme.primary, size: 14),
                 ],
               ),
-              if (fullName.isNotEmpty) ...[
-                const SizedBox(height: 2),
+              // الاسم العربي + الباقة بسطر واحد لو وجدا
+              if (fullName.isNotEmpty)
                 Text(
                   fullName,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 9.5,
                     color: Colors.grey.shade500,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-              ],
-              if (packageName != null && packageName!.isNotEmpty) ...[
-                const SizedBox(height: 2),
+              if (packageName != null && packageName!.isNotEmpty)
                 Text(
                   packageName!,
-                  style: TextStyle(
-                    fontSize: 11,
+                  style: const TextStyle(
+                    fontSize: 9.5,
                     color: AppTheme.teal600,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-              ],
-              if (hasExistingDiscount) ...[
-                const SizedBox(height: 4),
+              // أسفل: قيمة الخصم بـcompact chip بدل "خصم موجود"
+              if (hasExisting)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(
-                    color: AppTheme.warningColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
+                    color: AppTheme.warningColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(5),
                   ),
-                  child: const Text(
-                    'خصم موجود',
-                    style: TextStyle(
+                  child: Text(
+                    '-${AppHelpers.formatMoney(existingDiscountAmount!)}',
+                    style: const TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 10,
+                      fontSize: 9.5,
                       color: AppTheme.warningColor,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ),
