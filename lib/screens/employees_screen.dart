@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+import '../widgets/app_snackbar.dart';
 
 import '../core/network/dio_client.dart';
 import '../core/theme/app_theme.dart';
@@ -89,14 +89,14 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     try {
       final dio = ref.read(backendDioProvider);
       await dio.delete('/api/v2/employees/${emp.id}');
-      Fluttertoast.showToast(msg: 'تم حذف الموظف');
+      if (mounted) AppSnackBar.success(context, 'تم حذف الموظف');
       await _load();
     } on DioException catch (e) {
-      Fluttertoast.showToast(
-        msg: e.response?.data is Map
-            ? (e.response?.data['message']?.toString() ?? 'فشل الحذف')
-            : 'فشل الحذف',
-      );
+      if (!mounted) return;
+      final msg = e.response?.data is Map
+          ? (e.response?.data['message']?.toString() ?? 'فشل الحذف')
+          : 'فشل الحذف';
+      AppSnackBar.error(context, msg);
     }
   }
 
@@ -385,16 +385,16 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
     setState(() {
       _perms = Map<String, bool>.from(preset.permissions);
     });
-    Fluttertoast.showToast(msg: 'تم تطبيق ${preset.label}');
+    AppSnackBar.info(context, 'تم تطبيق ${preset.label}');
   }
 
   Future<void> _save() async {
     if (_userCtrl.text.trim().isEmpty) {
-      Fluttertoast.showToast(msg: 'اسم المستخدم مطلوب');
+      AppSnackBar.warning(context, 'اسم المستخدم مطلوب');
       return;
     }
     if (widget.existing == null && _passCtrl.text.length < 4) {
-      Fluttertoast.showToast(msg: 'كلمة مرور ٤ أحرف على الأقل');
+      AppSnackBar.warning(context, 'كلمة مرور ٤ أحرف على الأقل');
       return;
     }
     setState(() => _saving = true);
@@ -412,17 +412,17 @@ class _EmployeeEditorState extends ConsumerState<_EmployeeEditor>
       }
       if (widget.existing == null) {
         await dio.post('/api/v2/employees', data: body);
-        Fluttertoast.showToast(msg: 'تم إنشاء الموظف');
+        if (mounted) AppSnackBar.success(context, 'تم إنشاء الموظف');
       } else {
         await dio.put('/api/v2/employees/${widget.existing!.id}', data: body);
-        Fluttertoast.showToast(msg: 'تم حفظ التعديلات');
+        if (mounted) AppSnackBar.success(context, 'تم حفظ التعديلات');
       }
       if (mounted) Navigator.of(context).pop(true);
     } on DioException catch (e) {
       final msg = e.response?.data is Map
           ? (e.response?.data['message']?.toString() ?? 'فشل الحفظ')
           : 'فشل الحفظ';
-      Fluttertoast.showToast(msg: msg, toastLength: Toast.LENGTH_LONG);
+      if (mounted) AppSnackBar.error(context, msg);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

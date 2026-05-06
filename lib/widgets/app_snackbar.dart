@@ -31,6 +31,29 @@ class AppSnackBar {
           {String? detail}) =>
       _show(context, message, _SnackType.whatsappError, detail: detail);
 
+  // ─── إصدارات بدون context (يستعملوا appNavigatorKey) ───
+  // مفيدة في الأماكن اللي ما عندنا BuildContext: dio interceptors،
+  // background services، callbacks خارج tree.
+  static void successGlobal(String message, {String? detail}) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx != null) success(ctx, message, detail: detail);
+  }
+
+  static void errorGlobal(String message, {String? detail}) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx != null) error(ctx, message, detail: detail);
+  }
+
+  static void warningGlobal(String message, {String? detail}) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx != null) warning(ctx, message, detail: detail);
+  }
+
+  static void infoGlobal(String message, {String? detail}) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx != null) info(ctx, message, detail: detail);
+  }
+
   static void dismiss() {
     _dismissTimer?.cancel();
     _dismissTimer = null;

@@ -50,7 +50,7 @@ dependencies:
   pdf: ^3.11.1
   printing: ^5.13.3
   pull_to_refresh_flutter3: ^2.0.2
-  fluttertoast: ^8.2.10
+  # fluttertoast: شيلناه — استبدلناه بـAppSnackBar widget الموحّد
   file_picker: ^8.1.6
   flutter_native_contact_picker: ^0.0.11
 

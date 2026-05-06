@@ -1,9 +1,9 @@
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import '../services/storage_service.dart';
 import '../services/session_refresh_service.dart';
 import '../services/session_events.dart';
+import '../../widgets/app_snackbar.dart';
 
 class AuthInterceptor extends Interceptor {
   final StorageService _storage;
@@ -67,17 +67,13 @@ class AuthInterceptor extends Interceptor {
     );
 
     // 403 من backend مع code=PERMISSION_DENIED → الموظف ما عنده صلاحية.
-    // نُظهر toast بالرسالة العربية ولا نفعّل تجديد التوكن.
+    // AppSnackBar.errorGlobal يستعمل appNavigatorKey فما يحتاج context.
     if (err.response?.statusCode == 403) {
       final data = err.response?.data;
       if (data is Map && data['code'] == 'PERMISSION_DENIED') {
         final msg = (data['message']?.toString() ?? 'لا تملك صلاحية لهذه العملية');
         try {
-          Fluttertoast.showToast(
-            msg: msg,
-            toastLength: Toast.LENGTH_LONG,
-            gravity: ToastGravity.CENTER,
-          );
+          AppSnackBar.errorGlobal(msg);
         } catch (_) { /* ignore */ }
       }
       return handler.next(err);
