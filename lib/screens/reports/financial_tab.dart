@@ -584,14 +584,11 @@ class _AdminRow extends StatelessWidget {
     final activations = _toInt(admin['activations_count']);
     final extends_ = _toInt(admin['extend_count']);
 
-    final isProfit = net >= 0;
-    final netColor = isProfit
+    // اللون يدلّ على الإشارة: أخضر للموجب، أحمر للسالب — يغني عن
+    // أي label نصي ("ربح/خسارة").
+    final netColor = net >= 0
         ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
         : (isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C));
-    final netBadgeBg = (isProfit ? const Color(0xFF10B981) : const Color(0xFFE11D48))
-        .withValues(alpha: 0.10);
-    final netBadgeBorder = (isProfit ? const Color(0xFF10B981) : const Color(0xFFE11D48))
-        .withValues(alpha: 0.25);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -603,7 +600,8 @@ class _AdminRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header: اسم المدير + شارة ربح/خسارة
+          // Header: اسم المدير فقط — لون "صافي الفترة" أدناه يكفي
+          // للدلالة على ربح/خسارة (أخضر vs أحمر).
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
@@ -626,31 +624,6 @@ class _AdminRow extends StatelessWidget {
                       fontFamily: 'Cairo',
                     ),
                     overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: netBadgeBg,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: netBadgeBorder, width: 1),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isProfit ? LucideIcons.trendingUp : LucideIcons.trendingDown,
-                        size: 11, color: netColor,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        isProfit ? 'ربح' : 'خسارة',
-                        style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w800,
-                          color: netColor, fontFamily: 'Cairo',
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],
