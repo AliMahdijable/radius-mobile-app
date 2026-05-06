@@ -141,6 +141,16 @@ class StorageService {
     return const {};
   }
 
+  /// تحديث صلاحيات الموظف بالـstorage بدون تغيير باقي حقول الجلسة.
+  /// يستعمله auth_provider لمّا /api/auth/me يرجع perms فريش.
+  Future<void> saveEmployeePermissions(Map<String, bool> permissions) async {
+    final sp = await _sp;
+    await sp.setString(
+      AppConstants.storageEmployeePermissions,
+      jsonEncode(permissions),
+    );
+  }
+
   Future<void> clearAll() async {
     final sp = await _sp;
     await sp.remove(AppConstants.storageToken);

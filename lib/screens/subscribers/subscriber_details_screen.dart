@@ -2794,7 +2794,9 @@ class _SubscriberDetailsScreenState
                   amounts: const [1000.0, 2500.0, 5000.0, 10000.0, 15000.0, 20000.0],
                   selectedAmount: amountNum,
                   enabled: true,
-                  onAmountSelected: (v) {
+                  // الخصم REPLACE وليس accumulate — الـpreset قيمة كاملة.
+                  onSelected: (v) {
+                    amountFocus.unfocus();
                     amountCtrl.text = v.toInt().toString();
                     setSheet(() {});
                   },
