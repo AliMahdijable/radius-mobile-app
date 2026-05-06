@@ -8,6 +8,7 @@ import '../../core/utils/bottom_sheet_utils.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
+import '../../widgets/wa_status_badge.dart';
 
 class DailyActivationsTab extends ConsumerStatefulWidget {
   const DailyActivationsTab({super.key});
@@ -363,6 +364,15 @@ class _ActivationRow extends StatelessWidget {
               Padding(padding: const EdgeInsets.only(top: 3),
                   child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                       maxLines: 3, overflow: TextOverflow.ellipsis)),
+            // شارة حالة الواتساب — null/فارغ ما تظهر شي.
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: WaStatusBadge(
+                status: record['wa_status']?.toString(),
+                reason: record['wa_reason']?.toString(),
+                compact: true,
+              ),
+            ),
           ]),
         ),
         Text(formattedTime, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,

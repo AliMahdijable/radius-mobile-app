@@ -11,6 +11,7 @@ import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
+import '../../widgets/wa_status_badge.dart';
 
 class ActivationsTab extends ConsumerStatefulWidget {
   const ActivationsTab({super.key});
@@ -456,7 +457,23 @@ class _ActivationRow extends StatelessWidget {
                       maxLines: 3, overflow: TextOverflow.ellipsis)),
             if (admin.isNotEmpty)
               Padding(padding: const EdgeInsets.only(top: 2),
-                  child: Text('المدير: $admin', style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .6)))),
+                  child: Wrap(spacing: 6, runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text('المدير: $admin', style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .6))),
+                      WaStatusBadge(
+                        status: record['wa_status']?.toString(),
+                        reason: record['wa_reason']?.toString(),
+                        compact: true,
+                      ),
+                    ],
+                  )),
+            if (admin.isEmpty)
+              WaStatusBadge(
+                status: record['wa_status']?.toString(),
+                reason: record['wa_reason']?.toString(),
+                compact: true,
+              ),
           ]),
         ),
       ]),

@@ -13,6 +13,7 @@ import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
+import '../../widgets/wa_status_badge.dart';
 import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
@@ -622,6 +623,12 @@ class _ActivityRow extends StatelessWidget {
                                 .withValues(alpha: .5),
                           ),
                         ),
+                      // شارة حالة إشعار الواتساب — null/فارغ ما يظهر شي.
+                      WaStatusBadge(
+                        status: activity['wa_status']?.toString(),
+                        reason: activity['wa_reason']?.toString(),
+                        compact: true,
+                      ),
                     ],
                   ),
                 ),
