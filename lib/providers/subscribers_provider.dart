@@ -763,6 +763,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       uploadBytes: s.uploadBytes,
       downloadBytes: s.downloadBytes,
       deviceVendor: s.deviceVendor,
+      discount: s.discount,
     );
   }
 
@@ -997,6 +998,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       parentUsername: sub.parentUsername,
       isOnlineFlag: sub.isOnlineFlag,
       enabled: sub.enabled,
+      discount: sub.discount,
     );
   }
 

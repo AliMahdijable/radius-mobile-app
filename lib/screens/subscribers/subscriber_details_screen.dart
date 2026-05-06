@@ -2892,8 +2892,12 @@ class _SubscriberDetailsScreenState
                             );
                           }
                           if (mounted) Navigator.pop(sheetCtx);
-                          await ref.read(subscribersProvider.notifier)
-                              .refreshSingleSubscriber(id);
+                          // refresh + إعادة تحميل القائمة عشان حقل
+                          // discount يأخذ القيمة الجديدة (refreshSingle
+                          // يجلب من SAS4 الذي لا يعرف الخصم).
+                          final notifier = ref.read(subscribersProvider.notifier);
+                          await notifier.refreshSingleSubscriber(id);
+                          await notifier.loadSubscribers();
                         } else {
                           setSheet(() => submitting = false);
                           if (mounted) {
@@ -3127,6 +3131,13 @@ class _SubscriberDetailsScreenState
                           ? AppHelpers.formatMoney(sub.price)
                           : '—',
                     ),
+                    // الخصم النشط — يظهر فقط لو المشترك عنده خصم.
+                    if (sub.hasDiscount)
+                      _DetailRow(
+                        icon: LucideIcons.percent,
+                        label: 'الخصم',
+                        value: '-${AppHelpers.formatMoney(sub.discount)}',
+                      ),
                     _StatusRow(sub: sub),
                   ],
                 ),

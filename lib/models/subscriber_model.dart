@@ -23,6 +23,9 @@ class SubscriberModel {
   final int? downloadBytes;
   final int? uploadBytes;
   final String? deviceVendor;
+  /// مبلغ الخصم النشط للمشترك (0 لو ما عندو). الـbackend يعطيه عبر
+  /// /api/subscribers/with-phones من جدول subscriber_discounts.
+  final double? discount;
 
   const SubscriberModel({
     this.idx,
@@ -49,7 +52,11 @@ class SubscriberModel {
     this.downloadBytes,
     this.uploadBytes,
     this.deviceVendor,
+    this.discount,
   });
+
+  /// هل عند المشترك خصم نشط؟
+  bool get hasDiscount => discount != null && discount! > 0;
 
   String get fullName => '$firstname $lastname'.trim();
 
@@ -184,6 +191,9 @@ class SubscriberModel {
           ? json['acctinputoctets']
           : int.tryParse(json['acctinputoctets']?.toString() ?? ''),
       deviceVendor: json['oui']?.toString(),
+      discount: json['discount'] is num
+          ? (json['discount'] as num).toDouble()
+          : double.tryParse(json['discount']?.toString() ?? ''),
     );
   }
 

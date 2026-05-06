@@ -338,6 +338,23 @@ class SubscriberCard extends StatelessWidget {
                           : AppTheme.warningColor.withOpacity(0.18),
                     ),
                   ],
+                  // chip للخصم النشط — يُعرض إذا المشترك عنده خصم
+                  // مسجَّل بصفحة الخصومات. اللون أخضر للتوفير الإيجابي.
+                  if (subscriber.hasDiscount) ...[
+                    _metaChip(
+                      theme: theme,
+                      icon: LucideIcons.percent,
+                      text: '-${AppHelpers.formatMoney(subscriber.discount)}',
+                      iconColor: isDisabled ? Colors.grey : Colors.teal,
+                      textColor: isDisabled ? Colors.grey : Colors.teal,
+                      backgroundColor: isDisabled
+                          ? Colors.grey.withOpacity(0.08)
+                          : Colors.teal.withOpacity(0.10),
+                      borderColor: isDisabled
+                          ? Colors.grey.withOpacity(0.12)
+                          : Colors.teal.withOpacity(0.20),
+                    ),
+                  ],
                   // CPE health pill — probes the subscriber's router
                   // (ONT / Ubiquiti) and shows a colored dot for quick
                   // scanning down the list. Shown for every subscriber
