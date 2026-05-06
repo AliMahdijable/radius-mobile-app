@@ -336,6 +336,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       'acctinputoctets': existing.uploadBytes,
       'acctoutputoctets': existing.downloadBytes,
       'oui': existing.deviceVendor,
+      // الخصم يجي من /api/subscribers/with-phones، و SAS4 ما يعرفه.
+      // نحفظ القيمة الحالية عند الـrefresh عشان الـchip ما يضيع
+      // لمّا المستخدم يفتح المشترك ثم يرجع للقائمة.
+      'discount': existing.discount,
     };
 
     var updated = SubscriberModel.fromJson(merged);
