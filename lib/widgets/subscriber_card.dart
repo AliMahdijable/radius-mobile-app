@@ -52,10 +52,9 @@ class SubscriberCard extends StatelessWidget {
     const badgeSize = 18.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
-    final badgeStyle = _resolveBadgeStyle(
-      subscriber,
-      isOnlinePage: showOnlineDetails,
-    );
+    // أيقونة الحالة — مطابقة للويب: Wifi/WifiOff/Ban بألوان مختلفة حسب
+    // (online × (active/near-expiry/expired)) + معطّل.
+    final statusVisual = _resolveStatusVisual(subscriber);
     final hasProfile = subscriber.profileName != null &&
         subscriber.profileName!.isNotEmpty;
     final hasPhone = subscriber.displayPhone.trim().isNotEmpty;
@@ -93,103 +92,10 @@ class SubscriberCard extends StatelessWidget {
                 SizedBox(
                   width: badgeSize,
                   height: badgeSize,
-                  child: badgeStyle.isSplit
-                      ? _SplitSubscriberBadge(
-                          size: badgeSize,
-                          leftColor: badgeStyle.primaryColor,
-                          rightColor: badgeStyle.secondaryColor!,
-                          borderColor: badgeStyle.borderColor,
-                          dividerColor: badgeStyle.dividerColor,
-                        )
-                      : Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: badgeStyle.borderColor,
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: badgeStyle.borderColor.withOpacity(0.10),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(5),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (badgeStyle.secondaryColor != null)
-                            Row(
-                              textDirection: TextDirection.ltr,
-                              children: [
-                                Expanded(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: badgeStyle.primaryColor,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: badgeStyle.secondaryColor!,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          else
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    _tintColor(
-                                      badgeStyle.primaryColor,
-                                      0.18,
-                                    ),
-                                    badgeStyle.primaryColor,
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
-                              ),
-                            ),
-                          if (badgeStyle.secondaryColor == null)
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              height: badgeSize * 0.45,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.white.withOpacity(0.20),
-                                      Colors.white.withOpacity(0.03),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ),
-                                ),
-                              ),
-                          ),
-                          Center(
-                            child: Text(
-                              _badgeLabel(subscriber),
-                              style: TextStyle(
-                                color: badgeStyle.foregroundColor,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 9,
-                                height: 1,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: Icon(
+                    statusVisual.icon,
+                    size: badgeSize - 1,
+                    color: statusVisual.color,
                   ),
                 ),
                 const SizedBox(width: badgeGap),
@@ -543,57 +449,50 @@ class SubscriberCard extends StatelessWidget {
     return '0 يوم';
   }
 
-  static String _badgeLabel(SubscriberModel sub) {
-    final firstName = sub.firstname.trim();
-    if (firstName.isNotEmpty) return firstName[0];
-    final username = sub.username.trim();
-    if (username.isNotEmpty) return username[0];
-    return '?';
-  }
-
-  static _SubscriberBadgeStyle _resolveBadgeStyle(
-    SubscriberModel sub, {
-    required bool isOnlinePage,
-  }) {
-    if (isOnlinePage && sub.isExpired && sub.isOnline) {
-      return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFF8B5CF6),
-        borderColor: Color(0xFF7C3AED),
-        foregroundColor: Colors.white,
+  // أيقونة الحالة + لونها — مطابقة لـClient-v2 ROW_STYLE.
+  // disabled→Ban (رمادي)، online×{active=أزرق, near=كهرماني, expired=بنفسجي}،
+  // offline×{active=أخضر, near=كهرماني, expired=أحمر}.
+  static _StatusVisual _resolveStatusVisual(SubscriberModel sub) {
+    if (sub.isDisabled) {
+      return const _StatusVisual(
+        icon: LucideIcons.ban,
+        color: Color(0xFF94A3B8), // slate-400
       );
     }
-
-    if (sub.isExpired && sub.isOnline) {
-      return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFF59E0B),
-        secondaryColor: Color(0xFF2563EB),
-        borderColor: Color(0xFFD4D9E1),
-        foregroundColor: Colors.white,
-        dividerColor: Color(0xFFF8FAFC),
-        isSplit: true,
-      );
-    }
-
-    if (sub.isExpired) {
-      return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFFF59E0B),
-        borderColor: Color(0xFFE38906),
-        foregroundColor: Colors.white,
-      );
-    }
-
     if (sub.isOnline) {
-      return const _SubscriberBadgeStyle(
-        primaryColor: Color(0xFF2563EB),
-        borderColor: Color(0xFF1D4ED8),
-        foregroundColor: Colors.white,
+      if (sub.isExpired) {
+        return const _StatusVisual(
+          icon: LucideIcons.wifi,
+          color: Color(0xFF8B5CF6), // purple-500
+        );
+      }
+      if (sub.isNearExpiry) {
+        return const _StatusVisual(
+          icon: LucideIcons.wifi,
+          color: Color(0xFFF59E0B), // amber-500
+        );
+      }
+      return const _StatusVisual(
+        icon: LucideIcons.wifi,
+        color: Color(0xFF2563EB), // blue-600
       );
     }
-
-    return const _SubscriberBadgeStyle(
-      primaryColor: Color(0xFF22A06B),
-      borderColor: Color(0xFF19784E),
-      foregroundColor: Colors.white,
+    // offline
+    if (sub.isExpired) {
+      return const _StatusVisual(
+        icon: LucideIcons.wifiOff,
+        color: Color(0xFFEF4444), // red-500
+      );
+    }
+    if (sub.isNearExpiry) {
+      return const _StatusVisual(
+        icon: LucideIcons.wifiOff,
+        color: Color(0xFFF59E0B), // amber-500
+      );
+    }
+    return const _StatusVisual(
+      icon: LucideIcons.wifiOff,
+      color: Color(0xFF10B981), // emerald-500
     );
   }
 
@@ -638,111 +537,12 @@ class SubscriberCard extends StatelessWidget {
     );
   }
 
-  static Color _tintColor(Color color, double amount) {
-    return Color.lerp(color, Colors.white, amount) ?? color;
-  }
 }
 
-class _SubscriberBadgeStyle {
-  final Color primaryColor;
-  final Color? secondaryColor;
-  final Color borderColor;
-  final Color foregroundColor;
-  final Color dividerColor;
-  final bool isSplit;
-
-  const _SubscriberBadgeStyle({
-    required this.primaryColor,
-    this.secondaryColor,
-    required this.borderColor,
-    required this.foregroundColor,
-    this.dividerColor = const Color(0xFFF8FAFC),
-    this.isSplit = false,
-  });
-}
-
-class _SplitSubscriberBadge extends StatelessWidget {
-  final double size;
-  final Color leftColor;
-  final Color rightColor;
-  final Color borderColor;
-  final Color dividerColor;
-
-  const _SplitSubscriberBadge({
-    required this.size,
-    required this.leftColor,
-    required this.rightColor,
-    required this.borderColor,
-    required this.dividerColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(
-          color: borderColor,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: borderColor.withOpacity(0.10),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Row(
-              textDirection: TextDirection.ltr,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: ColoredBox(
-                    color: leftColor,
-                  ),
-                ),
-                ColoredBox(
-                  color: dividerColor.withOpacity(0.75),
-                  child: const SizedBox(width: 1),
-                ),
-                Expanded(
-                  child: ColoredBox(
-                    color: rightColor,
-                  ),
-                ),
-              ],
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: size * 0.42,
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withOpacity(0.18),
-                        Colors.white.withOpacity(0.03),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+class _StatusVisual {
+  final IconData icon;
+  final Color color;
+  const _StatusVisual({required this.icon, required this.color});
 }
 
 class _OnlineRow extends StatelessWidget {

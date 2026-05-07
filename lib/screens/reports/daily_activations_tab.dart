@@ -323,6 +323,9 @@ class _ActivationRow extends StatelessWidget {
     final target = fullname.isNotEmpty ? fullname : username;
     final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final desc = AppHelpers.formatNumbersInText(record['action_description']?.toString() ?? '');
+    final admin = record['admin_username']?.toString() ?? '';
+    final empUsername = record['acting_employee_username']?.toString() ?? '';
+    final empFullName = record['acting_employee_full_name']?.toString() ?? '';
     final time = record['created_at']?.toString() ?? '';
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
@@ -363,6 +366,32 @@ class _ActivationRow extends StatelessWidget {
               Padding(padding: const EdgeInsets.only(top: 3),
                   child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                       maxLines: 3, overflow: TextOverflow.ellipsis)),
+            if (admin.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      empUsername.isNotEmpty
+                          ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
+                          : 'المدير: $admin',
+                      style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .8), fontWeight: FontWeight.w600),
+                    ),
+                    if (empUsername.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text('موظف', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: theme.colorScheme.primary)),
+                      ),
+                  ],
+                ),
+              ),
             // شارة حالة الواتساب — null/فارغ ما تظهر شي.
             Padding(
               padding: const EdgeInsets.only(top: 4),

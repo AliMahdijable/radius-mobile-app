@@ -845,6 +845,9 @@ class _LogRow extends StatelessWidget {
     final subtitle = (username.isNotEmpty && username != title) ? username : '';
     final desc = AppHelpers.formatNumbersInText(log['action_description']?.toString() ?? '');
     final amount = _parseAmount(log);
+    final admin = log['admin_username']?.toString() ?? '';
+    final empUsername = log['acting_employee_username']?.toString() ?? '';
+    final empFullName = log['acting_employee_full_name']?.toString() ?? '';
     final time = log['created_at']?.toString() ?? '';
     final isDebt = type == 'BALANCE_ADD' || (type == 'SUBSCRIBER_ACTIVATE' && (desc.toLowerCase().contains('غير نقدي')));
 
@@ -878,6 +881,32 @@ class _LogRow extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                       maxLines: 3, overflow: TextOverflow.ellipsis),
+                ),
+              if (admin.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        empUsername.isNotEmpty
+                            ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
+                            : 'المدير: $admin',
+                        style: TextStyle(fontSize: 11, color: theme.colorScheme.primary.withValues(alpha: .8), fontWeight: FontWeight.w600),
+                      ),
+                      if (empUsername.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text('موظف', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: theme.colorScheme.primary)),
+                        ),
+                    ],
+                  ),
                 ),
             ]),
           ),

@@ -412,6 +412,8 @@ class _ActivationRow extends StatelessWidget {
     final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final desc = AppHelpers.formatNumbersInText(record['action_description']?.toString() ?? '');
     final admin = record['admin_username']?.toString() ?? '';
+    final empUsername = record['acting_employee_username']?.toString() ?? '';
+    final empFullName = record['acting_employee_full_name']?.toString() ?? '';
     final time = record['created_at']?.toString() ?? '';
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
@@ -458,7 +460,21 @@ class _ActivationRow extends StatelessWidget {
                   child: Wrap(spacing: 6, runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text('المدير: $admin', style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .6))),
+                      Text(
+                        empUsername.isNotEmpty
+                            ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
+                            : 'المدير: $admin',
+                        style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .8), fontWeight: FontWeight.w600),
+                      ),
+                      if (empUsername.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text('موظف', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: theme.colorScheme.primary)),
+                        ),
                       WaStatusBadge(
                         status: record['wa_status']?.toString(),
                         reason: record['wa_reason']?.toString(),
