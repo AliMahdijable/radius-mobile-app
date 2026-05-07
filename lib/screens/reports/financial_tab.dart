@@ -290,14 +290,16 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
             ],
           ),
           const SizedBox(height: 12),
-          // Net profit hero — يظهر دائماً حتى لو 0 لأنه الرقم الأهم
-          // اللي المدير يفتح الشاشة عشانه. tinted blue يميّزه عن
-          // الـtiles فوقه بدون ما يصير صارخ.
+          // Net hero — يظهر دائماً حتى لو 0 لأنه الرقم الأهم اللي المدير
+          // يفتح الشاشة عشانه. اللون يدلّ على الإشارة:
+          //   net ≥ 0 → ربح، أخضر
+          //   net < 0 → خسارة، أحمر + علامة "−" قدّام الرقم.
+          // (formatMoney يحذف الإشارة ⇒ نحطّها يدوياً للسالب.)
           KpiCard(
-            label: 'صافي الربح',
-            value: AppHelpers.formatMoney(netProfit),
+            label: netProfit >= 0 ? 'صافي الربح' : 'صافي الخسارة',
+            value: (netProfit < 0 ? '- ' : '') + AppHelpers.formatMoney(netProfit),
             icon: LucideIcons.piggyBank,
-            accent: KpiAccent.blue,
+            accent: netProfit >= 0 ? KpiAccent.emerald : KpiAccent.rose,
             hero: true,
           ),
           const SizedBox(height: 20),
@@ -653,7 +655,7 @@ class _AdminRowState extends State<_AdminRow> with SingleTickerProviderStateMixi
                     ),
                   ),
                   Text(
-                    AppHelpers.formatMoney(net),
+                    (net < 0 ? '- ' : '') + AppHelpers.formatMoney(net),
                     style: TextStyle(
                       fontSize: 16.5, fontWeight: FontWeight.w900,
                       color: netColor, fontFamily: 'Cairo',
