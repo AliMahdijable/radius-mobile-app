@@ -49,7 +49,7 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
-    const badgeSize = 18.0;
+    const badgeSize = 22.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
     // أيقونة الحالة — مطابقة للويب: Wifi/WifiOff/Ban بألوان مختلفة حسب
