@@ -1009,62 +1009,83 @@ class _AppNotificationItem extends StatelessWidget {
       _ => LucideIcons.bell,
     };
 
+    // نفس نمط KpiCard: خلفية card محايدة + شريط جانبي ملوّن (RTL start)
+    // + أيقونة ملوّنة + فاصل أفقي بين العنوان والـbody. يضمن مظهر
+    // موحّد بين الإشعارات والكارتات الإحصائية على الخلفية البيضاء.
+    final cardBg = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final divider = theme.colorScheme.onSurface.withValues(alpha: 0.08);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 5),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: accent.withValues(alpha: 0.12)),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: divider, width: 1),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Icon(icon, color: accent, size: 13),
+          // الشريط الجانبي الملوّن — start = right في RTL.
+          PositionedDirectional(
+            start: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(width: 4, color: accent),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 9, 10, 9),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        notification.title,
-                        maxLines: 1,
+                Icon(icon, color: accent, size: 18),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              notification.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: accent,
+                                fontFamily: 'Cairo',
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatNotificationTime(notification.createdAt),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: muted,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(height: 1, color: divider),
+                      const SizedBox(height: 5),
+                      Text(
+                        notification.body,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.35,
+                          color: muted,
+                          fontFamily: 'Cairo',
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _formatNotificationTime(notification.createdAt),
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  notification.body,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.35,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.70),
+                    ],
                   ),
                 ),
               ],

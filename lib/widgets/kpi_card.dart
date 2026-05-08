@@ -123,7 +123,13 @@ class KpiCard extends StatelessWidget {
         ? const EdgeInsetsDirectional.fromSTEB(14, 11, 14, 11)
         : const EdgeInsetsDirectional.fromSTEB(12, 10, 10, 10);
 
+    // ارتفاع أدنى ثابت للكارت غير الـhero — يضمن إن الكارتات الجارة بنفس
+    // العمود تتساوى حتى لو بعضها بدون sub line. بدون هذا تطلع الكارتات
+    // غير المتزنة (مثل الصرفيات بدون sub جنب الديون الجديدة معها sub).
+    final minHeight = hero ? 0.0 : 78.0;
+
     return Container(
+      constraints: BoxConstraints(minHeight: minHeight),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(10),
