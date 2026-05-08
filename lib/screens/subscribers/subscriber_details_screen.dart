@@ -1035,12 +1035,17 @@ class _SubscriberDetailsScreenState
                 SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     setSheet(() => submitting = true);
-                    final success = await notifier.extendSubscription(
+                    final result = await notifier.extendSubscription(
                       userId: id, profileId: selectedPkgId, method: method);
+                    final success = result.ok;
                     if (mounted) {
                       Navigator.pop(ctx);
-                      _showSnack(success ? 'تم التمديد بنجاح' : 'فشل التمديد',
-                          success: success);
+                      _showSnack(
+                        success
+                            ? 'تم التمديد بنجاح'
+                            : (result.errorMessage ?? 'فشل التمديد'),
+                        success: success,
+                      );
                       if (success) {
                         if (id != null) {
                           await notifier.refreshSubscriberAfterOperation(id);
@@ -1641,7 +1646,7 @@ class _SubscriberDetailsScreenState
                     final cashAmount = _parseMoney(partialCtrl.text);
                     setSheet(() => submitting = true);
                     final notifier = ref.read(subscribersProvider.notifier);
-                    final success = await notifier.activateSubscriber(
+                    final result = await notifier.activateSubscriber(
                       userId: id,
                       userPrice: userPrice,
                       activationUnits: units,
@@ -1653,9 +1658,15 @@ class _SubscriberDetailsScreenState
                       originalPrice: originalPrice,
                       discountAmount: discountAmount > 0 ? discountAmount : 0,
                     );
+                    final success = result.ok;
                     if (mounted) {
                       Navigator.pop(ctx);
-                      _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
+                      _showSnack(
+                        success
+                            ? 'تم التفعيل بنجاح'
+                            : (result.errorMessage ?? 'فشل التفعيل'),
+                        success: success,
+                      );
                       if (success) {
                         if (id != null) {
                           final paymentLabel = isCash

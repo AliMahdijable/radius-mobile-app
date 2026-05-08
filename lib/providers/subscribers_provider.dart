@@ -6,6 +6,7 @@ import '../core/constants/api_constants.dart';
 import '../core/network/dio_client.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/encryption_service.dart';
+import '../core/utils/sas4_errors.dart';
 import '../models/subscriber_model.dart';
 import 'dashboard_provider.dart';
 import 'reports_provider.dart';
@@ -1775,7 +1776,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  Future<bool> activateSubscriber({
+  Future<({bool ok, String? errorMessage})> activateSubscriber({
     required int userId,
     required double userPrice,
     required dynamic activationUnits,
@@ -1822,10 +1823,19 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       );
 
       final rData = response.data;
-      final isSuccess = response.statusCode == 200 ||
-          rData?['status'] == 200 ||
-          rData?['success'] == true;
+      // كان: HTTP 200 OR data.status==200 OR data.success — الـOR كانت تخلّي
+      // أي رد HTTP 200 يبان كنجاح حتى لو body فيه status:-1 (مثل
+      // rsp_insufficient_balance). الحقيقة الوحيدة هي data.status == 200.
+      final isSuccess = rData is Map && rData['status'] == 200;
 
+      if (!isSuccess) {
+        final rspMsg = (rData is Map ? rData['message']?.toString() : null);
+        return (
+          ok: false,
+          errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التفعيل'),
+        );
+      }
+      // success path — ندخل block النجاح القديم
       if (isSuccess) {
         await updateUserNotes(userId, newNotes);
 
@@ -1870,15 +1880,23 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           },
         );
 
-        return true;
+        return (ok: true, errorMessage: null);
       }
-      return false;
-    } catch (_) {
-      return false;
+      return (ok: false, errorMessage: 'فشل التفعيل');
+    } on DioException catch (e) {
+      // SAS4 ممكن يرجع HTTP 4xx/5xx مع body يحتوي rsp_*. نلتقطها ونترجمها.
+      final rData = e.response?.data;
+      final rspMsg = (rData is Map ? rData['message']?.toString() : null) ?? e.message;
+      return (
+        ok: false,
+        errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التفعيل'),
+      );
+    } catch (e) {
+      return (ok: false, errorMessage: 'فشل التفعيل: $e');
     }
   }
 
-  Future<bool> extendSubscription({
+  Future<({bool ok, String? errorMessage})> extendSubscription({
     required int userId,
     required int profileId,
     required String method,
@@ -1899,7 +1917,8 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
-      if (response.data?['status'] == 200) {
+      final rData = response.data;
+      if (rData is Map && rData['status'] == 200) {
         final subName = _findUsername(userId);
         logActivity(
           action: 'extend_subscriber',
@@ -1913,11 +1932,23 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             'username': subName,
           },
         );
-        return true;
+        return (ok: true, errorMessage: null);
       }
-      return false;
-    } catch (_) {
-      return false;
+      // SAS رجع status != 200 → نترجم الرسالة بدل ما نرمي bool فقط
+      final rspMsg = (rData is Map ? rData['message']?.toString() : null);
+      return (
+        ok: false,
+        errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التمديد'),
+      );
+    } on DioException catch (e) {
+      final rData = e.response?.data;
+      final rspMsg = (rData is Map ? rData['message']?.toString() : null) ?? e.message;
+      return (
+        ok: false,
+        errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التمديد'),
+      );
+    } catch (e) {
+      return (ok: false, errorMessage: 'فشل التمديد: $e');
     }
   }
 
