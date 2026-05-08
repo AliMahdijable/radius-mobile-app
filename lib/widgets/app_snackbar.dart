@@ -75,16 +75,20 @@ class AppSnackBar {
         ? const Duration(seconds: 4)
         : const Duration(milliseconds: 2800);
 
+    // ToastificationStyle.flat = خلفية بيضاء/كرت محايدة + لون فقط بالـicon
+    // والـborder. مطابق لفلسفة التصميم الجديدة (كروت TPI بدون tinted bg
+    // ساطعة بـlight mode). كان flatColored يستعمل خلفية ملوّنة 25-30%.
     toastification.show(
       type: spec.toastType,
-      style: ToastificationStyle.flatColored,
+      style: ToastificationStyle.flat,
       title: Text(
         message,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Cairo',
           fontWeight: FontWeight.w700,
-          fontSize: 14,
+          fontSize: 13.5,
           height: 1.35,
+          color: spec.accent,
         ),
       ),
       description: (detail != null && detail.isNotEmpty)
@@ -100,29 +104,22 @@ class AppSnackBar {
               overflow: TextOverflow.ellipsis,
             )
           : null,
-      icon: Icon(spec.icon, color: spec.iconColor, size: 22),
+      icon: Icon(spec.icon, color: spec.iconColor, size: 20),
       primaryColor: spec.accent,
-      backgroundColor: spec.bg,
-      foregroundColor: spec.fg,
+      // backgroundColor / foregroundColor تُترك null حتى flat style يستعمل
+      // ألوان theme الافتراضية (white/surface).
       alignment: Alignment.topCenter,
       direction: TextDirection.rtl,
       autoCloseDuration: duration,
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: spec.accent.withValues(alpha: 0.35), width: 1),
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: spec.accent.withValues(alpha: 0.25), width: 1),
       boxShadow: [
         BoxShadow(
-          color: spec.accent.withValues(alpha: 0.18),
-          blurRadius: 16,
-          offset: const Offset(0, 6),
-        ),
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
+          color: Colors.black.withValues(alpha: 0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
         ),
       ],
-      // Stacking: toastification بشكل افتراضي يكدّس الـtoasts الجديدة فوق
-      // الموجودة (stack تلقائي). كل toast يبقى مدّته ثم ينزاح.
       showProgressBar: true,
       pauseOnHover: true,
       dragToClose: true,
