@@ -79,7 +79,6 @@ class AppSnackBar {
     // خلفية بيضاء/card neutral + شريط جانبي ملوّن من الـRTL start فقط
     // (مو border حول الكل) + أيقونة وعنوان ملوّنة + وصف رمادي.
     toastification.showCustom(
-      type: spec.toastType,
       alignment: Alignment.topCenter,
       autoCloseDuration: duration,
       direction: TextDirection.rtl,
