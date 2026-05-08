@@ -487,16 +487,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final msg = response.data['message']?.toString() ?? 'فشل تسجيل الدخول';
       state = state.copyWith(status: AuthStatus.unauthenticated, error: msg);
       return false;
-    } on DioException catch (_) {
+    } on DioException catch (e) {
+      // الـbackend الآن يترجم rsp_* لعربي ويضعه في `message`. كنّا نتجاهله
+      // ونعرض "خطأ في المعلومات المدخلة" للجميع — يضيع الفرق بين كلمة
+      // مرور خاطئة، شبكة معطّلة، حساب موقوف، الخ.
+      final body = e.response?.data;
+      final serverMsg = body is Map ? body['message']?.toString() : null;
+      final fallback = e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.connectionError
+          ? 'تعذّر الاتصال بالخادم. تحقّق من الإنترنت وحاول مجدداً.'
+          : 'اسم المستخدم أو كلمة المرور غير صحيحة';
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'خطأ في المعلومات المدخلة',
+        error: serverMsg?.isNotEmpty == true ? serverMsg! : fallback,
       );
       return false;
     } catch (_) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'خطأ في المعلومات المدخلة',
+        error: 'حدث خطأ غير متوقّع. حاول مجدداً.',
       );
       return false;
     } finally {
