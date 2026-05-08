@@ -75,57 +75,23 @@ class AppSnackBar {
         ? const Duration(seconds: 4)
         : const Duration(milliseconds: 2800);
 
-    // ToastificationStyle.flat = خلفية بيضاء/كرت محايدة + لون فقط بالـicon
-    // والـborder. مطابق لفلسفة التصميم الجديدة (كروت TPI بدون tinted bg
-    // ساطعة بـlight mode). كان flatColored يستعمل خلفية ملوّنة 25-30%.
-    toastification.show(
+    // showCustom — نبني widget كامل بنفس design الـKpiCard:
+    // خلفية بيضاء/card neutral + شريط جانبي ملوّن من الـRTL start فقط
+    // (مو border حول الكل) + أيقونة وعنوان ملوّنة + وصف رمادي.
+    toastification.showCustom(
       type: spec.toastType,
-      style: ToastificationStyle.flat,
-      title: Text(
-        message,
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontWeight: FontWeight.w700,
-          fontSize: 13.5,
-          height: 1.35,
-          color: spec.accent,
-        ),
-      ),
-      description: (detail != null && detail.isNotEmpty)
-          ? Text(
-              detail,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
-                height: 1.35,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
-      icon: Icon(spec.icon, color: spec.iconColor, size: 20),
-      primaryColor: spec.accent,
-      // backgroundColor / foregroundColor تُترك null حتى flat style يستعمل
-      // ألوان theme الافتراضية (white/surface).
       alignment: Alignment.topCenter,
-      direction: TextDirection.rtl,
       autoCloseDuration: duration,
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: spec.accent.withValues(alpha: 0.25), width: 1),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.08),
-          blurRadius: 10,
-          offset: const Offset(0, 3),
-        ),
-      ],
-      showProgressBar: true,
-      pauseOnHover: true,
-      dragToClose: true,
-      applyBlurEffect: false,
-      closeButtonShowType: CloseButtonShowType.onHover,
-      closeOnClick: true,
+      direction: TextDirection.rtl,
+      builder: (context, holder) {
+        return _SideBarToast(
+          accent: spec.accent,
+          icon: spec.icon,
+          title: message,
+          detail: detail,
+          onClose: () => toastification.dismiss(holder),
+        );
+      },
     );
   }
 
@@ -186,6 +152,121 @@ class AppSnackBar {
           icon: LucideIcons.messageCircle,
         );
     }
+  }
+}
+
+/// Toast widget بنفس design الـKpiCard:
+///   - خلفية card بيضاء (في light mode) أو surface (في dark mode)
+///   - شريط جانبي ملوّن 4px من جهة RTL start فقط (مو border حول الكل)
+///   - أيقونة + عنوان بلون الـaccent
+///   - وصف رمادي خفيف
+class _SideBarToast extends StatelessWidget {
+  final Color accent;
+  final IconData icon;
+  final String title;
+  final String? detail;
+  final VoidCallback onClose;
+
+  const _SideBarToast({
+    required this.accent,
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cardBg = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final divider = theme.colorScheme.onSurface.withValues(alpha: 0.08);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.65);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: GestureDetector(
+          onTap: onClose,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: divider, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                // الشريط الملوّن — RTL start = right
+                PositionedDirectional(
+                  start: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 4, color: accent),
+                ),
+                Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 10, 10),
+                  child: Row(
+                    crossAxisAlignment: detail != null && detail!.isNotEmpty
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.center,
+                    children: [
+                      Icon(icon, color: accent, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                height: 1.3,
+                                color: accent,
+                              ),
+                            ),
+                            if (detail != null && detail!.isNotEmpty) ...[
+                              const SizedBox(height: 5),
+                              Container(height: 1, color: divider),
+                              const SizedBox(height: 5),
+                              Text(
+                                detail!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 11.5,
+                                  height: 1.35,
+                                  color: muted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -290,6 +290,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                 _KpiItem(
                   label: 'الصرفيات',
                   value: AppHelpers.formatMoney(expenses),
+                  sub: '${_num(kpis['expenses_count']).toInt()} صرفية',
                   icon: LucideIcons.receipt,
                   accent: KpiAccent.rose,
                 ),
