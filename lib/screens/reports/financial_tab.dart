@@ -283,7 +283,7 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   label: 'الديون الجديدة',
                   value: AppHelpers.formatMoney(nonCashActivations),
                   sub: 'من تفعيلات غير نقدية — ستُحصَّل لاحقاً',
-                  icon: LucideIcons.alertTriangle,
+                  icon: LucideIcons.triangleAlert,
                   accent: KpiAccent.amber,
                 ),
               if (expenses > 0)
