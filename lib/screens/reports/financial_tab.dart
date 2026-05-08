@@ -7,6 +7,7 @@ import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
+import '../../providers/subscribers_provider.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/date_range_picker_row.dart';
 import '../../widgets/employee_filter_dropdown.dart';
@@ -119,6 +120,21 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     }
 
     final kpis = state.kpis;
+    // ديون المشتركين الحالية (snapshot) — نفس مصدر الداشبورد. مش flow،
+    // فلا يعتمد على فلتر التاريخ. يستفيد من القائمة المُحمَّلة بالـsubscribersProvider
+    // (لو الأدمن دخل الداشبورد مرة وحدة، تكون cached).
+    final subsList = ref.watch(subscribersProvider).subscribers;
+    double subscribersDebtOutstanding = 0;
+    int debtorsCount = 0;
+    for (final s in subsList) {
+      final raw = s.notes ?? '';
+      final cleaned = raw.replaceAll(RegExp(r'[^0-9.\-]'), '');
+      final n = double.tryParse(cleaned);
+      if (n != null && n < 0) {
+        debtorsCount++;
+        subscribersDebtOutstanding += n.abs();
+      }
+    }
     // النقد الفعلي المُستلم (cash basis) — تعريف الأدمن للربح:
     // "الربح = تفعيل نقدي + تسديد دين − صرفيات".
     final debtCollections = _num(kpis['payments_sum']) +
@@ -247,8 +263,13 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
               ]),
             ),
 
-          // KPIs — منظّمة على cash-basis. النقد المستلم منفصل عن الإيراد
-          // المُولَّد، والربح يحتسب من النقد فقط (تعريف الأدمن).
+          // KPIs — منظّمة على cash-basis. النقد المستلم منفصل عن الديون
+          // الجديدة، والربح يحتسب من النقد فقط (تعريف الأدمن).
+          _SectionHeader(
+            label: 'نشاط الفترة (من $_dateFrom إلى $_dateTo)',
+            barColor: theme.colorScheme.primary.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 6),
           _KpiGrid(
             items: [
               if (cashCollected > 0)
@@ -283,17 +304,45 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   icon: LucideIcons.zap,
                   accent: KpiAccent.primary,
                 ),
-              if (managerDebtsOutstanding > 0)
-                _KpiItem(
-                  label: 'ديون المدراء (لقطة)',
-                  value: AppHelpers.formatMoney(managerDebtsOutstanding),
-                  sub: 'snapshot — لا يُحتسب في الربح',
-                  icon: LucideIcons.userCheck,
-                  accent: KpiAccent.amber,
-                ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          // مجموعة ثانية — لقطة الآن (snapshot، مستقلة عن فلتر التاريخ).
+          // "الديون الحالية" = مجموع notes السالبة لكل المشتركين الآن.
+          // 0 = الأدمن قبض كل ديونه ✓ (مهم للتمييز عن "الديون الجديدة").
+          if (subscribersDebtOutstanding > 0 ||
+              debtorsCount > 0 ||
+              managerDebtsOutstanding > 0) ...[
+            _SectionHeader(
+              label: 'لقطة الآن (المتبقّي حالياً)',
+              barColor: const Color(0xFFF59E0B),
+            ),
+            const SizedBox(height: 6),
+            _KpiGrid(
+              items: [
+                _KpiItem(
+                  label: 'ديون المشتركين الحالية',
+                  value: AppHelpers.formatMoney(subscribersDebtOutstanding),
+                  sub: subscribersDebtOutstanding > 0
+                      ? '$debtorsCount مدين • snapshot'
+                      : 'لا مديونين — كل الديون مُحصَّلة ✓',
+                  icon: LucideIcons.wallet,
+                  accent: subscribersDebtOutstanding > 0
+                      ? KpiAccent.amber
+                      : KpiAccent.emerald,
+                ),
+                if (managerDebtsOutstanding > 0)
+                  _KpiItem(
+                    label: 'ديون المدراء',
+                    value: AppHelpers.formatMoney(managerDebtsOutstanding),
+                    sub: 'snapshot — مستحق على المدراء الفرعيين',
+                    icon: LucideIcons.userCheck,
+                    accent: KpiAccent.amber,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           // الربح/الخسارة hero — أخضر للموجب، أحمر للسالب. يبيّن من أين
           // أتى الرقم (نقد − صرفيات) وملاحظة بالإيراد المستحق إن وُجد.
           KpiCard(
@@ -524,6 +573,44 @@ class _KpiGrid extends StatelessWidget {
           )).toList(),
         );
       },
+    );
+  }
+}
+
+/// عنوان مجموعة KPIs (مثل "نشاط الفترة" / "لقطة الآن"). شريط رفيع ملوّن
+/// على الجانب RTL start + نص خفيف. ينظّم الكارتات لمجموعتين منفصلتين.
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final Color barColor;
+  const _SectionHeader({required this.label, required this.barColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 12,
+          decoration: BoxDecoration(
+            color: barColor,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface.withValues(alpha: 0.55),
+              fontFamily: 'Cairo',
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
