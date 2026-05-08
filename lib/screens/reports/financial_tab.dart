@@ -308,41 +308,38 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           ),
           const SizedBox(height: 14),
           // مجموعة ثانية — لقطة الآن (snapshot، مستقلة عن فلتر التاريخ).
-          // "الديون الحالية" = مجموع notes السالبة لكل المشتركين الآن.
-          // 0 = الأدمن قبض كل ديونه ✓ (مهم للتمييز عن "الديون الجديدة").
-          if (subscribersDebtOutstanding > 0 ||
-              debtorsCount > 0 ||
-              managerDebtsOutstanding > 0) ...[
-            _SectionHeader(
-              label: 'لقطة الآن (المتبقّي حالياً)',
-              barColor: const Color(0xFFF59E0B),
-            ),
-            const SizedBox(height: 6),
-            _KpiGrid(
-              items: [
+          // يظهر دائماً حتى لو 0 — لأن رسالة "كل الديون مُحصَّلة ✓" هي
+          // المعلومة المهمة لأدمن قبض كل ديونه ولا يميّزها عن "الديون
+          // الجديدة" خلال الفترة.
+          _SectionHeader(
+            label: 'لقطة الآن (المتبقّي حالياً)',
+            barColor: const Color(0xFFF59E0B),
+          ),
+          const SizedBox(height: 6),
+          _KpiGrid(
+            items: [
+              _KpiItem(
+                label: 'ديون المشتركين الحالية',
+                value: AppHelpers.formatMoney(subscribersDebtOutstanding),
+                sub: subscribersDebtOutstanding > 0
+                    ? '$debtorsCount مدين من أصل ${subsList.length}'
+                    : 'لا مديونين — كل الديون مُحصَّلة ✓',
+                icon: LucideIcons.wallet,
+                accent: subscribersDebtOutstanding > 0
+                    ? KpiAccent.amber
+                    : KpiAccent.emerald,
+              ),
+              if (managerDebtsOutstanding > 0)
                 _KpiItem(
-                  label: 'ديون المشتركين الحالية',
-                  value: AppHelpers.formatMoney(subscribersDebtOutstanding),
-                  sub: subscribersDebtOutstanding > 0
-                      ? '$debtorsCount مدين • snapshot'
-                      : 'لا مديونين — كل الديون مُحصَّلة ✓',
-                  icon: LucideIcons.wallet,
-                  accent: subscribersDebtOutstanding > 0
-                      ? KpiAccent.amber
-                      : KpiAccent.emerald,
+                  label: 'ديون المدراء',
+                  value: AppHelpers.formatMoney(managerDebtsOutstanding),
+                  sub: 'snapshot — مستحق على المدراء الفرعيين',
+                  icon: LucideIcons.userCheck,
+                  accent: KpiAccent.amber,
                 ),
-                if (managerDebtsOutstanding > 0)
-                  _KpiItem(
-                    label: 'ديون المدراء',
-                    value: AppHelpers.formatMoney(managerDebtsOutstanding),
-                    sub: 'snapshot — مستحق على المدراء الفرعيين',
-                    icon: LucideIcons.userCheck,
-                    accent: KpiAccent.amber,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-          ],
+            ],
+          ),
+          const SizedBox(height: 12),
           // الربح/الخسارة hero — أخضر للموجب، أحمر للسالب. يبيّن من أين
           // أتى الرقم (نقد − صرفيات) وملاحظة بالإيراد المستحق إن وُجد.
           KpiCard(
