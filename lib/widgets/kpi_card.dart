@@ -92,75 +92,121 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final p = _palette();
     final fg = isDark ? p.fgDark : p.fgLight;
+    // اللون الكامل للـside bar (مو نسخة الـbg الشفافة).
+    final accentBar = switch (accent) {
+      KpiAccent.emerald => const Color(0xFF10B981),
+      KpiAccent.amber => const Color(0xFFF59E0B),
+      KpiAccent.rose => const Color(0xFFE11D48),
+      KpiAccent.blue => const Color(0xFF3B82F6),
+      KpiAccent.violet => const Color(0xFF8B5CF6),
+      KpiAccent.slate => const Color(0xFF64748B),
+      KpiAccent.primary => const Color(0xFF0EA5E9),
+    };
 
-    final iconSize = hero ? 26.0 : (compact ? 18.0 : 22.0);
+    final iconSize = hero ? 22.0 : (compact ? 18.0 : 20.0);
     final labelSize = hero ? 12.0 : 11.5;
-    final valueSize = hero ? 22.0 : (compact ? 15.0 : 17.0);
+    final valueSize = hero ? 20.0 : (compact ? 15.0 : 17.0);
     final subSize = 10.5;
+    final barWidth = hero ? 5.0 : 4.0;
+
+    // خلفية محايدة (Card surface). اللون يظهر فقط في:
+    // الشريط الجانبي + الأيقونة + الـvalue.
+    final cardBg = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final divider = theme.colorScheme.onSurface.withValues(alpha: 0.08);
 
     final pad = hero
-        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12)
-        : const EdgeInsets.all(10);
+        ? const EdgeInsetsDirectional.fromSTEB(14, 11, 14, 11)
+        : const EdgeInsetsDirectional.fromSTEB(12, 10, 10, 10);
 
     return Container(
-      padding: pad,
       decoration: BoxDecoration(
-        color: p.bg,
+        color: cardBg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: p.border, width: 1),
+        border: Border.all(color: divider, width: 1),
+        // hero يأخذ shadow خفيف عشان يميّزه عن الكارتات الإحصائية الفوقه.
+        boxShadow: hero
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
-      child: Row(
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
         children: [
-          Icon(icon, size: iconSize, color: fg),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+          // الشريط الجانبي الملوّن — يستعمل PositionedDirectional.start
+          // ليتموضع تلقائياً حسب الـtextDirection (RTL → يمين البصري).
+          PositionedDirectional(
+            start: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(width: barWidth, color: accentBar),
+          ),
+          Padding(
+            padding: pad,
+            child: Row(
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: labelSize,
-                    color: fg.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Cairo',
-                    height: 1.1,
+                Icon(icon, size: iconSize, color: fg),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: labelSize,
+                          color: muted,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Cairo',
+                          height: 1.1,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          value,
+                          style: TextStyle(
+                            fontSize: valueSize,
+                            color: fg,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Cairo',
+                            letterSpacing: -0.2,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                      if (sub != null && sub!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(height: 1, color: divider),
+                        const SizedBox(height: 5),
+                        Text(
+                          sub!,
+                          style: TextStyle(
+                            fontSize: subSize,
+                            color: muted.withValues(alpha: 0.85),
+                            fontFamily: 'Cairo',
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: valueSize,
-                      color: fg,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'Cairo',
-                      letterSpacing: -0.2,
-                      height: 1.0,
-                    ),
-                  ),
-                ),
-                if (sub != null && sub!.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    sub!,
-                    style: TextStyle(
-                      fontSize: subSize,
-                      color: fg.withValues(alpha: 0.7),
-                      fontFamily: 'Cairo',
-                      height: 1.1,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
               ],
             ),
           ),

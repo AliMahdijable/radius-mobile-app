@@ -130,8 +130,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     // يتحول لنقد لما يتسدد الدين بفترات لاحقة — ما يدخل بالربح الآن.
     final nonCashActivations = _num(kpis['activate_non_cash_sum']);
     final receivable = nonCashActivations + _num(kpis['balance_add_sum']);
-    // الإيراد الإجمالي المُولَّد (مستحق + محصّل من تفعيل) — للعرض فقط.
-    final revenue = cashActivations + nonCashActivations;
     final expenses = _num(kpis['expenses_sum']);
     // Outstanding inter-admin debts (snapshot — للعرض فقط، لا يطرح من الربح)
     final managerDebtsCustom = _num(kpis['manager_debts_outstanding']);
@@ -262,14 +260,13 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   icon: LucideIcons.wallet,
                   accent: KpiAccent.emerald,
                 ),
-              if (revenue > 0)
+              if (nonCashActivations > 0)
                 _KpiItem(
-                  label: 'الإيرادات',
-                  value: AppHelpers.formatMoney(revenue),
-                  sub:
-                      'نقدي ${AppHelpers.formatMoney(cashActivations)} • غير نقدي ${AppHelpers.formatMoney(nonCashActivations)}',
-                  icon: LucideIcons.trendingUp,
-                  accent: KpiAccent.blue,
+                  label: 'الديون الجديدة',
+                  value: AppHelpers.formatMoney(nonCashActivations),
+                  sub: 'من تفعيلات غير نقدية — ستُحصَّل لاحقاً',
+                  icon: LucideIcons.alertTriangle,
+                  accent: KpiAccent.amber,
                 ),
               if (expenses > 0)
                 _KpiItem(
@@ -300,12 +297,12 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           // الربح/الخسارة hero — أخضر للموجب، أحمر للسالب. يبيّن من أين
           // أتى الرقم (نقد − صرفيات) وملاحظة بالإيراد المستحق إن وُجد.
           KpiCard(
-            label: netProfit >= 0 ? 'الربح الصافي' : 'الخسارة الصافية',
+            label: netProfit >= 0 ? 'الربح الصافي للفترة' : 'الخسارة الصافية للفترة',
             value: (netProfit < 0 ? '- ' : '') + AppHelpers.formatMoney(netProfit.abs()),
             sub: nonCashActivations > 0
-                ? 'نقد − صرفيات • +${AppHelpers.formatMoney(nonCashActivations)} مستحق'
-                : 'نقد − صرفيات',
-            icon: LucideIcons.piggyBank,
+                ? 'نقد ${AppHelpers.formatMoney(cashCollected)} − صرفيات ${AppHelpers.formatMoney(expenses)} • +${AppHelpers.formatMoney(nonCashActivations)} دين جديد سيُحصَّل لاحقاً'
+                : 'نقد ${AppHelpers.formatMoney(cashCollected)} − صرفيات ${AppHelpers.formatMoney(expenses)}',
+            icon: LucideIcons.trendingUp,
             accent: netProfit >= 0 ? KpiAccent.emerald : KpiAccent.rose,
             hero: true,
           ),
