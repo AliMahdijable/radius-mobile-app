@@ -301,17 +301,14 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   icon: LucideIcons.zap,
                   accent: KpiAccent.primary,
                 ),
-              _KpiItem(
-                label: 'ديون المشتركين الحالية',
-                value: AppHelpers.formatMoney(subscribersDebtOutstanding),
-                sub: subscribersDebtOutstanding > 0
-                    ? '$debtorsCount مدين من أصل ${subsList.length}'
-                    : 'لا مديونين — كل الديون مُحصَّلة ✓',
-                icon: LucideIcons.wallet,
-                accent: subscribersDebtOutstanding > 0
-                    ? KpiAccent.amber
-                    : KpiAccent.emerald,
-              ),
+              if (subscribersDebtOutstanding > 0)
+                _KpiItem(
+                  label: 'ديون المشتركين الحالية',
+                  value: AppHelpers.formatMoney(subscribersDebtOutstanding),
+                  sub: '$debtorsCount مدين من أصل ${subsList.length}',
+                  icon: LucideIcons.wallet,
+                  accent: KpiAccent.amber,
+                ),
               if (managerDebtsOutstanding > 0)
                 _KpiItem(
                   label: 'ديون المدراء',
