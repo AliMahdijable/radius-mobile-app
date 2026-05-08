@@ -65,6 +65,13 @@ class FcmService {
 
   static Future<void> init() async {
     if (_initialized) return;
+    // Firebase Messaging ما يدعم Windows/macOS/Linux أصلاً — نتجاوز
+    // مباشرةً على desktop. يبقى flag _initialized=true حتى لا تُستدعى مجدداً.
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      _initialized = true;
+      debugPrint('ℹ️ FCM Service skipped (desktop platform)');
+      return;
+    }
 
     await Firebase.initializeApp();
     await FirebaseMessaging.instance.setAutoInitEnabled(true);

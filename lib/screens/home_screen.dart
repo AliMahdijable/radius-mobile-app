@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
+import '../core/utils/platform_utils.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -132,6 +133,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Future<void> _syncAppIconBadge(int count) async {
     if (count == _lastBadgeCount) return;
     _lastBadgeCount = count;
+    // app_badge_plus يدعم Android/iOS فقط — desktop ما عنده taskbar badge
+    // (Windows عنده taskbar overlay icons لكن plugin مختلف). نتجاوز.
+    if (!PlatformUtils.supportsAppBadge) return;
     try {
       final supported = await AppBadgePlus.isSupported();
       if (!supported) return;
