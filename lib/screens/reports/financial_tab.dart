@@ -263,13 +263,10 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
               ]),
             ),
 
-          // KPIs — منظّمة على cash-basis. النقد المستلم منفصل عن الديون
-          // الجديدة، والربح يحتسب من النقد فقط (تعريف الأدمن).
-          _SectionHeader(
-            label: 'نشاط الفترة (من $_dateFrom إلى $_dateTo)',
-            barColor: theme.colorScheme.primary.withValues(alpha: 0.6),
-          ),
-          const SizedBox(height: 6),
+          // KPIs — كل الكارتات في grid واحد (نشاط الفترة + لقطة snapshot).
+          // الـlabel يميّز "الديون الجديدة" (flow) عن "ديون المشتركين الحالية"
+          // (snapshot)، فلا حاجة لـsection headers منفصلة. كارت snapshot يظهر
+          // دائماً حتى لو 0 — رسالة "كل الديون مُحصَّلة ✓" مهمة بحد ذاتها.
           _KpiGrid(
             items: [
               if (cashCollected > 0)
@@ -304,20 +301,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                   icon: LucideIcons.zap,
                   accent: KpiAccent.primary,
                 ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // مجموعة ثانية — لقطة الآن (snapshot، مستقلة عن فلتر التاريخ).
-          // يظهر دائماً حتى لو 0 — لأن رسالة "كل الديون مُحصَّلة ✓" هي
-          // المعلومة المهمة لأدمن قبض كل ديونه ولا يميّزها عن "الديون
-          // الجديدة" خلال الفترة.
-          _SectionHeader(
-            label: 'لقطة الآن (المتبقّي حالياً)',
-            barColor: const Color(0xFFF59E0B),
-          ),
-          const SizedBox(height: 6),
-          _KpiGrid(
-            items: [
               _KpiItem(
                 label: 'ديون المشتركين الحالية',
                 value: AppHelpers.formatMoney(subscribersDebtOutstanding),
@@ -570,44 +553,6 @@ class _KpiGrid extends StatelessWidget {
           )).toList(),
         );
       },
-    );
-  }
-}
-
-/// عنوان مجموعة KPIs (مثل "نشاط الفترة" / "لقطة الآن"). شريط رفيع ملوّن
-/// على الجانب RTL start + نص خفيف. ينظّم الكارتات لمجموعتين منفصلتين.
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final Color barColor;
-  const _SectionHeader({required this.label, required this.barColor});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Container(
-          width: 3,
-          height: 12,
-          decoration: BoxDecoration(
-            color: barColor,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              color: cs.onSurface.withValues(alpha: 0.55),
-              fontFamily: 'Cairo',
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
     );
   }
 }
