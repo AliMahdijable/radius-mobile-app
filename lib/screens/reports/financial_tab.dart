@@ -119,29 +119,32 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     }
 
     final kpis = state.kpis;
-    final collections = _num(kpis['payments_sum']) +
+    // النقد الفعلي المُستلم (cash basis) — تعريف الأدمن للربح:
+    // "الربح = تفعيل نقدي + تسديد دين − صرفيات".
+    final debtCollections = _num(kpis['payments_sum']) +
         _num(kpis['debt_pay_sum']) +
-        _num(kpis['balance_deduct_sum']) +
-        _num(kpis['activate_cash_sum']);
-    final debts =
-        _num(kpis['balance_add_sum']) + _num(kpis['activate_non_cash_sum']);
+        _num(kpis['balance_deduct_sum']);
+    final cashActivations = _num(kpis['activate_cash_sum']);
+    final cashCollected = cashActivations + debtCollections;
+    // الإيراد المستحق غير المحصّل (تفعيل غير نقدي + ديون مضافة).
+    // يتحول لنقد لما يتسدد الدين بفترات لاحقة — ما يدخل بالربح الآن.
+    final nonCashActivations = _num(kpis['activate_non_cash_sum']);
+    final receivable = nonCashActivations + _num(kpis['balance_add_sum']);
+    // الإيراد الإجمالي المُولَّد (مستحق + محصّل من تفعيل) — للعرض فقط.
+    final revenue = cashActivations + nonCashActivations;
     final expenses = _num(kpis['expenses_sum']);
-    // Outstanding inter-admin debts. The KPI returned by the server
-    // covers ONLY the custom manager_debts ledger; SAS-side debt
-    // (manager.debt) lives behind the SAS4 API and isn't visible to
-    // the finance controller. Sum it client-side from the manager-tree
-    // we already fetch via reportsProvider.fetchManagers so the card
-    // matches the per-manager breakdown shown on the managers screen
-    // (دين الساس + ديون أخرى).
+    // Outstanding inter-admin debts (snapshot — للعرض فقط، لا يطرح من الربح)
     final managerDebtsCustom = _num(kpis['manager_debts_outstanding']);
     final sasManagerDebtSum = state.managers.fold<double>(
       0,
       (sum, m) => sum + (m.debt > 0 ? m.debt : 0),
     );
     final managerDebtsOutstanding = managerDebtsCustom + sasManagerDebtSum;
-    final netProfit = collections - debts - expenses - managerDebtsOutstanding;
-    final activationsTotal =
-        _num(kpis['activations_count']) + _num(kpis['extend_count']);
+    // الربح = نقد − صرفيات (cash basis، بدون snapshot).
+    final netProfit = cashCollected - expenses;
+    final activationsCount = _num(kpis['activations_count']);
+    final extendCount = _num(kpis['extend_count']);
+    final activationsTotal = activationsCount + extendCount;
 
     final rawLogs = state.recentLogs;
     final allLogs = _searchQuery.isEmpty
@@ -246,58 +249,62 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
               ]),
             ),
 
-          // KPI cards — built dynamically so we only render rows that
-          // have meaningful data. Empty categories stay hidden instead
-          // of taking grid space with "0 IQD" cards. Net profit is
-          // always present as the hero summary.
+          // KPIs — منظّمة على cash-basis. النقد المستلم منفصل عن الإيراد
+          // المُولَّد، والربح يحتسب من النقد فقط (تعريف الأدمن).
           _KpiGrid(
             items: [
-              if (collections > 0)
+              if (cashCollected > 0)
                 _KpiItem(
-                  label: 'إجمالي التحصيلات',
-                  value: AppHelpers.formatMoney(collections),
-                  icon: LucideIcons.trendingUp,
+                  label: 'النقد المُستلم',
+                  value: AppHelpers.formatMoney(cashCollected),
+                  sub:
+                      'تفعيل ${AppHelpers.formatMoney(cashActivations)} • ديون ${AppHelpers.formatMoney(debtCollections)}',
+                  icon: LucideIcons.wallet,
                   accent: KpiAccent.emerald,
                 ),
-              if (activationsTotal > 0)
+              if (revenue > 0)
                 _KpiItem(
-                  label: 'تفعيل + تمديد',
-                  value: activationsTotal.toInt().toString(),
-                  icon: LucideIcons.circleCheck,
-                  accent: KpiAccent.amber,
-                ),
-              if (debts > 0)
-                _KpiItem(
-                  label: 'إجمالي الديون',
-                  value: AppHelpers.formatMoney(debts),
-                  icon: LucideIcons.banknote,
-                  accent: KpiAccent.rose,
+                  label: 'الإيرادات',
+                  value: AppHelpers.formatMoney(revenue),
+                  sub:
+                      'نقدي ${AppHelpers.formatMoney(cashActivations)} • غير نقدي ${AppHelpers.formatMoney(nonCashActivations)}',
+                  icon: LucideIcons.trendingUp,
+                  accent: KpiAccent.blue,
                 ),
               if (expenses > 0)
                 _KpiItem(
                   label: 'الصرفيات',
                   value: AppHelpers.formatMoney(expenses),
-                  icon: LucideIcons.wallet,
-                  accent: KpiAccent.amber,
+                  icon: LucideIcons.receipt,
+                  accent: KpiAccent.rose,
+                ),
+              if (activationsTotal > 0)
+                _KpiItem(
+                  label: 'العمليات',
+                  value: activationsTotal.toInt().toString(),
+                  sub: 'تفعيل ${activationsCount.toInt()} • تمديد ${extendCount.toInt()}',
+                  icon: LucideIcons.zap,
+                  accent: KpiAccent.primary,
                 ),
               if (managerDebtsOutstanding > 0)
                 _KpiItem(
-                  label: 'ديون المدراء',
+                  label: 'ديون المدراء (لقطة)',
                   value: AppHelpers.formatMoney(managerDebtsOutstanding),
+                  sub: 'snapshot — لا يُحتسب في الربح',
                   icon: LucideIcons.userCheck,
                   accent: KpiAccent.amber,
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          // Net hero — يظهر دائماً حتى لو 0 لأنه الرقم الأهم اللي المدير
-          // يفتح الشاشة عشانه. اللون يدلّ على الإشارة:
-          //   net ≥ 0 → ربح، أخضر
-          //   net < 0 → خسارة، أحمر + علامة "−" قدّام الرقم.
-          // (formatMoney يحذف الإشارة ⇒ نحطّها يدوياً للسالب.)
+          // الربح/الخسارة hero — أخضر للموجب، أحمر للسالب. يبيّن من أين
+          // أتى الرقم (نقد − صرفيات) وملاحظة بالإيراد المستحق إن وُجد.
           KpiCard(
-            label: netProfit >= 0 ? 'صافي الربح' : 'صافي الخسارة',
-            value: (netProfit < 0 ? '- ' : '') + AppHelpers.formatMoney(netProfit),
+            label: netProfit >= 0 ? 'الربح الصافي' : 'الخسارة الصافية',
+            value: (netProfit < 0 ? '- ' : '') + AppHelpers.formatMoney(netProfit.abs()),
+            sub: nonCashActivations > 0
+                ? 'نقد − صرفيات • +${AppHelpers.formatMoney(nonCashActivations)} مستحق'
+                : 'نقد − صرفيات',
             icon: LucideIcons.piggyBank,
             accent: netProfit >= 0 ? KpiAccent.emerald : KpiAccent.rose,
             hero: true,
@@ -474,11 +481,13 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
 class _KpiItem {
   final String label;
   final String value;
+  final String? sub;
   final IconData icon;
   final KpiAccent accent;
   const _KpiItem({
     required this.label,
     required this.value,
+    this.sub,
     required this.icon,
     required this.accent,
   });
@@ -559,6 +568,7 @@ class _KpiTile extends StatelessWidget {
     return KpiCard(
       label: item.label,
       value: item.value,
+      sub: item.sub,
       icon: item.icon,
       accent: item.accent,
     );
@@ -587,10 +597,17 @@ class _AdminRowState extends State<_AdminRow> with SingleTickerProviderStateMixi
     final isDark = theme.brightness == Brightness.dark;
     final admin = widget.admin;
     final name = admin['admin_username']?.toString() ?? '—';
-    final revenue = _toDouble(admin['revenue_total']);
-    final debt = _toDouble(admin['debt_total']);
+    // النقد المُستلم: تفعيلات نقدية + تسديدات الديون.
+    final cashCollected = _toDouble(admin['payments_sum']) +
+        _toDouble(admin['debt_pay_sum']) +
+        _toDouble(admin['balance_deduct_sum']) +
+        _toDouble(admin['activate_cash_sum']);
+    // الإيراد المستحق غير المحصّل (تفعيلات غير نقدية + ديون مضافة).
+    final receivable =
+        _toDouble(admin['activate_non_cash_sum']) + _toDouble(admin['balance_add_sum']);
     final expenses = _toDouble(admin['expenses_total']);
-    final net = revenue - debt - expenses;
+    // الربح = نقد − صرفيات (تعريف الأدمن).
+    final net = cashCollected - expenses;
     final activations = _toInt(admin['activations_count']);
     final extends_ = _toInt(admin['extend_count']);
 
@@ -693,27 +710,28 @@ class _AdminRowState extends State<_AdminRow> with SingleTickerProviderStateMixi
                         height: 1,
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
                       ),
-                      // 3 أرقام مالية
+                      // 3 أرقام مالية على cash-basis: نقد مُستلم • إيراد
+                      // مستحق (يُحصَّل لاحقاً) • صرفيات.
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                         child: Row(
                           children: [
                             _MiniMetric(
-                              label: 'إيرادات',
-                              value: AppHelpers.formatMoney(revenue),
+                              label: 'نقد مُستلم',
+                              value: AppHelpers.formatMoney(cashCollected),
                               color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
                             ),
                             _Divider(),
                             _MiniMetric(
-                              label: 'ديون',
-                              value: AppHelpers.formatMoney(debt),
-                              color: isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C),
+                              label: 'إيراد مستحق',
+                              value: AppHelpers.formatMoney(receivable),
+                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
                             ),
                             _Divider(),
                             _MiniMetric(
                               label: 'صرفيات',
                               value: AppHelpers.formatMoney(expenses),
-                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                              color: isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C),
                             ),
                           ],
                         ),
