@@ -52,11 +52,25 @@ class Sas4Errors {
   /// (داخل قوسين بعد fallback) حتى لا نُخفي خطأ غير مترجم.
   static String translate(String? rspMessage, {String fallback = 'فشلت العملية'}) {
     if (rspMessage == null) return fallback;
-    final key = rspMessage.trim().toLowerCase();
-    if (key.isEmpty) return fallback;
+    final raw = rspMessage.trim();
+    if (raw.isEmpty) return fallback;
+    final key = raw.toLowerCase();
     final ar = _ar[key];
     if (ar != null) return ar;
     if (key.startsWith('rsp_')) return '$fallback ($rspMessage)';
-    return rspMessage; // ربما رسالة عربية/إنجليزية مباشرة
+    // أخطاء dio/network الإنجليزية الجاهزة — استبدل بالـfallback العربي
+    // بدل ما يطلع للمستخدم نص "Connection error" أو "Http status error 502".
+    final lower = raw.toLowerCase();
+    if (lower.startsWith('http status error') ||
+        lower.startsWith('connection error') ||
+        lower.startsWith('connection timeout') ||
+        lower.startsWith('connection failed') ||
+        lower.startsWith('receive timeout') ||
+        lower.startsWith('send timeout') ||
+        lower.startsWith('socketexception') ||
+        lower.startsWith('request failed')) {
+      return fallback;
+    }
+    return rspMessage;
   }
 }
