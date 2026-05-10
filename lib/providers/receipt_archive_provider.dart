@@ -42,9 +42,16 @@ extension ReceiptPaymentMethodApi on ReceiptPaymentMethod {
   }
 }
 
+/// رقم الوصل المنسّق "No. 00000" — رقم تسلسلي لكل مدير.
+String formatReceiptNo(int? no) {
+  if (no == null || no < 0) return 'No. 00000';
+  return 'No. ${no.toString().padLeft(5, '0')}';
+}
+
 /// صف من الأرشيف. يطابق ما يرجعه GET /api/printed-receipts.
 class ArchivedReceipt {
   final int id;
+  final int? receiptNo;
   final String? subscriberId;
   final String? subscriberUsername;
   final String? subscriberName;
@@ -65,6 +72,7 @@ class ArchivedReceipt {
 
   const ArchivedReceipt({
     required this.id,
+    this.receiptNo,
     this.subscriberId,
     this.subscriberUsername,
     this.subscriberName,
@@ -95,6 +103,9 @@ class ArchivedReceipt {
     if (p is Map) payload = Map<String, dynamic>.from(p);
     return ArchivedReceipt(
       id: int.tryParse(j['id']?.toString() ?? '') ?? 0,
+      receiptNo: j['receipt_no'] == null
+          ? null
+          : int.tryParse(j['receipt_no'].toString()),
       subscriberId: j['subscriber_id']?.toString(),
       subscriberUsername: j['subscriber_username']?.toString(),
       subscriberName: j['subscriber_name']?.toString(),
@@ -121,12 +132,15 @@ class ArchiveListArgs {
   final DateTime? to;
   final String? type;
   final String? query;
+  /// رقم الوصل (No.) — يقبل رقم خام أو بصيغة "No. 00005"؛ السيرفر ينظّفه.
+  final String? receiptNo;
   final int limit;
   const ArchiveListArgs({
     this.from,
     this.to,
     this.type,
     this.query,
+    this.receiptNo,
     this.limit = 100,
   });
 
@@ -138,10 +152,11 @@ class ArchiveListArgs {
           o.to == to &&
           o.type == type &&
           o.query == query &&
+          o.receiptNo == receiptNo &&
           o.limit == limit);
 
   @override
-  int get hashCode => Object.hash(from, to, type, query, limit);
+  int get hashCode => Object.hash(from, to, type, query, receiptNo, limit);
 }
 
 /// يحفظ صف أرشيف بعد طباعة وصل. fire-and-forget عشان فشل الأرشفة ما يبطّل
@@ -208,6 +223,9 @@ final receiptsArchiveProvider = FutureProvider.family
   if (args.type != null && args.type!.isNotEmpty) qp['type'] = args.type;
   if (args.query != null && args.query!.trim().isNotEmpty) {
     qp['q'] = args.query!.trim();
+  }
+  if (args.receiptNo != null && args.receiptNo!.trim().isNotEmpty) {
+    qp['no'] = args.receiptNo!.trim();
   }
   try {
     final res = await dio.get('/api/printed-receipts', queryParameters: qp);

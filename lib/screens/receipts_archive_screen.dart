@@ -25,19 +25,23 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
   DateTime? _to;
   String _type = 'all';
   final _searchCtrl = TextEditingController();
+  final _noCtrl = TextEditingController();
   String _query = '';
+  String _no = '';
 
   ArchiveListArgs get _args => ArchiveListArgs(
         from: _from,
         to: _to,
         type: _type == 'all' ? null : _type,
         query: _query.isEmpty ? null : _query,
+        receiptNo: _no.isEmpty ? null : _no,
         limit: 200,
       );
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _noCtrl.dispose();
     super.dispose();
   }
 
@@ -129,29 +133,64 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
       ),
       body: Column(
         children: [
-          // search
+          // search row — نص + رقم وصل جنب جنب
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _query = v.trim()),
-              textDirection: TextDirection.ltr,
-              decoration: InputDecoration(
-                hintText: 'بحث (اسم/يوزر/تليفون)',
-                prefixIcon: const Icon(LucideIcons.search, size: 20),
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(LucideIcons.x, size: 18),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          setState(() => _query = '');
-                        },
-                      )
-                    : null,
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _query = v.trim()),
+                    textDirection: TextDirection.ltr,
+                    decoration: InputDecoration(
+                      hintText: 'بحث (اسم/يوزر/تليفون)',
+                      prefixIcon: const Icon(LucideIcons.search, size: 20),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      suffixIcon: _query.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(LucideIcons.x, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _query = '');
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _noCtrl,
+                    onChanged: (v) => setState(
+                        () => _no = v.replaceAll(RegExp(r'[^0-9]'), '')),
+                    textDirection: TextDirection.ltr,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontFamily: 'monospace'),
+                    decoration: InputDecoration(
+                      hintText: 'No.',
+                      prefixIcon: const Icon(LucideIcons.hash, size: 18),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      suffixIcon: _no.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(LucideIcons.x, size: 18),
+                              onPressed: () {
+                                _noCtrl.clear();
+                                setState(() => _no = '');
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           // type filter chips
@@ -368,6 +407,24 @@ class _ReceiptRow extends StatelessWidget {
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w700,
                                 color: color.withValues(alpha: .75))),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: .10),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                              color: AppTheme.primary.withValues(alpha: .30)),
+                        ),
+                        child: Text(formatReceiptNo(row.receiptNo),
+                            textDirection: TextDirection.ltr,
+                            style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primary)),
                       ),
                       const Spacer(),
                       Text(timeStr,
