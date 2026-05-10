@@ -162,7 +162,10 @@ class ArchiveListArgs {
 /// يحفظ صف أرشيف بعد طباعة وصل. fire-and-forget عشان فشل الأرشفة ما يبطّل
 /// تجربة الطباعة. الـcaller يبني الـpayload من ReceiptData المُستعملة + أي
 /// حقول إضافية (template_id، subscriber_id، إلخ).
-Future<void> archivePrintedReceipt(
+/// يحفظ صف بـprinted_receipts ويرجّع receipt_no اللي أعطاه الـbackend
+/// (المرقّم لكل مدير). يرجع null لو فشلت الأرشفة. الـcaller يستخدم القيمة
+/// لطباعة الـPDF برقم الوصل الصحيح بدلاً من INV-{timestamp} المؤقت.
+Future<int?> archivePrintedReceipt(
   WidgetRef ref, {
   required ReceiptData data,
   required ReceiptOperation operation,
@@ -189,7 +192,7 @@ Future<void> archivePrintedReceipt(
       ...?extraPayload,
     };
 
-    await dio.post('/api/printed-receipts', data: {
+    final res = await dio.post('/api/printed-receipts', data: {
       'subscriber_id': subscriberId,
       'subscriber_username': subscriberUsername,
       'subscriber_name': data.subscriberName,
@@ -206,11 +209,17 @@ Future<void> archivePrintedReceipt(
       'template_id': templateId,
       'payload': payload,
     });
+    final no = res.data is Map ? res.data['receipt_no'] : null;
+    if (no is num) return no.toInt();
+    if (no is String) return int.tryParse(no);
+    return null;
   } on DioException catch (e) {
     dev.log('archivePrintedReceipt failed: ${e.response?.statusCode} ${e.message}',
         name: 'RECEIPTS');
+    return null;
   } catch (e) {
     dev.log('archivePrintedReceipt error: $e', name: 'RECEIPTS');
+    return null;
   }
 }
 

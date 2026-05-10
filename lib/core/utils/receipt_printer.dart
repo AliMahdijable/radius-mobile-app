@@ -39,12 +39,25 @@ class ReceiptPrinter {
     _cairoFont = pw.Font.ttf(fontData);
   }
 
-  static String _fillTemplate(String template, ReceiptData data) {
-    final invoiceNumber = 'INV-${DateTime.now().millisecondsSinceEpoch}';
+  /// رقم الوصل المنسّق "No. 00000" — لو [no] null يستخدم INV-{timestamp}
+  /// كـfallback مؤقت (يحدث فقط لما تفشل الأرشفة).
+  static String _formatReceiptNo(int? no) {
+    if (no == null || no < 0) {
+      return 'INV-${DateTime.now().millisecondsSinceEpoch}';
+    }
+    return 'No. ${no.toString().padLeft(5, '0')}';
+  }
+
+  static String _fillTemplate(String template, ReceiptData data, {int? receiptNo}) {
+    final receiptLabel = _formatReceiptNo(receiptNo);
     final date = intl.DateFormat('yyyy/MM/dd HH:mm', 'ar').format(DateTime.now());
 
     return template
-        .replaceAll('{invoice_number}', invoiceNumber)
+        // كلا الـplaceholders يأخذان نفس القيمة الموحّدة. الـlegacy
+        // {invoice_number} يبقى مدعوماً للقوالب القديمة، والـ{receipt_no}
+        // الجديد للقوالب الحديثة المنشأة من v2 أو الموبايل.
+        .replaceAll('{receipt_no}', receiptLabel)
+        .replaceAll('{invoice_number}', receiptLabel)
         .replaceAll('{date}', date)
         .replaceAll('{subscriber_name}', data.subscriberName)
         .replaceAll('{phone_number}', data.phoneNumber.isNotEmpty ? data.phoneNumber : '-')
@@ -61,12 +74,16 @@ class ReceiptPrinter {
         .replaceAll('{debt_amount}', AppHelpers.formatMoney(data.debtAmount));
   }
 
-  /// Print using a stored HTML template
+  /// Print using a stored HTML template.
+  ///
+  /// [receiptNo] هو رقم الوصل المعطى من الـbackend (per-admin counter).
+  /// لو null، يطبع رقم timestamp مؤقت — يحدث فقط لما الأرشفة تفشل.
   static Future<void> printWithTemplate({
     required String htmlTemplate,
     required ReceiptData data,
+    int? receiptNo,
   }) async {
-    final filledHtml = _fillTemplate(htmlTemplate, data);
+    final filledHtml = _fillTemplate(htmlTemplate, data, receiptNo: receiptNo);
 
     final fullHtml = '''
 <!DOCTYPE html>
@@ -98,6 +115,7 @@ $filledHtml
   /// Print using a built-in default receipt (when no template exists)
   static Future<void> printDefaultReceipt({
     required ReceiptData data,
+    int? receiptNo,
   }) async {
     await _loadFonts();
 
@@ -109,7 +127,7 @@ $filledHtml
         color: PdfColor.fromHex('#1a7f64'));
     final smallStyle = pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey700);
 
-    final invoiceNumber = 'INV-${DateTime.now().millisecondsSinceEpoch}';
+    final invoiceNumber = _formatReceiptNo(receiptNo);
     final date = intl.DateFormat('yyyy/MM/dd HH:mm').format(DateTime.now());
 
     String opTitle;
@@ -137,7 +155,7 @@ $filledHtml
               pw.Divider(color: PdfColor.fromHex('#1a7f64'), thickness: 2),
               pw.SizedBox(height: 10),
 
-              _receiptRow('رقم الفاتورة', invoiceNumber, boldStyle, baseStyle),
+              _receiptRow('رقم الوصل', invoiceNumber, boldStyle, baseStyle),
               _receiptRow('التاريخ', date, boldStyle, baseStyle),
               pw.Divider(color: PdfColors.grey300),
               pw.SizedBox(height: 6),
@@ -197,15 +215,24 @@ $filledHtml
     );
   }
 
-  /// Quick print: tries active template first, falls back to default
+  /// Quick print: tries active template first, falls back to default.
+  ///
+  /// [receiptNo] هو رقم الوصل القادم من الـbackend بعد الأرشفة. لو فشلت
+  /// الأرشفة (null) يطبع رقم timestamp مؤقت. أي placeholder
+  /// {receipt_no} أو {invoice_number} في القالب يأخذ هذه القيمة.
   static Future<void> printReceipt({
     required ReceiptData data,
     String? htmlTemplate,
+    int? receiptNo,
   }) async {
     if (htmlTemplate != null && htmlTemplate.isNotEmpty) {
-      await printWithTemplate(htmlTemplate: htmlTemplate, data: data);
+      await printWithTemplate(
+        htmlTemplate: htmlTemplate,
+        data: data,
+        receiptNo: receiptNo,
+      );
     } else {
-      await printDefaultReceipt(data: data);
+      await printDefaultReceipt(data: data, receiptNo: receiptNo);
     }
   }
 }

@@ -176,13 +176,10 @@ class _SubscriberDetailsScreenState
         await ref.read(printTemplatesProvider.notifier).loadTemplates();
       }
       final activeTemplate = ref.read(printTemplatesProvider).activeTemplate;
-      await ReceiptPrinter.printReceipt(
-        data: data,
-        htmlTemplate: activeTemplate?.content,
-      );
-      // بعد ما تنفّذ الطباعة (المستخدم يقدر يلغي قبل الإرسال للطابعة، لكن
-      // المهم أن البيانات اكتملت وتم build الوصل) → نحفظ نسخة للأرشيف.
-      await archivePrintedReceipt(
+      // 1) أرشفة أولاً عشان نأخذ receipt_no من العدّاد الخاص بالمدير،
+      //    ثم نطبع الـPDF بالرقم الصحيح بدلاً من INV-{timestamp}. الترتيب
+      //    مهم — لو طبعنا أولاً، الوصل المطبوع ما يقدر يحوي receipt_no.
+      final receiptNo = await archivePrintedReceipt(
         ref,
         data: data,
         operation: operation,
@@ -190,6 +187,12 @@ class _SubscriberDetailsScreenState
         subscriberId: subscriberId,
         subscriberUsername: subscriberUsername,
         templateId: activeTemplate?.id,
+      );
+      // 2) طباعة بالرقم الذي رجّعه الـbackend (أو null لو فشلت الأرشفة)
+      await ReceiptPrinter.printReceipt(
+        data: data,
+        htmlTemplate: activeTemplate?.content,
+        receiptNo: receiptNo,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');

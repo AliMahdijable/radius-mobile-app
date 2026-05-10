@@ -111,9 +111,12 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
         await ref.read(printTemplatesProvider.notifier).loadTemplates();
       }
       final activeTemplate = ref.read(printTemplatesProvider).activeTemplate;
+      // إعادة الطباعة من الأرشيف تستخدم receipt_no الأصلي للوصل بدلاً من
+      // طلب رقم جديد — حتى المستخدم يحصل على نسخة طبق الأصل من الوصل القديم.
       await ReceiptPrinter.printReceipt(
         data: data,
         htmlTemplate: activeTemplate?.content,
+        receiptNo: full?.receiptNo ?? row.receiptNo,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في إعادة الطباعة');
