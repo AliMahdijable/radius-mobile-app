@@ -178,16 +178,130 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
     context.push('/print-template-editor', extra: t);
   }
 
-  void _createNew() {
+  Future<void> _createNew() async {
+    final type = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.outline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Text(
+                'اختر مقاس الورق',
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 14),
+              _typeOption(
+                ctx,
+                value: 'pos',
+                icon: LucideIcons.receipt,
+                title: 'POS 80mm',
+                subtitle: 'وصل حراري — يناسب طابعات نقاط البيع',
+              ),
+              const SizedBox(height: 8),
+              _typeOption(
+                ctx,
+                value: 'a4',
+                icon: LucideIcons.fileText,
+                title: 'A4',
+                subtitle: 'ورق عادي بحجم كامل — يطبع على طابعة منزلية',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (type == null || !mounted) return;
+
     final adminId = ref.read(authProvider).user?.id ?? '';
     final draft = PrintTemplateModel(
       adminId: adminId,
-      templateType: 'pos',
-      templateName: 'قالب جديد',
-      content: PrintTemplateModel.defaultPosTemplate(),
+      templateType: type,
+      templateName: type == 'pos' ? 'قالب POS جديد' : 'قالب A4 جديد',
+      content: type == 'pos'
+          ? PrintTemplateModel.defaultPosTemplate()
+          : PrintTemplateModel.defaultA4Template(),
       isActive: false,
     );
+    if (!mounted) return;
     context.push('/print-template-editor', extra: draft);
+  }
+
+  Widget _typeOption(
+    BuildContext ctx, {
+    required String value,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final scheme = Theme.of(ctx).colorScheme;
+    return Material(
+      color: scheme.primary.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.pop(ctx, value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: scheme.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11.5,
+                        color: scheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(LucideIcons.chevronLeft,
+                  size: 18, color: scheme.onSurface.withValues(alpha: 0.4)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

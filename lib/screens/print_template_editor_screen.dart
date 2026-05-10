@@ -224,7 +224,25 @@ class _PrintTemplateEditorScreenState
                             value: 'a4', child: Text('A4 (ورق عادي)')),
                       ],
                       onChanged: (v) {
-                        if (v != null) setState(() => _type = v);
+                        if (v == null || v == _type) return;
+                        // لو الـHTML الحالي لا يزال هو القالب الافتراضي للنوع
+                        // القديم، نُبدّله بافتراضي النوع الجديد تلقائياً. لو
+                        // المستخدم حرّر شيئاً (لا يطابق الافتراضي بالضبط)، نحترم
+                        // اختياره ونتركه كما هو.
+                        final currentTrimmed = _htmlCtrl.text.trim();
+                        final oldDefault = _type == 'pos'
+                            ? PrintTemplateModel.defaultPosTemplate().trim()
+                            : PrintTemplateModel.defaultA4Template().trim();
+                        setState(() {
+                          _type = v;
+                          if (currentTrimmed == oldDefault) {
+                            final newDefault = v == 'pos'
+                                ? PrintTemplateModel.defaultPosTemplate()
+                                : PrintTemplateModel.defaultA4Template();
+                            _htmlCtrl.text = newDefault;
+                            _previewHtml = newDefault;
+                          }
+                        });
                       },
                     ),
                   ),

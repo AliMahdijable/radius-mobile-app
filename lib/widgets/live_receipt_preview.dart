@@ -43,6 +43,10 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   Timer? _debounce;
   int _generation = 0; // يحمي من سباق التحديثات
 
+  // Zoom — Controller للـInteractiveViewer + قيمة عرض حالية
+  final TransformationController _zoomCtrl = TransformationController();
+  double _currentScale = 1.0;
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +65,27 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _zoomCtrl.dispose();
     super.dispose();
+  }
+
+  void _zoomIn() {
+    final next = (_currentScale * 1.4).clamp(0.5, 5.0);
+    _setZoom(next);
+  }
+
+  void _zoomOut() {
+    final next = (_currentScale / 1.4).clamp(0.5, 5.0);
+    _setZoom(next);
+  }
+
+  void _zoomReset() => _setZoom(1.0);
+
+  void _setZoom(double scale) {
+    setState(() {
+      _currentScale = scale;
+      _zoomCtrl.value = Matrix4.identity()..scale(scale);
+    });
   }
 
   bool _designEquals(ReceiptDesign a, ReceiptDesign b) {
@@ -242,7 +266,7 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
               color: theme.colorScheme.outline.withValues(alpha: 0.10),
             ),
             Container(
-              height: 320,
+              height: 480,
               width: double.infinity,
               color: const Color(0xFFF4F4F6),
               child: _buildPreviewBody(),
@@ -286,28 +310,95 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
         ),
       );
     }
-    return InteractiveViewer(
-      maxScale: 4,
-      minScale: 0.5,
-      boundaryMargin: const EdgeInsets.all(40),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Center(
+    return Stack(
+      children: [
+        InteractiveViewer(
+          transformationController: _zoomCtrl,
+          maxScale: 5,
+          minScale: 0.5,
+          boundaryMargin: const EdgeInsets.all(60),
+          onInteractionEnd: (_) {
+            // نُزامن قيمة الزوم الداخلية مع pinch-gesture
+            final s = _zoomCtrl.value.getMaxScaleOnAxis();
+            if ((s - _currentScale).abs() > 0.01) {
+              setState(() => _currentScale = s);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.10),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+        ),
+        // أزرار الـzoom — overlay بأسفل اليسار
+        Positioned(
+          bottom: 10,
+          left: 10,
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(LucideIcons.zoomOut, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: _currentScale > 0.6 ? _zoomOut : null,
+                ),
+                InkWell(
+                  onTap: _zoomReset,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      '${(_currentScale * 100).round()}%',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(LucideIcons.zoomIn, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: _currentScale < 4.5 ? _zoomIn : null,
+                ),
+              ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
