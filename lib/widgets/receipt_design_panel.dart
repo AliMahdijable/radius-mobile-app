@@ -78,7 +78,7 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
         ),
         const SizedBox(height: 8),
         _section(
-          icon: LucideIcons.layout,
+          icon: LucideIcons.layoutDashboard,
           title: 'التخطيط',
           children: _layoutSection(),
         ),
