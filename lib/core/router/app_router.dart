@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/subscriber_model.dart';
 import '../../models/manager_model.dart';
+import '../../models/print_template_model.dart';
 import '../../screens/login_screen.dart';
 import '../../screens/managers/manager_movements_screen.dart';
 import '../../screens/home_screen.dart';
@@ -14,6 +15,8 @@ import '../../screens/whatsapp/whatsapp_send_scope_screen.dart';
 import '../../screens/whatsapp/message_logs_screen.dart';
 import '../../screens/whatsapp/broadcast_screen.dart';
 import '../../screens/schedules_screen.dart';
+import '../../screens/print_template_editor_screen.dart';
+import '../../screens/print_templates_screen.dart';
 import '../../screens/templates_screen.dart';
 import '../../screens/discounts_screen.dart';
 import '../../screens/debt_export_screen.dart';
@@ -132,6 +135,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/templates',
         builder: (context, state) => const TemplatesScreen(),
+      ),
+      GoRoute(
+        path: '/print-templates',
+        builder: (context, state) => const PrintTemplatesScreen(),
+      ),
+      GoRoute(
+        path: '/print-template-editor',
+        builder: (context, state) {
+          final initial = state.extra;
+          if (initial is! PrintTemplateModel) {
+            return const Scaffold(
+              body: Center(child: Text('قالب غير صالح')),
+            );
+          }
+          return PrintTemplateEditorScreen(initial: initial);
+        },
       ),
       GoRoute(
         path: '/discounts',

@@ -416,6 +416,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 iconColor: AppTheme.primary,
                 onTap: () => context.push('/receipts-archive'),
               ),
+              _SettingTile(
+                icon: LucideIcons.fileCode,
+                title: 'قوالب الطباعة',
+                subtitle: 'تصميم وصولات POS وA4 — متغيّرات + معاينة',
+                iconColor: AppTheme.primary,
+                onTap: () => context.push('/print-templates'),
+              ),
               if (empCan('reports.expenses'))
                 _SettingTile(
                   icon: LucideIcons.wallet,
