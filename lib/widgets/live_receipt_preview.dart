@@ -167,8 +167,11 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
       receiptNo: 12345,
     );
     final wrapper =
-        await PrintHtmlWrapper.build(filledHtml: filled, d: widget.design);
-    return await Printing.convertHtml(html: wrapper, format: format);
+        PrintHtmlWrapper.build(filledHtml: filled, d: widget.design);
+    // timeout — لو convertHtml تجمّد لأي سبب (مثلاً خطأ في الـwebview الداخلي)
+    // ما نخلي المستخدم بـspinner لانهاية.
+    return await Printing.convertHtml(html: wrapper, format: format)
+        .timeout(const Duration(seconds: 15));
   }
 
   @override

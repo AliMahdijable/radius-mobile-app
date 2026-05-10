@@ -99,7 +99,7 @@ class ReceiptPrinter {
   }) async {
     final filledHtml = _fillTemplate(htmlTemplate, data, receiptNo: receiptNo);
     final d = design ?? ReceiptDesign();
-    final fullHtml = await PrintHtmlWrapper.build(filledHtml: filledHtml, d: d);
+    final fullHtml = PrintHtmlWrapper.build(filledHtml: filledHtml, d: d);
 
     await Printing.layoutPdf(
       onLayout: (format) async {
