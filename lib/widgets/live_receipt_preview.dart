@@ -286,10 +286,11 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
         InteractiveViewer(
           transformationController: _zoomCtrl,
           maxScale: 5,
-          minScale: 0.5,
-          boundaryMargin: const EdgeInsets.all(60),
+          minScale: 0.3,
+          // Allow free pan; content larger than viewport is normal for A4
+          constrained: false,
+          boundaryMargin: const EdgeInsets.all(200),
           onInteractionEnd: (_) {
-            // نُزامن قيمة الزوم الداخلية مع pinch-gesture
             final s = _zoomCtrl.value.getMaxScaleOnAxis();
             if ((s - _currentScale).abs() > 0.01) {
               setState(() => _currentScale = s);
@@ -297,20 +298,21 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
           },
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.10),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
+              // ارسم بالأبعاد الطبيعية للصورة. هذا مهم خصوصاً لـA4
+              // (910x1286px @110dpi) حتى المحتوى يطلع واضحاً والمستخدم
+              // يسحب/يكبّر بدل ما يشاهد نقطة بالمنتصف.
+              child: Image.memory(_imageBytes!),
             ),
           ),
         ),

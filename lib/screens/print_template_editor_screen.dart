@@ -99,6 +99,48 @@ class _PrintTemplateEditorScreenState
     return ReceiptDesign();
   }
 
+  /// زر "إعادة تعيين القالب" — يبدّل HTML للقالب الافتراضي بناءً على
+  /// النوع الحالي. مهم للقوالب القديمة اللي حُفظت بمحتوى لا يطابق النوع
+  /// (مثل A4 محفوظ بمحتوى POS).
+  Future<void> _resetTemplateContent() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          'إعادة تعيين القالب',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'سيتم استبدال محتوى HTML بقالب ${_type == 'pos' ? 'POS 80mm' : 'A4'} '
+          'الافتراضي. سيُحفظ التصميم البصري (الألوان، الخطوط، الهوامش).\n\n'
+          'هل تريد المتابعة؟',
+          style: const TextStyle(fontFamily: 'Cairo'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('إعادة تعيين',
+                style: TextStyle(
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final newHtml = _type == 'pos'
+        ? PrintTemplateModel.defaultPosTemplate()
+        : PrintTemplateModel.defaultA4Template();
+    setState(() {
+      _htmlCtrl.text = newHtml;
+      _previewHtml = newHtml;
+    });
+  }
+
   Future<void> _preview() async {
     if (_htmlCtrl.text.trim().isEmpty) {
       AppSnackBar.error(context, 'أضف محتوى HTML أولاً');
@@ -307,9 +349,34 @@ class _PrintTemplateEditorScreenState
           ),
           const SizedBox(height: 14),
 
+          // ── زر إعادة تعيين القالب ──
+          // ينفع لما القالب القديم محتواه ما يطابق النوع (مثلاً A4 محفوظ
+          // بـHTML POS من نسخة قديمة من التطبيق) — يستبدل HTML بافتراضي
+          // النوع الحالي مع الحفاظ على التصميم البصري.
+          OutlinedButton.icon(
+            onPressed: _resetTemplateContent,
+            icon: const Icon(LucideIcons.rotateCcw, size: 16),
+            label: Text(
+              'إعادة تعيين محتوى القالب لـ${_type == 'pos' ? 'POS' : 'A4'} الافتراضي',
+              style: const TextStyle(
+                  fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              foregroundColor: AppTheme.primary,
+              side: BorderSide(
+                  color: AppTheme.primary.withValues(alpha: 0.35)),
+            ),
+          ),
+          const SizedBox(height: 14),
+
           // ─── HTML editor + variables — مخفي بناءً على طلب المستخدم.
-          //     التصميم البصري + المعاينة كافيين. لو احتجت تعود لتحرير
-          //     الـHTML الخام، ارجع لـcommit 9353ca6.
+          //     التصميم البصري + المعاينة + زر إعادة التعيين كافيين.
+          //     لو احتجت تعود لتحرير الـHTML الخام، ارجع لـcommit 9353ca6.
 
           // ── أزرار المعاينة + الحفظ ──
           Row(children: [
