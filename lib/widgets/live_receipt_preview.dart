@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/utils/print_html_wrapper.dart';
 import '../core/utils/receipt_printer.dart' as rp;
 import '../models/print_template_model.dart';
 
@@ -157,47 +158,17 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
             widget.design.paperWidthMm * PdfPageFormat.mm,
             297 * PdfPageFormat.mm,
           );
-    // نولّد الـHTML بنفس الـmethod اللي يستعملها الطباعة الفعلية حتى
-    // المعاينة تطابق المخرجات تماماً.
-    final pseudoNo = 12345; // عدد عرض رقم وصل تجريبي للمعاينة
-    final wrapper = _wrapHtmlWithDesign(
-      rp.ReceiptPrinter.testFillTemplate(
-        widget.htmlTemplate,
-        widget.sampleData,
-        receiptNo: pseudoNo,
-      ),
-      widget.design,
+    // نستخدم نفس الـwrapper اللي يستخدمه الطباعة الفعلية — فالمعاينة
+    // والطباعة تتشاركان نفس CSS، نفس @font-face لـCairo، نفس قيم
+    // التصميم. الـreceiptNo رقم تجريبي للمعاينة فقط.
+    final filled = rp.ReceiptPrinter.testFillTemplate(
+      widget.htmlTemplate,
+      widget.sampleData,
+      receiptNo: 12345,
     );
+    final wrapper =
+        await PrintHtmlWrapper.build(filledHtml: filled, d: widget.design);
     return await Printing.convertHtml(html: wrapper, format: format);
-  }
-
-  String _wrapHtmlWithDesign(String filled, ReceiptDesign d) {
-    final pad = '${d.marginTopMm}mm ${d.marginRightMm}mm '
-        '${d.marginBottomMm}mm ${d.marginLeftMm}mm';
-    return '''
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-<meta charset="UTF-8">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root { --accent: ${d.accentColor}; --text: ${d.textColor}; }
-  body {
-    font-family: '${d.fontFamily}', sans-serif;
-    direction: rtl;
-    padding: $pad;
-    font-size: ${d.fontSizeBase}px;
-    font-weight: ${d.fontWeight};
-    color: ${d.textColor};
-    line-height: ${d.lineHeight};
-  }
-  h1, h2, h3 { color: var(--accent); font-size: ${d.fontSizeTitle}px; }
-  @media print { body { padding: 0; } }
-</style>
-</head>
-<body>$filled</body>
-</html>
-''';
   }
 
   @override

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../models/print_template_model.dart';
 import 'helpers.dart';
+import 'print_html_wrapper.dart';
 
 class ReceiptData {
   final String subscriberName;
@@ -98,40 +99,7 @@ class ReceiptPrinter {
   }) async {
     final filledHtml = _fillTemplate(htmlTemplate, data, receiptNo: receiptNo);
     final d = design ?? ReceiptDesign();
-
-    // تحويل قيم mm إلى padding CSS. الـconvertHtml يستعمل DPI افتراضي،
-    // فالـmm تطابق صحياً عند العرض.
-    final pad = '${d.marginTopMm}mm ${d.marginRightMm}mm '
-        '${d.marginBottomMm}mm ${d.marginLeftMm}mm';
-    final fullHtml = '''
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-      --accent: ${d.accentColor};
-      --text:   ${d.textColor};
-    }
-    body {
-      font-family: '${d.fontFamily}', sans-serif;
-      direction: rtl;
-      padding: $pad;
-      font-size: ${d.fontSizeBase}px;
-      font-weight: ${d.fontWeight};
-      color: ${d.textColor};
-      line-height: ${d.lineHeight};
-    }
-    h1, h2, h3 { color: var(--accent); font-size: ${d.fontSizeTitle}px; }
-    @media print { body { padding: 0; } }
-  </style>
-</head>
-<body>
-$filledHtml
-</body>
-</html>
-''';
+    final fullHtml = await PrintHtmlWrapper.build(filledHtml: filledHtml, d: d);
 
     await Printing.layoutPdf(
       onLayout: (format) async {

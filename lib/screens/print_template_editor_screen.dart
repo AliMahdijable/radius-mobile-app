@@ -44,13 +44,34 @@ class _PrintTemplateEditorScreenState
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.initial.templateName);
-    _htmlCtrl = TextEditingController(text: widget.initial.content);
-    _previewHtml = widget.initial.content;
+    final initialContent = _correctMismatchedContent(
+      widget.initial.templateType,
+      widget.initial.content,
+    );
+    _htmlCtrl = TextEditingController(text: initialContent);
+    _previewHtml = initialContent;
     _htmlCtrl.addListener(_onHtmlChanged);
     _type = widget.initial.templateType;
     _isActive = widget.initial.isActive;
     // قراءة التصميم من template_data (JSON). لو ما موجود/معطوب → افتراضيات.
     _design = _parseDesign(widget.initial.templateData);
+  }
+
+  /// إصلاح القوالب القديمة: لو النوع 'a4' لكن المحتوى يطابق defaultPosTemplate
+  /// بالضبط (تم إنشاؤه قبل ما يصير type-picker)، بدّل إلى defaultA4Template
+  /// والعكس صحيح. هذا فقط يطبَّق إذا المحتوى = الافتراضي الخاطئ بحرفيّته،
+  /// فلا نخسر أي تعديل قام به المدير.
+  static String _correctMismatchedContent(String type, String content) {
+    final trimmed = content.trim();
+    final posDefault = PrintTemplateModel.defaultPosTemplate().trim();
+    final a4Default = PrintTemplateModel.defaultA4Template().trim();
+    if (type == 'a4' && trimmed == posDefault) {
+      return PrintTemplateModel.defaultA4Template();
+    }
+    if (type == 'pos' && trimmed == a4Default) {
+      return PrintTemplateModel.defaultPosTemplate();
+    }
+    return content;
   }
 
   @override

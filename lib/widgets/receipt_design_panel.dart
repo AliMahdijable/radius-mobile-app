@@ -86,6 +86,16 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
     );
   }
 
+  /// لو القالب محفوظ بقيمة فونت قديمة (Almarai) أو فارغة، اعد لـCairo
+  /// كافتراضي معروض في الـdropdown.
+  String _normalizeFamily(String f) {
+    const allowed = {
+      'Cairo', 'Tajawal', 'Amiri',
+      'Noto Naskh Arabic', 'IBM Plex Sans Arabic',
+    };
+    return allowed.contains(f) ? f : 'Cairo';
+  }
+
   // ─── البناء ────────────────────────────────────────────────────
 
   Widget _section({
@@ -263,11 +273,13 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
     return [
       _dropdown<String>(
         label: 'نوع الخط',
-        value: d.fontFamily,
+        value: _normalizeFamily(d.fontFamily),
         items: const {
-          'Cairo': 'Cairo',
+          'Cairo': 'Cairo (افتراضي — مضمَّن)',
           'Tajawal': 'Tajawal',
-          'Almarai': 'Almarai',
+          'Amiri': 'Amiri (خط مزخرف)',
+          'Noto Naskh Arabic': 'Noto Naskh Arabic',
+          'IBM Plex Sans Arabic': 'IBM Plex Sans Arabic',
         },
         onChanged: (v) => setState(() {
           d.fontFamily = v ?? 'Cairo';
