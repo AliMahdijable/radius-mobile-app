@@ -12,13 +12,13 @@ import '../widgets/app_snackbar.dart';
 import '../widgets/live_receipt_preview.dart';
 import '../widgets/receipt_design_panel.dart';
 
-/// Editor for a single print template (POS or A4).
-///
-/// Three sections in one form:
-///   1. Settings — name, paper type, active flag
-///   2. HTML — multiline TextField + variable chip picker (insert at cursor)
-///   3. Preview — uses ReceiptPrinter with sample data to render the
-///      current draft so the user can verify before saving
+/// محرّر القالب — مرآة بصرية لـclient-v2/PrintTemplates.tsx:
+///   • هيدر العنوان + الوصف
+///   • معاينة لايف قابلة للطي (دائماً فوق)
+///   • شريط تابات أفقي قابل للسحب (الورق / الخطوط / التخطيط / الألوان /
+///     الأقسام / المحتوى)
+///   • محتوى التاب الحالي
+///   • شريط أكشن سفلي (حفظ + معاينة طباعة)
 class PrintTemplateEditorScreen extends ConsumerStatefulWidget {
   final PrintTemplateModel initial;
   const PrintTemplateEditorScreen({super.key, required this.initial});
@@ -28,6 +28,19 @@ class PrintTemplateEditorScreen extends ConsumerStatefulWidget {
       _PrintTemplateEditorScreenState();
 }
 
+/// أقسام الشاشة بترتيب الـtabs — الخمسة الأولى من ReceiptDesign، السادسة
+/// "المحتوى" مخصصة للاسم/الفعّالية/إعادة التعيين/نوع الورق.
+enum _Tab { paper, fonts, layout, colors, sections, content }
+
+const Map<_Tab, ({IconData icon, String label})> _kTabMeta = {
+  _Tab.paper:    (icon: LucideIcons.fileText,       label: 'الورق'),
+  _Tab.fonts:    (icon: LucideIcons.type,           label: 'الخطوط'),
+  _Tab.layout:   (icon: LucideIcons.layoutDashboard, label: 'التخطيط'),
+  _Tab.colors:   (icon: LucideIcons.palette,        label: 'الألوان'),
+  _Tab.sections: (icon: LucideIcons.eye,            label: 'الأقسام'),
+  _Tab.content:  (icon: LucideIcons.settings,       label: 'المحتوى'),
+};
+
 class _PrintTemplateEditorScreenState
     extends ConsumerState<PrintTemplateEditorScreen> {
   late TextEditingController _nameCtrl;
@@ -35,8 +48,9 @@ class _PrintTemplateEditorScreenState
   late String _type;
   late bool _isActive;
   late ReceiptDesign _design;
-  bool _saving = false;
   String _previewHtml = '';
+  bool _saving = false;
+  _Tab _tab = _Tab.paper;
 
   bool get _isNew => widget.initial.id == null;
 
@@ -53,25 +67,7 @@ class _PrintTemplateEditorScreenState
     _htmlCtrl.addListener(_onHtmlChanged);
     _type = widget.initial.templateType;
     _isActive = widget.initial.isActive;
-    // قراءة التصميم من template_data (JSON). لو ما موجود/معطوب → افتراضيات.
     _design = _parseDesign(widget.initial.templateData);
-  }
-
-  /// إصلاح القوالب القديمة: لو النوع 'a4' لكن المحتوى يطابق defaultPosTemplate
-  /// بالضبط (تم إنشاؤه قبل ما يصير type-picker)، بدّل إلى defaultA4Template
-  /// والعكس صحيح. هذا فقط يطبَّق إذا المحتوى = الافتراضي الخاطئ بحرفيّته،
-  /// فلا نخسر أي تعديل قام به المدير.
-  static String _correctMismatchedContent(String type, String content) {
-    final trimmed = content.trim();
-    final posDefault = PrintTemplateModel.defaultPosTemplate().trim();
-    final a4Default = PrintTemplateModel.defaultA4Template().trim();
-    if (type == 'a4' && trimmed == posDefault) {
-      return PrintTemplateModel.defaultA4Template();
-    }
-    if (type == 'pos' && trimmed == a4Default) {
-      return PrintTemplateModel.defaultPosTemplate();
-    }
-    return content;
   }
 
   @override
@@ -83,8 +79,6 @@ class _PrintTemplateEditorScreenState
   }
 
   void _onHtmlChanged() {
-    // الـTextEditingController يطلق notify كل ضربة مفتاح. نسحب القيمة
-    // ونضعها في state عشان المعاينة تعرف تعيد البناء (debounce داخلها).
     if (_previewHtml != _htmlCtrl.text) {
       setState(() => _previewHtml = _htmlCtrl.text);
     }
@@ -99,9 +93,21 @@ class _PrintTemplateEditorScreenState
     return ReceiptDesign();
   }
 
-  /// زر "إعادة تعيين القالب" — يبدّل HTML للقالب الافتراضي بناءً على
-  /// النوع الحالي. مهم للقوالب القديمة اللي حُفظت بمحتوى لا يطابق النوع
-  /// (مثل A4 محفوظ بمحتوى POS).
+  /// إصلاح القوالب القديمة: لو النوع 'a4' لكن المحتوى يطابق defaultPosTemplate
+  /// بالضبط، بدّل تلقائياً (والعكس صحيح).
+  static String _correctMismatchedContent(String type, String content) {
+    final trimmed = content.trim();
+    final posDefault = PrintTemplateModel.defaultPosTemplate().trim();
+    final a4Default = PrintTemplateModel.defaultA4Template().trim();
+    if (type == 'a4' && trimmed == posDefault) {
+      return PrintTemplateModel.defaultA4Template();
+    }
+    if (type == 'pos' && trimmed == a4Default) {
+      return PrintTemplateModel.defaultPosTemplate();
+    }
+    return content;
+  }
+
   Future<void> _resetTemplateContent() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -112,7 +118,7 @@ class _PrintTemplateEditorScreenState
         ),
         content: Text(
           'سيتم استبدال محتوى HTML بقالب ${_type == 'pos' ? 'POS 80mm' : 'A4'} '
-          'الافتراضي. سيُحفظ التصميم البصري (الألوان، الخطوط، الهوامش).\n\n'
+          'الافتراضي. يُحفظ التصميم البصري (الألوان، الخطوط، الهوامش).\n\n'
           'هل تريد المتابعة؟',
           style: const TextStyle(fontFamily: 'Cairo'),
         ),
@@ -124,9 +130,11 @@ class _PrintTemplateEditorScreenState
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('إعادة تعيين',
-                style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            child: const Text(
+              'إعادة تعيين',
+              style:
+                  TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ),
@@ -141,12 +149,12 @@ class _PrintTemplateEditorScreenState
     });
   }
 
-  Future<void> _preview() async {
+  Future<void> _printPreview() async {
     if (_htmlCtrl.text.trim().isEmpty) {
-      AppSnackBar.error(context, 'أضف محتوى HTML أولاً');
+      AppSnackBar.error(context, 'محتوى القالب فارغ');
       return;
     }
-    final sample = const rp.ReceiptData(
+    const sample = rp.ReceiptData(
       subscriberName: 'محمد أحمد',
       phoneNumber: '07712345678',
       packageName: 'باقة أساسية',
@@ -174,10 +182,6 @@ class _PrintTemplateEditorScreenState
       AppSnackBar.error(context, 'اسم القالب مطلوب');
       return;
     }
-    if (_htmlCtrl.text.trim().isEmpty) {
-      AppSnackBar.error(context, 'محتوى الـHTML مطلوب');
-      return;
-    }
     setState(() => _saving = true);
     final updated = widget.initial.copyWith(
       templateType: _type,
@@ -200,192 +204,312 @@ class _PrintTemplateEditorScreenState
     }
   }
 
+  void _onTypeChanged(String? v) {
+    if (v == null || v == _type) return;
+    final currentTrimmed = _htmlCtrl.text.trim();
+    final oldDefault = _type == 'pos'
+        ? PrintTemplateModel.defaultPosTemplate().trim()
+        : PrintTemplateModel.defaultA4Template().trim();
+    setState(() {
+      _type = v;
+      if (currentTrimmed == oldDefault) {
+        final newDefault = v == 'pos'
+            ? PrintTemplateModel.defaultPosTemplate()
+            : PrintTemplateModel.defaultA4Template();
+        _htmlCtrl.text = newDefault;
+        _previewHtml = newDefault;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(
-          _isNew ? 'قالب جديد' : 'تحرير القالب',
-          style: const TextStyle(
-              fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+        title: const Text(
+          'تصميم الوصل',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'معاينة',
-            icon: const Icon(LucideIcons.eye, size: 20),
-            onPressed: _preview,
-          ),
-          TextButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(LucideIcons.check, size: 18),
-            label: const Text(
-              'حفظ',
-              style:
-                  TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
+      ),
+      body: Column(
+        children: [
+          // ── Header subtitle ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+            child: Text(
+              'تخصيص شامل: الورق، الخطوط، الألوان، الأقسام، والمحتوى — مع معاينة فورية',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11.5,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+              textAlign: TextAlign.center,
             ),
+          ),
+
+          // ── معاينة لايف (دائماً فوق، قابلة للطي) ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: LiveReceiptPreview(
+              htmlTemplate: _previewHtml,
+              design: _design,
+              templateType: _type,
+              sampleData: const rp.ReceiptData(
+                subscriberName: 'محمد أحمد',
+                phoneNumber: '07712345678',
+                packageName: 'باقة أساسية',
+                packagePrice: 25000,
+                paidAmount: 25000,
+                remainingAmount: 0,
+                debtAmount: 0,
+                expiryDate: '2026-12-31',
+                operationType: 'activation',
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // ── شريط التابات ──
+          _TabBar(
+            current: _tab,
+            onChanged: (t) => setState(() => _tab = t),
+          ),
+          const SizedBox(height: 8),
+
+          // ── محتوى التاب الحالي ──
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
+              child: _buildTabContent(theme),
+            ),
+          ),
+
+          // ── شريط أكشن سفلي ──
+          _BottomActions(
+            saving: _saving,
+            onPreview: _printPreview,
+            onSave: _save,
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ── معاينة مباشرة (في الأعلى — قابلة للطي) ──
-          LiveReceiptPreview(
-            htmlTemplate: _previewHtml,
-            design: _design,
-            templateType: _type,
-            sampleData: const rp.ReceiptData(
-              subscriberName: 'محمد أحمد',
-              phoneNumber: '07712345678',
-              packageName: 'باقة أساسية',
-              packagePrice: 25000,
-              paidAmount: 25000,
-              remainingAmount: 0,
-              debtAmount: 0,
-              expiryDate: '2026-12-31',
-              operationType: 'activation',
+    );
+  }
+
+  // ─── محتوى التابات ─────────────────────────────────────────────
+
+  Widget _buildTabContent(ThemeData theme) {
+    if (_tab == _Tab.content) return _contentTab(theme);
+    return ReceiptDesignSectionPanel(
+      section: _toDesignSection(_tab),
+      value: _design,
+      templateType: _type,
+      onChanged: (d) => setState(() => _design = d),
+    );
+  }
+
+  DesignSection _toDesignSection(_Tab t) => switch (t) {
+        _Tab.paper => DesignSection.paper,
+        _Tab.fonts => DesignSection.fonts,
+        _Tab.layout => DesignSection.layout,
+        _Tab.colors => DesignSection.colors,
+        _Tab.sections => DesignSection.sections,
+        _Tab.content => DesignSection.paper, // غير مستخدم
+      };
+
+  Widget _contentTab(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // اسم القالب
+        TextField(
+          controller: _nameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'اسم القالب',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // مقاس الورق (POS / A4)
+        DropdownButtonFormField<String>(
+          initialValue: _type,
+          decoration: const InputDecoration(
+            labelText: 'مقاس الورق',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+          items: const [
+            DropdownMenuItem(
+                value: 'pos', child: Text('POS 80mm (وصل حراري)')),
+            DropdownMenuItem(value: 'a4', child: Text('A4 (ورق عادي)')),
+          ],
+          onChanged: _onTypeChanged,
+        ),
+        const SizedBox(height: 8),
+
+        // نشط/معطّل
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text(
+            'القالب النشط',
+            style: TextStyle(
+                fontFamily: 'Cairo', fontWeight: FontWeight.w800),
+          ),
+          subtitle: Text(
+            'يُستخدم عند طباعة الوصولات',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11.5,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
-          const SizedBox(height: 14),
+          value: _isActive,
+          activeThumbColor: AppTheme.successColor,
+          onChanged: (v) => setState(() => _isActive = v),
+        ),
+        const SizedBox(height: 14),
 
-          // ── إعدادات أساسية ──
-          _section(
-            title: 'الإعدادات',
-            icon: LucideIcons.settings,
-            child: Column(
-              children: [
-                TextField(
-                  controller: _nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم القالب',
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _type,
-                      decoration: const InputDecoration(
-                        labelText: 'مقاس الورق',
-                        isDense: true,
+        // إعادة تعيين القالب
+        OutlinedButton.icon(
+          onPressed: _resetTemplateContent,
+          icon: const Icon(LucideIcons.rotateCcw, size: 16),
+          label: Text(
+            'إعادة تعيين محتوى القالب لـ${_type == 'pos' ? 'POS' : 'A4'} الافتراضي',
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w700,
+                fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            foregroundColor: AppTheme.primary,
+            side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.35)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// شريط التابات الأفقي القابل للسحب — مماثل لتصميم client-v2.
+class _TabBar extends StatelessWidget {
+  final _Tab current;
+  final ValueChanged<_Tab> onChanged;
+  const _TabBar({required this.current, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 42,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color ?? Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        itemCount: _Tab.values.length,
+        itemBuilder: (_, i) {
+          final t = _Tab.values[i];
+          final meta = _kTabMeta[t]!;
+          final active = t == current;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+            child: Material(
+              color: active
+                  ? AppTheme.primary
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => onChanged(t),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        meta.icon,
+                        size: 15,
+                        color: active
+                            ? Colors.white
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.7),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'pos',
-                            child: Text('POS 80mm (وصل حراري)')),
-                        DropdownMenuItem(
-                            value: 'a4', child: Text('A4 (ورق عادي)')),
-                      ],
-                      onChanged: (v) {
-                        if (v == null || v == _type) return;
-                        // لو الـHTML الحالي لا يزال هو القالب الافتراضي للنوع
-                        // القديم، نُبدّله بافتراضي النوع الجديد تلقائياً. لو
-                        // المستخدم حرّر شيئاً (لا يطابق الافتراضي بالضبط)، نحترم
-                        // اختياره ونتركه كما هو.
-                        final currentTrimmed = _htmlCtrl.text.trim();
-                        final oldDefault = _type == 'pos'
-                            ? PrintTemplateModel.defaultPosTemplate().trim()
-                            : PrintTemplateModel.defaultA4Template().trim();
-                        setState(() {
-                          _type = v;
-                          if (currentTrimmed == oldDefault) {
-                            final newDefault = v == 'pos'
-                                ? PrintTemplateModel.defaultPosTemplate()
-                                : PrintTemplateModel.defaultA4Template();
-                            _htmlCtrl.text = newDefault;
-                            _previewHtml = newDefault;
-                          }
-                        });
-                      },
-                    ),
+                      const SizedBox(width: 6),
+                      Text(
+                        meta.label,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                          color: active
+                              ? Colors.white
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ],
                   ),
-                ]),
-                const SizedBox(height: 12),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'القالب النشط',
-                    style: TextStyle(
-                        fontFamily: 'Cairo', fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(
-                    'استخدم هذا القالب عند طباعة الوصولات',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11.5,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  value: _isActive,
-                  activeThumbColor: AppTheme.successColor,
-                  onChanged: (v) => setState(() => _isActive = v),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // ── التصميم البصري (5 أقسام قابلة للطي) ──
-          _section(
-            title: 'التصميم البصري',
-            icon: LucideIcons.brush,
-            subtitle: 'عناصر مرئية، ألوان، خطوط، هوامش — نفس ما هو على الويب',
-            child: ReceiptDesignPanel(
-              value: _design,
-              templateType: _type,
-              onChanged: (d) => setState(() => _design = d),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // ── زر إعادة تعيين القالب ──
-          // ينفع لما القالب القديم محتواه ما يطابق النوع (مثلاً A4 محفوظ
-          // بـHTML POS من نسخة قديمة من التطبيق) — يستبدل HTML بافتراضي
-          // النوع الحالي مع الحفاظ على التصميم البصري.
-          OutlinedButton.icon(
-            onPressed: _resetTemplateContent,
-            icon: const Icon(LucideIcons.rotateCcw, size: 16),
-            label: Text(
-              'إعادة تعيين محتوى القالب لـ${_type == 'pos' ? 'POS' : 'A4'} الافتراضي',
-              style: const TextStyle(
-                  fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
               ),
-              foregroundColor: AppTheme.primary,
-              side: BorderSide(
-                  color: AppTheme.primary.withValues(alpha: 0.35)),
             ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// شريط الأكشن السفلي — معاينة طباعة + حفظ.
+class _BottomActions extends StatelessWidget {
+  final bool saving;
+  final VoidCallback onPreview;
+  final VoidCallback onSave;
+
+  const _BottomActions({
+    required this.saving,
+    required this.onPreview,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color ?? Colors.white,
+        border: Border(
+          top: BorderSide(
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
           ),
-          const SizedBox(height: 14),
-
-          // ─── HTML editor + variables — مخفي بناءً على طلب المستخدم.
-          //     التصميم البصري + المعاينة + زر إعادة التعيين كافيين.
-          //     لو احتجت تعود لتحرير الـHTML الخام، ارجع لـcommit 9353ca6.
-
-          // ── أزرار المعاينة + الحفظ ──
-          Row(children: [
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _preview,
-                icon: const Icon(LucideIcons.eye, size: 16),
+                onPressed: onPreview,
+                icon: const Icon(LucideIcons.printer, size: 16),
                 label: const Text(
-                  'معاينة',
+                  'طباعة المعاينة',
                   style: TextStyle(
                       fontFamily: 'Cairo', fontWeight: FontWeight.w800),
                 ),
@@ -400,8 +524,8 @@ class _PrintTemplateEditorScreenState
             const SizedBox(width: 8),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
+                onPressed: saving ? null : onSave,
+                icon: saving
                     ? const SizedBox(
                         width: 14,
                         height: 14,
@@ -424,59 +548,8 @@ class _PrintTemplateEditorScreenState
                 ),
               ),
             ),
-          ]),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-
-  Widget _section({
-    required String title,
-    required IconData icon,
-    String? subtitle,
-    Widget? trailing,
-    required Widget child,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(children: [
-            Icon(icon, size: 16, color: AppTheme.primary),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w900),
-            ),
-            const Spacer(),
-            if (trailing != null) trailing,
-          ]),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11.5,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
           ],
-          const SizedBox(height: 12),
-          child,
-        ],
+        ),
       ),
     );
   }

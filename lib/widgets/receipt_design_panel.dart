@@ -4,30 +4,39 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../core/theme/app_theme.dart';
 import '../models/print_template_model.dart';
 
-/// لوحة تحرير ReceiptDesign — مرآة للويب client-v2/PrintTemplates.tsx.
-/// مقسّمة لـ 5 أقسام قابلة للطي (ExpansionTile) لتوفير المساحة على الموبايل:
-///   1. الإظهار/الإخفاء — switches للعناصر الظاهرة على الوصل
-///   2. الورق — عرض ورق POS، الهوامش، اتجاه A4
-///   3. الخطوط — نوع الخط، الأحجام، الوزن
-///   4. الألوان — accent + text + border
-///   5. التخطيط — تباعد الأقسام، ارتفاع السطر، محاذاة، حواف
-class ReceiptDesignPanel extends StatefulWidget {
+/// أقسام التصميم — يستعملها الـeditor كـtabs على غرار الويب.
+enum DesignSection { paper, fonts, layout, colors, sections }
+
+const Map<DesignSection, ({IconData icon, String label})> kDesignSectionMeta = {
+  DesignSection.paper:    (icon: LucideIcons.fileText,       label: 'الورق'),
+  DesignSection.fonts:    (icon: LucideIcons.type,           label: 'الخطوط'),
+  DesignSection.layout:   (icon: LucideIcons.layoutDashboard, label: 'التخطيط'),
+  DesignSection.colors:   (icon: LucideIcons.palette,        label: 'الألوان'),
+  DesignSection.sections: (icon: LucideIcons.eye,            label: 'الأقسام'),
+};
+
+/// لوحة تحرير قسم واحد من ReceiptDesign — تُستخدم داخل tabs الـeditor.
+/// السلوك مرآة لـclient-v2/PrintTemplates.tsx مع الفصل بين الأقسام.
+class ReceiptDesignSectionPanel extends StatefulWidget {
+  final DesignSection section;
   final ReceiptDesign value;
   final ValueChanged<ReceiptDesign> onChanged;
-  final String templateType; // 'pos' | 'a4' — يخفي/يظهر بعض الحقول
+  final String templateType; // 'pos' | 'a4'
 
-  const ReceiptDesignPanel({
+  const ReceiptDesignSectionPanel({
     super.key,
+    required this.section,
     required this.value,
     required this.onChanged,
     required this.templateType,
   });
 
   @override
-  State<ReceiptDesignPanel> createState() => _ReceiptDesignPanelState();
+  State<ReceiptDesignSectionPanel> createState() =>
+      _ReceiptDesignSectionPanelState();
 }
 
-class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
+class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
   late ReceiptDesign d;
 
   @override
@@ -37,57 +46,13 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
   }
 
   @override
-  void didUpdateWidget(covariant ReceiptDesignPanel oldWidget) {
+  void didUpdateWidget(covariant ReceiptDesignSectionPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) {
-      d = widget.value;
-    }
+    if (oldWidget.value != widget.value) d = widget.value;
   }
 
   void _emit() => widget.onChanged(d);
 
-  @override
-  Widget build(BuildContext context) {
-    final isPos = widget.templateType == 'pos';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _section(
-          icon: LucideIcons.eye,
-          title: 'الإظهار / الإخفاء',
-          initiallyExpanded: true,
-          children: _showHideSection(),
-        ),
-        const SizedBox(height: 8),
-        _section(
-          icon: LucideIcons.fileText,
-          title: 'الورق والهوامش',
-          children: _paperSection(isPos),
-        ),
-        const SizedBox(height: 8),
-        _section(
-          icon: LucideIcons.type,
-          title: 'الخطوط',
-          children: _typographySection(),
-        ),
-        const SizedBox(height: 8),
-        _section(
-          icon: LucideIcons.palette,
-          title: 'الألوان',
-          children: _colorsSection(),
-        ),
-        const SizedBox(height: 8),
-        _section(
-          icon: LucideIcons.layoutDashboard,
-          title: 'التخطيط',
-          children: _layoutSection(),
-        ),
-      ],
-    );
-  }
-
-  /// لو القالب محفوظ بقيمة فونت قديمة (Almarai) أو فارغة، اعد لـCairo
-  /// كافتراضي معروض في الـdropdown.
   String _normalizeFamily(String f) {
     const allowed = {
       'Cairo', 'Tajawal', 'Amiri',
@@ -96,44 +61,18 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
     return allowed.contains(f) ? f : 'Cairo';
   }
 
-  // ─── البناء ────────────────────────────────────────────────────
-
-  Widget _section({
-    required IconData icon,
-    required String title,
-    bool initiallyExpanded = false,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.15)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Theme(
-          data: theme.copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            leading: Icon(icon, size: 18, color: AppTheme.primary),
-            title: Text(
-              title,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 13.5,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            initiallyExpanded: initiallyExpanded,
-            children: children,
-          ),
-        ),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    final children = switch (widget.section) {
+      DesignSection.paper    => _paperSection(widget.templateType == 'pos'),
+      DesignSection.fonts    => _typographySection(),
+      DesignSection.layout   => _layoutSection(),
+      DesignSection.colors   => _colorsSection(),
+      DesignSection.sections => _showHideSection(),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
     );
   }
 
@@ -145,10 +84,11 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
             d.showLogo = v;
             _emit();
           })),
-      _switch('بيانات المتجر (العنوان/الهاتف)', d.showShopInfo, (v) => setState(() {
-            d.showShopInfo = v;
-            _emit();
-          })),
+      _switch('بيانات المتجر (العنوان/الهاتف)', d.showShopInfo,
+          (v) => setState(() {
+                d.showShopInfo = v;
+                _emit();
+              })),
       _switch('رقم الوصل', d.showReceiptId, (v) => setState(() {
             d.showReceiptId = v;
             _emit();
@@ -264,6 +204,34 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
           _emit();
         }),
       ),
+      const SizedBox(height: 12),
+      _dropdown<String>(
+        label: 'نمط الإطار',
+        value: d.borderStyle,
+        items: const {
+          'none': 'بدون',
+          'solid': 'متصل',
+          'dashed': 'متقطّع',
+          'dotted': 'منقّط',
+          'double': 'مزدوج',
+        },
+        onChanged: (v) => setState(() {
+          d.borderStyle = v ?? 'dashed';
+          _emit();
+        }),
+      ),
+      _slider(
+        label: 'انحناء زوايا الإطار',
+        value: d.borderRadiusPx,
+        min: 0,
+        max: 20,
+        divisions: 20,
+        suffix: ' px',
+        onChanged: (v) => setState(() {
+          d.borderRadiusPx = v;
+          _emit();
+        }),
+      ),
     ];
   }
 
@@ -345,7 +313,7 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
           _emit();
         }),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 14),
       _colorRow(
         label: 'لون النص',
         currentHex: d.textColor,
@@ -364,34 +332,6 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
 
   List<Widget> _layoutSection() {
     return [
-      _dropdown<String>(
-        label: 'نمط الإطار',
-        value: d.borderStyle,
-        items: const {
-          'none': 'بدون',
-          'solid': 'متصل',
-          'dashed': 'متقطّع',
-          'dotted': 'منقّط',
-          'double': 'مزدوج',
-        },
-        onChanged: (v) => setState(() {
-          d.borderStyle = v ?? 'dashed';
-          _emit();
-        }),
-      ),
-      const SizedBox(height: 6),
-      _slider(
-        label: 'انحناء زوايا الإطار',
-        value: d.borderRadiusPx,
-        min: 0,
-        max: 20,
-        divisions: 20,
-        suffix: ' px',
-        onChanged: (v) => setState(() {
-          d.borderRadiusPx = v;
-          _emit();
-        }),
-      ),
       _slider(
         label: 'المسافة بين الأقسام',
         value: d.sectionGapMm,
@@ -466,6 +406,7 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
           _emit();
         }),
       ),
+      const SizedBox(height: 8),
       _switch('عناوين الأقسام بأحرف كبيرة', d.sectionTitleUppercase,
           (v) => setState(() {
                 d.sectionTitleUppercase = v;
@@ -487,7 +428,7 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
       dense: true,
       title: Text(
         label,
-        style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5),
+        style: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
       ),
       value: value,
       activeThumbColor: AppTheme.successColor,
@@ -517,7 +458,7 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5),
                 ),
               ),
               Container(
@@ -572,17 +513,18 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
         initialValue: value,
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
+          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5),
           isDense: true,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
         items: items.entries
             .map((e) => DropdownMenuItem<T>(
                   value: e.key,
                   child: Text(
                     e.value,
-                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5),
+                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
                   ),
                 ))
             .toList(),
@@ -597,7 +539,7 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
     required List<String> presets,
     required ValueChanged<String> onChanged,
   }) {
-    Color _parse(String hex) {
+    Color parse(String hex) {
       final h = hex.replaceAll('#', '');
       return Color(int.parse('FF$h', radix: 16));
     }
@@ -609,13 +551,13 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: _parse(currentHex),
+              color: parse(currentHex),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -625,38 +567,38 @@ class _ReceiptDesignPanelState extends State<ReceiptDesignPanel> {
                 fontFamily: 'monospace',
                 fontSize: 10.5,
                 fontWeight: FontWeight.w900,
-                color: _parse(currentHex).computeLuminance() > 0.5
+                color: parse(currentHex).computeLuminance() > 0.5
                     ? Colors.black
                     : Colors.white,
               ),
             ),
           ),
         ]),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Wrap(
-          spacing: 6,
-          runSpacing: 6,
+          spacing: 8,
+          runSpacing: 8,
           children: presets.map((p) {
             final selected = p.toLowerCase() == currentHex.toLowerCase();
             return InkWell(
               onTap: () => onChanged(p),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               child: Container(
-                width: 30,
-                height: 30,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: _parse(p),
-                  borderRadius: BorderRadius.circular(8),
+                  color: parse(p),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: selected
                         ? AppTheme.primary
                         : Colors.black.withValues(alpha: 0.10),
-                    width: selected ? 2 : 1,
+                    width: selected ? 2.5 : 1,
                   ),
                 ),
                 child: selected
                     ? const Icon(LucideIcons.check,
-                        size: 16, color: Colors.white)
+                        size: 18, color: Colors.white)
                     : null,
               ),
             );

@@ -7,11 +7,12 @@ import '../core/theme/app_theme.dart';
 import '../models/print_template_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/print_templates_provider.dart';
-import '../widgets/app_snackbar.dart';
 
-/// Print templates list — simple Card-per-template view with toggle-active
-/// switches and an FAB to create a new template. Tapping a card opens the
-/// editor screen at /print-template-editor.
+/// قوالب الطباعة — قالب واحد لكل مدير (بناءً على طلب المستخدم).
+/// السلوك:
+///   • أول مرة: ينشئ قالب POS افتراضي ثم يفتح المحرّر مباشرة.
+///   • لاحقاً: يفتح القالب النشط أو الأول مباشرة.
+///   • أكثر من قالب موجود (من نسخة سابقة): يعرضها كقائمة بسيطة.
 class PrintTemplatesScreen extends ConsumerStatefulWidget {
   const PrintTemplatesScreen({super.key});
 
@@ -21,12 +22,41 @@ class PrintTemplatesScreen extends ConsumerStatefulWidget {
 }
 
 class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
+  bool _autoOpened = false;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(printTemplatesProvider.notifier).loadTemplates();
-    });
+    Future.microtask(_loadAndMaybeOpen);
+  }
+
+  Future<void> _loadAndMaybeOpen() async {
+    await ref.read(printTemplatesProvider.notifier).loadTemplates();
+    if (!mounted || _autoOpened) return;
+    final state = ref.read(printTemplatesProvider);
+
+    // مدير ليس عنده قوالب → ننشئ POS افتراضي ونفتحه مباشرة.
+    if (state.templates.isEmpty) {
+      _autoOpened = true;
+      final adminId = ref.read(authProvider).user?.id ?? '';
+      final draft = PrintTemplateModel(
+        adminId: adminId,
+        templateType: 'pos',
+        templateName: 'قالب الطباعة',
+        content: PrintTemplateModel.defaultPosTemplate(),
+        isActive: true,
+      );
+      if (!mounted) return;
+      context.push('/print-template-editor', extra: draft);
+      return;
+    }
+
+    // قالب واحد فقط → افتحه مباشرة بدون list intermediate.
+    if (state.templates.length == 1) {
+      _autoOpened = true;
+      if (!mounted) return;
+      context.push('/print-template-editor', extra: state.templates.first);
+    }
   }
 
   @override
@@ -38,98 +68,138 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
       appBar: AppBar(
         title: const Text(
           'قوالب الطباعة',
-          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'تحديث',
-            icon: const Icon(LucideIcons.refreshCw, size: 20),
-            onPressed: () =>
-                ref.read(printTemplatesProvider.notifier).loadTemplates(),
-          ),
-        ],
       ),
       body: state.loading
           ? const Center(child: CircularProgressIndicator())
-          : state.templates.isEmpty
-              ? _empty(context)
-              : RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(printTemplatesProvider.notifier).loadTemplates(),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
-                    itemCount: state.templates.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, i) {
-                      final t = state.templates[i];
-                      return _TemplateCard(
-                        template: t,
-                        onToggle: () => _toggleActive(t),
-                        onEdit: () => _openEditor(t),
-                        onDelete: () => _confirmDelete(t),
-                      );
-                    },
-                  ),
-                ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _createNew,
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
-        icon: const Icon(LucideIcons.plus, size: 18),
-        label: const Text(
-          'قالب جديد',
-          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
-        ),
+          : state.templates.length <= 1
+              // 0 أو 1 قالب → نعرض شاشة انتظار، الـauto-open يأخذ المستخدم
+              ? _loadingTransition(theme)
+              : _multipleTemplates(state.templates),
+    );
+  }
+
+  Widget _loadingTransition(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.fileText,
+              size: 36,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+          const SizedBox(height: 10),
+          const Text(
+            'جارٍ فتح القالب...',
+            style: TextStyle(
+                fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _empty(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(LucideIcons.fileText,
-                size: 48,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.3)),
-            const SizedBox(height: 14),
-            const Text(
-              'لا توجد قوالب طباعة بعد',
-              style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'اضغط "قالب جديد" لإنشاء قالب POS أو A4',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.55),
+  /// لو فيه أكثر من قالب (متبقّي من نسخة سابقة)، نعرضها لتسهيل الاختيار/الحذف.
+  Widget _multipleTemplates(List<PrintTemplateModel> templates) {
+    final theme = Theme.of(context);
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+      itemCount: templates.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (_, i) {
+        final t = templates[i];
+        final isPos = t.templateType == 'pos';
+        return Material(
+          color: theme.cardTheme.color ?? Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => context.push('/print-template-editor', extra: t),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isPos ? LucideIcons.receipt : LucideIcons.fileText,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t.templateName,
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              isPos ? 'POS 80mm' : 'A4',
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          if (t.isActive)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.successColor
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                'نشط',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.successColor,
+                                ),
+                              ),
+                            ),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.trash2, size: 18),
+                    color: Colors.red.shade700,
+                    onPressed: () => _confirmDelete(t),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
-  }
-
-  Future<void> _toggleActive(PrintTemplateModel t) async {
-    if (t.id == null) return;
-    final ok =
-        await ref.read(printTemplatesProvider.notifier).toggleActive(t.id!);
-    if (!mounted) return;
-    if (!ok) AppSnackBar.error(context, 'فشل تبديل الحالة');
   }
 
   Future<void> _confirmDelete(PrintTemplateModel t) async {
@@ -148,278 +218,22 @@ class _PrintTemplatesScreenState extends ConsumerState<PrintTemplatesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child:
+                const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red.shade700,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('حذف',
-                style:
-                    TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            child: const Text(
+              'حذف',
+              style:
+                  TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ),
     );
     if (ok != true || !mounted) return;
-    final done =
-        await ref.read(printTemplatesProvider.notifier).deleteTemplate(t.id!);
-    if (!mounted) return;
-    if (done) {
-      AppSnackBar.success(context, 'تم الحذف');
-    } else {
-      AppSnackBar.error(context, 'فشل الحذف');
-    }
-  }
-
-  void _openEditor(PrintTemplateModel t) {
-    context.push('/print-template-editor', extra: t);
-  }
-
-  Future<void> _createNew() async {
-    final type = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.outline,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const Text(
-                'اختر مقاس الورق',
-                style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 14),
-              _typeOption(
-                ctx,
-                value: 'pos',
-                icon: LucideIcons.receipt,
-                title: 'POS 80mm',
-                subtitle: 'وصل حراري — يناسب طابعات نقاط البيع',
-              ),
-              const SizedBox(height: 8),
-              _typeOption(
-                ctx,
-                value: 'a4',
-                icon: LucideIcons.fileText,
-                title: 'A4',
-                subtitle: 'ورق عادي بحجم كامل — يطبع على طابعة منزلية',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (type == null || !mounted) return;
-
-    final adminId = ref.read(authProvider).user?.id ?? '';
-    final draft = PrintTemplateModel(
-      adminId: adminId,
-      templateType: type,
-      templateName: type == 'pos' ? 'قالب POS جديد' : 'قالب A4 جديد',
-      content: type == 'pos'
-          ? PrintTemplateModel.defaultPosTemplate()
-          : PrintTemplateModel.defaultA4Template(),
-      isActive: false,
-    );
-    if (!mounted) return;
-    context.push('/print-template-editor', extra: draft);
-  }
-
-  Widget _typeOption(
-    BuildContext ctx, {
-    required String value,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    final scheme = Theme.of(ctx).colorScheme;
-    return Material(
-      color: scheme.primary.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => Navigator.pop(ctx, value),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: scheme.primary, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 11.5,
-                        color: scheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 18, color: scheme.onSurface.withValues(alpha: 0.4)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TemplateCard extends StatelessWidget {
-  final PrintTemplateModel template;
-  final VoidCallback onToggle;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _TemplateCard({
-    required this.template,
-    required this.onToggle,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isPos = template.templateType == 'pos';
-    final accent = isPos ? AppTheme.primary : Colors.indigo;
-
-    return Material(
-      color: theme.cardTheme.color ?? Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onEdit,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  isPos ? LucideIcons.receipt : LucideIcons.fileText,
-                  color: accent,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      template.templateName,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Row(children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: accent.withValues(alpha: 0.28)),
-                        ),
-                        child: Text(
-                          isPos ? 'POS 80mm' : 'A4',
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: accent,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      if (template.isActive)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.successColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'نشط',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.successColor,
-                            ),
-                          ),
-                        ),
-                    ]),
-                  ],
-                ),
-              ),
-              Switch(
-                value: template.isActive,
-                onChanged: (_) => onToggle(),
-                activeThumbColor: AppTheme.successColor,
-              ),
-              IconButton(
-                icon: const Icon(LucideIcons.trash2, size: 18),
-                color: Colors.red.shade700,
-                tooltip: 'حذف',
-                onPressed: onDelete,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    await ref.read(printTemplatesProvider.notifier).deleteTemplate(t.id!);
   }
 }
