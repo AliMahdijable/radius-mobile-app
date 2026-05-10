@@ -1,0 +1,298 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
+
+import '../core/theme/app_theme.dart';
+import '../core/utils/receipt_printer.dart' as rp;
+import '../models/print_template_model.dart';
+
+/// لوحة معاينة لايف للوصل — تحوّل HTML+design إلى PDF داخل الذاكرة وتعرض
+/// أول صفحة كصورة. الـUI:
+///   • شريط علوي: عنوان + زر تحديث + زر طيّ/فتح
+///   • منطقة العرض: 220px ارتفاع، scroll أفقي لتغطية الورق العريض
+///   • إعادة الرسم تحدث بعد 1 ثانية من توقف التعديل (debounce)
+///   • ✅ يستعمل ReceiptPrinter._fillTemplate الموجود (نفس الـrenderer
+///     المستخدم وقت الطباعة الفعلية) — مطابقة 1:1 لما يخرج للطابعة
+class LiveReceiptPreview extends StatefulWidget {
+  final String htmlTemplate;
+  final ReceiptDesign design;
+  final String templateType; // 'pos' | 'a4'
+  final rp.ReceiptData sampleData;
+
+  const LiveReceiptPreview({
+    super.key,
+    required this.htmlTemplate,
+    required this.design,
+    required this.templateType,
+    required this.sampleData,
+  });
+
+  @override
+  State<LiveReceiptPreview> createState() => _LiveReceiptPreviewState();
+}
+
+class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
+  bool _expanded = true;
+  bool _rendering = false;
+  Uint8List? _imageBytes;
+  String? _error;
+  Timer? _debounce;
+  int _generation = 0; // يحمي من سباق التحديثات
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleRender(delay: 100);
+  }
+
+  @override
+  void didUpdateWidget(covariant LiveReceiptPreview old) {
+    super.didUpdateWidget(old);
+    final changed = old.htmlTemplate != widget.htmlTemplate ||
+        old.templateType != widget.templateType ||
+        !_designEquals(old.design, widget.design);
+    if (changed) _scheduleRender();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  bool _designEquals(ReceiptDesign a, ReceiptDesign b) {
+    // مقارنة سريعة عبر JSON. الحقول كلها primitive فالتسلسل ثابت.
+    return a.toJson().toString() == b.toJson().toString();
+  }
+
+  void _scheduleRender({int delay = 900}) {
+    _debounce?.cancel();
+    _debounce = Timer(Duration(milliseconds: delay), _renderNow);
+  }
+
+  Future<void> _renderNow() async {
+    if (!mounted) return;
+    if (widget.htmlTemplate.trim().isEmpty) {
+      setState(() {
+        _imageBytes = null;
+        _error = 'لا يوجد محتوى HTML';
+      });
+      return;
+    }
+    final myGen = ++_generation;
+    setState(() {
+      _rendering = true;
+      _error = null;
+    });
+    try {
+      final pdfBytes = await _buildPdf();
+      if (myGen != _generation || !mounted) return;
+      // نأخذ أول صفحة كصورة بـ DPI متوسط (الكافي لـ 220px display).
+      final raster = await Printing.raster(pdfBytes, dpi: 110).first;
+      if (myGen != _generation || !mounted) return;
+      final png = await raster.toPng();
+      if (myGen != _generation || !mounted) return;
+      setState(() {
+        _imageBytes = png;
+        _rendering = false;
+      });
+    } catch (e) {
+      if (myGen != _generation || !mounted) return;
+      setState(() {
+        _rendering = false;
+        _error = 'تعذّر إنشاء المعاينة: $e';
+      });
+    }
+  }
+
+  Future<Uint8List> _buildPdf() async {
+    final format = widget.templateType == 'a4'
+        ? (widget.design.a4Orientation == 'landscape'
+            ? PdfPageFormat.a4.landscape
+            : PdfPageFormat.a4)
+        : PdfPageFormat(
+            widget.design.paperWidthMm * PdfPageFormat.mm,
+            double.infinity, // POS roll
+          );
+    // نولّد الـHTML بنفس الـmethod اللي يستعملها الطباعة الفعلية حتى
+    // المعاينة تطابق المخرجات تماماً.
+    final pseudoNo = 12345; // عدد عرض رقم وصل تجريبي للمعاينة
+    final wrapper = _wrapHtmlWithDesign(
+      rp.ReceiptPrinter.testFillTemplate(
+        widget.htmlTemplate,
+        widget.sampleData,
+        receiptNo: pseudoNo,
+      ),
+      widget.design,
+    );
+    return await Printing.convertHtml(html: wrapper, format: format);
+  }
+
+  String _wrapHtmlWithDesign(String filled, ReceiptDesign d) {
+    final pad = '${d.marginTopMm}mm ${d.marginRightMm}mm '
+        '${d.marginBottomMm}mm ${d.marginLeftMm}mm';
+    return '''
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --accent: ${d.accentColor}; --text: ${d.textColor}; }
+  body {
+    font-family: '${d.fontFamily}', sans-serif;
+    direction: rtl;
+    padding: $pad;
+    font-size: ${d.fontSizeBase}px;
+    font-weight: ${d.fontWeight};
+    color: ${d.textColor};
+    line-height: ${d.lineHeight};
+  }
+  h1, h2, h3 { color: var(--accent); font-size: ${d.fontSizeTitle}px; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>$filled</body>
+</html>
+''';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color ?? Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 8, 10),
+              child: Row(children: [
+                Icon(LucideIcons.eye, size: 16, color: AppTheme.primary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'معاينة مباشرة',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (_rendering)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    tooltip: 'تحديث',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _renderNow,
+                  ),
+                IconButton(
+                  icon: Icon(
+                    _expanded
+                        ? LucideIcons.chevronUp
+                        : LucideIcons.chevronDown,
+                    size: 18,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                ),
+              ]),
+            ),
+          ),
+
+          // Body
+          if (_expanded) ...[
+            Divider(
+              height: 1,
+              color: theme.colorScheme.outline.withValues(alpha: 0.10),
+            ),
+            Container(
+              height: 320,
+              width: double.infinity,
+              color: const Color(0xFFF4F4F6),
+              child: _buildPreviewBody(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewBody() {
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.circleAlert,
+                  size: 28, color: Colors.red.shade400),
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_imageBytes == null) {
+      return const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    return InteractiveViewer(
+      maxScale: 4,
+      minScale: 0.5,
+      boundaryMargin: const EdgeInsets.all(40),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Center(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+}

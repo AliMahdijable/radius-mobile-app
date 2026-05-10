@@ -9,6 +9,7 @@ import '../core/utils/receipt_printer.dart' as rp;
 import '../models/print_template_model.dart';
 import '../providers/print_templates_provider.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/live_receipt_preview.dart';
 import '../widgets/receipt_design_panel.dart';
 
 /// Editor for a single print template (POS or A4).
@@ -35,6 +36,7 @@ class _PrintTemplateEditorScreenState
   late bool _isActive;
   late ReceiptDesign _design;
   bool _saving = false;
+  String _previewHtml = '';
 
   bool get _isNew => widget.initial.id == null;
 
@@ -43,10 +45,28 @@ class _PrintTemplateEditorScreenState
     super.initState();
     _nameCtrl = TextEditingController(text: widget.initial.templateName);
     _htmlCtrl = TextEditingController(text: widget.initial.content);
+    _previewHtml = widget.initial.content;
+    _htmlCtrl.addListener(_onHtmlChanged);
     _type = widget.initial.templateType;
     _isActive = widget.initial.isActive;
     // قراءة التصميم من template_data (JSON). لو ما موجود/معطوب → افتراضيات.
     _design = _parseDesign(widget.initial.templateData);
+  }
+
+  @override
+  void dispose() {
+    _htmlCtrl.removeListener(_onHtmlChanged);
+    _nameCtrl.dispose();
+    _htmlCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onHtmlChanged() {
+    // الـTextEditingController يطلق notify كل ضربة مفتاح. نسحب القيمة
+    // ونضعها في state عشان المعاينة تعرف تعيد البناء (debounce داخلها).
+    if (_previewHtml != _htmlCtrl.text) {
+      setState(() => _previewHtml = _htmlCtrl.text);
+    }
   }
 
   static ReceiptDesign _parseDesign(String? raw) {
@@ -56,13 +76,6 @@ class _PrintTemplateEditorScreenState
       if (m is Map<String, dynamic>) return ReceiptDesign.fromJson(m);
     } catch (_) {}
     return ReceiptDesign();
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _htmlCtrl.dispose();
-    super.dispose();
   }
 
   void _insertVariable(String variable) {
@@ -208,6 +221,25 @@ class _PrintTemplateEditorScreenState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ── معاينة مباشرة (في الأعلى — قابلة للطي) ──
+          LiveReceiptPreview(
+            htmlTemplate: _previewHtml,
+            design: _design,
+            templateType: _type,
+            sampleData: const rp.ReceiptData(
+              subscriberName: 'محمد أحمد',
+              phoneNumber: '07712345678',
+              packageName: 'باقة أساسية',
+              packagePrice: 25000,
+              paidAmount: 25000,
+              remainingAmount: 0,
+              debtAmount: 0,
+              expiryDate: '2026-12-31',
+              operationType: 'activation',
+            ),
+          ),
+          const SizedBox(height: 14),
+
           // ── إعدادات أساسية ──
           _section(
             title: 'الإعدادات',

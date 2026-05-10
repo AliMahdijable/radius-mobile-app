@@ -49,6 +49,16 @@ class ReceiptPrinter {
     return 'No. ${no.toString().padLeft(5, '0')}';
   }
 
+  /// Public façade for [_fillTemplate] — used by the live-preview widget
+  /// to render the exact same string the production printer renders.
+  /// Keeps the live preview 1:1 with what comes out of the printer.
+  static String testFillTemplate(
+    String template,
+    ReceiptData data, {
+    int? receiptNo,
+  }) =>
+      _fillTemplate(template, data, receiptNo: receiptNo);
+
   static String _fillTemplate(String template, ReceiptData data, {int? receiptNo}) {
     final receiptLabel = _formatReceiptNo(receiptNo);
     final date = intl.DateFormat('yyyy/MM/dd HH:mm', 'ar').format(DateTime.now());
