@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart' as intl;
+import '../../models/print_template_model.dart';
 import 'helpers.dart';
 
 class ReceiptData {
@@ -76,23 +77,43 @@ class ReceiptPrinter {
 
   /// Print using a stored HTML template.
   ///
-  /// [receiptNo] هو رقم الوصل المعطى من الـbackend (per-admin counter).
-  /// لو null، يطبع رقم timestamp مؤقت — يحدث فقط لما الأرشفة تفشل.
+  /// [receiptNo] رقم الوصل من الـbackend (per-admin counter). null → fallback.
+  /// [design] إعدادات التصميم (margins, fonts, colors) المُخزَّنة في
+  ///   template_data. تُطبَّق كـCSS على wrapper الـbody قبل تمرير القالب.
   static Future<void> printWithTemplate({
     required String htmlTemplate,
     required ReceiptData data,
     int? receiptNo,
+    ReceiptDesign? design,
   }) async {
     final filledHtml = _fillTemplate(htmlTemplate, data, receiptNo: receiptNo);
+    final d = design ?? ReceiptDesign();
 
+    // تحويل قيم mm إلى padding CSS. الـconvertHtml يستعمل DPI افتراضي،
+    // فالـmm تطابق صحياً عند العرض.
+    final pad = '${d.marginTopMm}mm ${d.marginRightMm}mm '
+        '${d.marginBottomMm}mm ${d.marginLeftMm}mm';
     final fullHtml = '''
 <!DOCTYPE html>
-<html dir="rtl">
+<html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: sans-serif; direction: rtl; padding: 15px; font-size: 12px; }
+    :root {
+      --accent: ${d.accentColor};
+      --text:   ${d.textColor};
+    }
+    body {
+      font-family: '${d.fontFamily}', sans-serif;
+      direction: rtl;
+      padding: $pad;
+      font-size: ${d.fontSizeBase}px;
+      font-weight: ${d.fontWeight};
+      color: ${d.textColor};
+      line-height: ${d.lineHeight};
+    }
+    h1, h2, h3 { color: var(--accent); font-size: ${d.fontSizeTitle}px; }
     @media print { body { padding: 0; } }
   </style>
 </head>
@@ -217,19 +238,20 @@ $filledHtml
 
   /// Quick print: tries active template first, falls back to default.
   ///
-  /// [receiptNo] هو رقم الوصل القادم من الـbackend بعد الأرشفة. لو فشلت
-  /// الأرشفة (null) يطبع رقم timestamp مؤقت. أي placeholder
-  /// {receipt_no} أو {invoice_number} في القالب يأخذ هذه القيمة.
+  /// [receiptNo] رقم الوصل من الـbackend (null → fallback INV-timestamp).
+  /// [design] إعدادات التصميم من template_data — تُطبَّق على HTML wrapper.
   static Future<void> printReceipt({
     required ReceiptData data,
     String? htmlTemplate,
     int? receiptNo,
+    ReceiptDesign? design,
   }) async {
     if (htmlTemplate != null && htmlTemplate.isNotEmpty) {
       await printWithTemplate(
         htmlTemplate: htmlTemplate,
         data: data,
         receiptNo: receiptNo,
+        design: design,
       );
     } else {
       await printDefaultReceipt(data: data, receiptNo: receiptNo);

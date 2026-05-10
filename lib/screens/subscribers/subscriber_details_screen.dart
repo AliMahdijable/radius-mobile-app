@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -22,6 +23,7 @@ import '../../providers/subscribers_provider.dart';
 import '../../models/manager_model.dart';
 import '../../providers/receipt_archive_provider.dart';
 import '../../providers/templates_provider.dart';
+import '../../models/print_template_model.dart';
 import '../../providers/print_templates_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/utils/receipt_printer.dart';
@@ -188,15 +190,30 @@ class _SubscriberDetailsScreenState
         subscriberUsername: subscriberUsername,
         templateId: activeTemplate?.id,
       );
-      // 2) طباعة بالرقم الذي رجّعه الـbackend (أو null لو فشلت الأرشفة)
+      // 2) طباعة بالرقم + إعدادات التصميم المخزّنة (margins, font, colors)
+      final design = activeTemplate?.templateData != null
+          ? _parseDesignSafe(activeTemplate!.templateData!)
+          : null;
       await ReceiptPrinter.printReceipt(
         data: data,
         htmlTemplate: activeTemplate?.content,
         receiptNo: receiptNo,
+        design: design,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
     }
+  }
+
+  /// يفك JSON المُخزَّن في template_data. عند الفشل يرجع null (يستخدم
+  /// الـrenderer إعداداته الافتراضية حينها).
+  static ReceiptDesign? _parseDesignSafe(String raw) {
+    if (raw.trim().isEmpty) return null;
+    try {
+      final m = jsonDecode(raw);
+      if (m is Map<String, dynamic>) return ReceiptDesign.fromJson(m);
+    } catch (_) {}
+    return null;
   }
 
   // ── Edit ───────────────────────────────────────────────────────────────

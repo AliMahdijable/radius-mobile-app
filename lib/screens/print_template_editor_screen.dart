@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,6 +9,7 @@ import '../core/utils/receipt_printer.dart' as rp;
 import '../models/print_template_model.dart';
 import '../providers/print_templates_provider.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/receipt_design_panel.dart';
 
 /// Editor for a single print template (POS or A4).
 ///
@@ -30,6 +33,7 @@ class _PrintTemplateEditorScreenState
   late TextEditingController _htmlCtrl;
   late String _type;
   late bool _isActive;
+  late ReceiptDesign _design;
   bool _saving = false;
 
   bool get _isNew => widget.initial.id == null;
@@ -41,6 +45,17 @@ class _PrintTemplateEditorScreenState
     _htmlCtrl = TextEditingController(text: widget.initial.content);
     _type = widget.initial.templateType;
     _isActive = widget.initial.isActive;
+    // قراءة التصميم من template_data (JSON). لو ما موجود/معطوب → افتراضيات.
+    _design = _parseDesign(widget.initial.templateData);
+  }
+
+  static ReceiptDesign _parseDesign(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return ReceiptDesign();
+    try {
+      final m = jsonDecode(raw);
+      if (m is Map<String, dynamic>) return ReceiptDesign.fromJson(m);
+    } catch (_) {}
+    return ReceiptDesign();
   }
 
   @override
@@ -116,6 +131,7 @@ class _PrintTemplateEditorScreenState
       await rp.ReceiptPrinter.printWithTemplate(
         htmlTemplate: _htmlCtrl.text,
         data: sample,
+        design: _design,
       );
     } catch (e) {
       if (!mounted) return;
@@ -137,6 +153,7 @@ class _PrintTemplateEditorScreenState
       templateType: _type,
       templateName: _nameCtrl.text.trim(),
       content: _htmlCtrl.text,
+      templateData: jsonEncode(_design.toJson()),
       isActive: _isActive,
     );
     final notifier = ref.read(printTemplatesProvider.notifier);
@@ -248,6 +265,19 @@ class _PrintTemplateEditorScreenState
                   onChanged: (v) => setState(() => _isActive = v),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // ── التصميم البصري (5 أقسام قابلة للطي) ──
+          _section(
+            title: 'التصميم البصري',
+            icon: LucideIcons.brush,
+            subtitle: 'عناصر مرئية، ألوان، خطوط، هوامش — نفس ما هو على الويب',
+            child: ReceiptDesignPanel(
+              value: _design,
+              templateType: _type,
+              onChanged: (d) => setState(() => _design = d),
             ),
           ),
           const SizedBox(height: 14),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:intl/intl.dart' as intl;
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
 import '../core/utils/receipt_printer.dart';
+import '../models/print_template_model.dart';
 import '../providers/print_templates_provider.dart';
 import '../providers/receipt_archive_provider.dart';
 import '../widgets/app_snackbar.dart';
@@ -111,12 +114,20 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
         await ref.read(printTemplatesProvider.notifier).loadTemplates();
       }
       final activeTemplate = ref.read(printTemplatesProvider).activeTemplate;
-      // إعادة الطباعة من الأرشيف تستخدم receipt_no الأصلي للوصل بدلاً من
-      // طلب رقم جديد — حتى المستخدم يحصل على نسخة طبق الأصل من الوصل القديم.
+      // إعادة الطباعة من الأرشيف تستخدم receipt_no الأصلي + design القالب
+      // النشط الحالي (لو القالب الأصلي انحذف نستخدم المتوفر).
+      ReceiptDesign? design;
+      if (activeTemplate?.templateData != null) {
+        try {
+          final m = jsonDecode(activeTemplate!.templateData!);
+          if (m is Map<String, dynamic>) design = ReceiptDesign.fromJson(m);
+        } catch (_) {}
+      }
       await ReceiptPrinter.printReceipt(
         data: data,
         htmlTemplate: activeTemplate?.content,
         receiptNo: full?.receiptNo ?? row.receiptNo,
+        design: design,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في إعادة الطباعة');
