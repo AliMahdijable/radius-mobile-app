@@ -78,52 +78,6 @@ class _PrintTemplateEditorScreenState
     return ReceiptDesign();
   }
 
-  void _insertVariable(String variable) {
-    final selection = _htmlCtrl.selection;
-    final text = _htmlCtrl.text;
-    final start = selection.start.clamp(0, text.length);
-    final end = selection.end.clamp(0, text.length);
-    final newText = text.replaceRange(start, end, variable);
-    _htmlCtrl.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: start + variable.length),
-    );
-  }
-
-  void _resetToDefault() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('استرجاع القالب الافتراضي',
-            style:
-                TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
-        content: const Text(
-          'سيتم استبدال محتوى الـHTML الحالي بالقالب الافتراضي. هل تريد المتابعة؟',
-          style: TextStyle(fontFamily: 'Cairo'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('استرجاع',
-                style:
-                    TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    setState(() {
-      _htmlCtrl.text = _type == 'pos'
-          ? PrintTemplateModel.defaultPosTemplate()
-          : PrintTemplateModel.defaultA4Template();
-    });
-  }
-
   Future<void> _preview() async {
     if (_htmlCtrl.text.trim().isEmpty) {
       AppSnackBar.error(context, 'أضف محتوى HTML أولاً');
@@ -314,98 +268,9 @@ class _PrintTemplateEditorScreenState
           ),
           const SizedBox(height: 14),
 
-          // ── المتغيّرات (للإدراج بضغطة) ──
-          _section(
-            title: 'المتغيّرات',
-            icon: LucideIcons.code,
-            subtitle: 'اضغط على متغيّر لإدراجه عند مكان المؤشر في الـHTML',
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: PrintTemplateModel.availableVariables.map((v) {
-                return InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => _insertVariable(v),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: AppTheme.primary.withValues(alpha: 0.30)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          v,
-                          textDirection: TextDirection.ltr,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          PrintTemplateModel.variableLabels[v] ?? '',
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 10.5,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // ── محرّر HTML ──
-          _section(
-            title: 'محتوى HTML',
-            icon: LucideIcons.fileCode,
-            trailing: TextButton.icon(
-              onPressed: _resetToDefault,
-              icon: const Icon(LucideIcons.rotateCcw, size: 14),
-              label: const Text(
-                'استرجاع الافتراضي',
-                style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700),
-              ),
-            ),
-            child: TextField(
-              controller: _htmlCtrl,
-              maxLines: 18,
-              minLines: 10,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 11.5,
-                height: 1.5,
-              ),
-              textDirection: TextDirection.ltr,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: '<div>...HTML...</div>',
-                hintStyle: TextStyle(
-                  fontFamily: 'monospace',
-                  color:
-                      theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-                contentPadding: const EdgeInsets.all(10),
-              ),
-              keyboardType: TextInputType.multiline,
-            ),
-          ),
-          const SizedBox(height: 14),
+          // ─── HTML editor + variables — مخفي بناءً على طلب المستخدم.
+          //     التصميم البصري + المعاينة كافيين. لو احتجت تعود لتحرير
+          //     الـHTML الخام، ارجع لـcommit 9353ca6.
 
           // ── أزرار المعاينة + الحفظ ──
           Row(children: [

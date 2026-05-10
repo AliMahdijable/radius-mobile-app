@@ -91,9 +91,21 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
     try {
       final pdfBytes = await _buildPdf();
       if (myGen != _generation || !mounted) return;
-      // نأخذ أول صفحة كصورة بـ DPI متوسط (الكافي لـ 220px display).
-      final raster = await Printing.raster(pdfBytes, dpi: 110).first;
+      // الـraster stream قد يكون فارغاً لو الـPDF ما فيه صفحات
+      // (HTML malformed). نستعمل firstOrNull سلوكاً فبدلاً من throw نعرض رسالة.
+      PdfRaster? raster;
+      await for (final r in Printing.raster(pdfBytes, dpi: 110)) {
+        raster = r;
+        break;
+      }
       if (myGen != _generation || !mounted) return;
+      if (raster == null) {
+        setState(() {
+          _rendering = false;
+          _error = 'لم يتم توليد أي صفحة من القالب';
+        });
+        return;
+      }
       final png = await raster.toPng();
       if (myGen != _generation || !mounted) return;
       setState(() {
@@ -110,13 +122,16 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   }
 
   Future<Uint8List> _buildPdf() async {
+    // POS roll height — convertHtml لا يقبل double.infinity فاستخدم
+    // ارتفاع كبير معقول (297mm = A4 height) كحدّ أعلى. الـHTML نفسه
+    // سيقصّ في الواقع لما المحتوى ينتهي.
     final format = widget.templateType == 'a4'
         ? (widget.design.a4Orientation == 'landscape'
             ? PdfPageFormat.a4.landscape
             : PdfPageFormat.a4)
         : PdfPageFormat(
             widget.design.paperWidthMm * PdfPageFormat.mm,
-            double.infinity, // POS roll
+            297 * PdfPageFormat.mm,
           );
     // نولّد الـHTML بنفس الـmethod اللي يستعملها الطباعة الفعلية حتى
     // المعاينة تطابق المخرجات تماماً.
