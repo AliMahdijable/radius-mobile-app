@@ -11,9 +11,9 @@ import '../models/subscriber_model.dart';
 import 'dashboard_provider.dart';
 import 'reports_provider.dart';
 
-/// العمليات الجماعية المتاحة على تحديد متعدّد للمشتركين — تطابق ما هو
-/// مطلوب من الويب: تفعيل / تعطيل / حذف.
-enum BulkAction { enable, disable, delete }
+/// العمليات الجماعية المتاحة على تحديد متعدّد للمشتركين — تعطيل وحذف فقط.
+/// (التفعيل/إعادة التفعيل مستثنىً عمداً لأنه متشعّب — يُعالَج فردياً.)
+enum BulkAction { disable, delete }
 
 /// نتيجة عملية جماعية — حالة كل مشترك على حدة (id → نجاح/فشل).
 class BulkActionResult {
@@ -2383,9 +2383,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       bool ok;
       try {
         switch (action) {
-          case BulkAction.enable:
-            ok = await toggleSubscriber(id, enable: true, refreshOnline: false);
-            break;
           case BulkAction.disable:
             ok = await toggleSubscriber(id,
                 enable: false, refreshOnline: false);

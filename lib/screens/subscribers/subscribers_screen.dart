@@ -200,8 +200,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         top: false,
         child: Row(
           children: [
-            btn(LucideIcons.circleCheck, 'تفعيل', AppTheme.successColor,
-                BulkAction.enable),
             btn(LucideIcons.ban, 'تعطيل', AppTheme.warningColor,
                 BulkAction.disable),
             btn(LucideIcons.trash2, 'حذف', const Color(0xFFE53935),
@@ -217,12 +215,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     if (ids.isEmpty) return;
     final n = ids.length;
     final verb = switch (action) {
-      BulkAction.enable => 'تفعيل',
       BulkAction.disable => 'تعطيل',
       BulkAction.delete => 'حذف',
     };
     final accent = switch (action) {
-      BulkAction.enable => AppTheme.successColor,
       BulkAction.disable => AppTheme.warningColor,
       BulkAction.delete => const Color(0xFFE53935),
     };
@@ -233,7 +229,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       BulkAction.delete =>
         'سيتم حذف $n مشترك نهائياً ولا يمكن التراجع. '
             'المشتركون الذين عليهم دين لن يُحذفوا.\n\nهل تريد المتابعة؟',
-      BulkAction.enable => 'سيتم تفعيل $n مشترك.\n\nهل تريد المتابعة؟',
     };
 
     final confirmed = await showDialog<bool>(
