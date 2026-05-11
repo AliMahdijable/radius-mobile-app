@@ -215,8 +215,8 @@ class ReceiptPrinter {
                 children: [
                   pw.Text(
                     [
-                      if (data.shopAddress.isNotEmpty) '📍 ${data.shopAddress}',
-                      if (data.shopPhone.isNotEmpty) '📞 ${data.shopPhone}',
+                      if (data.shopAddress.isNotEmpty) data.shopAddress,
+                      if (data.shopPhone.isNotEmpty) 'هاتف: ${data.shopPhone}',
                     ].join('   '),
                     style: styleFooter,
                   ),
