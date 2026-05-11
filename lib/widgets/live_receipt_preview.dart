@@ -15,16 +15,12 @@ import '../models/print_template_model.dart';
 ///   • العرض: InteractiveViewer (pan/zoom) + أزرار zoom
 ///   • إعادة الرسم بعد ~700ms من توقف التعديل (debounce)
 class LiveReceiptPreview extends StatefulWidget {
-  /// htmlTemplate لم يعد مستعملاً (انتقلنا للـnative renderer) لكن نُبقيه
-  /// في الـsignature للتوافق العكسي مع الـcallers الحاليين.
-  final String htmlTemplate;
   final ReceiptDesign design;
   final String templateType; // 'pos' | 'a4'
   final rp.ReceiptData sampleData;
 
   const LiveReceiptPreview({
     super.key,
-    this.htmlTemplate = '',
     required this.design,
     required this.templateType,
     required this.sampleData,
@@ -55,8 +51,7 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   @override
   void didUpdateWidget(covariant LiveReceiptPreview old) {
     super.didUpdateWidget(old);
-    final changed = old.htmlTemplate != widget.htmlTemplate ||
-        old.templateType != widget.templateType ||
+    final changed = old.templateType != widget.templateType ||
         !_designEquals(old.design, widget.design);
     if (changed) _scheduleRender();
   }
@@ -99,13 +94,6 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
 
   Future<void> _renderNow() async {
     if (!mounted) return;
-    if (widget.htmlTemplate.trim().isEmpty) {
-      setState(() {
-        _imageBytes = null;
-        _error = 'لا يوجد محتوى HTML';
-      });
-      return;
-    }
     final myGen = ++_generation;
     setState(() {
       _rendering = true;
