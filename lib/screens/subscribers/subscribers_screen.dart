@@ -152,8 +152,45 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     );
   }
 
-  // الشريط السفلي بالعمليات الثلاث — يظهر فقط في وضع التحديد.
-  Widget _buildBulkBar(ThemeData theme) {
+  /// يقرأ حالة المشتركين المحدّدين (مفعّل/معطّل) من القوائم المحمّلة —
+  /// لأنّ بعض المحدّدين قد لا يكون ضمن الصفحة المعروضة حالياً. النتيجة
+  /// تحدّد أزرار الشريط السفلي: مفعّلون فقط → [تعطيل]، معطّلون فقط →
+  /// [تفعيل]، خليط → [تعطيل][تفعيل]. (و"حذف" دائماً.)
+  ({bool hasEnabled, bool hasDisabled}) _selectionStatus(
+      SubscribersState state) {
+    final byIdx = <String, SubscriberModel>{};
+    for (final s in state.subscribers) {
+      final i = s.idx;
+      if (i != null) byIdx[i] = s;
+    }
+    for (final s in state.searchResults) {
+      final i = s.idx;
+      if (i != null) byIdx.putIfAbsent(i, () => s);
+    }
+    for (final s in state.onlineUsers) {
+      final i = s.idx;
+      if (i != null) byIdx.putIfAbsent(i, () => s);
+    }
+    var hasEnabled = false;
+    var hasDisabled = false;
+    for (final id in _selectedIdx) {
+      final s = byIdx[id];
+      if (s == null) continue;
+      if (s.isEnabled) {
+        hasEnabled = true;
+      } else {
+        hasDisabled = true;
+      }
+      if (hasEnabled && hasDisabled) break;
+    }
+    // لو لم نتعرّف على حالة أيٍّ منهم، اعرض "تعطيل" افتراضياً.
+    if (!hasEnabled && !hasDisabled) hasEnabled = true;
+    return (hasEnabled: hasEnabled, hasDisabled: hasDisabled);
+  }
+
+  // الشريط السفلي بالعمليات — يتبدّل حسب حالة المحدّدين (تعطيل/تفعيل) + حذف.
+  Widget _buildBulkBar(
+      ThemeData theme, ({bool hasEnabled, bool hasDisabled}) status) {
     final enabled = _selectedIdx.isNotEmpty;
     Widget btn(IconData icon, String label, Color color, BulkAction action) {
       return Expanded(
@@ -172,7 +209,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               disabledBackgroundColor: color.withOpacity(0.30),
               disabledForegroundColor: Colors.white.withOpacity(0.8),
               minimumSize: const Size.fromHeight(44),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
               shape:
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -180,6 +217,17 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         ),
       );
     }
+
+    final actions = <Widget>[
+      if (status.hasEnabled)
+        btn(LucideIcons.ban, 'تعطيل', AppTheme.warningColor,
+            BulkAction.disable),
+      if (status.hasDisabled)
+        btn(LucideIcons.circleCheck, 'تفعيل', AppTheme.successColor,
+            BulkAction.enable),
+      btn(LucideIcons.trash2, 'حذف', const Color(0xFFE53935),
+          BulkAction.delete),
+    ];
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
@@ -196,36 +244,55 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            btn(LucideIcons.ban, 'تعطيل', AppTheme.warningColor,
-                BulkAction.disable),
-            btn(LucideIcons.trash2, 'حذف', const Color(0xFFE53935),
-                BulkAction.delete),
-          ],
-        ),
-      ),
+      child: SafeArea(top: false, child: Row(children: actions)),
     );
   }
 
   Future<void> _runBulkAction(BulkAction action) async {
-    final ids = _selectedIdx.map(int.tryParse).whereType<int>().toList();
-    if (ids.isEmpty) return;
+    // اقرأ حالة المحدّدين كي يطبّق "تعطيل" على المفعّلين فقط و"تفعيل" على
+    // المعطّلين فقط (الحذف على الكل) — فلا يُرسل أوامر بلا فائدة والعدّاد دقيق.
+    final st = ref.read(subscribersProvider);
+    final enabledByIdx = <String, bool>{};
+    for (final s in [
+      ...st.subscribers,
+      ...st.searchResults,
+      ...st.onlineUsers,
+    ]) {
+      final i = s.idx;
+      if (i != null) enabledByIdx.putIfAbsent(i, () => s.isEnabled);
+    }
+    Iterable<String> sel = _selectedIdx;
+    if (action == BulkAction.disable) {
+      // غير المعروف نعتبره مفعّلاً (الافتراضي).
+      sel = _selectedIdx.where((id) => enabledByIdx[id] ?? true);
+    } else if (action == BulkAction.enable) {
+      sel = _selectedIdx.where((id) => enabledByIdx[id] == false);
+    }
+    final ids = sel.map(int.tryParse).whereType<int>().toList();
+    if (ids.isEmpty) {
+      if (mounted) {
+        AppSnackBar.info(context, 'لا مشترك ضمن التحديد بحاجة لهذه العملية');
+      }
+      return;
+    }
     final n = ids.length;
     final verb = switch (action) {
       BulkAction.disable => 'تعطيل',
+      BulkAction.enable => 'تفعيل',
       BulkAction.delete => 'حذف',
     };
     final accent = switch (action) {
       BulkAction.disable => AppTheme.warningColor,
+      BulkAction.enable => AppTheme.successColor,
       BulkAction.delete => const Color(0xFFE53935),
     };
     final body = switch (action) {
       BulkAction.disable =>
         'سيتم تعطيل $n مشترك، وإن كان أيٌّ منهم متصلاً الآن سيُفصل فوراً. '
             'تبقى الحسابات في النظام.\n\nهل تريد المتابعة؟',
+      BulkAction.enable =>
+        'سيتم رفع التعطيل عن $n مشترك (يعودون قادرين على الاتصال). '
+            'لا يغيّر هذا الاشتراك أو التواريخ.\n\nهل تريد المتابعة؟',
       BulkAction.delete =>
         'سيتم حذف $n مشترك نهائياً ولا يمكن التراجع. '
             'المشتركون الذين عليهم دين لن يُحذفوا.\n\nهل تريد المتابعة؟',
@@ -1535,7 +1602,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
         ),
 
-        if (_selectionMode) _buildBulkBar(theme),
+        if (_selectionMode) _buildBulkBar(theme, _selectionStatus(state)),
       ],
     );
   }
