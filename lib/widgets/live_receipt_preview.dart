@@ -1,26 +1,30 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:printing/printing.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/theme/app_theme.dart';
 import '../core/utils/receipt_printer.dart' as rp;
 import '../models/print_template_model.dart';
 
-/// لوحة معاينة لايف للوصل — تبني PDF **native** (نفس ReceiptPrinter
-/// المستخدم للطباعة)، ترسم أول صفحة كصورة. ما تشوفه هو ما يطبع.
-///   • شريط علوي: عنوان + تحديث + طيّ/فتح
-///   • العرض: InteractiveViewer (pan/zoom) + أزرار zoom
-///   • إعادة الرسم بعد ~700ms من توقف التعديل (debounce)
+/// لوحة معاينة لايف للوصل — تعرض الـHTML الفعلي للقالب (مع CSS مشتقّ من
+/// التصميم) داخل WebView. هذا يطابق تماماً ما يخرج للطباعة عبر
+/// `Printing.convertHtml` على نفس الـHTML — فما تشوفه هو ما يطبع.
+///
+/// لماذا WebView وليس PDF→raster؟ لأن convertHtml→raster على بعض أجهزة
+/// أندرويد يتعثّر مع صفحات A4؛ والـnative renderer لا يطابق الـHTML
+/// المخصّص من الباك ايند. WebView يرسم الـHTML+CSS مباشرةً، بسرعة وموثوقية.
 class LiveReceiptPreview extends StatefulWidget {
+  /// محتوى قالب الـHTML (من template.content). فارغ → نعرض رسالة.
+  final String htmlTemplate;
   final ReceiptDesign design;
   final String templateType; // 'pos' | 'a4'
   final rp.ReceiptData sampleData;
 
   const LiveReceiptPreview({
     super.key,
+    required this.htmlTemplate,
     required this.design,
     required this.templateType,
     required this.sampleData,
@@ -32,115 +36,61 @@ class LiveReceiptPreview extends StatefulWidget {
 
 class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   bool _expanded = true;
-  bool _rendering = false;
-  Uint8List? _imageBytes;
-  String? _error;
+  bool _loading = true;
   Timer? _debounce;
-  int _generation = 0; // يحمي من سباق التحديثات
-
-  // Zoom — Controller للـInteractiveViewer + قيمة عرض حالية
-  final TransformationController _zoomCtrl = TransformationController();
-  double _currentScale = 1.0;
+  late final WebViewController _controller;
 
   @override
   void initState() {
     super.initState();
-    _scheduleRender(delay: 100);
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.disabled)
+      ..setBackgroundColor(const Color(0xFFF4F4F6))
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) {
+          if (mounted) setState(() => _loading = false);
+        },
+        onWebResourceError: (_) {
+          if (mounted) setState(() => _loading = false);
+        },
+      ));
+    _scheduleReload(delay: 80);
   }
 
   @override
   void didUpdateWidget(covariant LiveReceiptPreview old) {
     super.didUpdateWidget(old);
-    final changed = old.templateType != widget.templateType ||
+    final changed = old.htmlTemplate != widget.htmlTemplate ||
+        old.templateType != widget.templateType ||
         !_designEquals(old.design, widget.design);
-    if (changed) _scheduleRender();
+    if (changed) _scheduleReload();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
-    _zoomCtrl.dispose();
     super.dispose();
   }
 
-  void _zoomIn() {
-    final next = (_currentScale * 1.4).clamp(0.5, 5.0);
-    _setZoom(next);
-  }
+  bool _designEquals(ReceiptDesign a, ReceiptDesign b) =>
+      a.toJson().toString() == b.toJson().toString();
 
-  void _zoomOut() {
-    final next = (_currentScale / 1.4).clamp(0.5, 5.0);
-    _setZoom(next);
-  }
-
-  void _zoomReset() => _setZoom(1.0);
-
-  void _setZoom(double scale) {
-    setState(() {
-      _currentScale = scale;
-      _zoomCtrl.value = Matrix4.identity()..scale(scale);
-    });
-  }
-
-  bool _designEquals(ReceiptDesign a, ReceiptDesign b) {
-    // مقارنة سريعة عبر JSON. الحقول كلها primitive فالتسلسل ثابت.
-    return a.toJson().toString() == b.toJson().toString();
-  }
-
-  void _scheduleRender({int delay = 900}) {
+  void _scheduleReload({int delay = 600}) {
     _debounce?.cancel();
-    _debounce = Timer(Duration(milliseconds: delay), _renderNow);
+    _debounce = Timer(Duration(milliseconds: delay), _reloadNow);
   }
 
-  Future<void> _renderNow() async {
+  void _reloadNow() {
     if (!mounted) return;
-    final myGen = ++_generation;
-    setState(() {
-      _rendering = true;
-      _error = null;
-    });
-    try {
-      final pdfBytes = await _buildPdf();
-      if (myGen != _generation || !mounted) return;
-      // الـraster stream قد يكون فارغاً لو الـPDF ما فيه صفحات
-      // (HTML malformed). نستعمل firstOrNull سلوكاً فبدلاً من throw نعرض رسالة.
-      PdfRaster? raster;
-      await for (final r in Printing.raster(pdfBytes, dpi: 110)) {
-        raster = r;
-        break;
-      }
-      if (myGen != _generation || !mounted) return;
-      if (raster == null) {
-        setState(() {
-          _rendering = false;
-          _error = 'لم يتم توليد أي صفحة من القالب';
-        });
-        return;
-      }
-      final png = await raster.toPng();
-      if (myGen != _generation || !mounted) return;
-      setState(() {
-        _imageBytes = png;
-        _rendering = false;
-      });
-    } catch (e) {
-      if (myGen != _generation || !mounted) return;
-      setState(() {
-        _rendering = false;
-        _error = 'تعذّر إنشاء المعاينة: $e';
-      });
-    }
-  }
-
-  Future<Uint8List> _buildPdf() async {
-    // نفس الـbuilder المستخدم للطباعة الفعلية → مطابقة 1:1. سريع لأنه
-    // native (لا webview/HTML) فلا timeout عملياً، لكن نضع 10s احتياطاً.
-    return await rp.ReceiptPrinter.buildReceiptPdf(
+    setState(() => _loading = true);
+    final html = rp.ReceiptPrinter.buildPreviewHtml(
+      htmlTemplate: widget.htmlTemplate,
       data: widget.sampleData,
       design: widget.design,
       type: widget.templateType,
       receiptNo: 12345,
-    ).timeout(const Duration(seconds: 10));
+    );
+    _controller.loadHtmlString(html);
   }
 
   @override
@@ -175,7 +125,7 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
                     ),
                   ),
                 ),
-                if (_rendering)
+                if (_loading)
                   const SizedBox(
                     width: 16,
                     height: 16,
@@ -186,7 +136,7 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
                     icon: const Icon(LucideIcons.refreshCw, size: 16),
                     tooltip: 'تحديث',
                     visualDensity: VisualDensity.compact,
-                    onPressed: _renderNow,
+                    onPressed: _reloadNow,
                   ),
                 IconButton(
                   icon: Icon(
@@ -202,148 +152,35 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
             ),
           ),
 
-          // Body
+          // Body — WebView داخل ارتفاع ثابت، scroll داخلي يتكفّل بطول الوصل.
           if (_expanded) ...[
             Divider(
               height: 1,
               color: theme.colorScheme.outline.withValues(alpha: 0.10),
             ),
-            Container(
-              height: 480,
-              width: double.infinity,
-              color: const Color(0xFFF4F4F6),
-              child: _buildPreviewBody(),
+            SizedBox(
+              height: 360,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(12)),
+                child: Stack(
+                  children: [
+                    WebViewWidget(controller: _controller),
+                    if (_loading)
+                      const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ],
         ],
       ),
-    );
-  }
-
-  Widget _buildPreviewBody() {
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.circleAlert,
-                  size: 28, color: Colors.red.shade400),
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (_imageBytes == null) {
-      return const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-    return Stack(
-      children: [
-        InteractiveViewer(
-          transformationController: _zoomCtrl,
-          maxScale: 5,
-          minScale: 0.3,
-          // Allow free pan; content larger than viewport is normal for A4
-          constrained: false,
-          boundaryMargin: const EdgeInsets.all(200),
-          onInteractionEnd: (_) {
-            final s = _zoomCtrl.value.getMaxScaleOnAxis();
-            if ((s - _currentScale).abs() > 0.01) {
-              setState(() => _currentScale = s);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.10),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              // ارسم بالأبعاد الطبيعية للصورة. هذا مهم خصوصاً لـA4
-              // (910x1286px @110dpi) حتى المحتوى يطلع واضحاً والمستخدم
-              // يسحب/يكبّر بدل ما يشاهد نقطة بالمنتصف.
-              child: Image.memory(_imageBytes!),
-            ),
-          ),
-        ),
-        // أزرار الـzoom — overlay بأسفل اليسار
-        Positioned(
-          bottom: 10,
-          left: 10,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(LucideIcons.zoomOut, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: _currentScale > 0.6 ? _zoomOut : null,
-                ),
-                InkWell(
-                  onTap: _zoomReset,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Text(
-                      '${(_currentScale * 100).round()}%',
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(LucideIcons.zoomIn, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: _currentScale < 4.5 ? _zoomIn : null,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

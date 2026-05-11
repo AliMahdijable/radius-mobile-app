@@ -170,6 +170,7 @@ class _PrintTemplateEditorScreenState
     try {
       await rp.ReceiptPrinter.printReceipt(
         data: _sampleData,
+        htmlTemplate: _htmlCtrl.text,
         design: _design,
         type: _type,
       );
@@ -252,6 +253,7 @@ class _PrintTemplateEditorScreenState
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: LiveReceiptPreview(
+              htmlTemplate: _htmlCtrl.text,
               design: _design,
               templateType: _type,
               sampleData: _sampleData,

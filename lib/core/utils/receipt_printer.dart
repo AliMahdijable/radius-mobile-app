@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../models/print_template_model.dart';
 import 'helpers.dart';
+import 'print_html_wrapper.dart';
 
 /// بيانات الوصل المطبوع (sample أو حقيقية).
 class ReceiptData {
@@ -142,7 +143,7 @@ class ReceiptPrinter {
 
     final gap = d.sectionGapMm * PdfPageFormat.mm;
     final invoiceNumber = _formatReceiptNo(receiptNo);
-    final date = templateHelper_formatDate(DateTime.now());
+    final date = _formatDateAr(DateTime.now());
 
     pw.MainAxisAlignment headerAlign() {
       switch (d.headerAlign) {
@@ -302,24 +303,109 @@ class ReceiptPrinter {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // الطباعة (يفتح حوار الطباعة) — يستعمل نفس الـbuilder.
+  // ملء متغيّرات قالب HTML بقيم ReceiptData — يطابق templateHelper على
+  // الباك ايند قدر الإمكان (للموبايل sample data).
+  // ─────────────────────────────────────────────────────────────────
+
+  static String fillTemplate(
+    String template,
+    ReceiptData data, {
+    int? receiptNo,
+  }) {
+    final receiptLabel = _formatReceiptNo(receiptNo);
+    final dateStr = _formatDateAr(DateTime.now());
+    final exp = data.expiryDate.isNotEmpty
+        ? AppHelpers.formatExpiration(data.expiryDate)
+        : '-';
+    return template
+        .replaceAll('{shop_name}',
+            data.shopName.isNotEmpty ? data.shopName : 'MyServices')
+        .replaceAll('{shop_address}', data.shopAddress)
+        .replaceAll('{shop_phone}', data.shopPhone)
+        .replaceAll('{receipt_no}', receiptLabel)
+        .replaceAll('{invoice_number}', receiptLabel)
+        .replaceAll('{date}', dateStr)
+        .replaceAll('{subscriber_name}',
+            data.subscriberName.isNotEmpty ? data.subscriberName : '-')
+        .replaceAll('{firstname}',
+            data.firstName.isNotEmpty ? data.firstName : data.subscriberName)
+        .replaceAll('{username}', data.subscriberName)
+        .replaceAll('{phone_number}',
+            data.phoneNumber.isNotEmpty ? data.phoneNumber : '-')
+        .replaceAll('{phone}', data.phoneNumber)
+        .replaceAll('{package_name}',
+            data.packageName.isNotEmpty ? data.packageName : '-')
+        .replaceAll('{package_price}', AppHelpers.formatMoney(data.packagePrice))
+        .replaceAll('{discount_amount}', '0')
+        .replaceAll('{discounted_price}',
+            AppHelpers.formatMoney(data.packagePrice))
+        .replaceAll('{paid_amount}', AppHelpers.formatMoney(data.paidAmount))
+        .replaceAll('{remaining_amount}',
+            AppHelpers.formatMoney(data.remainingAmount))
+        .replaceAll('{debt_amount}', AppHelpers.formatMoney(data.debtAmount))
+        .replaceAll('{expiry_date}', exp)
+        .replaceAll('{expiration_date}', exp)
+        .replaceAll('{days_remaining}', '—')
+        .replaceAll('{remaining_days}', '—')
+        .replaceAll('{credit_amount}', '0')
+        .replaceAll('{has_debt}', data.debtAmount > 0 ? 'نعم' : 'لا')
+        .replaceAll('{activation_date}', dateStr)
+        .replaceAll('{payment_date}', dateStr)
+        .replaceAll('{manager_name}', data.managerName)
+        .replaceAll('{manager_username}', data.managerName);
+  }
+
+  /// يبني الـHTML النهائي للمعاينة (محتوى القالب مملوء + CSS من التصميم).
+  /// يُحمَّل في WebView داخل LiveReceiptPreview → عرض مطابق لما يطبع.
+  static String buildPreviewHtml({
+    required String htmlTemplate,
+    required ReceiptData data,
+    required ReceiptDesign design,
+    required String type,
+    int? receiptNo,
+  }) {
+    final filled = fillTemplate(htmlTemplate, data, receiptNo: receiptNo);
+    return PrintHtmlWrapper.build(filledHtml: filled, d: design, type: type);
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // الطباعة — تحاول HTML→PDF (يطابق تصميم الباك ايند). لو فشل/تأخر
+  // (بعض أجهزة أندرويد webview محدود)، تـfallback للـnative renderer.
   // ─────────────────────────────────────────────────────────────────
 
   static Future<void> printReceipt({
     required ReceiptData data,
+    String? htmlTemplate,
     ReceiptDesign? design,
     String type = 'pos',
     int? receiptNo,
-    // ملاحظة: htmlTemplate لم يعد مستعملاً — أبقيناه للتوافق العكسي مع
-    // الـcallers القديمين. الـnative renderer هو المسار الوحيد الآن.
-    @Deprecated('htmlTemplate is ignored; native renderer is used') String? htmlTemplate,
   }) async {
-    final bytes = await buildReceiptPdf(
-      data: data, design: design, type: type, receiptNo: receiptNo);
+    final d = design ?? ReceiptDesign();
+    Future<Uint8List> nativeFallback() => buildReceiptPdf(
+        data: data, design: d, type: type, receiptNo: receiptNo);
+
+    Uint8List bytes;
+    if (htmlTemplate != null && htmlTemplate.trim().isNotEmpty) {
+      try {
+        final fullHtml = buildPreviewHtml(
+          htmlTemplate: htmlTemplate,
+          data: data,
+          design: d,
+          type: type,
+          receiptNo: receiptNo,
+        );
+        bytes = await Printing.convertHtml(html: fullHtml)
+            .timeout(const Duration(seconds: 10));
+      } catch (_) {
+        bytes = await nativeFallback();
+      }
+    } else {
+      bytes = await nativeFallback();
+    }
     await Printing.layoutPdf(onLayout: (_) async => bytes);
   }
 
-  // backward-compat shim — كان يأخذ htmlTemplate؛ الآن يتجاهله.
+  // backward-compat shim
   static Future<void> printWithTemplate({
     required String htmlTemplate,
     required ReceiptData data,
@@ -327,12 +413,15 @@ class ReceiptPrinter {
     ReceiptDesign? design,
     String type = 'pos',
   }) =>
-      printReceipt(data: data, design: design, type: type, receiptNo: receiptNo);
+      printReceipt(
+          data: data,
+          htmlTemplate: htmlTemplate,
+          design: design,
+          type: type,
+          receiptNo: receiptNo);
 
   // ─────────────────────────────────────────────────────────────────
-  // أداة تنسيق تاريخ بسيطة (yyyy-MM-dd H:MM صباحاً/مساءً، بغداد).
-  // ─────────────────────────────────────────────────────────────────
-  static String templateHelper_formatDate(DateTime now) {
+  static String _formatDateAr(DateTime now) {
     final fmt = intl.DateFormat('yyyy-MM-dd', 'en');
     final h24 = int.parse(intl.DateFormat('HH').format(now));
     final mm = intl.DateFormat('mm').format(now);

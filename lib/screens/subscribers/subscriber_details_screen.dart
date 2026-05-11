@@ -197,6 +197,7 @@ class _SubscriberDetailsScreenState
           : null;
       await ReceiptPrinter.printReceipt(
         data: data,
+        htmlTemplate: activeTemplate?.content,
         design: design,
         type: activeTemplate?.templateType ?? 'pos',
         receiptNo: receiptNo,

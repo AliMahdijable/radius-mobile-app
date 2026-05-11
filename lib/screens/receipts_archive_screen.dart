@@ -136,6 +136,7 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
       }
       await ReceiptPrinter.printReceipt(
         data: data,
+        htmlTemplate: activeTemplate?.content,
         design: design,
         type: activeTemplate?.templateType ?? 'pos',
         receiptNo: full?.receiptNo ?? row.receiptNo,
