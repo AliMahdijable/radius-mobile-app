@@ -30,20 +30,22 @@ class PrintHtmlWrapper {
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     background: #f4f4f6;
     -webkit-text-size-adjust: 100%;
+    overflow-x: hidden;
   }
   :root { --accent: ${d.accentColor}; --text: ${d.textColor}; }
   .page {
     background: #fff;
     width: $pageWidth;
-    max-width: 100%;
+    max-width: calc(100% - 16px);
     margin: 8px auto;
     padding: $pad;
+    overflow: hidden;            /* امنع المحتوى من تجاوز الحدود */
     box-shadow: 0 2px 12px rgba(0,0,0,0.10);
     font-family: '${d.fontFamily}', 'Noto Sans Arabic', 'Noto Naskh Arabic', Tahoma, Arial, sans-serif;
     direction: rtl;
@@ -53,10 +55,18 @@ class PrintHtmlWrapper {
     line-height: ${d.lineHeight};
     ${borderCss == 'none' ? '' : 'border: $borderCss ${d.accentColor}; border-radius: ${d.borderRadiusPx}px;'}
   }
+  /* أي عنصر داخل الوصل لا يتجاوز عرض الصفحة، والنصوص الطويلة تلتفّ */
+  .page * {
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+  }
+  .page table { width: 100%; table-layout: fixed; }
+  .page td { overflow-wrap: break-word; }
   h1, h2, h3 { color: var(--accent); font-size: ${d.fontSizeTitle}px; font-weight: 800; }
   @media print {
     html, body { background: #fff; }
-    .page { box-shadow: none; margin: 0; width: 100%; }
+    .page { box-shadow: none; margin: 0; width: 100%; max-width: 100%; }
   }
 </style>
 </head>

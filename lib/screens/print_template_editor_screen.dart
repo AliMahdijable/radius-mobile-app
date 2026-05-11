@@ -488,7 +488,7 @@ class _TabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      height: 42,
+      height: 52,
       margin: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
@@ -498,14 +498,14 @@ class _TabBar extends StatelessWidget {
       ),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         itemCount: _Tab.values.length,
         itemBuilder: (_, i) {
           final t = _Tab.values[i];
           final meta = _kTabMeta[t]!;
           final active = t == current;
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 3),
             child: Material(
               color: active
                   ? AppTheme.primary
@@ -516,8 +516,9 @@ class _TabBar extends StatelessWidget {
                 onTap: () => onChanged(t),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                      horizontal: 14, vertical: 6),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         meta.icon,
