@@ -5,9 +5,26 @@ import '../../models/print_template_model.dart';
 ///   • LiveReceiptPreview → يحمّله في WebView (عرض دقيق لما يطبع)
 ///   • ReceiptPrinter.printReceipt → يمرّره لـPrinting.convertHtml
 ///
-/// لا نُضمّن أي مورد خارجي (`<link>` لخطوط) — يُهنّ webview الطباعة بلا
-/// إنترنت. نعتمد على خطوط النظام (Noto Sans Arabic / Tahoma).
+/// نُحمّل خطّ Google المختار عبر `<link>` كي تنعكس "نوع الخط" فعلياً في
+/// المعاينة (تطابق الويب). لو لا يوجد إنترنت يسقط المتصفّح تلقائياً إلى
+/// خطوط النظام (Noto Sans Arabic / Tahoma) — والطباعة لها fallback أصلي.
 class PrintHtmlWrapper {
+  /// خرائط اسم العائلة → شريحة رابط Google Fonts (بأوزان مناسبة).
+  static const Map<String, String> _gfSlugs = {
+    'Cairo': 'Cairo:wght@400;500;600;700;800;900',
+    'Tajawal': 'Tajawal:wght@400;500;700;800',
+    'Amiri': 'Amiri:wght@400;700',
+    'Noto Naskh Arabic': 'Noto+Naskh+Arabic:wght@400;500;600;700',
+    'IBM Plex Sans Arabic': 'IBM+Plex+Sans+Arabic:wght@400;500;600;700',
+  };
+
+  static String _fontLink(String family) {
+    final slug = _gfSlugs[family] ?? _gfSlugs['Cairo']!;
+    return '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        '<link href="https://fonts.googleapis.com/css2?family=$slug&display=swap" rel="stylesheet">';
+  }
+
   static String build({
     required String filledHtml,
     required ReceiptDesign d,
@@ -31,6 +48,7 @@ class PrintHtmlWrapper {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes">
+${_fontLink(d.fontFamily)}
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {

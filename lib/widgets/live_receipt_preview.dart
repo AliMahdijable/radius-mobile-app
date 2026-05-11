@@ -75,7 +75,9 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   bool _designEquals(ReceiptDesign a, ReceiptDesign b) =>
       a.toJson().toString() == b.toJson().toString();
 
-  void _scheduleReload({int delay = 600}) {
+  // قصير بما يكفي ليبدو "لحظياً" عند تحريك المؤشّرات، ودون إعادة رسم
+  // على كل إطار.
+  void _scheduleReload({int delay = 250}) {
     _debounce?.cancel();
     _debounce = Timer(Duration(milliseconds: delay), _reloadNow);
   }

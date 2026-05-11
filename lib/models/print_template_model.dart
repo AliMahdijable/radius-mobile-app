@@ -87,6 +87,10 @@ class ReceiptDesign {
     this.showDatetime = true,
   });
 
+  /// نسخة مستقلّة — تُستعمل قبل أي تعديل حتى لا نُلوّث المرجع المشترَك
+  /// (وإلا لن تكتشف معاينة الـWebView التغيير لأنه يحدث على نفس الكائن).
+  ReceiptDesign clone() => ReceiptDesign.fromJson(toJson());
+
   factory ReceiptDesign.fromJson(Map<String, dynamic> j) {
     double _d(dynamic v, double fallback) =>
         v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? fallback;

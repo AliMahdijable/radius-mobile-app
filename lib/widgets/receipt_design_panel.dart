@@ -17,6 +17,10 @@ const Map<DesignSection, ({IconData icon, String label})> kDesignSectionMeta = {
 
 /// لوحة تحرير قسم واحد من ReceiptDesign — تُستخدم داخل tabs الـeditor.
 /// السلوك مرآة لـclient-v2/PrintTemplates.tsx مع الفصل بين الأقسام.
+///
+/// مهم: كل تعديل يُنتج كائن ReceiptDesign **جديد** (عبر [_update]) ولا يُعدِّل
+/// المرجع الوارد — هذا ضروري كي يكتشف `LiveReceiptPreview.didUpdateWidget`
+/// التغيير ويعيد رسم المعاينة لحظياً.
 class ReceiptDesignSectionPanel extends StatefulWidget {
   final DesignSection section;
   final ReceiptDesign value;
@@ -48,10 +52,17 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
   @override
   void didUpdateWidget(covariant ReceiptDesignSectionPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) d = widget.value;
+    if (!identical(oldWidget.value, widget.value)) d = widget.value;
   }
 
-  void _emit() => widget.onChanged(d);
+  /// ينسخ التصميم الحالي، يطبّق التعديل على النسخة، يحدّث الحالة المحلية،
+  /// ويُبلّغ الأب — بدون أي تعديل في المكان على الكائن المشترَك.
+  void _update(void Function(ReceiptDesign d) mut) {
+    final next = d.clone();
+    mut(next);
+    setState(() => d = next);
+    widget.onChanged(next);
+  }
 
   String _normalizeFamily(String f) {
     const allowed = {
@@ -80,47 +91,25 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
 
   List<Widget> _showHideSection() {
     return [
-      _switch('شعار المتجر', d.showLogo, (v) => setState(() {
-            d.showLogo = v;
-            _emit();
-          })),
+      _switch('شعار المتجر', d.showLogo, (v) => _update((d) => d.showLogo = v)),
       _switch('بيانات المتجر (العنوان/الهاتف)', d.showShopInfo,
-          (v) => setState(() {
-                d.showShopInfo = v;
-                _emit();
-              })),
-      _switch('رقم الوصل', d.showReceiptId, (v) => setState(() {
-            d.showReceiptId = v;
-            _emit();
-          })),
-      _switch('التاريخ والوقت', d.showDatetime, (v) => setState(() {
-            d.showDatetime = v;
-            _emit();
-          })),
-      _switch('بيانات المشترك', d.showSubscriberInfo, (v) => setState(() {
-            d.showSubscriberInfo = v;
-            _emit();
-          })),
-      _switch('بيانات الباقة', d.showPackageInfo, (v) => setState(() {
-            d.showPackageInfo = v;
-            _emit();
-          })),
-      _switch('سعر الباقة', d.showPackagePrice, (v) => setState(() {
-            d.showPackagePrice = v;
-            _emit();
-          })),
-      _switch('بيانات العملية', d.showTransactionInfo, (v) => setState(() {
-            d.showTransactionInfo = v;
-            _emit();
-          })),
-      _switch('توقيع المدير', d.showManagerSignature, (v) => setState(() {
-            d.showManagerSignature = v;
-            _emit();
-          })),
-      _switch('الذيل (رسالة الشكر)', d.showFooter, (v) => setState(() {
-            d.showFooter = v;
-            _emit();
-          })),
+          (v) => _update((d) => d.showShopInfo = v)),
+      _switch('رقم الوصل', d.showReceiptId,
+          (v) => _update((d) => d.showReceiptId = v)),
+      _switch('التاريخ والوقت', d.showDatetime,
+          (v) => _update((d) => d.showDatetime = v)),
+      _switch('بيانات المشترك', d.showSubscriberInfo,
+          (v) => _update((d) => d.showSubscriberInfo = v)),
+      _switch('بيانات الباقة', d.showPackageInfo,
+          (v) => _update((d) => d.showPackageInfo = v)),
+      _switch('سعر الباقة', d.showPackagePrice,
+          (v) => _update((d) => d.showPackagePrice = v)),
+      _switch('بيانات العملية', d.showTransactionInfo,
+          (v) => _update((d) => d.showTransactionInfo = v)),
+      _switch('توقيع المدير', d.showManagerSignature,
+          (v) => _update((d) => d.showManagerSignature = v)),
+      _switch('الذيل (رسالة الشكر)', d.showFooter,
+          (v) => _update((d) => d.showFooter = v)),
     ];
   }
 
@@ -136,10 +125,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
           max: 120,
           divisions: 70,
           suffix: ' مم',
-          onChanged: (v) => setState(() {
-            d.paperWidthMm = v;
-            _emit();
-          }),
+          onChanged: (v) => _update((d) => d.paperWidthMm = v),
         ),
       ] else ...[
         _dropdown<String>(
@@ -149,10 +135,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
             'portrait': 'عمودي (Portrait)',
             'landscape': 'أفقي (Landscape)',
           },
-          onChanged: (v) => setState(() {
-            d.a4Orientation = v ?? 'portrait';
-            _emit();
-          }),
+          onChanged: (v) => _update((d) => d.a4Orientation = v ?? 'portrait'),
         ),
       ],
       const SizedBox(height: 6),
@@ -163,10 +146,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 30,
         divisions: 30,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.marginTopMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.marginTopMm = v),
       ),
       _slider(
         label: 'الهامش السفلي',
@@ -175,10 +155,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 30,
         divisions: 30,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.marginBottomMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.marginBottomMm = v),
       ),
       _slider(
         label: 'الهامش الأيمن',
@@ -187,10 +164,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 30,
         divisions: 30,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.marginRightMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.marginRightMm = v),
       ),
       _slider(
         label: 'الهامش الأيسر',
@@ -199,10 +173,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 30,
         divisions: 30,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.marginLeftMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.marginLeftMm = v),
       ),
       const SizedBox(height: 12),
       _dropdown<String>(
@@ -215,10 +186,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
           'dotted': 'منقّط',
           'double': 'مزدوج',
         },
-        onChanged: (v) => setState(() {
-          d.borderStyle = v ?? 'dashed';
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.borderStyle = v ?? 'dashed'),
       ),
       _slider(
         label: 'انحناء زوايا الإطار',
@@ -227,10 +195,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 20,
         divisions: 20,
         suffix: ' px',
-        onChanged: (v) => setState(() {
-          d.borderRadiusPx = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.borderRadiusPx = v),
       ),
     ];
   }
@@ -243,16 +208,13 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         label: 'نوع الخط',
         value: _normalizeFamily(d.fontFamily),
         items: const {
-          'Cairo': 'Cairo (افتراضي — مضمَّن)',
+          'Cairo': 'Cairo (افتراضي)',
           'Tajawal': 'Tajawal',
           'Amiri': 'Amiri (خط مزخرف)',
           'Noto Naskh Arabic': 'Noto Naskh Arabic',
           'IBM Plex Sans Arabic': 'IBM Plex Sans Arabic',
         },
-        onChanged: (v) => setState(() {
-          d.fontFamily = v ?? 'Cairo';
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.fontFamily = v ?? 'Cairo'),
       ),
       const SizedBox(height: 6),
       _slider(
@@ -262,10 +224,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 22,
         divisions: 13,
         suffix: ' px',
-        onChanged: (v) => setState(() {
-          d.fontSizeBase = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.fontSizeBase = v),
       ),
       _slider(
         label: 'حجم خط العناوين',
@@ -274,10 +233,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 36,
         divisions: 24,
         suffix: ' px',
-        onChanged: (v) => setState(() {
-          d.fontSizeTitle = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.fontSizeTitle = v),
       ),
       _dropdown<String>(
         label: 'سُمك الخط',
@@ -289,10 +245,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
           '700': 'عريض (700)',
           '800': 'عريض جداً (800)',
         },
-        onChanged: (v) => setState(() {
-          d.fontWeight = v ?? '700';
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.fontWeight = v ?? '700'),
       ),
     ];
   }
@@ -308,10 +261,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
           '#0d9488', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444',
           '#f59e0b', '#1f2937', '#000000',
         ],
-        onChanged: (hex) => setState(() {
-          d.accentColor = hex;
-          _emit();
-        }),
+        onChanged: (hex) => _update((d) => d.accentColor = hex),
       ),
       const SizedBox(height: 14),
       _colorRow(
@@ -320,10 +270,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         presets: const [
           '#0f172a', '#1f2937', '#374151', '#4b5563', '#000000',
         ],
-        onChanged: (hex) => setState(() {
-          d.textColor = hex;
-          _emit();
-        }),
+        onChanged: (hex) => _update((d) => d.textColor = hex),
       ),
     ];
   }
@@ -339,10 +286,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 20,
         divisions: 20,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.sectionGapMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.sectionGapMm = v),
       ),
       _slider(
         label: 'ارتفاع السطر',
@@ -351,10 +295,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 2.2,
         divisions: 12,
         suffix: 'x',
-        onChanged: (v) => setState(() {
-          d.lineHeight = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.lineHeight = v),
       ),
       _slider(
         label: 'حجم الشعار',
@@ -363,10 +304,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 50,
         divisions: 42,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.logoSizeMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.logoSizeMm = v),
       ),
       _slider(
         label: 'حجم الـQR',
@@ -375,10 +313,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
         max: 60,
         divisions: 45,
         suffix: ' مم',
-        onChanged: (v) => setState(() {
-          d.qrSizeMm = v;
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.qrSizeMm = v),
       ),
       _dropdown<String>(
         label: 'محاذاة العنوان',
@@ -388,10 +323,7 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
           'center': 'وسط',
           'left': 'يسار',
         },
-        onChanged: (v) => setState(() {
-          d.headerAlign = v ?? 'center';
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.headerAlign = v ?? 'center'),
       ),
       _dropdown<String>(
         label: 'محاذاة الذيل',
@@ -401,22 +333,13 @@ class _ReceiptDesignSectionPanelState extends State<ReceiptDesignSectionPanel> {
           'center': 'وسط',
           'left': 'يسار',
         },
-        onChanged: (v) => setState(() {
-          d.footerAlign = v ?? 'center';
-          _emit();
-        }),
+        onChanged: (v) => _update((d) => d.footerAlign = v ?? 'center'),
       ),
       const SizedBox(height: 8),
       _switch('عناوين الأقسام بأحرف كبيرة', d.sectionTitleUppercase,
-          (v) => setState(() {
-                d.sectionTitleUppercase = v;
-                _emit();
-              })),
+          (v) => _update((d) => d.sectionTitleUppercase = v)),
       _switch('تسطير عناوين الأقسام', d.sectionTitleUnderline,
-          (v) => setState(() {
-                d.sectionTitleUnderline = v;
-                _emit();
-              })),
+          (v) => _update((d) => d.sectionTitleUnderline = v)),
     ];
   }
 
