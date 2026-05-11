@@ -3,22 +3,20 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import '../core/theme/app_theme.dart';
-import '../core/utils/print_html_wrapper.dart';
 import '../core/utils/receipt_printer.dart' as rp;
 import '../models/print_template_model.dart';
 
-/// لوحة معاينة لايف للوصل — تحوّل HTML+design إلى PDF داخل الذاكرة وتعرض
-/// أول صفحة كصورة. الـUI:
-///   • شريط علوي: عنوان + زر تحديث + زر طيّ/فتح
-///   • منطقة العرض: 220px ارتفاع، scroll أفقي لتغطية الورق العريض
-///   • إعادة الرسم تحدث بعد 1 ثانية من توقف التعديل (debounce)
-///   • ✅ يستعمل ReceiptPrinter._fillTemplate الموجود (نفس الـrenderer
-///     المستخدم وقت الطباعة الفعلية) — مطابقة 1:1 لما يخرج للطابعة
+/// لوحة معاينة لايف للوصل — تبني PDF **native** (نفس ReceiptPrinter
+/// المستخدم للطباعة)، ترسم أول صفحة كصورة. ما تشوفه هو ما يطبع.
+///   • شريط علوي: عنوان + تحديث + طيّ/فتح
+///   • العرض: InteractiveViewer (pan/zoom) + أزرار zoom
+///   • إعادة الرسم بعد ~700ms من توقف التعديل (debounce)
 class LiveReceiptPreview extends StatefulWidget {
+  /// htmlTemplate لم يعد مستعملاً (انتقلنا للـnative renderer) لكن نُبقيه
+  /// في الـsignature للتوافق العكسي مع الـcallers الحاليين.
   final String htmlTemplate;
   final ReceiptDesign design;
   final String templateType; // 'pos' | 'a4'
@@ -26,7 +24,7 @@ class LiveReceiptPreview extends StatefulWidget {
 
   const LiveReceiptPreview({
     super.key,
-    required this.htmlTemplate,
+    this.htmlTemplate = '',
     required this.design,
     required this.templateType,
     required this.sampleData,
@@ -147,31 +145,14 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
   }
 
   Future<Uint8List> _buildPdf() async {
-    // POS roll height — convertHtml لا يقبل double.infinity فاستخدم
-    // ارتفاع كبير معقول (297mm = A4 height) كحدّ أعلى. الـHTML نفسه
-    // سيقصّ في الواقع لما المحتوى ينتهي.
-    final format = widget.templateType == 'a4'
-        ? (widget.design.a4Orientation == 'landscape'
-            ? PdfPageFormat.a4.landscape
-            : PdfPageFormat.a4)
-        : PdfPageFormat(
-            widget.design.paperWidthMm * PdfPageFormat.mm,
-            297 * PdfPageFormat.mm,
-          );
-    // نستخدم نفس الـwrapper اللي يستخدمه الطباعة الفعلية — فالمعاينة
-    // والطباعة تتشاركان نفس CSS، نفس @font-face لـCairo، نفس قيم
-    // التصميم. الـreceiptNo رقم تجريبي للمعاينة فقط.
-    final filled = rp.ReceiptPrinter.testFillTemplate(
-      widget.htmlTemplate,
-      widget.sampleData,
+    // نفس الـbuilder المستخدم للطباعة الفعلية → مطابقة 1:1. سريع لأنه
+    // native (لا webview/HTML) فلا timeout عملياً، لكن نضع 10s احتياطاً.
+    return await rp.ReceiptPrinter.buildReceiptPdf(
+      data: widget.sampleData,
+      design: widget.design,
+      type: widget.templateType,
       receiptNo: 12345,
-    );
-    final wrapper =
-        PrintHtmlWrapper.build(filledHtml: filled, d: widget.design);
-    // مع خطوط النظام (بلا أي مورد خارجي) convertHtml ينجز خلال أجزاء من
-    // الثانية. timeout 8s احتياطي ضد تجمّد الـwebview الداخلي.
-    return await Printing.convertHtml(html: wrapper, format: format)
-        .timeout(const Duration(seconds: 8));
+    ).timeout(const Duration(seconds: 10));
   }
 
   @override

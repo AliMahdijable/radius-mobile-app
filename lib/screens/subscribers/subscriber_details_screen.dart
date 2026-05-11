@@ -191,14 +191,15 @@ class _SubscriberDetailsScreenState
         templateId: activeTemplate?.id,
       );
       // 2) طباعة بالرقم + إعدادات التصميم المخزّنة (margins, font, colors)
+      //    + نوع الورق (POS/A4). الـnative renderer هو المسار الوحيد الآن.
       final design = activeTemplate?.templateData != null
           ? _parseDesignSafe(activeTemplate!.templateData!)
           : null;
       await ReceiptPrinter.printReceipt(
         data: data,
-        htmlTemplate: activeTemplate?.content,
-        receiptNo: receiptNo,
         design: design,
+        type: activeTemplate?.templateType ?? 'pos',
+        receiptNo: receiptNo,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
@@ -1095,7 +1096,8 @@ class _SubscriberDetailsScreenState
                         if (printReceipt) {
                           await _printReceiptNow(
                             ReceiptData(
-                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                              subscriberName: currentSub.username,
+                              firstName: currentSub.fullName,
                               phoneNumber: currentSub.displayPhone,
                               packageName: currentSub.profileName ?? '',
                               packagePrice: extPrice,
@@ -1734,7 +1736,8 @@ class _SubscriberDetailsScreenState
                         if (printReceipt) {
                           await _printReceiptNow(
                             ReceiptData(
-                              subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                              subscriberName: currentSub.username,
+                              firstName: currentSub.fullName,
                               phoneNumber: currentSub.displayPhone,
                               packageName: profileName,
                               packagePrice: userPrice,
@@ -2334,7 +2337,8 @@ class _SubscriberDetailsScreenState
                             if (printReceipt) {
                               await _printReceiptNow(
                                 ReceiptData(
-                                  subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                  subscriberName: currentSub.username,
+                              firstName: currentSub.fullName,
                                   phoneNumber: currentSub.displayPhone,
                                   packageName: currentSub.profileName ?? '',
                                   packagePrice: 0,
@@ -2633,7 +2637,8 @@ class _SubscriberDetailsScreenState
                             if (printReceipt) {
                               await _printReceiptNow(
                                 ReceiptData(
-                                  subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                  subscriberName: currentSub.username,
+                              firstName: currentSub.fullName,
                                   phoneNumber: currentSub.displayPhone,
                                   packageName: currentSub.profileName ?? '',
                                   debtAmount: btnAmount,

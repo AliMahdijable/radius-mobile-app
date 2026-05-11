@@ -91,9 +91,20 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
     // جلب الـpayload الكامل (الـlist endpoint ما يرجعه لتقليل الحجم)
     final full = await fetchArchivedReceipt(ref, row.id);
     final payload = full?.payload ?? row.payload ?? const {};
+    // الـsubscriber object القديم في الـpayload يحتوي fullName/username.
+    final subObj = payload['subscriber'] is Map
+        ? Map<String, dynamic>.from(payload['subscriber'] as Map)
+        : const {};
     final data = ReceiptData(
-      subscriberName: (payload['subscriber_name'] as String?) ??
-          row.subscriberName ?? '—',
+      subscriberName: (subObj['username'] as String?) ??
+          row.subscriberUsername ??
+          (payload['subscriber_name'] as String?) ??
+          row.subscriberName ??
+          '—',
+      firstName: (subObj['fullName'] as String?) ??
+          row.subscriberName ??
+          (payload['subscriber_name'] as String?) ??
+          '',
       phoneNumber: (payload['phone_number'] as String?) ??
           row.subscriberPhone ?? '',
       packageName: (payload['package_name'] as String?) ?? row.packageName ?? '',
@@ -125,9 +136,9 @@ class _ReceiptsArchiveScreenState extends ConsumerState<ReceiptsArchiveScreen> {
       }
       await ReceiptPrinter.printReceipt(
         data: data,
-        htmlTemplate: activeTemplate?.content,
-        receiptNo: full?.receiptNo ?? row.receiptNo,
         design: design,
+        type: activeTemplate?.templateType ?? 'pos',
+        receiptNo: full?.receiptNo ?? row.receiptNo,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في إعادة الطباعة');

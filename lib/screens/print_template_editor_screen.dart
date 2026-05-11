@@ -149,27 +149,29 @@ class _PrintTemplateEditorScreenState
     });
   }
 
+  static const rp.ReceiptData _sampleData = rp.ReceiptData(
+    subscriberName: 'sample.user@hst',
+    firstName: 'محمد أحمد',
+    phoneNumber: '07712345678',
+    packageName: 'باقة أساسية',
+    packagePrice: 25000,
+    paidAmount: 25000,
+    remainingAmount: 0,
+    debtAmount: 0,
+    expiryDate: '2026-12-31 18:30:00',
+    operationType: 'activation',
+    shopName: 'مكتب الإنترنت',
+    shopAddress: 'بغداد',
+    shopPhone: '07712345678',
+    managerName: 'admin@hst',
+  );
+
   Future<void> _printPreview() async {
-    if (_htmlCtrl.text.trim().isEmpty) {
-      AppSnackBar.error(context, 'محتوى القالب فارغ');
-      return;
-    }
-    const sample = rp.ReceiptData(
-      subscriberName: 'محمد أحمد',
-      phoneNumber: '07712345678',
-      packageName: 'باقة أساسية',
-      packagePrice: 25000,
-      paidAmount: 25000,
-      remainingAmount: 0,
-      debtAmount: 0,
-      expiryDate: '2026-12-31',
-      operationType: 'activation',
-    );
     try {
-      await rp.ReceiptPrinter.printWithTemplate(
-        htmlTemplate: _htmlCtrl.text,
-        data: sample,
+      await rp.ReceiptPrinter.printReceipt(
+        data: _sampleData,
         design: _design,
+        type: _type,
       );
     } catch (e) {
       if (!mounted) return;
@@ -250,20 +252,9 @@ class _PrintTemplateEditorScreenState
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: LiveReceiptPreview(
-              htmlTemplate: _previewHtml,
               design: _design,
               templateType: _type,
-              sampleData: const rp.ReceiptData(
-                subscriberName: 'محمد أحمد',
-                phoneNumber: '07712345678',
-                packageName: 'باقة أساسية',
-                packagePrice: 25000,
-                paidAmount: 25000,
-                remainingAmount: 0,
-                debtAmount: 0,
-                expiryDate: '2026-12-31',
-                operationType: 'activation',
-              ),
+              sampleData: _sampleData,
             ),
           ),
           const SizedBox(height: 10),
