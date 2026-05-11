@@ -11,6 +11,22 @@ import '../models/subscriber_model.dart';
 import 'dashboard_provider.dart';
 import 'reports_provider.dart';
 
+/// العمليات الجماعية المتاحة على تحديد متعدّد للمشتركين — تطابق ما هو
+/// مطلوب من الويب: تفعيل / تعطيل / حذف.
+enum BulkAction { enable, disable, delete }
+
+/// نتيجة عملية جماعية — حالة كل مشترك على حدة (id → نجاح/فشل).
+class BulkActionResult {
+  final Map<int, bool> results;
+  const BulkActionResult(this.results);
+
+  int get total => results.length;
+  int get successCount => results.values.where((v) => v).length;
+  int get failCount => results.values.where((v) => !v).length;
+  List<int> get failedIds =>
+      results.entries.where((e) => !e.value).map((e) => e.key).toList();
+}
+
 class SubscribersState {
   final List<SubscriberModel> subscribers;
   final List<SubscriberModel> searchResults;
@@ -2027,7 +2043,8 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  Future<bool> toggleSubscriber(int id, {required bool enable}) async {
+  Future<bool> toggleSubscriber(int id,
+      {required bool enable, bool refreshOnline = true}) async {
     try {
       final subName = _findUsername(id);
       final payload = EncryptionService.encrypt({'user_ids': [id]});
@@ -2062,7 +2079,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             'username': subName,
           },
         );
-        if (!enable) {
+        if (!enable && refreshOnline) {
           // حدّث القائمة الحيّة كي يختفي المشترك المُعطَّل فوراً.
           await loadOnlineUsers();
         }
@@ -2350,6 +2367,45 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     } catch (_) {
       return false;
     }
+  }
+
+  /// ينفّذ عملية جماعية على عدّة مشتركين بالتسلسل ويعيد حالة كلٍّ منهم.
+  /// التعطيل يفصل الجلسة الحيّة لكلِّ واحد (مطابق للويب). تُحدَّث القوائم
+  /// مرّة واحدة في النهاية بدل تحديثها لكل مشترك.
+  Future<BulkActionResult> runBulkAction(
+    List<int> ids,
+    BulkAction action, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final results = <int, bool>{};
+    var done = 0;
+    for (final id in ids) {
+      bool ok;
+      try {
+        switch (action) {
+          case BulkAction.enable:
+            ok = await toggleSubscriber(id, enable: true, refreshOnline: false);
+            break;
+          case BulkAction.disable:
+            ok = await toggleSubscriber(id,
+                enable: false, refreshOnline: false);
+            break;
+          case BulkAction.delete:
+            ok = await deleteSubscriber(id);
+            break;
+        }
+      } catch (_) {
+        ok = false;
+      }
+      results[id] = ok;
+      onProgress?.call(++done, ids.length);
+    }
+    // عكس الحالات الجديدة في الواجهة (enabled / محذوف / أونلاين).
+    try {
+      await loadSubscribers();
+      await loadOnlineUsers();
+    } catch (_) {/* الواجهة ستُحدَّث بأي pull-to-refresh لاحق */}
+    return BulkActionResult(results);
   }
 
   Future<bool> manageDebt(int userId, Map<String, dynamic> debtData) async {

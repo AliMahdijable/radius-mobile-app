@@ -72,6 +72,247 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   // etc.).
   String _lastProbedHash = '';
 
+  // ── تحديد متعدّد ──────────────────────────────────────────────────
+  // يُفعَّل بالضغط المطوّل على بطاقة. نخزّن idx (الرقمي) للمشتركين
+  // المحدّدين — هو ما تحتاجه عمليات التفعيل/التعطيل/الحذف.
+  bool _selectionMode = false;
+  final Set<String> _selectedIdx = {};
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIdx.clear();
+    });
+  }
+
+  void _toggleSelect(SubscriberModel sub) {
+    final id = sub.idx;
+    if (id == null) return;
+    setState(() {
+      if (_selectedIdx.contains(id)) {
+        _selectedIdx.remove(id);
+        if (_selectedIdx.isEmpty) _selectionMode = false;
+      } else {
+        _selectedIdx.add(id);
+        _selectionMode = true;
+      }
+    });
+  }
+
+  void _enterSelectionWith(SubscriberModel sub) {
+    final id = sub.idx;
+    if (id == null) return;
+    setState(() {
+      _selectionMode = true;
+      _selectedIdx.add(id);
+    });
+  }
+
+  // شريط رأس وضع التحديد — بديل صفّ البحث.
+  Widget _buildSelectionHeader(ThemeData theme, List<SubscriberModel> pool) {
+    final selectable = pool.where((s) => s.idx != null).toList();
+    final allSelected = selectable.isNotEmpty &&
+        selectable.every((s) => _selectedIdx.contains(s.idx));
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(LucideIcons.x),
+          tooltip: 'إنهاء التحديد',
+          visualDensity: VisualDensity.compact,
+          onPressed: _exitSelection,
+        ),
+        Text(
+          '${_selectedIdx.length} محدد',
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: selectable.isEmpty
+              ? null
+              : () {
+                  setState(() {
+                    if (allSelected) {
+                      for (final s in selectable) {
+                        _selectedIdx.remove(s.idx);
+                      }
+                      if (_selectedIdx.isEmpty) _selectionMode = false;
+                    } else {
+                      for (final s in selectable) {
+                        _selectedIdx.add(s.idx!);
+                      }
+                    }
+                  });
+                },
+          child: Text(
+            allSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // الشريط السفلي بالعمليات الثلاث — يظهر فقط في وضع التحديد.
+  Widget _buildBulkBar(ThemeData theme) {
+    final enabled = _selectedIdx.isNotEmpty;
+    Widget btn(IconData icon, String label, Color color, BulkAction action) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: ElevatedButton.icon(
+            onPressed: enabled ? () => _runBulkAction(action) : null,
+            icon: Icon(icon, size: 16),
+            label: Text(
+              label,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: color.withOpacity(0.30),
+              disabledForegroundColor: Colors.white.withOpacity(0.8),
+              minimumSize: const Size.fromHeight(44),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.12)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            btn(LucideIcons.circleCheck, 'تفعيل', AppTheme.successColor,
+                BulkAction.enable),
+            btn(LucideIcons.ban, 'تعطيل', AppTheme.warningColor,
+                BulkAction.disable),
+            btn(LucideIcons.trash2, 'حذف', const Color(0xFFE53935),
+                BulkAction.delete),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runBulkAction(BulkAction action) async {
+    final ids = _selectedIdx.map(int.tryParse).whereType<int>().toList();
+    if (ids.isEmpty) return;
+    final n = ids.length;
+    final verb = switch (action) {
+      BulkAction.enable => 'تفعيل',
+      BulkAction.disable => 'تعطيل',
+      BulkAction.delete => 'حذف',
+    };
+    final accent = switch (action) {
+      BulkAction.enable => AppTheme.successColor,
+      BulkAction.disable => AppTheme.warningColor,
+      BulkAction.delete => const Color(0xFFE53935),
+    };
+    final body = switch (action) {
+      BulkAction.disable =>
+        'سيتم تعطيل $n مشترك، وإن كان أيٌّ منهم متصلاً الآن سيُفصل فوراً. '
+            'تبقى الحسابات في النظام.\n\nهل تريد المتابعة؟',
+      BulkAction.delete =>
+        'سيتم حذف $n مشترك نهائياً ولا يمكن التراجع. '
+            'المشتركون الذين عليهم دين لن يُحذفوا.\n\nهل تريد المتابعة؟',
+      BulkAction.enable => 'سيتم تفعيل $n مشترك.\n\nهل تريد المتابعة؟',
+    };
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('تأكيد $verb ($n)'),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: accent, foregroundColor: Colors.white),
+            child: Text(verb),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final progress = ValueNotifier<int>(0);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: ValueListenableBuilder<int>(
+                valueListenable: progress,
+                builder: (_, done, __) => Text(
+                  'جارٍ $verb المشتركين... $done/$n',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final result = await ref.read(subscribersProvider.notifier).runBulkAction(
+          ids,
+          action,
+          onProgress: (done, _) => progress.value = done,
+        );
+
+    navigator.pop(); // أغلق نافذة التقدّم
+    progress.dispose();
+    if (!mounted) return;
+
+    setState(() {
+      _selectionMode = false;
+      _selectedIdx.clear();
+      _currentPage = 0;
+    });
+
+    final ok = result.successCount;
+    final bad = result.failCount;
+    final hint = action == BulkAction.delete ? ' — المتعذّرون غالباً عليهم دين' : '';
+    if (bad == 0) {
+      AppSnackBar.success(context, 'تم $verb $ok مشترك بنجاح');
+    } else if (ok == 0) {
+      AppSnackBar.error(context, 'فشل $verb المشتركين ($bad)$hint');
+    } else {
+      AppSnackBar.error(context, 'تم $verb $ok — فشل $bad$hint');
+    }
+  }
+
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
   static const _sortFields = [
@@ -844,7 +1085,9 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Row(
+          child: _selectionMode
+              ? _buildSelectionHeader(theme, visibleList)
+              : Row(
             children: [
               Expanded(
                 child: TextField(
@@ -1216,13 +1459,25 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
                             lastPayment: state.lastPayments[sub.username],
+                            selectionMode: _selectionMode,
+                            selected: sub.idx != null &&
+                                _selectedIdx.contains(sub.idx),
+                            onLongPress: () {
+                              if (_selectionMode) {
+                                _toggleSelect(sub);
+                              } else {
+                                _enterSelectionWith(sub);
+                              }
+                            },
                             // The online filter used to disable onTap so
                             // the disconnect button could own the row.
                             // Per user request, mirror every other tab:
                             // tapping a row opens the subscriber details.
                             // The disconnect button still works as its
                             // own tap target inside the card.
-                            onTap: () {
+                            onTap: _selectionMode
+                                ? () => _toggleSelect(sub)
+                                : () {
                               // Prefetch device status the moment the
                               // admin taps the row, so by the time the
                               // details screen mounts the
@@ -1247,7 +1502,9 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                                 extra: sub,
                               );
                             },
-                            onDisconnect: isOnlineFilter && sub.idx != null
+                            onDisconnect: !_selectionMode &&
+                                    isOnlineFilter &&
+                                    sub.idx != null
                                 ? () async {
                                     final confirm = await showDialog<bool>(
                                       context: context,
@@ -1282,6 +1539,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       ),
                     ),
         ),
+
+        if (_selectionMode) _buildBulkBar(theme),
       ],
     );
   }

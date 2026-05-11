@@ -12,19 +12,26 @@ import '../providers/device_provider.dart';
 class SubscriberCard extends StatelessWidget {
   final SubscriberModel subscriber;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final bool showOnlineDetails;
   final Map<String, dynamic>? lastPayment;
   final VoidCallback? onDisconnect;
   final VoidCallback? onPreview;
+  // وضع التحديد المتعدّد — يُظهر دائرة اختيار قبل البطاقة ويُلوّن المحدّد.
+  final bool selectionMode;
+  final bool selected;
 
   const SubscriberCard({
     super.key,
     required this.subscriber,
     this.onTap,
+    this.onLongPress,
     this.showOnlineDetails = false,
     this.lastPayment,
     this.onDisconnect,
     this.onPreview,
+    this.selectionMode = false,
+    this.selected = false,
   });
 
   static String formatBytes(int? bytes) {
@@ -69,16 +76,22 @@ class SubscriberCard extends StatelessWidget {
         subscriber.username.isNotEmpty && subscriber.username != displayName;
 
     return Opacity(
-      opacity: isDisabled ? 0.55 : 1.0,
+      opacity: isDisabled && !selected ? 0.55 : 1.0,
       child: InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: EdgeInsetsDirectional.fromSTEB(selected ? 13 : 16, 12, 16, 12),
         decoration: BoxDecoration(
-          color: isDisabled
-              ? theme.colorScheme.onSurface.withOpacity(0.03)
-              : null,
-          border: Border(
+          color: selected
+              ? AppTheme.primary.withOpacity(0.10)
+              : (isDisabled
+                  ? theme.colorScheme.onSurface.withOpacity(0.03)
+                  : null),
+          border: BorderDirectional(
+            start: selected
+                ? BorderSide(color: AppTheme.primary, width: 3)
+                : BorderSide.none,
             bottom: BorderSide(
               color: theme.colorScheme.onSurface.withOpacity(0.06),
             ),
@@ -92,11 +105,21 @@ class SubscriberCard extends StatelessWidget {
                 SizedBox(
                   width: badgeSize,
                   height: badgeSize,
-                  child: Icon(
-                    statusVisual.icon,
-                    size: badgeSize - 1,
-                    color: statusVisual.color,
-                  ),
+                  child: selectionMode
+                      ? Icon(
+                          selected
+                              ? Icons.check_circle_rounded
+                              : Icons.circle_outlined,
+                          size: badgeSize,
+                          color: selected
+                              ? AppTheme.primary
+                              : theme.colorScheme.onSurface.withOpacity(0.35),
+                        )
+                      : Icon(
+                          statusVisual.icon,
+                          size: badgeSize - 1,
+                          color: statusVisual.color,
+                        ),
                 ),
                 const SizedBox(width: badgeGap),
                 Expanded(
