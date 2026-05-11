@@ -2043,6 +2043,13 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           response.data?['success'] == true ||
           response.statusCode == 200;
       if (ok) {
+        // عند التعطيل: نفصل الجلسة الحيّة من RADIUS كمان — مطابق للويب
+        // (server.js → /api/v2/subscribers/:idx/toggle-enabled). SAS4
+        // disable لحاله لا يقطع الجلسة النشطة، تستمر حتى accounting timeout.
+        // best-effort: فشله لا يفشل العملية.
+        if (!enable) {
+          await _disconnectActiveSessionByUsername(id);
+        }
         logActivity(
           action: 'edit_subscriber',
           description: enable
@@ -2055,10 +2062,74 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             'username': subName,
           },
         );
+        if (!enable) {
+          // حدّث القائمة الحيّة كي يختفي المشترك المُعطَّل فوراً.
+          await loadOnlineUsers();
+        }
       }
       return ok;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// يبحث عن الجلسة النشطة للمشترك (بالاسم) ويُرسل أمر الفصل — يطابق منطق
+  /// الويب: `/index/online` ← acctsessionid/radacctid ← `/user/disconnect/acctid/{id}`.
+  /// كل الأخطاء تُبتلع — هذه خطوة تكميلية للتعطيل.
+  Future<void> _disconnectActiveSessionByUsername(int userId) async {
+    try {
+      // 1) احصل على username المشترك — من الحالة المحلية أو بطلب صريح.
+      String username = _findUsername(userId);
+      if (username == userId.toString()) {
+        try {
+          final r = await _sas4Dio.get('${ApiConstants.sas4GetUser}/$userId');
+          dynamic d = r.data;
+          if (d is String) d = EncryptionService.decrypt(d);
+          if (d is Map) {
+            username = (d['data']?['username'] ?? d['username'] ?? '')
+                .toString();
+          }
+        } catch (_) {/* نُكمل بلا username — لا يمكن البحث */}
+      }
+      if (username.isEmpty || username == userId.toString()) return;
+
+      // 2) ابحث في /index/online عن acctsessionid لهذا الاسم.
+      final payload = EncryptionService.encrypt({
+        'page': 1,
+        'count': 5,
+        'sortBy': 'username',
+        'direction': 'asc',
+        'search': username,
+        'columns': ['username', 'acctsessionid', 'radacctid', 'acctstarttime'],
+      });
+      final onlineRes = await _sas4Dio.post(
+        ApiConstants.sas4OnlineUsers,
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+      dynamic parsed = onlineRes.data;
+      if (parsed is String) parsed = EncryptionService.decrypt(parsed);
+      final rows = (parsed is Map && parsed['data'] is List)
+          ? (parsed['data'] as List)
+          : const [];
+      final lower = username.toLowerCase();
+      Map? row;
+      for (final e in rows) {
+        if (e is Map &&
+            (e['username']?.toString().toLowerCase() ?? '') == lower) {
+          row = e;
+          break;
+        }
+      }
+      final acctId = (row?['acctsessionid'] ?? row?['radacctid'])?.toString();
+      if (acctId == null || acctId.isEmpty) return;
+
+      // 3) أمر الفصل.
+      await _sas4Dio.get('${ApiConstants.sas4DisconnectUser}/$acctId');
+      dev.log('toggleSubscriber: disconnected active session for $username '
+          '(acctid=$acctId)', name: 'SUBS');
+    } catch (e) {
+      dev.log('toggleSubscriber disconnect step failed: $e', name: 'SUBS');
     }
   }
 

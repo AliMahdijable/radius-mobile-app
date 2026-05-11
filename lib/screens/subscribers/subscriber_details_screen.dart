@@ -2978,7 +2978,12 @@ class _SubscriberDetailsScreenState
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد $action'),
-        content: Text('هل تريد $action للمشترك "${sub.fullName}"؟'),
+        content: Text(
+          enable
+              ? 'هل تريد تفعيل حساب المشترك "${sub.fullName}"؟'
+              : 'سيُمنع المشترك "${sub.fullName}" من الاتصال، وإن كان متصلاً '
+                  'الآن سيُفصل فوراً. يبقى الحساب في النظام.\n\nهل تريد المتابعة؟',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
