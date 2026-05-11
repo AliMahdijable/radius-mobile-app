@@ -237,18 +237,12 @@ class _PrintTemplateEditorScreenState
       ),
       body: Column(
         children: [
-          // ── Header subtitle ──
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-            child: Text(
-              'تخصيص شامل: الورق، الخطوط، الألوان، الأقسام، والمحتوى — مع معاينة فورية',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11.5,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
-              textAlign: TextAlign.center,
+          // ── اختيار نوع الورقة — بارز بالأعلى مثل الويب ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: _PaperTypePicker(
+              current: _type,
+              onChanged: _onTypeChanged,
             ),
           ),
 
@@ -334,26 +328,9 @@ class _PrintTemplateEditorScreenState
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 14),
-
-        // مقاس الورق (POS / A4)
-        DropdownButtonFormField<String>(
-          initialValue: _type,
-          decoration: const InputDecoration(
-            labelText: 'مقاس الورق',
-            isDense: true,
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(
-                value: 'pos', child: Text('POS 80mm (وصل حراري)')),
-            DropdownMenuItem(value: 'a4', child: Text('A4 (ورق عادي)')),
-          ],
-          onChanged: _onTypeChanged,
-        ),
         const SizedBox(height: 8),
 
-        // نشط/معطّل
+        // نشط/معطّل — (نوع الورقة موجود بالأعلى دائماً، ما نكرّره هنا)
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
           title: const Text(
@@ -397,6 +374,113 @@ class _PrintTemplateEditorScreenState
           ),
         ),
       ],
+    );
+  }
+}
+
+/// اختيار نوع الورقة (A4 / POS) — كرتان بارزتان بالأعلى مثل الويب.
+class _PaperTypePicker extends StatelessWidget {
+  final String current; // 'pos' | 'a4'
+  final ValueChanged<String?> onChanged;
+  const _PaperTypePicker({required this.current, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: _card(
+            theme,
+            value: 'a4',
+            icon: LucideIcons.fileText,
+            title: 'A4',
+            subtitle: 'ورق طباعة عادي',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _card(
+            theme,
+            value: 'pos',
+            icon: LucideIcons.receipt,
+            title: 'POS',
+            subtitle: 'حراري قابل للتخصيص',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _card(
+    ThemeData theme, {
+    required String value,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final active = value == current;
+    return Material(
+      color: active
+          ? AppTheme.primary.withValues(alpha: 0.10)
+          : (theme.cardTheme.color ?? Colors.white),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onChanged(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active
+                  ? AppTheme.primary
+                  : theme.colorScheme.outline.withValues(alpha: 0.18),
+              width: active ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 22,
+                  color: active
+                      ? AppTheme.primary
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        color: active
+                            ? AppTheme.primary
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 10.5,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (active)
+                Icon(LucideIcons.circleCheck,
+                    size: 18, color: AppTheme.primary),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

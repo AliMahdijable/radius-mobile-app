@@ -168,10 +168,10 @@ class _LiveReceiptPreviewState extends State<LiveReceiptPreview> {
     );
     final wrapper =
         PrintHtmlWrapper.build(filledHtml: filled, d: widget.design);
-    // timeout — لو convertHtml تجمّد لأي سبب (مثلاً خطأ في الـwebview الداخلي)
-    // ما نخلي المستخدم بـspinner لانهاية.
+    // مع خطوط النظام (بلا أي مورد خارجي) convertHtml ينجز خلال أجزاء من
+    // الثانية. timeout 8s احتياطي ضد تجمّد الـwebview الداخلي.
     return await Printing.convertHtml(html: wrapper, format: format)
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 8));
   }
 
   @override
