@@ -16,6 +16,7 @@ import '../../widgets/subscriber_card.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/add_subscriber_sheet.dart';
+import 'bulk_renew_sheet.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
@@ -188,10 +189,42 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     return (hasEnabled: hasEnabled, hasDisabled: hasDisabled);
   }
 
-  // الشريط السفلي بالعمليات — يتبدّل حسب حالة المحدّدين (تعطيل/تفعيل) + حذف.
-  Widget _buildBulkBar(
-      ThemeData theme, ({bool hasEnabled, bool hasDisabled}) status) {
+  /// المشتركون المحدّدون فعلياً (من القوائم المحمّلة) — للتجديد الجماعي.
+  List<SubscriberModel> _selectedSubscribers(SubscribersState state) {
+    final byIdx = <String, SubscriberModel>{};
+    for (final s in state.subscribers) {
+      final i = s.idx;
+      if (i != null) byIdx[i] = s;
+    }
+    for (final s in state.searchResults) {
+      final i = s.idx;
+      if (i != null) byIdx.putIfAbsent(i, () => s);
+    }
+    for (final s in state.onlineUsers) {
+      final i = s.idx;
+      if (i != null) byIdx.putIfAbsent(i, () => s);
+    }
+    return [for (final id in _selectedIdx) if (byIdx[id] != null) byIdx[id]!];
+  }
+
+  Future<void> _openBulkRenew(SubscribersState state) async {
+    final subs = _selectedSubscribers(state);
+    if (subs.isEmpty) return;
+    final didRenew = await showBulkRenewSheet(context, subs);
+    if (!mounted) return;
+    if (didRenew == true) {
+      setState(() {
+        _selectionMode = false;
+        _selectedIdx.clear();
+        _currentPage = 0;
+      });
+    }
+  }
+
+  // الشريط السفلي بالعمليات — صف "تجديد الاشتراك" بارز، ثم تعطيل/تفعيل/حذف.
+  Widget _buildBulkBar(ThemeData theme, SubscribersState state) {
     final enabled = _selectedIdx.isNotEmpty;
+    final status = _selectionStatus(state);
     Widget btn(IconData icon, String label, Color color, BulkAction action) {
       return Expanded(
         child: Padding(
@@ -208,7 +241,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               foregroundColor: Colors.white,
               disabledBackgroundColor: color.withOpacity(0.30),
               disabledForegroundColor: Colors.white.withOpacity(0.8),
-              minimumSize: const Size.fromHeight(44),
+              minimumSize: const Size.fromHeight(42),
               padding: const EdgeInsets.symmetric(horizontal: 2),
               shape:
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -218,7 +251,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       );
     }
 
-    final actions = <Widget>[
+    final secondary = <Widget>[
       if (status.hasEnabled)
         btn(LucideIcons.ban, 'تعطيل', AppTheme.warningColor,
             BulkAction.disable),
@@ -244,7 +277,40 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ],
       ),
-      child: SafeArea(top: false, child: Row(children: actions)),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // تجديد الاشتراك — العملية الرئيسية، صفّ كامل بالأعلى.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: enabled ? () => _openBulkRenew(state) : null,
+                  icon: const Icon(LucideIcons.calendarPlus, size: 17),
+                  label: Text(
+                    'تجديد الاشتراك (${_selectedIdx.length})',
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w900),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppTheme.primary.withOpacity(0.30),
+                    disabledForegroundColor: Colors.white.withOpacity(0.8),
+                    minimumSize: const Size.fromHeight(46),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ),
+            Row(children: secondary),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1602,7 +1668,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
         ),
 
-        if (_selectionMode) _buildBulkBar(theme, _selectionStatus(state)),
+        if (_selectionMode) _buildBulkBar(theme, state),
       ],
     );
   }
