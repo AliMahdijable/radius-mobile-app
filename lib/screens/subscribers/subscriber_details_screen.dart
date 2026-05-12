@@ -83,24 +83,32 @@ class _SubscriberDetailsScreenState
         candidate.idx == originalIdx;
   }
 
+  /// نبحث في قائمة المتصلين أولاً (تحمل IP/MAC/الجلسة الحيّة التي لا
+  /// تُرجعها قائمة المشتركين العامة) ثم القائمة العامة، وإلا الـmodel
+  /// المُمرَّر. لولا هذا الترتيب لظهر "لا يوجد اتصال نشط" لمشترك متصل لأن
+  /// مطابقة الاسم كانت تختار صفّ القائمة العامة الفقير من البيانات.
   SubscriberModel _resolveCurrentSubscriber(
-      Iterable<SubscriberModel> subscribers) {
+    Iterable<SubscriberModel> onlineUsers,
+    Iterable<SubscriberModel> subscribers,
+  ) {
+    for (final candidate in onlineUsers) {
+      if (_matchesCurrentSubscriber(candidate)) return candidate;
+    }
     for (final candidate in subscribers) {
-      if (_matchesCurrentSubscriber(candidate)) {
-        return candidate;
-      }
+      if (_matchesCurrentSubscriber(candidate)) return candidate;
     }
     return widget.subscriber;
   }
 
   SubscriberModel _readCurrentSubscriber() {
-    return _resolveCurrentSubscriber(ref.read(subscribersProvider).subscribers);
+    final st = ref.read(subscribersProvider);
+    return _resolveCurrentSubscriber(st.onlineUsers, st.subscribers);
   }
 
   SubscriberModel _watchCurrentSubscriber() {
     return ref.watch(
       subscribersProvider.select(
-        (state) => _resolveCurrentSubscriber(state.subscribers),
+        (state) => _resolveCurrentSubscriber(state.onlineUsers, state.subscribers),
       ),
     );
   }
