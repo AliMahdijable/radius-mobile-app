@@ -96,11 +96,11 @@ class _RenewRow {
 
   double get partialAmount => _parseMoney(partialCtrl.text);
 
-  /// المقبوض نقداً لهذا السطر.
+  /// المقبوض نقداً فعلياً لهذا السطر (لو "جزئي" تجاوز السعر، الفائض يصير
+  /// رصيداً للمشترك — لا نقصّه هنا).
   double get cashIn => switch (method) {
         _PayMethod.cash => finalPrice,
-        _PayMethod.partial =>
-          partialAmount > finalPrice ? finalPrice : partialAmount,
+        _PayMethod.partial => partialAmount,
         _PayMethod.debt => 0.0,
       };
 
@@ -226,20 +226,13 @@ class _BulkRenewSheetState extends ConsumerState<_BulkRenewSheet> {
       AppSnackBar.error(context, 'لا يوجد مشترك قابل للتجديد');
       return;
     }
-    // تحقّق من المبالغ الجزئية.
+    // تحقّق من المبالغ الجزئية — يكفي أن يكون أكبر من صفر. لو تجاوز السعر،
+    // الفائض يُسجَّل رصيداً للمشترك (نفس منطق التفعيل الفردي).
     for (final r in renewable) {
-      if (r.method == _PayMethod.partial) {
-        final a = r.partialAmount;
-        if (a <= 0) {
-          AppSnackBar.error(
-              context, 'أدخل المبلغ الجزئي للمشترك ${r.sub.username}');
-          return;
-        }
-        if (a >= r.finalPrice) {
-          AppSnackBar.error(context,
-              'المبلغ الجزئي للمشترك ${r.sub.username} يساوي/يتجاوز السعر — اختر "نقدي"');
-          return;
-        }
+      if (r.method == _PayMethod.partial && r.partialAmount <= 0) {
+        AppSnackBar.error(
+            context, 'أدخل المبلغ الجزئي للمشترك ${r.sub.username}');
+        return;
       }
     }
 
