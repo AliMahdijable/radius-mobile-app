@@ -291,6 +291,7 @@ class _BulkRenewSheetState extends ConsumerState<_BulkRenewSheet> {
     );
 
     final failed = <String>[]; // "username — السبب"
+    final succeeded = <_RenewRow>[];
     var ok = 0;
     var done = 0;
     for (final r in rows) {
@@ -310,6 +311,7 @@ class _BulkRenewSheetState extends ConsumerState<_BulkRenewSheet> {
         );
         if (res.ok) {
           ok++;
+          succeeded.add(r);
           final nb = r.newBalance;
           // أرشفة الوصل (fire-and-forget — فشلها لا يُفشل العملية).
           try {
@@ -346,13 +348,59 @@ class _BulkRenewSheetState extends ConsumerState<_BulkRenewSheet> {
       await notifier.loadSubscribers();
     } catch (_) {}
 
+    // أرسل إشعارات «التفعيل» عبر قائمة انتظار الواتساب بالباك-اند (تُرسَل
+    // واحدة بعد الأخرى) — نلتقط تاريخ الانتهاء الجديد من القائمة المُحدَّثة.
+    var waQueued = 0;
+    String? waReason;
+    if (succeeded.isNotEmpty) {
+      final freshByUsername = <String, SubscriberModel>{};
+      for (final s in ref.read(subscribersProvider).subscribers) {
+        freshByUsername[s.username.toLowerCase()] = s;
+      }
+      final items = succeeded.map((r) {
+        final fresh = freshByUsername[r.sub.username.toLowerCase()];
+        final nb = r.newBalance;
+        return <String, dynamic>{
+          'idx': r.sub.idx,
+          'username': r.sub.username,
+          'phone': r.sub.displayPhone,
+          'firstname': r.sub.firstname,
+          'lastname': r.sub.lastname,
+          'package_name': r.sub.profileName ?? '',
+          'package_price': r.originalPrice,
+          'discount_amount': r.discount,
+          'discounted_price': r.finalPrice,
+          'paid_amount': r.cashIn,
+          'new_balance': nb,
+          'expiration': fresh?.expiration ?? r.sub.expiration ?? '',
+        };
+      }).toList();
+      final qr = await notifier.queueActivationNotices(items);
+      waQueued = qr.queued;
+      waReason = qr.reason;
+    }
+
     navigator.pop(); // أغلق نافذة التقدّم
     progress.dispose();
     if (!mounted) return;
 
+    // نص حالة الواتساب للملخّص.
+    String? waDetail() {
+      if (succeeded.isEmpty) return null;
+      if (waQueued > 0) return '$waQueued رسالة واتساب في قائمة الإرسال';
+      if (waReason == 'notifications_disabled' || waReason == 'feature_off') {
+        return 'إشعارات الواتساب مُعطَّلة — لم تُضف رسائل';
+      }
+      if (waReason == 'no_template') {
+        return 'لا يوجد قالب «إشعار التفعيل» نشط — لم تُرسل رسائل';
+      }
+      return 'لم تُضف رسائل واتساب';
+    }
+
     // اعرض ملخّصاً ثم أغلق المودل.
     if (failed.isEmpty) {
-      AppSnackBar.success(context, 'تم تجديد $ok اشتراك بنجاح');
+      AppSnackBar.success(context, 'تم تجديد $ok اشتراك بنجاح',
+          detail: waDetail());
       Navigator.pop(context, true);
     } else {
       await showDialog(
@@ -364,6 +412,13 @@ class _BulkRenewSheetState extends ConsumerState<_BulkRenewSheet> {
             child: ListView(
               shrinkWrap: true,
               children: [
+                if (waDetail() != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('📨 ${waDetail()}',
+                        style: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  ),
                 for (final f in failed)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),

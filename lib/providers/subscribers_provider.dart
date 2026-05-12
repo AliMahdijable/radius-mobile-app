@@ -2432,6 +2432,32 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     return BulkActionResult(results);
   }
 
+  /// يُدرج إشعارات «تفعيل» لقائمة مشتركين في قائمة انتظار الواتساب
+  /// بالباك-اند — يرسلها queueProcessor واحدة بعد الأخرى (تقييد + إعادة
+  /// محاولة)، فلا نرسل من التطبيق. يعيد (queued, skipped, reason?).
+  Future<({int queued, int skipped, String? reason})> queueActivationNotices(
+      List<Map<String, dynamic>> items) async {
+    if (items.isEmpty) return (queued: 0, skipped: 0, reason: null);
+    try {
+      final res = await _backendDio.post(
+        '/api/v2/whatsapp/queue-activations',
+        data: {'items': items},
+      );
+      final d = res.data;
+      if (d is Map) {
+        return (
+          queued: (d['queued'] is num) ? (d['queued'] as num).toInt() : 0,
+          skipped: (d['skipped'] is num) ? (d['skipped'] as num).toInt() : 0,
+          reason: d['reason']?.toString(),
+        );
+      }
+      return (queued: 0, skipped: items.length, reason: null);
+    } catch (e) {
+      dev.log('queueActivationNotices error: $e', name: 'SUBS');
+      return (queued: 0, skipped: items.length, reason: 'error');
+    }
+  }
+
   Future<bool> manageDebt(int userId, Map<String, dynamic> debtData) async {
     try {
       final payload = EncryptionService.encrypt(debtData);
