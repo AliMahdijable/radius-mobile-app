@@ -1337,7 +1337,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           final match = subMap[o.username.toLowerCase()];
           if (match != null) {
             return SubscriberModel(
-              idx: o.idx, username: o.username,
+              // SAS4 /index/online لا يُرجع id موثوقاً (أحياناً null أو
+              // radacctid) — نأخذ idx الحقيقي من القائمة الرئيسية كي تشتغل
+              // عمليات التعديل/التفعيل/الحذف على المشترك من صفحة المتصلين.
+              idx: match.idx ?? o.idx, username: o.username,
               firstname: match.firstname.isNotEmpty ? match.firstname : o.firstname,
               lastname: match.lastname.isNotEmpty ? match.lastname : o.lastname,
               phone: o.phone ?? match.phone,

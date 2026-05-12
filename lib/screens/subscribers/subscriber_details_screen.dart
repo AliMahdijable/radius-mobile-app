@@ -61,15 +61,26 @@ class _SubscriberDetailsScreenState
     });
   }
 
-  int? get _subscriberId =>
-      int.tryParse(widget.subscriber.idx ?? '');
+  /// idx الحقيقي للمشترك. الـmodel القادم من صفحة المتصلين قد يحمل idx
+  /// مفقوداً أو خاطئاً (SAS4 /index/online لا يُرجع id موثوقاً)، فنحاول
+  /// أولاً idx الـextra ثم idx المشترك المُطابَق بالاسم من القائمة الرئيسية.
+  int? get _subscriberId {
+    final fromExtra = int.tryParse(widget.subscriber.idx ?? '');
+    final resolved = int.tryParse(_readCurrentSubscriber().idx ?? '');
+    return resolved ?? fromExtra;
+  }
 
   bool _matchesCurrentSubscriber(SubscriberModel candidate) {
-    final originalIdx = widget.subscriber.idx;
-    if (originalIdx != null && originalIdx.isNotEmpty) {
-      return candidate.idx == originalIdx;
+    // نُطابق بالاسم دائماً (فريد في SAS4) — يصحّح حتى لو حمل الـextra
+    // idx خاطئاً من صفحة المتصلين — مع قبول التطابق بالـidx أيضاً.
+    if (candidate.username.isNotEmpty &&
+        candidate.username == widget.subscriber.username) {
+      return true;
     }
-    return candidate.username == widget.subscriber.username;
+    final originalIdx = widget.subscriber.idx;
+    return originalIdx != null &&
+        originalIdx.isNotEmpty &&
+        candidate.idx == originalIdx;
   }
 
   SubscriberModel _resolveCurrentSubscriber(
