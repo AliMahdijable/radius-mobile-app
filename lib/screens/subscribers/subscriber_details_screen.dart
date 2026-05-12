@@ -3211,35 +3211,32 @@ class _SubscriberDetailsScreenState
                 const SizedBox(height: 12),
 
                 // ── Connection & Device ──
-                // Shown for every subscriber except the purely offline
-                // (active subscription but not currently connected). IP
-                // row + live uptime on top, CPE probe card below. When
-                // SAS4 hasn't returned an IP yet we still show the card
-                // with a placeholder so the admin can open the config
-                // dialog and enter custom creds.
-                if (!sub.isOffline)
-                  _DetailSection(
-                    title: 'الاتصال والجهاز',
-                    children: [
-                      if ((sub.ipAddress ?? '').trim().isNotEmpty)
-                        _IpDetailRow(
-                          ip: sub.ipAddress!.trim(),
-                          sessionSeconds: sub.sessionTime,
-                          onTap: () => _launchIpInBrowser(sub.ipAddress!),
-                        )
-                      else
-                        const _NoIpHint(),
-                      ConnectionStatusCard(
-                        subscriberUsername: sub.username,
-                        fallbackIp: (sub.ipAddress ?? '').trim().isNotEmpty
-                            ? sub.ipAddress!.trim()
-                            : null,
-                      ),
-                      _DeviceNotesRow(subscriberUsername: sub.username),
-                    ],
-                  ),
+                // يُعرض دائماً (حتى لو الاشتراك أوف-لاين) — أجهزة النانو/ONT
+                // كثيراً ما تكون متصلة بالكهرباء/الشبكة والمشترك طافٍ، فنحتاج
+                // الزرّ في كل الحالات: إن أرجع الجهاز قراءةً ظهرت المعلومات،
+                // وإلا يبقى زرّا إعادة التحميل والإعدادات (لإدخال IP/credentials).
+                _DetailSection(
+                  title: 'الاتصال والجهاز',
+                  children: [
+                    if ((sub.ipAddress ?? '').trim().isNotEmpty)
+                      _IpDetailRow(
+                        ip: sub.ipAddress!.trim(),
+                        sessionSeconds: sub.sessionTime,
+                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                      )
+                    else
+                      const _NoIpHint(),
+                    ConnectionStatusCard(
+                      subscriberUsername: sub.username,
+                      fallbackIp: (sub.ipAddress ?? '').trim().isNotEmpty
+                          ? sub.ipAddress!.trim()
+                          : null,
+                    ),
+                    _DeviceNotesRow(subscriberUsername: sub.username),
+                  ],
+                ),
 
-                if (!sub.isOffline) const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
                 // ── Subscription Status ──
                 _DetailSection(
