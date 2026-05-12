@@ -271,6 +271,10 @@ class _SubscriberDetailsScreenState
 
     final sub = _readCurrentSubscriber();
     final originalUsername = details['username']?.toString() ?? sub.username;
+    final originalFirstname =
+        (details['firstname']?.toString() ?? sub.firstname).trim();
+    final originalLastname =
+        (details['lastname']?.toString() ?? sub.lastname).trim();
     final originalProfileId = details['profile_id'] ??
         (details['profile_details'] is Map ? details['profile_details']['id'] : null) ??
         sub.profileId;
@@ -647,6 +651,21 @@ class _SubscriberDetailsScreenState
 
                         final ok = await notifier.updateSubscriber(id, details);
                         if (!ok) anySuccess = false;
+
+                        // عند تغيير الاسم أو اسم المستخدم (الرمز): نفصل
+                        // الجلسة الحيّة كي يعيد المشترك الاتصال (مطابق التعطيل).
+                        final nameOrCodeChanged =
+                            (newUsername != originalUsername && newUsername.isNotEmpty) ||
+                                fnCtrl.text.trim() != originalFirstname ||
+                                lnCtrl.text.trim() != originalLastname;
+                        if (anySuccess && nameOrCodeChanged) {
+                          await notifier.disconnectActiveSession(
+                            id,
+                            knownUsername: newUsername.isNotEmpty
+                                ? newUsername
+                                : originalUsername,
+                          );
+                        }
 
                         if (mounted) {
                           Navigator.pop(ctx);

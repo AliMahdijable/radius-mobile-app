@@ -2091,34 +2091,45 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// يبحث عن الجلسة النشطة للمشترك (بالاسم) ويُرسل أمر الفصل — يطابق منطق
-  /// الويب: `/index/online` ← acctsessionid/radacctid ← `/user/disconnect/acctid/{id}`.
-  /// كل الأخطاء تُبتلع — هذه خطوة تكميلية للتعطيل.
-  Future<void> _disconnectActiveSessionByUsername(int userId) async {
-    try {
-      // 1) احصل على username المشترك — من الحالة المحلية أو بطلب صريح.
-      String username = _findUsername(userId);
-      if (username == userId.toString()) {
-        try {
-          final r = await _sas4Dio.get('${ApiConstants.sas4GetUser}/$userId');
-          dynamic d = r.data;
-          if (d is String) d = EncryptionService.decrypt(d);
-          if (d is Map) {
-            username = (d['data']?['username'] ?? d['username'] ?? '')
-                .toString();
-          }
-        } catch (_) {/* نُكمل بلا username — لا يمكن البحث */}
-      }
-      if (username.isEmpty || username == userId.toString()) return;
+  /// يبحث عن الجلسة النشطة للمشترك ويُرسل أمر الفصل — يطابق منطق الويب:
+  /// `/index/online` ← acctsessionid/radacctid ← `/user/disconnect/acctid/{id}`.
+  /// يُطابق بالـid أولاً (ثابت رغم تغيير الاسم) ثم بالـusername. كل الأخطاء
+  /// تُبتلع — خطوة تكميلية (للتعطيل أو لتعديل الاسم/الرمز).
+  ///
+  /// [knownUsername] يُمرَّر عند تعديل الاسم لأنّ الحالة المحلية قد تكون
+  /// بالاسم القديم.
+  Future<void> disconnectActiveSession(int userId, {String? knownUsername}) =>
+      _disconnectActiveSessionByUsername(userId, knownUsername: knownUsername);
 
-      // 2) ابحث في /index/online عن acctsessionid لهذا الاسم.
+  Future<void> _disconnectActiveSessionByUsername(int userId,
+      {String? knownUsername}) async {
+    try {
+      // 1) احصل على username للبحث — المُمرَّر، أو الحالة المحلية، أو بطلب.
+      String username = (knownUsername ?? '').trim();
+      if (username.isEmpty) {
+        username = _findUsername(userId);
+        if (username == userId.toString()) {
+          try {
+            final r =
+                await _sas4Dio.get('${ApiConstants.sas4GetUser}/$userId');
+            dynamic d = r.data;
+            if (d is String) d = EncryptionService.decrypt(d);
+            if (d is Map) {
+              username =
+                  (d['data']?['username'] ?? d['username'] ?? '').toString();
+            }
+          } catch (_) {/* نُكمل بلا username */}
+        }
+      }
+
+      // 2) ابحث في /index/online (نطلب id كي نُطابق رغم تغيير الاسم).
       final payload = EncryptionService.encrypt({
         'page': 1,
-        'count': 5,
+        'count': 50,
         'sortBy': 'username',
         'direction': 'asc',
-        'search': username,
-        'columns': ['username', 'acctsessionid', 'radacctid', 'acctstarttime'],
+        'search': username == userId.toString() ? '' : username,
+        'columns': ['id', 'username', 'acctsessionid', 'radacctid'],
       });
       final onlineRes = await _sas4Dio.post(
         ApiConstants.sas4OnlineUsers,
@@ -2133,10 +2144,18 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       final lower = username.toLowerCase();
       Map? row;
       for (final e in rows) {
-        if (e is Map &&
-            (e['username']?.toString().toLowerCase() ?? '') == lower) {
+        if (e is Map && '${e['id'] ?? ''}' == '$userId') {
           row = e;
           break;
+        }
+      }
+      if (row == null && lower.isNotEmpty && username != userId.toString()) {
+        for (final e in rows) {
+          if (e is Map &&
+              (e['username']?.toString().toLowerCase() ?? '') == lower) {
+            row = e;
+            break;
+          }
         }
       }
       final acctId = (row?['acctsessionid'] ?? row?['radacctid'])?.toString();
@@ -2144,10 +2163,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
       // 3) أمر الفصل.
       await _sas4Dio.get('${ApiConstants.sas4DisconnectUser}/$acctId');
-      dev.log('toggleSubscriber: disconnected active session for $username '
-          '(acctid=$acctId)', name: 'SUBS');
+      dev.log('disconnected active session for user $userId (acctid=$acctId)',
+          name: 'SUBS');
     } catch (e) {
-      dev.log('toggleSubscriber disconnect step failed: $e', name: 'SUBS');
+      dev.log('disconnect step failed: $e', name: 'SUBS');
     }
   }
 
