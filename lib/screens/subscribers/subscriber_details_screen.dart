@@ -51,12 +51,15 @@ class _SubscriberDetailsScreenState
     super.initState();
     // حقول SAS4 admin_list لا تعيد دائماً framedipaddress/macAddress.
     // نعيد تحميل التفاصيل الدقيقة عند فتح الصفحة لنكشف عن الـ IP الحالي عند الاتصال.
+    // عند فتح الشاشة: اجلب بيانات الاتصال الحيّة (IP/MAC/الجلسة) للمشترك
+    // بالاسم من /index/online — تشتغل حتى لو وصلنا للشاشة من البحث لا من
+    // صفحة المتصلين. (هذا يحلّ محلّ refreshSubscriberAfterOperation الذي
+    // كان غرضه نفسه — كشف الـIP الحالي عند الاتصال.)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final id = _subscriberId;
-      if (id == null || !mounted) return;
+      if (!mounted) return;
       ref
           .read(subscribersProvider.notifier)
-          .refreshSubscriberAfterOperation(id)
+          .fetchOnlineInfo(widget.subscriber.username)
           .catchError((_) {});
     });
   }

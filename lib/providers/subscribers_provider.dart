@@ -1371,6 +1371,106 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
+  /// يجلب بيانات الاتصال الحيّة لمشترك واحد بالاسم من `/index/online`
+  /// (IP/MAC/مدّة الجلسة/النقل) ويُراكِبها على صفّ المشترك في
+  /// `state.subscribers` (وعلى `onlineUsers` إن كان موجوداً فيها) — يُستدعى
+  /// عند فتح شاشة التفاصيل كي يظهر الـIP حتى لو وصلنا للشاشة من البحث لا
+  /// من صفحة المتصلين. لا نُدرج صفاً جديداً في `onlineUsers` إن كانت
+  /// فارغة كي لا يظنّ تبويب "المتصلين" أن هذا المشترك هو الوحيد المتصل.
+  Future<void> fetchOnlineInfo(String username) async {
+    final un = username.trim();
+    if (un.isEmpty) return;
+    try {
+      final payload = EncryptionService.encrypt({
+        'page': 1,
+        'count': 5,
+        'sortBy': 'username',
+        'direction': 'asc',
+        'search': un,
+        'columns': [
+          'id', 'username', 'framedipaddress', 'callingstationid',
+          'acctsessiontime', 'acctoutputoctets', 'acctinputoctets', 'oui',
+        ],
+      });
+      final response = await _sas4Dio.post(
+        ApiConstants.sas4OnlineUsers,
+        data: {'payload': payload},
+        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      );
+      dynamic parsed = response.data;
+      if (parsed is String) parsed = EncryptionService.decrypt(parsed);
+      final rows = (parsed is Map && parsed['data'] is List)
+          ? (parsed['data'] as List)
+          : const [];
+      final lower = un.toLowerCase();
+      Map? row;
+      for (final e in rows) {
+        if (e is Map && '${e['username'] ?? ''}'.toLowerCase() == lower) {
+          row = e;
+          break;
+        }
+      }
+      final m = row == null ? null : Map<String, dynamic>.from(row);
+      int? toInt(dynamic v) => v is int ? v : int.tryParse('${v ?? ''}');
+
+      // يبني نسخة من المشترك بعد مراكبة بيانات الاتصال الحيّة (أو إزالتها
+      // إن خرج من النت).
+      SubscriberModel apply(SubscriberModel s) => SubscriberModel(
+            idx: s.idx,
+            username: s.username,
+            firstname: s.firstname,
+            lastname: s.lastname,
+            phone: s.phone,
+            mobile: s.mobile,
+            expiration: s.expiration,
+            remainingDays: s.remainingDays,
+            notes: s.notes,
+            debt: s.debt,
+            hasDebtFlag: s.hasDebtFlag,
+            profileName: s.profileName,
+            profileId: s.profileId,
+            balance: s.balance,
+            price: s.price,
+            parentUsername: s.parentUsername,
+            isOnlineFlag: m != null,
+            enabled: s.enabled,
+            ipAddress: m == null
+                ? null
+                : (m['framedipaddress'] ?? m['framed_ip_address'])?.toString(),
+            macAddress: m == null ? null : m['callingstationid']?.toString(),
+            sessionTime: m == null ? null : toInt(m['acctsessiontime']),
+            downloadBytes: m == null ? null : toInt(m['acctoutputoctets']),
+            uploadBytes: m == null ? null : toInt(m['acctinputoctets']),
+            deviceVendor: m == null ? null : m['oui']?.toString(),
+            discount: s.discount,
+          );
+
+      var changed = false;
+      final newSubs = state.subscribers.map((s) {
+        if (s.username.toLowerCase() == lower) {
+          changed = true;
+          return apply(s);
+        }
+        return s;
+      }).toList();
+      // في onlineUsers: حدّث الموجود فقط أو أزله إن خرج — لا تُضف جديداً.
+      final onlineHas = state.onlineUsers.any((s) => s.username.toLowerCase() == lower);
+      final newOnline = m == null
+          ? (onlineHas
+              ? state.onlineUsers.where((s) => s.username.toLowerCase() != lower).toList()
+              : state.onlineUsers)
+          : (onlineHas
+              ? state.onlineUsers.map((s) => s.username.toLowerCase() == lower ? apply(s) : s).toList()
+              : state.onlineUsers);
+      if (changed ||
+          !identical(newOnline, state.onlineUsers)) {
+        state = state.copyWith(subscribers: newSubs, onlineUsers: newOnline);
+      }
+    } catch (e) {
+      dev.log('fetchOnlineInfo error: $e', name: 'SUBS');
+    }
+  }
+
   Future<bool> disconnectUser(String sessionId) async {
     try {
       // Immediately remove from online list for instant UI feedback
