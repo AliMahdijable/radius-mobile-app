@@ -1,0 +1,51 @@
+# Codemagic CI/CD configuration for MyServices Radius
+# https://docs.codemagic.io/yaml/yaml-getting-started/
+
+workflows:
+  ios-release:
+    name: iOS App Store Release
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      vars:
+        BUNDLE_ID: "com.mysvcs.radMysvcs"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+    integrations:
+      app_store_connect: codemagic
+
+    scripts:
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+
+      - name: Install CocoaPods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+
+      - name: Flutter build IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
