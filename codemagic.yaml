@@ -8,14 +8,13 @@ workflows:
     max_build_duration: 60
 
     environment:
+      groups:
+        - appstore
       vars:
         BUNDLE_ID: "com.mysvcs.radMysvcs"
       flutter: stable
       xcode: latest
       cocoapods: default
-
-    integrations:
-      app_store_connect: codemagic
 
     scripts:
       - name: Set up code signing
@@ -47,5 +46,7 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
