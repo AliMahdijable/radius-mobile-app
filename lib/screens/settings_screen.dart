@@ -8,9 +8,6 @@ import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/theme_provider.dart';
 import '../core/theme/app_theme.dart';
-import '../core/services/storage_service.dart';
-import '../core/services/fcm_service.dart';
-import '../core/services/expiry_push_service.dart';
 import '../core/utils/bottom_sheet_utils.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -25,29 +22,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static const MethodChannel _appInfoChannel =
       MethodChannel('com.mysvcs.rad_mysvcs/app_info');
 
-  bool _fcmEnabled = false;
-  bool _fcmLoaded = false;
   String? _appVersion;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
+    Future.microtask(() {
       ref.read(settingsProvider.notifier).loadFeatures();
-      await _loadNotificationState();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAppVersion();
-    });
-  }
-
-  Future<void> _loadNotificationState() async {
-    final storage = ref.read(storageServiceProvider);
-    final enabled = await FcmService.isEnabled(storage);
-    if (!mounted) return;
-    setState(() {
-      _fcmEnabled = enabled;
-      _fcmLoaded = true;
     });
   }
 
@@ -73,30 +57,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (cleanVersion.isNotEmpty) return cleanVersion;
     if (buildNumber.isNotEmpty) return buildNumber;
     return null;
-  }
-
-  Future<void> _onFcmChanged(bool value) async {
-    final storage = ref.read(storageServiceProvider);
-    if (value) {
-      final result = await FcmService.enable(storage);
-      if (!result.enabled && mounted) {
-        AppSnackBar.error(
-          context,
-          result.message ?? 'لم يُمنح إذن الإشعارات. تحقق من إعدادات الجهاز.',
-        );
-        return;
-      }
-      await ExpiryPushService.setEnabled(storage, true);
-      if (!mounted) return;
-      setState(() => _fcmEnabled = true);
-      AppSnackBar.success(context, 'تم تفعيل إشعارات الجهاز');
-    } else {
-      await FcmService.disable(storage);
-      await ExpiryPushService.setEnabled(storage, false);
-      if (!mounted) return;
-      setState(() => _fcmEnabled = false);
-      AppSnackBar.success(context, 'تم إيقاف إشعارات الجهاز');
-    }
   }
 
   void _showFeaturesModal() {
@@ -273,25 +233,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
                 activeColor: theme.colorScheme.primary,
               ),
-            ),
-            _SettingTile(
-              icon: LucideIcons.bellRing,
-              title: 'إشعارات الجهاز',
-              subtitle:
-                  'استقبال تنبيهات الجهاز للاشتراكات + الإشعارات الفورية داخل التطبيق.',
-              trailing: !_fcmLoaded
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Switch.adaptive(
-                      value: _fcmEnabled,
-                      onChanged: ref.watch(authProvider).status ==
-                              AuthStatus.authenticated
-                          ? _onFcmChanged
-                          : null,
-                      activeColor: theme.colorScheme.primary,
-                    ),
             ),
             _SettingTile(
               icon: LucideIcons.bellRing,
