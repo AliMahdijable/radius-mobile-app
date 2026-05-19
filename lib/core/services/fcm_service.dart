@@ -276,6 +276,12 @@ class FcmService {
     return true;
   }
 
+  /// Public wrapper around the internal diag POST so callers outside
+  /// FcmService (auth_provider, etc.) can drop trace points into the
+  /// pre-FCM flow without coupling to dio/SharedPreferences themselves.
+  static Future<void> diagPing(String stage, {String? error}) =>
+      _diag(stage, error: error);
+
   static Future<void> _diag(String stage, {
     int? apnsLen,
     int? fcmLen,
@@ -581,9 +587,14 @@ class FcmService {
     StorageService storage, {
     bool force = false,
   }) async {
-    if (!await storage.getFcmEnabled()) return;
+    unawaited(_diag('syncReg_entered', error: 'force=$force'));
+    if (!await storage.getFcmEnabled()) {
+      unawaited(_diag('syncReg_fcmDisabled'));
+      return;
+    }
 
     final osPermissionGranted = await hasOsPermission();
+    unawaited(_diag('syncReg_osPerm', error: 'granted=$osPermissionGranted'));
     if (!osPermissionGranted) {
       debugPrint(
         'FCM sync: OS notification permission is not confirmed, but token registration will continue.',
@@ -601,14 +612,23 @@ class FcmService {
     if (!force &&
         !adminChanged &&
         now - lastSyncMs < _softResyncWindow.inMilliseconds) {
+      unawaited(_diag('syncReg_skipped_recent'));
       return;
     }
 
+    unawaited(_diag('syncReg_calling_init'));
     await init();
+    unawaited(_diag('syncReg_init_done'));
     _ensureTokenRefreshListener();
 
     final ok = await _registerCurrentTokenWithRecovery();
-    await registerPeriodicSyncTask();
+    unawaited(_diag('syncReg_register_result', error: 'ok=$ok'));
+    // Workmanager registerPeriodicSyncTask على iOS قد يفشل صامتاً — نحاصره.
+    try {
+      await registerPeriodicSyncTask();
+    } catch (e) {
+      unawaited(_diag('syncReg_periodic_error', error: e.toString()));
+    }
     if (!ok) {
       _scheduleDeferredRegistration();
     }
