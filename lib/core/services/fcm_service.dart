@@ -88,8 +88,6 @@ class FcmService {
         return;
       }
 
-      unawaited(_diag('init_begin'));
-
       // نُمرّر options الصريحة بدل auto-load. على iOS auto-load يفشل إن لم
       // يُسجَّل GoogleService-Info.plist في Xcode project → exception.
       if (Firebase.apps.isEmpty) {
@@ -99,7 +97,6 @@ class FcmService {
           throw TimeoutException('Firebase.initializeApp timed out');
         });
       }
-      unawaited(_diag('init_firebase_done'));
 
       // setAutoInitEnabled على iOS قد يَعلَق ينتظر APNs — نضع timeout صارم
       // ولا نسمح بفشلها يقطع باقي init.
@@ -107,13 +104,11 @@ class FcmService {
         await FirebaseMessaging.instance
             .setAutoInitEnabled(true)
             .timeout(const Duration(seconds: 5));
-        unawaited(_diag('init_autoInit_done'));
       } catch (e) {
-        unawaited(_diag('init_autoInit_error', error: e.toString()));
+        debugPrint('FCM: setAutoInitEnabled warning: $e');
       }
 
       FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
-      unawaited(_diag('init_bgHandler_set'));
 
       const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosInit = DarwinInitializationSettings();
@@ -122,9 +117,8 @@ class FcmService {
           const InitializationSettings(android: androidInit, iOS: iosInit),
           onDidReceiveNotificationResponse: _handleLocalNotificationTap,
         ).timeout(const Duration(seconds: 10));
-        unawaited(_diag('init_fln_done'));
       } catch (e) {
-        unawaited(_diag('init_fln_error', error: e.toString()));
+        debugPrint('FCM: flutter_local_notifications init warning: $e');
       }
 
       if (Platform.isAndroid) {
@@ -159,11 +153,9 @@ class FcmService {
 
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpen);
-      unawaited(_diag('init_listeners_set'));
 
       // getInitialMessage على iOS قد يَعلَق إن FIRMessaging لم يكمل بعد —
-      // نضع timeout قصير ونمضي قُدماً. (cold-start tap routing سيشتغل عند
-      // المحاولة التالية من initialize/openedApp.)
+      // نضع timeout قصير ونمضي قُدماً.
       try {
         final initialMessage = await FirebaseMessaging.instance
             .getInitialMessage()
@@ -171,17 +163,12 @@ class FcmService {
         if (initialMessage != null) {
           _handleNotificationOpen(initialMessage);
         }
-        unawaited(_diag('init_initialMsg_done'));
       } catch (e) {
-        unawaited(_diag('init_initialMsg_skip', error: e.toString()));
+        debugPrint('FCM: getInitialMessage skipped: $e');
       }
 
       _initialized = true;
-      unawaited(_diag('init_complete'));
       debugPrint('✅ FCM Service initialized');
-    } catch (e) {
-      unawaited(_diag('init_fatal', error: e.toString()));
-      rethrow;
     } finally {
       _initFuture = null;
     }
@@ -319,45 +306,7 @@ class FcmService {
     return true;
   }
 
-  /// Public wrapper around the internal diag POST so callers outside
-  /// FcmService (auth_provider, etc.) can drop trace points into the
-  /// pre-FCM flow without coupling to dio/SharedPreferences themselves.
-  static Future<void> diagPing(String stage, {String? error}) =>
-      _diag(stage, error: error);
-
-  static Future<void> _diag(String stage, {
-    int? apnsLen,
-    int? fcmLen,
-    int? waitedMs,
-    String? error,
-  }) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final adminUsername = prefs.getString(AppConstants.storageAdminUsername);
-      final dio = Dio(BaseOptions(
-        baseUrl: ApiConstants.backendUrl,
-        connectTimeout: const Duration(seconds: 8),
-        sendTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
-      ));
-      await dio.post(ApiConstants.fcmDiag, data: {
-        'stage': stage,
-        'platform': Platform.isIOS ? 'iOS' : 'Android',
-        'adminUsername': adminUsername,
-        'apnsTokenLength': apnsLen,
-        'fcmTokenLength': fcmLen,
-        'waitedMs': waitedMs,
-        'error': error,
-      });
-      dio.close();
-    } catch (_) {
-      // diag failures are best-effort; do not break the main flow
-    }
-  }
-
   static Future<String?> _tryGetFcmToken() async {
-    final startMs = DateTime.now().millisecondsSinceEpoch;
-    unawaited(_diag('start'));
     try {
       final messaging = FirebaseMessaging.instance;
       await messaging.setAutoInitEnabled(true);
@@ -369,50 +318,33 @@ class FcmService {
         );
       } catch (error) {
         debugPrint('FCM: requestPermission warning: $error');
-        unawaited(_diag('requestPermission_error', error: error.toString()));
       }
 
       // iOS فقط: FCM token يحتاج APNs token صالح أولاً. iOS يسجّل مع APNs
-      // بعد ~3–10 ثوانٍ من قبول الإذن (وأحياناً 30+ ثانية على شبكات بطيئة).
-      // ننتظر حتى ~60 ثانية بـpolling ثم نُكمل.
+      // عادةً خلال ثوانٍ قليلة بعد قبول الإذن، فلو ناديت getToken() فوراً
+      // يرجع null. ننتظر حتى ~10 ثوانٍ بـpolling ثم نُكمل.
       if (Platform.isIOS) {
         String? apns;
-        for (var i = 0; i < 20; i++) {
+        for (var i = 0; i < 5; i++) {
           try {
             apns = await messaging.getAPNSToken();
           } catch (e) {
             debugPrint('FCM: getAPNSToken error: $e');
-            unawaited(_diag('apns_error', error: e.toString()));
           }
-          if (apns != null && apns.isNotEmpty) {
-            final waited = DateTime.now().millisecondsSinceEpoch - startMs;
-            debugPrint('FCM: APNs token ready after ${waited}ms (${apns.length} chars)');
-            unawaited(_diag('apns_ready', apnsLen: apns.length, waitedMs: waited));
-            break;
-          }
-          if (i < 19) await Future<void>.delayed(const Duration(seconds: 3));
+          if (apns != null && apns.isNotEmpty) break;
+          if (i < 4) await Future<void>.delayed(const Duration(seconds: 2));
         }
         if (apns == null || apns.isEmpty) {
-          final waited = DateTime.now().millisecondsSinceEpoch - startMs;
-          debugPrint('FCM: APNs token still null after ${waited}ms — '
-              'تحقق من Push Notifications capability في provisioning profile');
-          unawaited(_diag('apns_null', waitedMs: waited));
+          debugPrint('FCM: APNs token still null after 10s');
           return null;
         }
       }
 
       final token = await messaging.getToken();
-      final waited = DateTime.now().millisecondsSinceEpoch - startMs;
       debugPrint('FCM token: ${token?.substring(0, 30) ?? "null"}…');
-      unawaited(_diag(
-        token == null || token.isEmpty ? 'fcm_null' : 'fcm_ready',
-        fcmLen: token?.length,
-        waitedMs: waited,
-      ));
       return token;
     } catch (error) {
       debugPrint('FCM: getToken failed: $error');
-      unawaited(_diag('getToken_error', error: error.toString()));
       return null;
     }
   }
@@ -630,14 +562,9 @@ class FcmService {
     StorageService storage, {
     bool force = false,
   }) async {
-    unawaited(_diag('syncReg_entered', error: 'force=$force'));
-    if (!await storage.getFcmEnabled()) {
-      unawaited(_diag('syncReg_fcmDisabled'));
-      return;
-    }
+    if (!await storage.getFcmEnabled()) return;
 
     final osPermissionGranted = await hasOsPermission();
-    unawaited(_diag('syncReg_osPerm', error: 'granted=$osPermissionGranted'));
     if (!osPermissionGranted) {
       debugPrint(
         'FCM sync: OS notification permission is not confirmed, but token registration will continue.',
@@ -655,22 +582,18 @@ class FcmService {
     if (!force &&
         !adminChanged &&
         now - lastSyncMs < _softResyncWindow.inMilliseconds) {
-      unawaited(_diag('syncReg_skipped_recent'));
       return;
     }
 
-    unawaited(_diag('syncReg_calling_init'));
     await init();
-    unawaited(_diag('syncReg_init_done'));
     _ensureTokenRefreshListener();
 
     final ok = await _registerCurrentTokenWithRecovery();
-    unawaited(_diag('syncReg_register_result', error: 'ok=$ok'));
     // Workmanager registerPeriodicSyncTask على iOS قد يفشل صامتاً — نحاصره.
     try {
       await registerPeriodicSyncTask();
     } catch (e) {
-      unawaited(_diag('syncReg_periodic_error', error: e.toString()));
+      debugPrint('FCM: registerPeriodicSyncTask warning: $e');
     }
     if (!ok) {
       _scheduleDeferredRegistration();

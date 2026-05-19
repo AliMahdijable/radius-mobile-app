@@ -236,14 +236,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _syncNotificationServices({bool forcePushSync = false}) async {
-    // diag ping #1 — أول شي قبل أي check: نتأكد إن الدالة تنادى أصلاً.
-    unawaited(FcmService.diagPing('auth_sync_entered'));
-
     final notificationsEnabled = await _storage.getFcmEnabled();
-    unawaited(FcmService.diagPing(
-      'auth_sync_fcmEnabled',
-      error: 'enabled=$notificationsEnabled',
-    ));
     if (!notificationsEnabled) return;
 
     if (!await _storage.getPushExpiryOutsideEnabled()) {
@@ -254,17 +247,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // يقطع تسجيل FCM. نحاصره بـtry/catch.
     try {
       await ExpiryPushService.onLoggedIn(_storage);
-      unawaited(FcmService.diagPing('expiry_push_ok'));
     } catch (e) {
-      unawaited(FcmService.diagPing('expiry_push_error', error: e.toString()));
+      dev.log('ExpiryPushService.onLoggedIn warning: $e');
     }
 
-    unawaited(FcmService.diagPing('fcm_sync_calling'));
     await FcmService.syncRegistrationIfNeeded(
       _storage,
       force: forcePushSync,
     );
-    unawaited(FcmService.diagPing('fcm_sync_returned'));
   }
 
   Future<void> checkAuth() async {
