@@ -10,10 +10,12 @@ import 'core/services/expiry_push_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/utils/platform_utils.dart';
 
-// سجلّ تشخيص الإقلاع — يُملأ خلال main() ويُعرض على شاشة الـoverlay لو
-// التطبيق ظهر بدون UI ("شاشة بيضاء") — حتى نشخّص بدون Mac/Xcode على iOS.
+// سجلّ تشخيص الإقلاع — يُملأ خلال main() ويظهر في شاشة الخطأ القاتل فقط.
+// لو الإقلاع ناجح نُمرّر التطبيق كما هو بلا أي تغيير في شجرة الـwidgets
+// (لأن لفّ MaterialApp بـStack يكسر معالجة اللمس على iOS).
 final List<String> _bootLog = <String>[];
 String? _bootFatal;
+StackTrace? _bootFatalStack;
 
 void _log(String msg) {
   final ts = DateTime.now().toIso8601String().substring(11, 23);
@@ -37,14 +39,13 @@ Future<void> _safeStep(String name, Future<void> Function() body,
 Future<void> main() async {
   runZonedGuarded<Future<void>>(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    _log('main start (platform=${Platform.operatingSystem})');
+    _log('main start (${Platform.operatingSystem})');
 
     if (PlatformUtils.supportsPushNotifications) {
-      // كل خطوة معزولة بـtimeout و try/catch — لو علقت أو كسرت، نكمل.
-      // هذا يضمن أن runApp يُستدعى دائماً (لا شاشة بيضاء بسبب init).
+      // كل خطوة بـtimeout 10s — لو علقت أو كسرت، نكمل بدون تعطيل runApp.
       await _safeStep('FcmService.init', () => FcmService.init());
-      await _safeStep('ExpiryPushService.init',
-          () => ExpiryPushService.init());
+      await _safeStep(
+          'ExpiryPushService.init', () => ExpiryPushService.init());
       await _safeStep('Workmanager.init',
           () => ExpiryPushService.ensureWorkmanagerInitialized());
     } else {
@@ -63,123 +64,102 @@ Future<void> main() async {
     }
 
     _log('runApp');
-    runApp(const ProviderScope(child: _RootGuard()));
+    // لو حصل fatal خلال main، اعرض شاشة الخطأ بدل MyApp (التطبيق ما يقدر
+    // يكمل أصلاً). غير ذلك → MyApp مباشرة بلا أي Stack/GestureDetector
+    // فوقه (الـStack يكسر اللمس على iOS).
+    if (_bootFatal != null) {
+      runApp(_BootErrorApp(error: _bootFatal!, stack: _bootFatalStack));
+    } else {
+      runApp(const ProviderScope(child: MyApp()));
+    }
     _log('runApp returned');
   }, (error, stack) {
     _log('UNCAUGHT: $error');
-    _bootFatal = '$error\n\n$stack';
+    _bootFatal = '$error';
+    _bootFatalStack = stack;
     debugPrint('🔥 [BOOT] UNCAUGHT: $error\n$stack');
   });
 }
 
-/// يلفّ التطبيق ويفتح overlay تشخيصياً (5 ضغطات على الزاوية اليمنى العلوية)
-/// — مفيد جداً على iOS بدون Mac: لو الشاشة بيضاء، اضغط الزاوية اليمنى
-/// العلوية 5 مرات بسرعة وراح يظهر لوغ الإقلاع وأي أخطاء fatal.
-class _RootGuard extends StatefulWidget {
-  const _RootGuard();
-  @override
-  State<_RootGuard> createState() => _RootGuardState();
-}
-
-class _RootGuardState extends State<_RootGuard> {
-  int _taps = 0;
-  DateTime _lastTap = DateTime.fromMillisecondsSinceEpoch(0);
-  bool _showDiag = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // لو حصل fatal خلال main، اعرض overlay تلقائياً.
-    if (_bootFatal != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _showDiag = true);
-      });
-    }
-  }
-
-  void _onCornerTap() {
-    final now = DateTime.now();
-    if (now.difference(_lastTap).inSeconds > 2) _taps = 0;
-    _lastTap = now;
-    _taps++;
-    if (_taps >= 5) {
-      setState(() {
-        _showDiag = !_showDiag;
-        _taps = 0;
-      });
-    }
-  }
+/// شاشة بديلة تُعرض **فقط** عند فشل قاتل أثناء main(). لا تُلفّ MaterialApp
+/// الأساسي ولا تتدخّل في شجرة الـwidgets الاعتيادية — فما تأثير لها على
+/// أداء/لمس التطبيق في المسار الناجح.
+class _BootErrorApp extends StatelessWidget {
+  final String error;
+  final StackTrace? stack;
+  const _BootErrorApp({required this.error, this.stack});
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const MyApp(),
-        // زر شفّاف بالزاوية اليمنى العلوية — 5 ضغطات يفتح اللوغ.
-        Positioned(
-          top: 0,
-          right: 0,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: _onCornerTap,
-            child: const SizedBox(width: 60, height: 60),
-          ),
-        ),
-        if (_showDiag) _DiagOverlay(onClose: () => setState(() => _showDiag = false)),
-      ],
-    );
-  }
-}
-
-class _DiagOverlay extends StatelessWidget {
-  final VoidCallback onClose;
-  const _DiagOverlay({required this.onClose});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.92),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                const Text('Boot Diagnostics',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: onClose,
-                ),
-              ]),
-              if (_bootFatal != null) ...[
-                const Text('FATAL',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 24),
+                const Text('فشل تشغيل التطبيق',
+                    style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  color: Colors.red.withValues(alpha: 0.2),
-                  child: Text(_bootFatal!,
-                      style: const TextStyle(color: Colors.red, fontSize: 11, fontFamily: 'monospace')),
+                  color: Colors.red.withValues(alpha: 0.15),
+                  child: SelectableText(error,
+                      style: const TextStyle(
+                          color: Colors.red,
+                          fontFamily: 'monospace',
+                          fontSize: 12)),
                 ),
-              ],
-              const Text('Boot log',
-                  style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.white.withValues(alpha: 0.05),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      _bootLog.join('\n'),
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'monospace'),
+                const SizedBox(height: 12),
+                const Text('Boot log',
+                    style: TextStyle(
+                        color: Colors.amber,
+                        fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.white12,
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        _bootLog.join('\n'),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'monospace',
+                            fontSize: 11),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                if (stack != null) ...[
+                  const SizedBox(height: 8),
+                  const Text('Stack',
+                      style: TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold)),
+                  Container(
+                    height: 120,
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.white10,
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        stack.toString(),
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontFamily: 'monospace',
+                            fontSize: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
