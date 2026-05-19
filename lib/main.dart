@@ -16,9 +16,18 @@ Future<void> main() async {
   // و macOS و Linux نتجاوزهما — التطبيق يبقى يشتغل بدون push (المستخدم
   // يفتح التطبيق مباشرة).
   if (PlatformUtils.supportsPushNotifications) {
-    await FcmService.init();
-    await ExpiryPushService.init();
-    await ExpiryPushService.ensureWorkmanagerInitialized();
+    // نلفّ تهيئة FCM بـtry/catch — لو فشل Firebase أو الأذونات أو
+    // workmanager لأي سبب (مثل GoogleService-Info.plist غير مُسجَّل في
+    // Xcode على iOS) لا نريد أن ينطلق exception ويترك الشاشة بيضاء.
+    // التطبيق يستمر بلا push وهذا أفضل من crash كامل.
+    try {
+      await FcmService.init();
+      await ExpiryPushService.init();
+      await ExpiryPushService.ensureWorkmanagerInitialized();
+    } catch (e, st) {
+      debugPrint('⚠️ FCM/push init failed (continuing without push): $e');
+      debugPrint('$st');
+    }
   }
 
   // SystemChrome لـmobile فقط — على desktop ما يوجد status bar.

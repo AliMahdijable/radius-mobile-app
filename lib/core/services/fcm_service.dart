@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+
+import '../../firebase_options.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
@@ -31,7 +33,11 @@ class FcmEnableResult {
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  // نعتمد options الصريحة بدل auto-load عشان iOS — لو GoogleService-Info.plist
+  // ما أُضيف لـXcode project يصير exception → شاشة بيضاء بـTestFlight.
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  }
   debugPrint('FCM background message: ${message.messageId}');
 }
 
@@ -73,7 +79,14 @@ class FcmService {
       return;
     }
 
-    await Firebase.initializeApp();
+    // نُمرّر options الصريحة بدل auto-load (GoogleService-Info.plist /
+    // google-services.json). على iOS auto-load يفشل إن لم يُسجَّل الـplist
+    // في Xcode project → exception → شاشة بيضاء بـTestFlight.
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
     await FirebaseMessaging.instance.setAutoInitEnabled(true);
     FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
