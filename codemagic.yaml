@@ -16,26 +16,21 @@ workflows:
       cocoapods: default
 
     scripts:
-      - name: Verify environment variables
-        script: |
-          echo "Checking env vars..."
-          [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] && echo "ERROR: ISSUER_ID missing" && exit 1
-          [ -z "$APP_STORE_CONNECT_KEY_IDENTIFIER" ] && echo "ERROR: KEY_ID missing" && exit 1
-          [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ] && echo "ERROR: PRIVATE_KEY missing" && exit 1
-          echo "All env vars OK"
-          echo "Key ID: $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Bundle: $BUNDLE_ID"
-
       - name: Initialize keychain
         script: |
           keychain initialize
+
+      - name: Generate certificate private key
+        script: |
+          openssl genrsa -out /tmp/cert_key.pem 2048
+          echo "Private key generated successfully"
 
       - name: Fetch and create signing files
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create \
-            --verbose
+            --certificate-key-path=/tmp/cert_key.pem
 
       - name: Add certificates to keychain
         script: |
