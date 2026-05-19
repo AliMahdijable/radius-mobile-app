@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -9,30 +10,25 @@ import 'core/services/expiry_push_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/utils/platform_utils.dart';
 
+// يلفّ خطوة async في timeout + try/catch حتى لا يحجب أي init مُعلَّق
+// (مثلاً Firebase Messaging على iOS ينتظر APNs token إلى الأبد لو Push
+// Notifications capability ناقصة في entitlements) — يلوغ ويكمل.
+Future<void> _safeStep(String name, Future<void> Function() body,
+    {Duration timeout = const Duration(seconds: 8)}) async {
+  try {
+    await body().timeout(timeout);
+  } on TimeoutException {
+    debugPrint('⏰ [BOOT] $name timed out after ${timeout.inSeconds}s');
+  } catch (e, st) {
+    debugPrint('⚠️ [BOOT] $name failed: $e');
+    debugPrint('$st');
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase Messaging + WorkManager متاحان فقط على Android/iOS. على Windows
-  // و macOS و Linux نتجاوزهما — التطبيق يبقى يشتغل بدون push.
-  if (PlatformUtils.supportsPushNotifications) {
-    // try/catch بسيط — لو فشل أي شي بـFirebase/Workmanager (مثلاً قنوات
-    // الإشعارات أو APNs)، نلوغ ونكمل لـrunApp بدلاً من شاشة بيضاء.
-    try {
-      await FcmService.init();
-    } catch (e, st) {
-      debugPrint('⚠️ FcmService.init failed (continuing without FCM): $e');
-      debugPrint('$st');
-    }
-    try {
-      await ExpiryPushService.init();
-      await ExpiryPushService.ensureWorkmanagerInitialized();
-    } catch (e, st) {
-      debugPrint('⚠️ ExpiryPushService failed (continuing): $e');
-      debugPrint('$st');
-    }
-  }
-
-  // SystemChrome لـmobile فقط — على desktop ما يوجد status bar.
+  // SystemChrome لـmobile فقط — قبل runApp عشان يطبّق على أول رسم.
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -42,6 +38,18 @@ Future<void> main() async {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
     ));
+  }
+
+  // تهيئة FCM/WorkManager في الخلفية (fire-and-forget) — لا ننتظرها قبل
+  // runApp. هذا النمط القياسي على iOS: التطبيق يفتح فوراً، ويظهر طلب إذن
+  // الإشعارات فوق شاشة الدخول خلال ثانية أو ثانيتين (مثل WhatsApp/Telegram).
+  // النتيجة: لا يوجد احتمال شاشة بيضاء بسبب تعليق FCM/APNs على iOS.
+  if (PlatformUtils.supportsPushNotifications) {
+    unawaited(_safeStep('FcmService.init', () => FcmService.init()));
+    unawaited(_safeStep(
+        'ExpiryPushService.init', () => ExpiryPushService.init()));
+    unawaited(_safeStep('Workmanager.init',
+        () => ExpiryPushService.ensureWorkmanagerInitialized()));
   }
 
   runApp(
