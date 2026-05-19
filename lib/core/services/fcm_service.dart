@@ -276,7 +276,39 @@ class FcmService {
     return true;
   }
 
+  static Future<void> _diag(String stage, {
+    int? apnsLen,
+    int? fcmLen,
+    int? waitedMs,
+    String? error,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final adminUsername = prefs.getString(AppConstants.storageAdminUsername);
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiConstants.backendUrl,
+        connectTimeout: const Duration(seconds: 8),
+        sendTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+      ));
+      await dio.post(ApiConstants.fcmDiag, data: {
+        'stage': stage,
+        'platform': Platform.isIOS ? 'iOS' : 'Android',
+        'adminUsername': adminUsername,
+        'apnsTokenLength': apnsLen,
+        'fcmTokenLength': fcmLen,
+        'waitedMs': waitedMs,
+        'error': error,
+      });
+      dio.close();
+    } catch (_) {
+      // diag failures are best-effort; do not break the main flow
+    }
+  }
+
   static Future<String?> _tryGetFcmToken() async {
+    final startMs = DateTime.now().millisecondsSinceEpoch;
+    unawaited(_diag('start'));
     try {
       final messaging = FirebaseMessaging.instance;
       await messaging.setAutoInitEnabled(true);
@@ -288,38 +320,50 @@ class FcmService {
         );
       } catch (error) {
         debugPrint('FCM: requestPermission warning: $error');
+        unawaited(_diag('requestPermission_error', error: error.toString()));
       }
 
       // iOS فقط: FCM token يحتاج APNs token صالح أولاً. iOS يسجّل مع APNs
-      // بعد ~3–10 ثوانٍ من قبول الإذن، فلو ناديت getToken() فوراً يرجع null.
-      // ننتظر حتى ~14 ثانية بـpolling ثم نُكمل (لو APNs ما رجع، نُلوغ
-      // ونرجع null بدل ما نسجّل token غلط).
+      // بعد ~3–10 ثوانٍ من قبول الإذن (وأحياناً 30+ ثانية على شبكات بطيئة).
+      // ننتظر حتى ~60 ثانية بـpolling ثم نُكمل.
       if (Platform.isIOS) {
         String? apns;
-        for (var i = 0; i < 7; i++) {
+        for (var i = 0; i < 20; i++) {
           try {
             apns = await messaging.getAPNSToken();
           } catch (e) {
             debugPrint('FCM: getAPNSToken error: $e');
+            unawaited(_diag('apns_error', error: e.toString()));
           }
           if (apns != null && apns.isNotEmpty) {
-            debugPrint('FCM: APNs token ready after ${i * 2}s (${apns.length} chars)');
+            final waited = DateTime.now().millisecondsSinceEpoch - startMs;
+            debugPrint('FCM: APNs token ready after ${waited}ms (${apns.length} chars)');
+            unawaited(_diag('apns_ready', apnsLen: apns.length, waitedMs: waited));
             break;
           }
-          if (i < 6) await Future<void>.delayed(const Duration(seconds: 2));
+          if (i < 19) await Future<void>.delayed(const Duration(seconds: 3));
         }
         if (apns == null || apns.isEmpty) {
-          debugPrint('FCM: APNs token still null after 14s — '
+          final waited = DateTime.now().millisecondsSinceEpoch - startMs;
+          debugPrint('FCM: APNs token still null after ${waited}ms — '
               'تحقق من Push Notifications capability في provisioning profile');
+          unawaited(_diag('apns_null', waitedMs: waited));
           return null;
         }
       }
 
       final token = await messaging.getToken();
+      final waited = DateTime.now().millisecondsSinceEpoch - startMs;
       debugPrint('FCM token: ${token?.substring(0, 30) ?? "null"}…');
+      unawaited(_diag(
+        token == null || token.isEmpty ? 'fcm_null' : 'fcm_ready',
+        fcmLen: token?.length,
+        waitedMs: waited,
+      ));
       return token;
     } catch (error) {
       debugPrint('FCM: getToken failed: $error');
+      unawaited(_diag('getToken_error', error: error.toString()));
       return null;
     }
   }
