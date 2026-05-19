@@ -290,8 +290,33 @@ class FcmService {
         debugPrint('FCM: requestPermission warning: $error');
       }
 
+      // iOS فقط: FCM token يحتاج APNs token صالح أولاً. iOS يسجّل مع APNs
+      // بعد ~3–10 ثوانٍ من قبول الإذن، فلو ناديت getToken() فوراً يرجع null.
+      // ننتظر حتى ~14 ثانية بـpolling ثم نُكمل (لو APNs ما رجع، نُلوغ
+      // ونرجع null بدل ما نسجّل token غلط).
+      if (Platform.isIOS) {
+        String? apns;
+        for (var i = 0; i < 7; i++) {
+          try {
+            apns = await messaging.getAPNSToken();
+          } catch (e) {
+            debugPrint('FCM: getAPNSToken error: $e');
+          }
+          if (apns != null && apns.isNotEmpty) {
+            debugPrint('FCM: APNs token ready after ${i * 2}s (${apns.length} chars)');
+            break;
+          }
+          if (i < 6) await Future<void>.delayed(const Duration(seconds: 2));
+        }
+        if (apns == null || apns.isEmpty) {
+          debugPrint('FCM: APNs token still null after 14s — '
+              'تحقق من Push Notifications capability في provisioning profile');
+          return null;
+        }
+      }
+
       final token = await messaging.getToken();
-      debugPrint('FCM token: $token');
+      debugPrint('FCM token: ${token?.substring(0, 30) ?? "null"}…');
       return token;
     } catch (error) {
       debugPrint('FCM: getToken failed: $error');
