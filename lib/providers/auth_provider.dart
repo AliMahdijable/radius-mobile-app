@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as dev;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -398,7 +399,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     }
 
-    await _syncNotificationServices();
+    // fire-and-forget — لا نحجب resume بانتظار FCM (نفس السبب في login).
+    unawaited(_syncNotificationServices());
   }
 
   bool _mapEquals(Map<String, bool> a, Map<String, bool> b) {
@@ -469,7 +471,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _resetSessionScopedProviders();
         _socket.disconnect();
         _socket.connect(user.id);
-        await _syncNotificationServices(forcePushSync: true);
+
+        // لا ننتظر مزامنة الإشعارات قبل تغيير الحالة لـauthenticated —
+        // على iOS بدون Push Notifications entitlement، FirebaseMessaging.
+        // getToken() يعلّق ينتظر APNs token إلى الأبد، فيظل زرّ الدخول
+        // يدور والمستخدم يحسّ التطبيق "جامد" (لو سكّر وفتح التطبيق رجع
+        // يلقى نفسه مسجّل — لأن التوكن انحفظ، فقط الـUI ما تحرّك). الآن:
+        // الـstate يتحوّل فوراً للـauthenticated، الـrouter يفتح الداش
+        // بورد، ومزامنة FCM تنتهي في الخلفية. retry موجود في
+        // _schedulePushResyncRetry يضمن إعادة المحاولة.
+        unawaited(_syncNotificationServices(forcePushSync: true));
 
         state = AuthState(
           status: AuthStatus.authenticated,
