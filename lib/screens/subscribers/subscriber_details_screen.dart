@@ -46,6 +46,10 @@ class _SubscriberDetailsScreenState
     extends ConsumerState<SubscriberDetailsScreen> {
   bool _isProcessing = false;
 
+  /// آخر اتصال للمشترك غير المتصل — يُجلب مرّة عند فتح الشاشة من SAS4
+  /// /index/UserSessions ويُعرض فقط لو المشترك غير متصل.
+  String? _lastConnection;
+
   @override
   void initState() {
     super.initState();
@@ -57,10 +61,14 @@ class _SubscriberDetailsScreenState
     // كان غرضه نفسه — كشف الـIP الحالي عند الاتصال.)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref
-          .read(subscribersProvider.notifier)
-          .fetchOnlineInfo(widget.subscriber.username)
-          .catchError((_) {});
+      final notifier = ref.read(subscribersProvider.notifier);
+      notifier.fetchOnlineInfo(widget.subscriber.username).catchError((_) {});
+      // آخر اتصال — مكالمة منفصلة لـ/index/UserSessions، نعرضها لو offline.
+      notifier.getLastConnection(widget.subscriber.username).then((ts) {
+        if (mounted && ts != null && ts.isNotEmpty) {
+          setState(() => _lastConnection = ts);
+        }
+      });
     });
   }
 
@@ -3248,6 +3256,14 @@ class _SubscriberDetailsScreenState
                       )
                     else
                       const _NoIpHint(),
+                    // آخر اتصال — يظهر فقط للمشترك غير المتصل (المتصل عنده
+                    // جلسة حيّة أعلاه). يساعد على معرفة آخر مرّة كان online.
+                    if (!sub.isOnline && _lastConnection != null)
+                      _DetailRow(
+                        icon: LucideIcons.history,
+                        label: 'آخر اتصال',
+                        value: AppHelpers.formatReportDateTime(_lastConnection),
+                      ),
                     ConnectionStatusCard(
                       subscriberUsername: sub.username,
                       fallbackIp: (sub.ipAddress ?? '').trim().isNotEmpty

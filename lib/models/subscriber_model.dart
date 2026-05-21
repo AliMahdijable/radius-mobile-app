@@ -26,6 +26,10 @@ class SubscriberModel {
   /// مبلغ الخصم النشط للمشترك (0 لو ما عندو). الـbackend يعطيه عبر
   /// /api/subscribers/with-phones من جدول subscriber_discounts.
   final double? discount;
+  /// وقت آخر اتصال (آخر جلسة) للمشترك غير المتصل — يُجلب عند الطلب من
+  /// SAS4 /index/UserSessions. نَص datetime كما يرجّعه SAS (مثل
+  /// "2026-05-19 14:30:00"). يبقى null للمتصل أو لو ما عنده جلسة سابقة.
+  final String? lastConnection;
 
   const SubscriberModel({
     this.idx,
@@ -53,6 +57,7 @@ class SubscriberModel {
     this.uploadBytes,
     this.deviceVendor,
     this.discount,
+    this.lastConnection,
   });
 
   /// هل عند المشترك خصم نشط؟
@@ -194,6 +199,11 @@ class SubscriberModel {
       discount: json['discount'] is num
           ? (json['discount'] as num).toDouble()
           : double.tryParse(json['discount']?.toString() ?? ''),
+      lastConnection: (json['last_connection'] ??
+              json['lastConnection'] ??
+              json['acctstoptime'] ??
+              json['acctstarttime'])
+          ?.toString(),
     );
   }
 
