@@ -6,6 +6,7 @@ import '../widgets/app_snackbar.dart';
 
 import '../core/network/dio_client.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/helpers.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmployeesScreen — قائمة موظفي المدير الحالي + add/edit/delete.
@@ -175,7 +176,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                        padding: EdgeInsets.fromLTRB(
+                            12, 12, 12, AppHelpers.fabListBottom(context)),
                         itemCount: _employees.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (_, i) => _EmployeeCard(

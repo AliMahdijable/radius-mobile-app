@@ -145,7 +145,8 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
                       );
                     }
                     return SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 100),
+                      padding: EdgeInsets.fromLTRB(
+                          14, 4, 14, AppHelpers.fabListBottom(context)),
                       sliver: SliverList.separated(
                         itemCount: debts.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 10),

@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../models/template_model.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/bottom_sheet_utils.dart';
+import '../core/utils/helpers.dart';
 import '../widgets/app_snackbar.dart';
 
 class TemplatesScreen extends ConsumerStatefulWidget {
@@ -521,7 +522,8 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                   onRefresh: () =>
                       ref.read(templatesProvider.notifier).loadTemplates(),
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.fromLTRB(
+                        16, 16, 16, AppHelpers.fabListBottom(context)),
                     itemCount: state.templates.length,
                     itemBuilder: (context, index) {
                       final tmpl = state.templates[index];

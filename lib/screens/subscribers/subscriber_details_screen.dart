@@ -3334,7 +3334,7 @@ class _SubscriberDetailsScreenState
                   ],
                 ),
 
-                const SizedBox(height: 80),
+                SizedBox(height: AppHelpers.fabListBottom(context)),
               ],
             ),
       floatingActionButton: FloatingActionButton(

@@ -9,6 +9,7 @@ import 'package:intl/intl.dart' as intl;
 
 import '../core/theme/app_theme.dart';
 import '../core/utils/bottom_sheet_utils.dart';
+import '../core/utils/helpers.dart';
 import '../models/manager_debt.dart';
 import '../models/manager_model.dart';
 import '../models/template_model.dart';
@@ -1441,7 +1442,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                 : state.managers.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 96),
+                        padding: EdgeInsets.fromLTRB(
+                            12, 18, 12, AppHelpers.fabListBottom(context)),
                         children: [
                           EmptyState(
                             icon: LucideIcons.userCog,
@@ -1470,7 +1472,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                         onRefresh: () => _reloadManagers(),
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
+                          padding: EdgeInsets.fromLTRB(
+                              12, 0, 12, AppHelpers.fabListBottom(context)),
                           itemCount: state.managers.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),

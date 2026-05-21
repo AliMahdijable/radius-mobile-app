@@ -11,6 +11,13 @@ class AppHelpers {
     return utcTime.add(const Duration(hours: AppConstants.baghdadUtcOffset));
   }
 
+  /// المسافة السفلية لأي قائمة قابلة للتمرير تقع تحت زر إضافة عائم
+  /// (FloatingActionButton)، بحيث آخر عنصر دائماً يتزحلق فوق الزر ولا ينخفي
+  /// تحته — حتى على الشاشات الصغيرة. نضيف شريط الأمان السفلي (home indicator
+  /// / gesture nav) لأن الزر يطفو فوقه. 88 = زر (56) + هامشه (16) + تنفّس (16).
+  static double fabListBottom(BuildContext ctx) =>
+      88 + MediaQuery.of(ctx).viewPadding.bottom;
+
   /// Format date to Arabic-friendly format (24h)
   static String formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return '—';

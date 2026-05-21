@@ -114,7 +114,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(expensesProvider(_args)),
                   child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
+                    padding: EdgeInsets.fromLTRB(
+                        12, 4, 12, AppHelpers.fabListBottom(context)),
                     itemCount: page.expenses.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (_, i) => _ExpenseTile(
