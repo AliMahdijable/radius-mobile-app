@@ -1733,43 +1733,26 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// آخر اتصال (آخر جلسة) لمشترك غير متصل — نستعلم SAS4 /index/UserSessions
-  /// مرتّبة DESC ونلتقط أحدث جلسة للمستخدم: نفضّل وقت الفصل acctstoptime
-  /// (= آخر مرّة كان فيها online)، ونرجع لوقت البدء acctstarttime لو الفصل
-  /// فارغ/صفري. يرجّع نص datetime أو null. لا يُعدّل الـstate العام.
+  /// آخر اتصال (آخر جلسة) لمشترك غير متصل. نستدعي الـbackend
+  /// /api/v2/subscribers/last-macs الذي يسحب bulk من SAS4 UserSessions
+  /// ويفلتر بالكود — لأن SAS4 /index/UserSessions لا يفلتر بـusername/search
+  /// مباشرة (يرجّع 0 صفوف مع الفلتر). الـbackend يرجّع lastConnections[username]
+  /// = أحدث جلسة (acctstoptime، fallback acctstarttime). يرجّع نص datetime أو
+  /// null. لا يُعدّل الـstate العام.
   Future<String?> getLastConnection(String username) async {
     final un = username.trim();
     if (un.isEmpty) return null;
     try {
-      final payload = EncryptionService.encrypt({
-        'page': 1,
-        'count': 5,
-        'sortBy': 'acctstarttime',
-        'direction': 'desc',
-        'search': un,
-        'columns': ['username', 'acctstarttime', 'acctstoptime'],
-      });
-      final response = await _sas4Dio.post(
-        ApiConstants.sas4UserSessions,
-        data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
+      final response = await _backendDio.post(
+        ApiConstants.subscribersLastMacs,
+        data: {
+          'usernames': [un],
+        },
       );
-      dynamic parsed = response.data;
-      if (parsed is String) parsed = EncryptionService.decrypt(parsed);
-      final rows = (parsed is Map && parsed['data'] is List)
-          ? (parsed['data'] as List)
-          : const [];
-      final lower = un.toLowerCase();
-      bool isZeroTs(String? t) =>
-          t == null || t.isEmpty || t.startsWith('0000');
-      // الصفوف مرتّبة DESC، فأول مطابقة = أحدث جلسة.
-      for (final e in rows) {
-        if (e is! Map) continue;
-        if ('${e['username'] ?? ''}'.toLowerCase() != lower) continue;
-        final stop = e['acctstoptime']?.toString().trim();
-        final start = e['acctstarttime']?.toString().trim();
-        final ts = !isZeroTs(stop) ? stop : start;
-        if (ts != null && !isZeroTs(ts)) return ts;
+      final data = response.data;
+      if (data is Map && data['lastConnections'] is Map) {
+        final ts = (data['lastConnections'] as Map)[un]?.toString();
+        if (ts != null && ts.trim().isNotEmpty) return ts.trim();
       }
       return null;
     } catch (e) {

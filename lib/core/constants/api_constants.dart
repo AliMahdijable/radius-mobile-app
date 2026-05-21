@@ -20,6 +20,9 @@ class ApiConstants {
 
   // Subscribers
   static const String subscribersWithPhones = '/api/subscribers/with-phones';
+  // يرجّع آخر MAC + آخر اتصال (lastConnections) لكل username — backend يسحب
+  // bulk من SAS4 UserSessions ويفلتر بالكود (SAS4 لا يفلتر بـusername مباشرة).
+  static const String subscribersLastMacs = '/api/v2/subscribers/last-macs';
   static const String subscribersSearch = '/api/subscribers/search';
   static const String lastPayments = '/api/subscribers/last-payments';
   static const String lastFinancialMovements = '/api/subscribers/last-financial-movements';
