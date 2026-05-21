@@ -128,16 +128,16 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         title: const Text('الموظفون'),
         actions: [
           IconButton(
+            tooltip: 'موظف جديد',
+            icon: const Icon(LucideIcons.userPlus),
+            onPressed: _loading || _catalog == null ? null : () => _openEditor(),
+          ),
+          IconButton(
             tooltip: 'تحديث',
             icon: const Icon(LucideIcons.refreshCw),
             onPressed: _loading ? null : _load,
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _loading || _catalog == null ? null : () => _openEditor(),
-        icon: const Icon(LucideIcons.userPlus),
-        label: const Text('موظف جديد'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

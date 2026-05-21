@@ -1194,6 +1194,14 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
       appBar: AppBar(
         title: const Text('المدراء الفرعيون'),
         actions: [
+          if (ref.watch(authProvider).user
+                  ?.hasEmployeePermission('managers.add') ??
+              true)
+            IconButton(
+              onPressed: () => _openManagerForm(),
+              tooltip: 'إضافة مدير',
+              icon: const Icon(LucideIcons.userPlus),
+            ),
           IconButton(
             onPressed: state.loading ? null : () => _reloadManagers(),
             tooltip: 'تحديث',
@@ -1201,15 +1209,6 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           ),
         ],
       ),
-      floatingActionButton: (ref.watch(authProvider).user
-                  ?.hasEmployeePermission('managers.add') ??
-              true)
-          ? FloatingActionButton.small(
-              onPressed: () => _openManagerForm(),
-              tooltip: 'إضافة مدير',
-              child: const Icon(LucideIcons.userPlus),
-            )
-          : null,
       body: Column(
         children: [
           if (state.loading && state.managers.isNotEmpty)

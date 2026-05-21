@@ -82,11 +82,13 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
           appBar: AppBar(
             title: const Text('ديون المدراء'),
             elevation: 0,
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _openCreate(context, acc.subAdmins),
-            icon: const Icon(LucideIcons.plus),
-            label: const Text('إضافة دين'),
+            actions: [
+              IconButton(
+                icon: const Icon(LucideIcons.plus),
+                tooltip: 'إضافة دين',
+                onPressed: () => _openCreate(context, acc.subAdmins),
+              ),
+            ],
           ),
           body: RefreshIndicator(
             onRefresh: () async {

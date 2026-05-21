@@ -35,11 +35,15 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     final asyncPage = ref.watch(expensesProvider(_args));
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('الصرفيات')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(context),
-        icon: const Icon(LucideIcons.plus),
-        label: const Text('إضافة'),
+      appBar: AppBar(
+        title: const Text('الصرفيات'),
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.plus),
+            tooltip: 'إضافة',
+            onPressed: () => _openForm(context),
+          ),
+        ],
       ),
       body: Column(
         children: [
