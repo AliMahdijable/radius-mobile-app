@@ -491,10 +491,17 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('قوالب الرسائل')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEditSheet(null),
-        child: const Icon(LucideIcons.plus),
+      appBar: AppBar(
+        title: const Text('قوالب الرسائل'),
+        // زر الإضافة في الشريط العلوي بدل FAB عائم — لا يغطّي آخر عنصر
+        // بالقائمة مهما كان طولها.
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.plus),
+            tooltip: 'إضافة قالب',
+            onPressed: () => _showEditSheet(null),
+          ),
+        ],
       ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
