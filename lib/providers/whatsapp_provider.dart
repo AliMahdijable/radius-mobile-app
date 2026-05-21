@@ -86,12 +86,12 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
   Future<String?> _getAdminId() => _storage.getAdminId();
   Future<String?> _getUsername() => _storage.getAdminUsername();
 
-  Future<void> fetchStatus() async {
+  Future<void> fetchStatus({bool live = true}) async {
     final adminId = await _getAdminId();
     if (adminId == null) return;
     try {
       final response = await _dio.get(
-        '${ApiConstants.waConnectionStatus}/$adminId?live=true',
+        '${ApiConstants.waConnectionStatus}/$adminId?live=$live',
       );
       if (response.data['success'] == true) {
         final s = WhatsAppStatusModel.fromJson(response.data);
@@ -101,6 +101,21 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
         );
       }
     } catch (_) {}
+  }
+
+  /// تُستدعى عند فتح شاشة الاتصال: تتحقق من الحالة، وإن لم تكن متصلة قد تكون
+  /// جلسة محفوظة قيد الاستعادة بالـbackend (live=true تُحفّزها). نتحقق بضع
+  /// مرّات خلال ~12 ثانية بدون الاعتماد على الـsocket، فتظهر "متصل" حتى لو
+  /// الـsocket مكسور. الإعادات بـlive=false (خفيفة، بلا تكرار محاولة استعادة).
+  Future<void> refreshStatusOnOpen() async {
+    await fetchStatus(live: true);
+    for (var i = 0; i < 4; i++) {
+      if (!mounted) return;
+      if (state.status.connected) return;
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+      await fetchStatus(live: false);
+    }
   }
 
   Future<void> startSession() async {

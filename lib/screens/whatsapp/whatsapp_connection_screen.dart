@@ -25,7 +25,7 @@ class _WhatsAppConnectionScreenState
   void initState() {
     super.initState();
     Future.microtask(() {
-      ref.read(whatsappProvider.notifier).fetchStatus();
+      ref.read(whatsappProvider.notifier).refreshStatusOnOpen();
     });
   }
 
