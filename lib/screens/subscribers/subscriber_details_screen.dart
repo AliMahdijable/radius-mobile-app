@@ -72,6 +72,15 @@ class _SubscriberDetailsScreenState
     });
   }
 
+  /// نص "آخر اتصال": الوقت النسبي (منذ X دقيقة/ساعة/يوم) + التاريخ الكامل.
+  /// مثال: «منذ 5 ساعات • 2026/05/21 01:03 مساءً». لو تعذّر النسبي نعرض
+  /// التاريخ فقط.
+  String _lastConnectionLabel() {
+    final date = AppHelpers.formatReportDateTime(_lastConnection);
+    final rel = AppHelpers.formatRelativeArabic(_lastConnection);
+    return rel.isEmpty ? date : '$rel  •  $date';
+  }
+
   /// idx الحقيقي للمشترك. الـmodel القادم من صفحة المتصلين قد يحمل idx
   /// مفقوداً أو خاطئاً (SAS4 /index/online لا يُرجع id موثوقاً)، فنحاول
   /// أولاً idx الـextra ثم idx المشترك المُطابَق بالاسم من القائمة الرئيسية.
@@ -3262,7 +3271,7 @@ class _SubscriberDetailsScreenState
                       _DetailRow(
                         icon: LucideIcons.history,
                         label: 'آخر اتصال',
-                        value: AppHelpers.formatReportDateTime(_lastConnection),
+                        value: _lastConnectionLabel(),
                       ),
                     ConnectionStatusCard(
                       subscriberUsername: sub.username,

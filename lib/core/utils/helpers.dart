@@ -106,6 +106,34 @@ class AppHelpers {
     return formatDate(dateStr);
   }
 
+  /// وقت نسبي عربي granular: "الآن / منذ X ثانية / دقيقة / ساعة / يوم / شهر /
+  /// سنة". يفسّر نصوص SAS الخام (مثل "2026-05-21 13:03:00") كوقت بغداد عبر
+  /// تثبيتها بـ+03:00 — فيظهر الفرق صحيحاً مهما كانت منطقة الجهاز. يرجّع ''
+  /// لو النص فارغ/غير صالح (حتى يقدر النداء يتعامل معه).
+  static String formatRelativeArabic(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return '';
+    final s = dateStr.trim();
+    final dt = (s.contains('T') || s.contains('+') || s.endsWith('Z'))
+        ? DateTime.tryParse(s)
+        : DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
+    if (dt == null) return '';
+    var diff = DateTime.now().difference(dt);
+    if (diff.isNegative) diff = Duration.zero;
+    final sec = diff.inSeconds;
+    if (sec < 10) return 'الآن';
+    if (sec < 60) return 'منذ $sec ثانية';
+    final mins = diff.inMinutes;
+    if (mins < 60) return 'منذ $mins دقيقة';
+    final hrs = diff.inHours;
+    if (hrs < 24) return 'منذ $hrs ساعة';
+    final days = diff.inDays;
+    if (days < 30) return 'منذ $days يوم';
+    final months = (days / 30).floor();
+    if (months < 12) return 'منذ $months شهر';
+    final years = (days / 365).floor();
+    return 'منذ $years سنة';
+  }
+
   /// Format money with IQD currency
   static String formatMoney(dynamic amount) {
     if (amount == null) return '0';
