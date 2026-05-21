@@ -127,9 +127,89 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
   }
 
+  /// شاشة سبلاش بسيطة (نفس هوية شاشة الدخول) تُعرض أثناء فحص الجلسة وتسجيل
+  /// الدخول التلقائي. اللوغو + اسم التطبيق + مؤشّر تحميل.
+  Widget _buildSplash() {
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.white,
+              Color(0xFFF0F5F3),
+              Color(0xFFE2F1E7),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: 0.15),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Image.asset(
+                    'assets/images/myservice_raduis.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'MyServices Radius',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1A2E2B),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.6,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+
+    // أثناء فحص الجلسة / تسجيل الدخول التلقائي (status = initial/loading) نعرض
+    // سبلاش بدل نموذج الدخول، حتى لا يومض النموذج لجزء من الثانية قبل ما
+    // يقرّر النظام (مسجَّل تلقائياً أو يحتاج إدخال). بمجرّد ما يصير
+    // authenticated يحوّل الـrouter للرئيسية، ولو unauthenticated يظهر النموذج.
+    final authStatus = ref.watch(authProvider.select((s) => s.status));
+    if (authStatus == AuthStatus.initial || authStatus == AuthStatus.loading) {
+      return _buildSplash();
+    }
 
     return Scaffold(
       body: Container(

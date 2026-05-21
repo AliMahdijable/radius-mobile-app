@@ -266,6 +266,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final expiry = session?.expiresAt ?? await _storage.getTokenExpiry();
 
       if (token == null || adminId == null) {
+        // تسجيل دخول تلقائي: الجلسة مفقودة/منتهية لكن المستخدم حافظ بياناته
+        // («حفظ بيانات الدخول») → نسجّل دخول صامتاً بدل إجباره ينقر زر الدخول.
+        if (await _tryAutoLogin()) return;
         state = state.copyWith(
           status: AuthStatus.unauthenticated,
           clearError: true,
@@ -337,6 +340,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
         status: AuthStatus.unauthenticated,
         clearError: true,
       );
+    }
+  }
+
+  /// تسجيل دخول تلقائي بالبيانات المحفوظة («حفظ بيانات الدخول») — يُستدعى من
+  /// [checkAuth] لمّا تكون الجلسة مفقودة/منتهية. لو نجح، [login] يضبط الـstate
+  /// لـauthenticated ويرجّع true؛ غير ذلك نرجّع false ليكمل [checkAuth] إلى
+  /// شاشة الدخول. لا نرمي استثناءً — أي فشل (شبكة/باسورد مغيّر) يرجع false.
+  Future<bool> _tryAutoLogin() async {
+    try {
+      if (!await _storage.getRememberMe()) return false;
+      final username = await _storage.getSavedUsername();
+      final password = await _storage.getSavedPassword();
+      if (username == null ||
+          username.trim().isEmpty ||
+          password == null ||
+          password.isEmpty) {
+        return false;
+      }
+      return await login(username.trim(), password);
+    } catch (_) {
+      return false;
     }
   }
 
@@ -536,6 +560,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await FcmService.onLoggedOut();
     await ExpiryPushService.onLoggedOut();
     await _storage.clearAll();
+    // الخروج اليدوي يلغي «حفظ بيانات الدخول» — وإلّا التسجيل التلقائي في
+    // checkAuth يعيد إدخاله عند فتح التطبيق ويُبطل قرار الخروج. المستخدم
+    // يقدر يفعّل «حفظ بيانات الدخول» من جديد عند تسجيل الدخول التالي.
+    await _storage.clearCredentials();
     _resetSessionScopedProviders();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
