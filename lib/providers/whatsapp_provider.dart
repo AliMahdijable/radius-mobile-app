@@ -146,11 +146,15 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
     if (_pollingQr) return;
     _pollingQr = true;
     try {
-      for (var i = 0; i < 20; i++) {
-        await Future<void>.delayed(const Duration(seconds: 2));
+      // نبقى نُحدّث الـQR كل 3 ثوانٍ لمدة ~90 ثانية (مثل الويب) — whatsmeow
+      // يولّد QR جديد كل ~20 ثانية، والـcache يتحدّث، فحتى لو الـsocket مكسور
+      // يبقى الـQR المعروض حديثاً قابلاً للمسح. نتوقف عند الاتصال أو المهلة.
+      var elapsed = 0;
+      while (elapsed < 90) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        elapsed += 3;
         if (!_pollingQr) return; // أُلغي (disconnect/dispose)
-        if (state.status.connected) return; // اتصل (socket أو poll)
-        if (state.qrCode != null) return; // الـsocket جاب الـQR أولاً
+        if (state.status.connected) return; // اتصل عبر socket
         try {
           final res = await _dio.get('${ApiConstants.waPendingQr}/$adminId');
           final data = res.data;
@@ -169,20 +173,22 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
               return;
             }
             final qr = data['qrCode']?.toString();
-            if (qr != null && qr.isNotEmpty && state.qrCode == null) {
-              state = state.copyWith(qrCode: qr, isConnecting: true);
-              return;
+            if (qr != null && qr.isNotEmpty && qr != state.qrCode) {
+              // حدّث الـQR كل مرة يتغيّر (refresh) — لا نتوقف، نكمل المتابعة.
+              state = state.copyWith(qrCode: qr, isConnecting: false);
             }
           }
         } catch (_) {
           // تجاهل أخطاء poll مؤقتة وأعد المحاولة
         }
       }
-      // انتهت المهلة (~40s) بلا QR ولا اتصال — أخرج المستخدم من حالة الانتظار.
-      if (state.qrCode == null && !state.status.connected) {
+      // انتهت المهلة (~90s) بلا اتصال — أخرج المستخدم من حالة الانتظار.
+      if (!state.status.connected) {
         state = state.copyWith(
           isConnecting: false,
-          error: 'تعذّر توليد رمز QR. حاول مرة أخرى.',
+          error: state.qrCode == null
+              ? 'تعذّر توليد رمز QR. حاول مرة أخرى.'
+              : 'انتهت مهلة الانتظار. حاول مجدداً.',
         );
       }
     } finally {
