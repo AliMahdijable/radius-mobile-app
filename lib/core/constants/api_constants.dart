@@ -29,10 +29,12 @@ class ApiConstants {
 
   // WhatsApp Connection
   static const String waStartSession = '/api/whatsapp/start-session';
+  static const String waStartSessionCode = '/api/whatsapp/start-session-code';
   static const String waReconnect = '/api/whatsapp/reconnect';
   static const String waDisconnect = '/api/whatsapp/disconnect';
   static const String waConnectionStatus = '/api/whatsapp/connection-status';
   static const String waPendingQr = '/api/whatsapp/pending-qr';
+  static const String waPendingPairCode = '/api/whatsapp/pending-paircode';
   static const String waGetQr = '/api/whatsapp/get-qr';
 
   // WhatsApp Messaging

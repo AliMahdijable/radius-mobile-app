@@ -10,12 +10,14 @@ import '../models/whatsapp_status_model.dart';
 class WhatsAppState {
   final WhatsAppStatusModel status;
   final String? qrCode;
+  final String? pairCode; // كود الربط برقم الهاتف (8 خانات)
   final bool isConnecting;
   final String? error;
 
   const WhatsAppState({
     this.status = const WhatsAppStatusModel(),
     this.qrCode,
+    this.pairCode,
     this.isConnecting = false,
     this.error,
   });
@@ -23,12 +25,14 @@ class WhatsAppState {
   WhatsAppState copyWith({
     WhatsAppStatusModel? status,
     String? qrCode,
+    String? pairCode,
     bool? isConnecting,
     String? error,
   }) {
     return WhatsAppState(
       status: status ?? this.status,
       qrCode: qrCode ?? this.qrCode,
+      pairCode: pairCode ?? this.pairCode,
       isConnecting: isConnecting ?? this.isConnecting,
       error: error,
     );
@@ -42,6 +46,7 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
   StreamSubscription? _statusSub;
   StreamSubscription? _qrSub;
   bool _pollingQr = false;
+  bool _pollingPair = false;
 
   WhatsAppNotifier(this._dio, this._socket, this._storage)
       : super(const WhatsAppState()) {
@@ -153,6 +158,88 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
     }
   }
 
+  /// الربط بالكود (pairing code): يرسل رقم الهاتف للباكند فيرجّع كود 8 خانات
+  /// يكتبه المستخدم في واتساب (الأجهزة المرتبطة ← ربط برقم الهاتف بدل المسح).
+  /// عند نجاح الربط يصل حدث 'connected' عبر socket — وكـfallback نعمل polling
+  /// خفيف للحالة. دائماً جلسة جديدة (مثل startSession مع QR).
+  Future<void> startSessionWithCode(String phone) async {
+    final adminId = await _getAdminId();
+    final username = await _getUsername();
+    if (adminId == null) return;
+    _pollingQr = false; // أوقف أي polling QR جارٍ
+    state = state.copyWith(isConnecting: true, error: null, qrCode: null, pairCode: null);
+    try {
+      final res = await _dio.post(ApiConstants.waStartSessionCode, data: {
+        'adminId': adminId,
+        'adminUsername': username ?? '',
+        'phone': phone,
+      });
+      final data = res.data;
+      if (data is Map && data['alreadyConnected'] == true) {
+        state = state.copyWith(
+          status: WhatsAppStatusModel(
+            connected: true,
+            phone: data['phone']?.toString(),
+            pushname: data['pushname']?.toString(),
+            platform: data['platform']?.toString(),
+          ),
+          isConnecting: false,
+        );
+        return;
+      }
+      final code = (data is Map) ? data['pairCode']?.toString() : null;
+      if (code != null && code.isNotEmpty) {
+        state = state.copyWith(pairCode: code, isConnecting: false);
+        unawaited(_pollForPairConnected(adminId));
+      } else {
+        final msg = (data is Map ? data['message']?.toString() : null);
+        state = state.copyWith(isConnecting: false, error: msg ?? 'تعذّر توليد كود الربط');
+      }
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message']?.toString();
+      state = state.copyWith(isConnecting: false, error: msg ?? 'فشل بدء الربط بالكود');
+    } catch (e) {
+      state = state.copyWith(isConnecting: false, error: 'فشل بدء الربط بالكود');
+    }
+  }
+
+  /// Polling خفيف بعد عرض كود الربط — يكتشف نجاح الاتصال لو فات حدث socket.
+  /// كود الربط صالح ~3 دقائق فنفحص خلالها كل 3 ثوانٍ.
+  Future<void> _pollForPairConnected(String adminId) async {
+    if (_pollingPair) return;
+    _pollingPair = true;
+    try {
+      var elapsed = 0;
+      while (elapsed < 180) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        elapsed += 3;
+        if (!_pollingPair) return; // أُلغي (disconnect/dispose)
+        if (state.status.connected) return; // اتصل عبر socket
+        try {
+          final res = await _dio.get('${ApiConstants.waPendingPairCode}/$adminId');
+          final data = res.data;
+          if (data is Map && data['alreadyConnected'] == true) {
+            state = state.copyWith(
+              status: WhatsAppStatusModel(
+                connected: true,
+                phone: data['phone']?.toString(),
+                pushname: data['pushname']?.toString(),
+                platform: data['platform']?.toString(),
+              ),
+              isConnecting: false,
+              pairCode: null,
+            );
+            return;
+          }
+        } catch (_) {
+          // تجاهل أخطاء poll مؤقتة
+        }
+      }
+    } finally {
+      _pollingPair = false;
+    }
+  }
+
   /// Polling احتياطي للـQR بعد بدء/إعادة الجلسة. الـsocket هو الأساس (فوري)؛
   /// هذا يلتقط الحالات اللي تفوت فيها رسالة الـsocket. يتوقف فور ظهور QR (من
   /// socket أو poll) أو الاتصال، ويضع رسالة واضحة عند انتهاء المهلة بدل تعليق
@@ -215,6 +302,7 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
     final adminId = await _getAdminId();
     if (adminId == null) return;
     _pollingQr = false; // أوقف أي polling جارٍ للـQR
+    _pollingPair = false; // وأي polling لكود الربط
     try {
       await _dio.post(ApiConstants.waDisconnect, data: {
         'adminId': adminId,
@@ -294,6 +382,7 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
   @override
   void dispose() {
     _pollingQr = false;
+    _pollingPair = false;
     _statusSub?.cancel();
     _qrSub?.cancel();
     super.dispose();
