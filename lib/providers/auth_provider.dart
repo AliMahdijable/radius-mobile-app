@@ -331,11 +331,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       });
       _schedulePushResyncRetry();
     } on _TokenInvalidException {
-      // التوكن مرفوض من SAS4. قبل إجبار شاشة الدخول، نجرّب تسجيل دخول تلقائي
-      // بالبيانات المحفوظة («حفظ بيانات الدخول») — غالباً الباسوورد صحيح
-      // والتوكن فقط قديم/مرفوض، فنجدّد الجلسة صامتاً بدل ما نطلب من المستخدم
-      // ينقر «دخول».
-      if (await _tryAutoLogin()) return;
+      // handleSessionExpired يحاول التسجيل التلقائي الصامت أولاً (لو «حفظ
+      // بيانات الدخول» مفعّل) قبل أي طرد — فالتوكن المرفوض من SAS4 يتجدّد
+      // صامتاً بدل ما نطلب من المستخدم ينقر «دخول».
       await handleSessionExpired(
         reason: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.',
       );
@@ -353,7 +351,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// [checkAuth] لمّا تكون الجلسة مفقودة/منتهية. لو نجح، [login] يضبط الـstate
   /// لـauthenticated ويرجّع true؛ غير ذلك نرجّع false ليكمل [checkAuth] إلى
   /// شاشة الدخول. لا نرمي استثناءً — أي فشل (شبكة/باسورد مغيّر) يرجع false.
-  Future<bool> _tryAutoLogin() async {
+  Future<bool>? _autoLoginFuture;
+
+  /// تسجيل دخول تلقائي صامت بالبيانات المحفوظة. **صامت تماماً**: لا يغيّر
+  /// الـstatus أثناء المحاولة (login يبقي الحالة كما هي حتى ينجح/يفشل)، فلا
+  /// يومض نموذج الدخول ولا splash وسط الجلسة — مجرّد تجديد توكن بالخلفية.
+  /// يُشارَك نفس الـFuture بين النداءات المتزامنة (عدّة طلبات تطيح 401 بنفس
+  /// اللحظة) فما تصير عاصفة logins.
+  Future<bool> _tryAutoLogin() {
+    return _autoLoginFuture ??=
+        _doAutoLogin().whenComplete(() => _autoLoginFuture = null);
+  }
+
+  Future<bool> _doAutoLogin() async {
     try {
       if (!await _storage.getRememberMe()) return false;
       final username = await _storage.getSavedUsername();
@@ -364,9 +374,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
           password.isEmpty) {
         return false;
       }
-      // splash أثناء المحاولة (login لا يضبط loading) — حتى ما يومض نموذج
-      // الدخول لجزء من الثانية قبل ما يكتمل التسجيل التلقائي.
-      state = state.copyWith(status: AuthStatus.loading, clearError: true);
       return await login(username.trim(), password);
     } catch (_) {
       return false;
@@ -579,6 +586,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> handleSessionExpired({String? reason}) async {
     if (state.status == AuthStatus.unauthenticated) return;
+    // استرجاع صامت: ما دام المستخدم مفعّل «حفظ بيانات الدخول» نعيد تسجيل
+    // الدخول بالخفاء (توكن جديد) بدل ما نطرده ونعرض «انتهت الجلسة». ينجح
+    // طالما الباسوورد المحفوظ صحيح — فلا ينقطع وسط الاستخدام لمجرّد انتهاء
+    // التوكن. يفشل (ويُكمل الطرد تحت) فقط لو الباسوورد تغيّر فعلاً.
+    if (await _tryAutoLogin()) return;
     _socket.disconnect();
     await FcmService.onLoggedOut();
     await ExpiryPushService.onLoggedOut();
