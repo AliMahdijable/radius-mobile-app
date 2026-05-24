@@ -331,11 +331,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       });
       _schedulePushResyncRetry();
     } on _TokenInvalidException {
-      // التوكن مرفوض من SAS4 — إجبار خروج كامل + إعلام المستخدم.
+      // التوكن مرفوض من SAS4. قبل إجبار شاشة الدخول، نجرّب تسجيل دخول تلقائي
+      // بالبيانات المحفوظة («حفظ بيانات الدخول») — غالباً الباسوورد صحيح
+      // والتوكن فقط قديم/مرفوض، فنجدّد الجلسة صامتاً بدل ما نطلب من المستخدم
+      // ينقر «دخول».
+      if (await _tryAutoLogin()) return;
       await handleSessionExpired(
         reason: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.',
       );
     } catch (e) {
+      // أي فشل آخر (شبكة/صلاحيات) — نجرّب التسجيل التلقائي قبل شاشة الدخول.
+      if (await _tryAutoLogin()) return;
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
         clearError: true,
@@ -358,6 +364,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
           password.isEmpty) {
         return false;
       }
+      // splash أثناء المحاولة (login لا يضبط loading) — حتى ما يومض نموذج
+      // الدخول لجزء من الثانية قبل ما يكتمل التسجيل التلقائي.
+      state = state.copyWith(status: AuthStatus.loading, clearError: true);
       return await login(username.trim(), password);
     } catch (_) {
       return false;
