@@ -2390,6 +2390,22 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
+  /// تحديث لوحة المعلومات بعد تغيير دين (إضافة/تسديد). الباكند يسجّل النشاط
+  /// بنفسه، فهنا فقط ننعش العدّادات والقوائم بدون POST نشاط مكرّر.
+  Future<void> _refreshAfterDebtChange() async {
+    final adminId = await _storage.getAdminId();
+    if (adminId == null) return;
+    try {
+      await _ref.read(dashboardProvider.notifier).refreshDailyActivations(adminId);
+    } catch (_) {}
+    try {
+      await _ref.read(dashboardProvider.notifier).refreshCountsOnly();
+    } catch (_) {}
+    try {
+      _ref.read(reportsProvider.notifier).triggerRefresh();
+    } catch (_) {}
+  }
+
   /// Matches React's updateUserComments: GET full user, merge notes, PUT back.
   Future<bool> updateUserNotes(int userId, double newNotesValue) async {
     try {
@@ -2414,7 +2430,9 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// Pay debt: newNotes = current + amount (moves negative toward zero)
+  /// Pay debt — عبر backend endpoint المتين (نفس مسار الويب). الباكند يبني
+  /// payload نظيف لـSAS4 (مع confirm_password وكل الحقول) فلا يفشل للمشتركين
+  /// ناقصي البيانات مثل ما كان يصير مع الـPUT المباشر، ويسجّل النشاط بنفسه.
   Future<bool> payDebt({
     required int userId,
     required String username,
@@ -2422,32 +2440,18 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     String? paymentNotes,
   }) async {
     try {
-      final details = await getSubscriberDetails(userId);
-      if (details == null) return false;
-
-      final currentNotes = _parseNotes(details);
-      final newNotes = currentNotes + amount;
-      final remaining = newNotes < 0 ? newNotes.abs() : 0.0;
-      final credit = newNotes > 0 ? newNotes : 0.0;
-
-      final ok = await updateUserNotes(userId, newNotes);
-      if (ok) {
-        logActivity(
-          action: 'deduct_balance',
-          description: 'تسديد دين ${_formatIQD(amount)} IQD من المشترك: $username${paymentNotes != null ? ' - $paymentNotes' : ''}',
-          targetId: userId,
-          targetName: username,
-          refreshDashboard: true,
-          metadata: {
-            'amount': amount,
-            'previous_balance': currentNotes,
-            'new_balance': newNotes,
-            'remaining_debt': remaining,
-            'credit': credit,
-            'payment_notes': paymentNotes,
-          },
-        );
-      }
+      final res = await _backendDio.post(
+        '/api/v2/subscribers/$userId/pay-debt',
+        data: {
+          'amount': amount,
+          if (paymentNotes != null && paymentNotes.isNotEmpty)
+            'comment': paymentNotes,
+        },
+      );
+      final ok = res.statusCode == 200 &&
+          res.data is Map &&
+          res.data['success'] == true;
+      if (ok) await _refreshAfterDebtChange();
       return ok;
     } catch (e) {
       dev.log('payDebt error: $e', name: 'SUBS');
@@ -2455,7 +2459,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// Add debt: newNotes = current - amount (makes more negative)
+  /// Add debt — عبر backend endpoint المتين (نفس مسار الويب). انظر [payDebt].
   Future<bool> addDebt({
     required int userId,
     required String username,
@@ -2463,28 +2467,17 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     String? comment,
   }) async {
     try {
-      final details = await getSubscriberDetails(userId);
-      if (details == null) return false;
-
-      final currentNotes = _parseNotes(details);
-      final newNotes = currentNotes - amount;
-
-      final ok = await updateUserNotes(userId, newNotes);
-      if (ok) {
-        logActivity(
-          action: 'add_balance',
-          description: 'إضافة دين ${_formatIQD(amount)} IQD للمشترك: $username${comment != null ? ' - $comment' : ''}',
-          targetId: userId,
-          targetName: username,
-          refreshDashboard: true,
-          metadata: {
-            'amount': amount,
-            'previous_comment': currentNotes,
-            'new_comment': newNotes,
-            'comment': comment,
-          },
-        );
-      }
+      final res = await _backendDio.post(
+        '/api/v2/subscribers/$userId/add-debt',
+        data: {
+          'amount': amount,
+          if (comment != null && comment.isNotEmpty) 'comment': comment,
+        },
+      );
+      final ok = res.statusCode == 200 &&
+          res.data is Map &&
+          res.data['success'] == true;
+      if (ok) await _refreshAfterDebtChange();
       return ok;
     } catch (e) {
       dev.log('addDebt error: $e', name: 'SUBS');
