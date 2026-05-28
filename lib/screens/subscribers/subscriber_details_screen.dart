@@ -1134,23 +1134,11 @@ class _SubscriberDetailsScreenState
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
-                        final remDays = _calcRemainingDays(expDate);
-                        // حساب المبلغ المسدد بناءً على طريقة التمديد
-                        final paidAmountForMsg = method == 'credit'
-                          ? _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0)
-                          : '0'; // نقاط: لا يوجد مبلغ نقدي
-
-                        await _sendWhatsAppFromTemplate('renewal',
-                          extraVars: {
-                            '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
-                            '{paid_amount}': paidAmountForMsg,
-                            '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
-                            '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
-                            '{expiry_date}': expDate,
-                            '{expiration_date}': expDate,
-                            '{days_remaining}': remDays,
-                            '{remaining_days}': remDays,
-                          });
+                        // WA 2.0 cleanup (Build 82): إشعار التمديد يطلقه backend
+                        // تلقائياً من /api/v2/subscribers/.../extend مع
+                        // idempotencyKey مرتبط بالـactivity_log. كان الاستدعاء
+                        // هنا يسبّب رسالتين لنفس الحدث (مرة من الموبايل، مرة
+                        // من v2). راجع memory project_whatsapp_v2_phase1_done.
                         final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
                         if (printReceipt) {
                           await _printReceiptNow(
@@ -1775,23 +1763,14 @@ class _SubscriberDetailsScreenState
                         final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
-                        final freshExpDate = fresh?['expiration']?.toString() ?? '';
-                        final freshRemDays = _calcRemainingDays(freshExpDate);
                         final actualPaidAmount = isCash
                           ? (isPartialCash ? cashAmount : userPrice)
                           : 0.0;
-                        final paidAmountForMsg = _formatNumber(actualPaidAmount);
-                        await _sendWhatsAppFromTemplate('activation_notice', extraVars: {
-                          '{package_name}': profileName,
-                          '{package_price}': _formatNumber(userPrice),
-                          '{paid_amount}': paidAmountForMsg,
-                          '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
-                          '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
-                          '{expiry_date}': freshExpDate,
-                          '{expiration_date}': freshExpDate,
-                          '{remaining_days}': freshRemDays,
-                          '{days_remaining}': freshRemDays,
-                        });
+                        // WA 2.0 cleanup (Build 82): إشعار التفعيل يطلقه backend
+                        // تلقائياً من /api/v2/subscribers/.../activate مع
+                        // idempotencyKey مرتبط بالـactivity_log. الاستدعاء اليدوي
+                        // هنا كان يسبّب رسالتين لنفس الحدث. v2 يحترم feature
+                        // flag sendOnActivation. راجع project_whatsapp_v2_phase1_done.
                         if (printReceipt) {
                           await _printReceiptNow(
                             ReceiptData(
@@ -2371,28 +2350,11 @@ class _SubscriberDetailsScreenState
                             final currentSub = _readCurrentSubscriber();
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
-                            final freshExpDate2 = fresh?['expiration']?.toString() ?? '';
-                            final freshRemDays2 = _calcRemainingDays(freshExpDate2);
-                            // Web's pay-debt flow already includes {payment_date}
-                            // in the payment_confirmation substitution; mobile
-                            // was missing it so admin templates with that
-                            // placeholder rendered with the literal token.
-                            // Default to today (the mobile sheet doesn't
-                            // expose a date picker yet — same fallback the
-                            // web uses when no date is picked).
-                            final paymentDateStr =
-                                intl.DateFormat('yyyy-MM-dd').format(DateTime.now());
-                            await _sendWhatsAppFromTemplate('payment_confirmation',
-                              extraVars: {
-                                '{paid_amount}': _formatNumber(payAmount),
-                                '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
-                                '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
-                                '{expiry_date}': freshExpDate2,
-                                '{expiration_date}': freshExpDate2,
-                                '{remaining_days}': freshRemDays2,
-                                '{days_remaining}': freshRemDays2,
-                                '{payment_date}': paymentDateStr,
-                              });
+                            // WA 2.0 cleanup (Build 82): إشعار التسديد يطلقه
+                            // backend تلقائياً من /api/v2/subscribers/.../pay-debt
+                            // مع idempotencyKey=v2:wa:{activity_log_id}:payment_confirmation.
+                            // الاستدعاء اليدوي هنا كان يسبّب رسالتين لنفس الحدث.
+                            // راجع memory project_whatsapp_v2_phase1_done.
                             if (printReceipt) {
                               await _printReceiptNow(
                                 ReceiptData(
