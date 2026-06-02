@@ -45,9 +45,11 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // extendBody:false (default) so the tab content stops at the bar edge.
+    // Previous value `true` made the body extend behind a partially-
+    // transparent bar — content visibly bled through the bottom gap.
     return Scaffold(
       backgroundColor: AppColors.bg,
-      extendBody: true,
       body: IndexedStack(index: _tab, children: _tabs),
       bottomNavigationBar: _BottomBar(
         current: _tab,
@@ -116,26 +118,28 @@ class _BottomBar extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: -22,
+            top: -18,
             child: GestureDetector(
               onTap: onFabTap,
               child: Container(
-                width: 60,
-                height: 60,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: AppColors.brand,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.bg, width: 4),
+                  // Thin matching-bg ring + restrained shadow so the FAB
+                  // reads as a confident pill, not a glowing emergency button.
+                  border: Border.all(color: AppColors.surface, width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.brand.withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
+                      color: AppColors.brand.withValues(alpha: 0.18),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 30),
+                    color: Colors.white, size: 24),
               ),
             ),
           ),
