@@ -99,15 +99,29 @@ class _PermissionsScreenState extends State<PermissionsScreen>
   Future<void> _onNotifTap() async {
     HapticFeedback.selectionClick();
     if (_notif == _PermState.granted) return;
-    if (_notif == _PermState.deniedOnce || _notif == _PermState.unknown) {
-      setState(() => _notif = _PermState.requesting);
-      final res = await Permission.notification.request();
-      if (!mounted) return;
-      setState(() => _notif = _mapNotif(res));
+    if (_notif == _PermState.permanentlyDenied) {
+      await openAppSettings();
       return;
     }
-    // permanentlyDenied → open settings; system Settings handles the rest.
-    await openAppSettings();
+    // Soft ask first — explain WHY before consuming the one-shot iOS prompt.
+    // If the user says "ليس الآن" we never call .request(), keeping that
+    // single iOS opportunity available for a future, better-timed ask.
+    final agreed = await _showSoftAskDialog(
+      icon: Icons.notifications_active_rounded,
+      title: 'تفعيل الإشعارات',
+      points: const [
+        'تنبيه عند انتهاء اشتراك مشترك',
+        'تأكيد وصول تذكيرات الواتساب',
+        'إعلام عند انقطاع جلسة واتساب',
+        'تنبيه فوري حتى لو التطبيق مغلق',
+      ],
+      confirmLabel: 'تفعيل الإشعارات',
+    );
+    if (!agreed || !mounted) return;
+    setState(() => _notif = _PermState.requesting);
+    final res = await Permission.notification.request();
+    if (!mounted) return;
+    setState(() => _notif = _mapNotif(res));
   }
 
   // ── Biometric ──────────────────────────────────────────────────────
@@ -115,16 +129,26 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     HapticFeedback.selectionClick();
     if (_bio == _PermState.granted) return;
     if (!_bioAvailable) {
-      // Likely simulator without enrolled biometric, OR a device with the
-      // sensor disabled. Push them to system settings to set it up.
       await openAppSettings();
       return;
     }
+    final kind = _bioKind ?? 'البصمة';
+    final agreed = await _showSoftAskDialog(
+      icon: Icons.fingerprint_rounded,
+      title: 'تفعيل $kind',
+      points: [
+        'دخول سريع بدون كتابة كلمة المرور',
+        'حماية إضافية لحسابك',
+        '$kind يبقى على جهازك فقط — لا يُرسل لنا',
+      ],
+      confirmLabel: 'تفعيل $kind',
+    );
+    if (!agreed || !mounted) return;
     setState(() => _bio = _PermState.requesting);
     final auth = LocalAuthentication();
     try {
       final ok = await auth.authenticate(
-        localizedReason: 'فعّل ${_bioKind ?? "البصمة"} لتسجيل دخول أسرع لاحقاً',
+        localizedReason: 'فعّل $kind لتسجيل دخول أسرع لاحقاً',
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
@@ -136,6 +160,113 @@ class _PermissionsScreenState extends State<PermissionsScreen>
       if (!mounted) return;
       setState(() => _bio = _PermState.deniedOnce);
     }
+  }
+
+  /// Pre-prompt dialog. Returns `true` if the user confirms — only then
+  /// do we trigger the real OS permission request. This pattern protects
+  /// the single iOS prompt opportunity per app install.
+  Future<bool> _showSoftAskDialog({
+    required IconData icon,
+    required String title,
+    required List<String> points,
+    required String confirmLabel,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.xl),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: Sp.xxl),
+        child: Padding(
+          padding: const EdgeInsets.all(Sp.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(R.md),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: AppColors.brand, size: 28),
+              ),
+              const SizedBox(height: Sp.lg),
+              Text(title,
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 20)),
+              const SizedBox(height: Sp.md),
+              for (final p in points) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Icon(Icons.check_circle_rounded,
+                          color: AppColors.brand, size: 14),
+                    ),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: Text(p,
+                          style: AppType.subtitle(color: AppColors.textMid)
+                              .copyWith(height: 1.55)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Sp.sm),
+              ],
+              const SizedBox(height: Sp.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      style: TextButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: Sp.md),
+                      ),
+                      child: Text(
+                        'ليس الآن',
+                        style:
+                            AppType.button(color: AppColors.textMid),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: Material(
+                        color: AppColors.brand,
+                        borderRadius: BorderRadius.circular(R.md),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => Navigator.of(ctx).pop(true),
+                          child: Center(
+                            child: Text(
+                              confirmLabel,
+                              style:
+                                  AppType.button(color: Colors.white)
+                                      .copyWith(fontSize: 14),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return ok == true;
   }
 
   void _continue() {
