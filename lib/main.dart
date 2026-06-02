@@ -1,11 +1,14 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 import 'theme/colors.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -15,6 +18,21 @@ void main() {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
+
+  // Try to bring up Firebase. Wrapped because GoogleService-Info.plist /
+  // google-services.json may not be present on a fresh clone yet. If
+  // it fails the app still launches — NotificationService falls back to
+  // permission_handler for the OS prompt.
+  try {
+    await Firebase.initializeApp();
+    NotificationService.markFirebaseReady(true);
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('Firebase init skipped: $e');
+    }
+    NotificationService.markFirebaseReady(false);
+  }
+
   runApp(const MyServicesApp());
 }
 

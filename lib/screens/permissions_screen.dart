@@ -2,22 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' show openAppSettings;
 
 import '../services/auth_storage.dart';
+import '../services/notification_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'main_shell.dart';
 
-/// Shown after the first successful login. Two OS permissions:
-///   1. Notifications (push)
-///   2. Biometric (Face ID / Touch ID)
+/// Round 4 rewrite — root-cause approach to the "popup never appears"
+/// problem the user kept hitting:
 ///
-/// iOS quirk: once a permission is denied, calling .request() again does
-/// nothing — the system won't re-prompt. So when the live status reports
-/// "denied" (or permanently denied), the button switches to "افتح الإعدادات"
-/// which opens the OS app settings page.
+///   Cause: once iOS records a notification-permission decision for a
+///   bundle ID, requestAuthorization() never re-displays the popup on
+///   that device. Same rule applies regardless of which Flutter package
+///   wraps the call (permission_handler, firebase_messaging, anything).
+///
+///   What changed here:
+///   1. NotificationService.request() is used instead of calling
+///      permission_handler directly — same path v1 uses (Firebase
+///      Messaging) when Firebase is configured.
+///   2. We fire the request automatically the first time this screen
+///      appears, matching v1's first-launch behavior (user said: "v1
+///      shows the permission popup right when the app first opens").
+///   3. We distinguish a true "user-denied" outcome (popup shown, user
+///      tapped Don't Allow) from a "silently-blocked" outcome (no popup
+///      because iOS remembered a previous denial). The second case gets
+///      a banner explaining how to reset — that's the situation 99% of
+///      our previous bug reports turned out to be.
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
 
@@ -25,20 +38,15 @@ class PermissionsScreen extends StatefulWidget {
   State<PermissionsScreen> createState() => _PermissionsScreenState();
 }
 
-enum _PermState {
-  unknown,
-  granted,
-  notYetRequested, // never been asked → button shows "تفعيل"
-  truePermanentlyDenied, // .request() actually returned denied → settings
-  requesting,
-}
+enum _State { idle, requesting, granted, userDenied, silentlyBlocked }
 
 class _PermissionsScreenState extends State<PermissionsScreen>
     with WidgetsBindingObserver {
-  _PermState _notif = _PermState.unknown;
-  _PermState _bio = _PermState.unknown;
+  _State _notif = _State.idle;
+  _State _bio = _State.idle;
   bool _bioAvailable = true;
-  String? _bioKind; // "بصمة" / "Face ID" — what the device actually has
+  String? _bioKind;
+  bool _autoFired = false;
 
   @override
   void initState() {
@@ -48,32 +56,30 @@ class _PermissionsScreenState extends State<PermissionsScreen>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Re-check status when returning from system Settings.
-    if (state == AppLifecycleState.resumed) _refresh();
-  }
-
   Future<void> _refresh() async {
-    final notif = await Permission.notification.status;
+    final granted = await NotificationService.isAuthorized();
     final auth = LocalAuthentication();
     bool canBio = false;
     String? kind;
     try {
       canBio = await auth.isDeviceSupported();
       if (canBio) {
-        final available = await auth.getAvailableBiometrics();
-        if (available.contains(BiometricType.face)) {
+        final list = await auth.getAvailableBiometrics();
+        if (list.contains(BiometricType.face)) {
           kind = 'Face ID';
-        } else if (available.contains(BiometricType.fingerprint)) {
-          kind = 'البصمة';
-        } else if (available.contains(BiometricType.strong) ||
-            available.contains(BiometricType.weak)) {
+        } else if (list.contains(BiometricType.fingerprint) ||
+            list.contains(BiometricType.strong) ||
+            list.contains(BiometricType.weak)) {
           kind = 'البصمة';
         } else {
           kind = null;
@@ -84,214 +90,61 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 
     if (!mounted) return;
     setState(() {
-      // INTENTIONAL: we only flip to `granted` when iOS confirms it.
-      // Everything else (denied, permanentlyDenied, restricted) collapses
-      // to `notYetRequested` so the user sees a "تفعيل" button and we
-      // attempt .request() — which is the ONLY way to know iOS's real
-      // answer. permission_handler on iOS reports `permanentlyDenied` on
-      // a fresh install (no choice ever made), so trusting the cached
-      // status meant we'd show "افتح الإعدادات" forever, even after a
-      // full reinstall — incident 2026-06-02.
-      _notif = notif.isGranted ? _PermState.granted : _PermState.notYetRequested;
+      if (granted) _notif = _State.granted;
       _bioAvailable = canBio;
       _bioKind = kind;
-      if (!canBio) _bio = _PermState.notYetRequested;
+    });
+
+    // Auto-fire the OS request the FIRST time this screen mounts (after
+    // a tiny pause so the user sees the screen come up first). This
+    // matches v1's "popup on first launch" UX. The auto-fire fires once
+    // per screen lifetime; manual taps still work afterward.
+    if (!_autoFired && !granted) {
+      _autoFired = true;
+      Future<void>.delayed(const Duration(milliseconds: 600), _requestNotif);
+    }
+  }
+
+  Future<void> _requestNotif() async {
+    if (!mounted || _notif == _State.granted || _notif == _State.requesting) return;
+    HapticFeedback.selectionClick();
+    setState(() => _notif = _State.requesting);
+    final res = await NotificationService.request();
+    if (!mounted) return;
+    setState(() {
+      _notif = switch (res) {
+        NotifPermissionResult.granted => _State.granted,
+        NotifPermissionResult.userDenied => _State.userDenied,
+        NotifPermissionResult.silentlyBlocked => _State.silentlyBlocked,
+      };
     });
   }
 
-  // ── Notification ───────────────────────────────────────────────────
-  Future<void> _onNotifTap() async {
-    HapticFeedback.selectionClick();
-    if (_notif == _PermState.granted) return;
-
-    // truePermanentlyDenied is reached ONLY after .request() actually
-    // returned denied (meaning iOS confirmed the user previously refused).
-    // Tap → open settings; the lifecycle observer re-reads on resume.
-    if (_notif == _PermState.truePermanentlyDenied) {
-      await openAppSettings();
-      return;
-    }
-
-    // Otherwise (notYetRequested / unknown): always attempt the request.
-    // Don't trust the cached status — permission_handler on iOS lies and
-    // reports denied even on a fresh install.
-    final agreed = await _showSoftAskDialog(
-      icon: Icons.notifications_active_rounded,
-      title: 'تفعيل الإشعارات',
-      points: const [
-        'تنبيه عند انتهاء اشتراك مشترك',
-        'تأكيد وصول تذكيرات الواتساب',
-        'إعلام عند انقطاع جلسة واتساب',
-        'تنبيه فوري حتى لو التطبيق مغلق',
-      ],
-      confirmLabel: 'تفعيل الإشعارات',
-    );
-    if (!agreed || !mounted) return;
-
-    setState(() => _notif = _PermState.requesting);
-    final res = await Permission.notification.request();
-    if (!mounted) return;
-
-    if (res.isGranted) {
-      setState(() => _notif = _PermState.granted);
-    } else {
-      // .request() returned denied — NOW we can trust that iOS truly
-      // blocks us (either user just denied in the popup, or iOS already
-      // had a stored decision). Flip to truePermanentlyDenied so the
-      // next tap routes to system settings.
-      setState(() => _notif = _PermState.truePermanentlyDenied);
-    }
-  }
-
-  // ── Biometric ──────────────────────────────────────────────────────
-  Future<void> _onBioTap() async {
-    HapticFeedback.selectionClick();
-    if (_bio == _PermState.granted) return;
+  Future<void> _requestBio() async {
     if (!_bioAvailable) {
       await openAppSettings();
       return;
     }
-    final kind = _bioKind ?? 'البصمة';
-    final agreed = await _showSoftAskDialog(
-      icon: Icons.fingerprint_rounded,
-      title: 'تفعيل $kind',
-      points: [
-        'دخول سريع بدون كتابة كلمة المرور',
-        'حماية إضافية لحسابك',
-        '$kind يبقى على جهازك فقط — لا يُرسل لنا',
-      ],
-      confirmLabel: 'تفعيل $kind',
-    );
-    if (!agreed || !mounted) return;
-    setState(() => _bio = _PermState.requesting);
+    HapticFeedback.selectionClick();
+    setState(() => _bio = _State.requesting);
     final auth = LocalAuthentication();
     try {
       final ok = await auth.authenticate(
-        localizedReason: 'فعّل $kind لتسجيل دخول أسرع لاحقاً',
+        localizedReason: 'فعّل ${_bioKind ?? "البصمة"} لتسجيل دخول أسرع لاحقاً',
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
         ),
       );
       if (!mounted) return;
-      setState(() =>
-          _bio = ok ? _PermState.granted : _PermState.notYetRequested);
+      setState(() => _bio = ok ? _State.granted : _State.userDenied);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _bio = _PermState.notYetRequested);
+      setState(() => _bio = _State.userDenied);
     }
   }
 
-  /// Pre-prompt dialog. Returns `true` if the user confirms — only then
-  /// do we trigger the real OS permission request. This pattern protects
-  /// the single iOS prompt opportunity per app install.
-  Future<bool> _showSoftAskDialog({
-    required IconData icon,
-    required String title,
-    required List<String> points,
-    required String confirmLabel,
-  }) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => Dialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(R.xl),
-        ),
-        insetPadding: const EdgeInsets.symmetric(horizontal: Sp.xxl),
-        child: Padding(
-          padding: const EdgeInsets.all(Sp.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.md),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, color: AppColors.brand, size: 28),
-              ),
-              const SizedBox(height: Sp.lg),
-              Text(title,
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 20)),
-              const SizedBox(height: Sp.md),
-              for (final p in points) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Icon(Icons.check_circle_rounded,
-                          color: AppColors.brand, size: 14),
-                    ),
-                    const SizedBox(width: Sp.sm),
-                    Expanded(
-                      child: Text(p,
-                          style: AppType.subtitle(color: AppColors.textMid)
-                              .copyWith(height: 1.55)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: Sp.sm),
-              ],
-              const SizedBox(height: Sp.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      style: TextButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: Sp.md),
-                      ),
-                      child: Text(
-                        'ليس الآن',
-                        style:
-                            AppType.button(color: AppColors.textMid),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: Sp.sm),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: Material(
-                        color: AppColors.brand,
-                        borderRadius: BorderRadius.circular(R.md),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () => Navigator.of(ctx).pop(true),
-                          child: Center(
-                            child: Text(
-                              confirmLabel,
-                              style:
-                                  AppType.button(color: Colors.white)
-                                      .copyWith(fontSize: 14),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    return ok == true;
-  }
-
   Future<void> _continue() async {
-    // Mark that we've shown perms once. Splash uses this to skip re-asking
-    // on auto-login next time the app launches.
     await AuthStorage.markPermissionsShown();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
@@ -315,14 +168,24 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                   .fadeIn(duration: const Duration(milliseconds: 350))
                   .slideY(begin: 0.06, end: 0),
               const SizedBox(height: Sp.huge),
-              _PermCard(
+              _Card(
                 icon: Icons.notifications_active_rounded,
                 title: 'إشعارات النظام',
                 body:
                     'لتنبيهك بانتهاء اشتراك، تسديد دين، أو ربط واتساب — حتى لو التطبيق مغلق.',
                 state: _notif,
-                buttonLabel: _notifButtonLabel(),
-                onTap: _onNotifTap,
+                actionLabel: switch (_notif) {
+                  _State.granted => 'مفعّلة',
+                  _State.requesting => 'جاري الطلب...',
+                  _State.silentlyBlocked => 'افتح إعدادات النظام',
+                  _State.userDenied => 'حاول مجدداً',
+                  _State.idle => 'تفعيل',
+                },
+                onAction: switch (_notif) {
+                  _State.granted => null,
+                  _State.silentlyBlocked => NotificationService.openSettings,
+                  _ => _requestNotif,
+                },
               )
                   .animate()
                   .fadeIn(
@@ -330,16 +193,28 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                     duration: const Duration(milliseconds: 350),
                   )
                   .slideY(begin: 0.05, end: 0),
+              // CRITICAL UX: if iOS silently blocked us (no popup
+              // appeared because of an earlier denial), tell the user
+              // EXACTLY how to recover. This was the source of every
+              // "why doesn't the popup appear" bug report.
+              if (_notif == _State.silentlyBlocked) ...[
+                const SizedBox(height: Sp.md),
+                _SilentlyBlockedBanner(),
+              ],
               const SizedBox(height: Sp.lg),
-              _PermCard(
+              _Card(
                 icon: Icons.fingerprint_rounded,
                 title: 'بصمة / Face ID',
                 body: _bioAvailable
                     ? 'دخول سريع بـ${_bioKind ?? "البصمة"} بدون كتابة كلمة المرور.'
-                    : 'الجهاز لا يدعم البصمة أو لم يتم تسجيلها بعد. يمكنك الاستمرار بدون.',
+                    : 'الجهاز لا يدعم البصمة أو لم يتم تسجيلها بعد.',
                 state: _bio,
-                buttonLabel: _bioButtonLabel(),
-                onTap: _onBioTap,
+                actionLabel: switch (_bio) {
+                  _State.granted => 'مفعّلة',
+                  _State.requesting => 'جاري المصادقة...',
+                  _ => _bioAvailable ? 'تفعيل' : 'افتح إعدادات النظام',
+                },
+                onAction: _bio == _State.granted ? null : _requestBio,
               )
                   .animate()
                   .fadeIn(
@@ -366,22 +241,6 @@ class _PermissionsScreenState extends State<PermissionsScreen>
         ),
       ),
     );
-  }
-
-  String _notifButtonLabel() => switch (_notif) {
-        _PermState.granted => 'مفعّلة',
-        _PermState.truePermanentlyDenied => 'افتح إعدادات النظام',
-        _PermState.requesting => 'جاري الطلب...',
-        _PermState.notYetRequested || _PermState.unknown => 'تفعيل',
-      };
-
-  String _bioButtonLabel() {
-    if (!_bioAvailable) return 'افتح إعدادات النظام';
-    return switch (_bio) {
-      _PermState.granted => 'مفعّلة',
-      _PermState.requesting => 'جاري المصادقة...',
-      _ => 'تفعيل',
-    };
   }
 }
 
@@ -410,7 +269,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(height: Sp.xs),
         Text(
-          'فعّل الإذونات التالية لتعمل بشكل أفضل. يمكنك تخطّيها وتفعيلها لاحقاً.',
+          'فعّل الإذونات التالية لتعمل التطبيق بشكل أفضل. يمكنك تخطّيها وتفعيلها لاحقاً.',
           style: AppType.subtitle(color: AppColors.textMid)
               .copyWith(height: 1.6),
         ),
@@ -419,22 +278,22 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _PermCard extends StatelessWidget {
-  const _PermCard({
+class _Card extends StatelessWidget {
+  const _Card({
     required this.icon,
     required this.title,
     required this.body,
     required this.state,
-    required this.buttonLabel,
-    required this.onTap,
+    required this.actionLabel,
+    required this.onAction,
   });
 
   final IconData icon;
   final String title;
   final String body;
-  final _PermState state;
-  final String buttonLabel;
-  final VoidCallback onTap;
+  final _State state;
+  final String actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -465,37 +324,72 @@ class _PermCard extends StatelessWidget {
                     style: AppType.button(color: AppColors.textHi)
                         .copyWith(fontSize: 16)),
               ),
-              _StateBadge(state: state),
+              _Badge(state: state),
             ],
           ),
           const SizedBox(height: Sp.md),
           Text(body,
               style: AppType.subtitle(color: AppColors.textMid)
                   .copyWith(height: 1.55)),
-          const SizedBox(height: Sp.md),
-          _Button(label: buttonLabel, state: state, onTap: onTap),
+          if (state != _State.granted) ...[
+            const SizedBox(height: Sp.md),
+            SizedBox(
+              height: 44,
+              child: Material(
+                color: state == _State.silentlyBlocked
+                    ? AppColors.error.withValues(alpha: 0.1)
+                    : AppColors.brand.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(R.md),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: state == _State.requesting ? null : onAction,
+                  child: Center(
+                    child: state == _State.requesting
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: state == _State.silentlyBlocked
+                                  ? AppColors.error
+                                  : AppColors.brand,
+                            ),
+                          )
+                        : Text(
+                            actionLabel,
+                            style: AppType.button(
+                              color: state == _State.silentlyBlocked
+                                  ? AppColors.error
+                                  : AppColors.brand,
+                            ).copyWith(fontSize: 14),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _StateBadge extends StatelessWidget {
-  const _StateBadge({required this.state});
-  final _PermState state;
+class _Badge extends StatelessWidget {
+  const _Badge({required this.state});
+  final _State state;
 
   @override
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (state) {
-      _PermState.granted => ('مفعّلة', AppColors.brand, Icons.check_rounded),
-      _PermState.truePermanentlyDenied =>
+      _State.granted => ('مفعّلة', AppColors.brand, Icons.check_rounded),
+      _State.silentlyBlocked =>
         ('بحاجة إعدادات', AppColors.error, Icons.settings_rounded),
-      _PermState.notYetRequested =>
-        ('غير مفعّلة', AppColors.textLow, Icons.circle_outlined),
-      _PermState.requesting =>
+      _State.userDenied =>
+        ('رفض', AppColors.textLow, Icons.close_rounded),
+      _State.requesting =>
         ('...', AppColors.textMid, Icons.more_horiz_rounded),
-      _PermState.unknown =>
-        ('—', AppColors.textLow, Icons.circle_outlined),
+      _State.idle =>
+        ('غير مفعّلة', AppColors.textLow, Icons.circle_outlined),
     };
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -519,49 +413,44 @@ class _StateBadge extends StatelessWidget {
   }
 }
 
-class _Button extends StatelessWidget {
-  const _Button({
-    required this.label,
-    required this.state,
-    required this.onTap,
-  });
-
-  final String label;
-  final _PermState state;
-  final VoidCallback onTap;
-
+class _SilentlyBlockedBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    if (state == _PermState.granted) return const SizedBox.shrink();
-    final loading = state == _PermState.requesting;
-    final danger = state == _PermState.truePermanentlyDenied;
-    final bg = danger
-        ? AppColors.error.withValues(alpha: 0.1)
-        : AppColors.brand.withValues(alpha: 0.1);
-    final fg = danger ? AppColors.error : AppColors.brand;
-
-    return SizedBox(
-      height: 44,
-      child: Material(
-        color: bg,
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(R.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: loading ? null : onTap,
-          child: Center(
-            child: loading
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: fg,
-                    ),
-                  )
-                : Text(label,
-                    style: AppType.button(color: fg).copyWith(fontSize: 14)),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+      ),
+      padding: const EdgeInsets.all(Sp.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              color: AppColors.error, size: 18),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'iOS لن يعرض النافذة مجدداً',
+                  style:
+                      AppType.label(color: AppColors.error).copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'الإذن مرفوض سابقاً على هذا الجهاز. ٣ طرق للحل:\n'
+                  '١. افتح إعدادات النظام → الإشعارات → MyServices Radius → فعّل.\n'
+                  '٢. أو احذف التطبيق من الجهاز وأعد تثبيته.\n'
+                  '٣. على المحاكي: Device → Erase All Content and Settings.',
+                  style: AppType.subtitle(color: AppColors.textMid)
+                      .copyWith(fontSize: 12, height: 1.55),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

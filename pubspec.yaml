@@ -26,8 +26,16 @@ dependencies:
   # HTTP
   dio: ^5.7.0
 
-  # OS permission requests (notifications etc)
+  # OS permission requests (notifications etc) — used as fallback when
+  # Firebase isn't configured. Firebase Messaging is the primary path.
   permission_handler: ^11.3.1
+
+  # Firebase — matches v1 exactly. The notification permission flow goes
+  # through firebase_messaging which uses the same iOS API as
+  # permission_handler under the hood but with proper UNUserNotificationCenter
+  # delegate registration via FlutterFire's iOS plugin.
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
 
   # Charts (sparkline on hero revenue card, etc.)
   fl_chart: ^0.70.2
