@@ -49,14 +49,24 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: IndexedStack(index: _tab, children: _tabs),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onFabTap,
-        backgroundColor: AppColors.brand,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        highlightElevation: 0,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, size: 28),
+      // Smaller, dropped-in FAB per user feedback round 6 — felt 'too big'
+      // and 'too high'. Use a 48×48 button pushed 14px deeper into the bar
+      // so it reads as integrated, not floating above.
+      floatingActionButton: Transform.translate(
+        offset: const Offset(0, 14),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: FloatingActionButton(
+            onPressed: _onFabTap,
+            backgroundColor: AppColors.brand,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            highlightElevation: 0,
+            shape: const CircleBorder(),
+            child: const Icon(Icons.add_rounded, size: 24),
+          ),
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
@@ -125,21 +135,42 @@ class _NavTab extends StatelessWidget {
             HapticFeedback.selectionClick();
             onTap();
           },
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
+            alignment: Alignment.topCenter,
             children: [
-              AnimatedScale(
-                duration: const Duration(milliseconds: 180),
+              // Brand-green top indicator on the active tab. A thin pill
+              // riding the top edge of the bar so it reads as 'this tab
+              // is selected' without coloring the whole cell.
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
-                scale: selected ? 1.1 : 1.0,
-                child: Icon(icon, color: color, size: 22),
+                width: selected ? 32 : 0,
+                height: 3,
+                decoration: const BoxDecoration(
+                  color: AppColors.brand,
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(2),
+                  ),
+                ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: AppType.muted(color: color).copyWith(fontSize: 10),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AnimatedScale(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    scale: selected ? 1.08 : 1.0,
+                    child: Icon(icon, color: color, size: 22),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    style:
+                        AppType.muted(color: color).copyWith(fontSize: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ],
           ),

@@ -122,12 +122,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: CustomScrollView(
           slivers: [
             // Pinned header — sticks to top while content scrolls.
+            // We pass topInset so the delegate can extend over the notch
+            // and pad its content below it (fixes the 'BOTTOM OVERFLOWED
+            // BY 20 PIXELS' yellow stripe from round 5).
             SliverPersistentHeader(
               pinned: true,
               delegate: _PinnedHeaderDelegate(
                 displayName: _displayName,
                 greeting: _greeting(),
                 whatsApp: waStatus,
+                topInset: MediaQuery.paddingOf(context).top,
               ),
             ),
             SliverPadding(
@@ -188,17 +192,28 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.displayName,
     required this.greeting,
     required this.whatsApp,
+    required this.topInset,
   });
 
   final String displayName;
   final String greeting;
   final WhatsAppStatus whatsApp;
 
-  @override
-  double get minExtent => 116;
+  /// Status-bar / notch padding. Added to the extent so the header
+  /// extends UNDER the notch (status bar text stays visible above)
+  /// and content lives below it with [topInset] of internal padding.
+  final double topInset;
+
+  // Content height (greeting + name + WA chip + padding) is ~108. Plus
+  // topInset (notch) gives the total visible extent. Same value for min
+  // and max so the header never collapses.
+  static const double _contentHeight = 108;
 
   @override
-  double get maxExtent => 116;
+  double get minExtent => _contentHeight + topInset;
+
+  @override
+  double get maxExtent => _contentHeight + topInset;
 
   @override
   Widget build(
@@ -206,57 +221,45 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    // Subtle hairline appears once anything scrolls behind the header.
-    final hasShadow = shrinkOffset > 1 || overlapsContent;
+    // No hairline divider — the line that appeared during scroll near
+    // the WA chip felt visually noisy. The header just sits on the bg
+    // color and lets the content scroll under it transparently.
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bg,
-        border: hasShadow
-            ? const Border(
-                bottom: BorderSide(color: AppColors.border),
-              )
-            : null,
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.sm),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(greeting,
-                        style:
-                            AppType.subtitle(color: AppColors.textMid)),
-                    const SizedBox(height: 2),
-                    Text(
-                      displayName.isEmpty ? 'مرحباً' : displayName,
-                      style: AppType.title(color: AppColors.textHi)
-                          .copyWith(fontSize: 20),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    _WAStatusChip(status: whatsApp),
-                  ],
+      color: AppColors.bg,
+      padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, Sp.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(greeting,
+                    style: AppType.subtitle(color: AppColors.textMid)),
+                const SizedBox(height: 2),
+                Text(
+                  displayName.isEmpty ? 'مرحباً' : displayName,
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 20),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              _IconChip(
-                icon: Icons.notifications_none_rounded,
-                badge: 3,
-                onTap: () {},
-              ),
-              const SizedBox(width: Sp.sm),
-              _IconChip(
-                icon: Icons.settings_outlined,
-                onTap: () {},
-              ),
-            ],
+                const SizedBox(height: 6),
+                _WAStatusChip(status: whatsApp),
+              ],
+            ),
           ),
-        ),
+          _IconChip(
+            icon: Icons.notifications_none_rounded,
+            badge: 3,
+            onTap: () {},
+          ),
+          const SizedBox(width: Sp.sm),
+          _IconChip(
+            icon: Icons.settings_outlined,
+            onTap: () {},
+          ),
+        ],
       ),
     );
   }
