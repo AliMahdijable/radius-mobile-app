@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'screens/login_screen.dart';
+import 'screens/splash_screen.dart';
 import 'theme/colors.dart';
 
 void main() {
@@ -54,7 +54,7 @@ class MyServicesApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         ),
       ),
-      home: const LoginScreen(),
+      home: const SplashScreen(),
     );
   }
 }

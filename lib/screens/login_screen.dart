@@ -32,6 +32,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passFocus = FocusNode();
   bool _obscure = true;
   bool _loading = false;
+  // Default ON — matches v1 behavior. Users who don't want auto-login
+  // on a shared device can untick before submitting.
+  bool _remember = true;
 
   @override
   void dispose() {
@@ -79,6 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
           adminId: adminId,
           adminUsername: adminUsername,
           displayName: displayName,
+          autoLogin: _remember,
         );
         if (!mounted) return;
         HapticFeedback.mediumImpact();
@@ -168,7 +172,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 passFocus: _passFocus,
                 obscure: _obscure,
                 loading: _loading,
+                remember: _remember,
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
+                onToggleRemember: () => setState(() => _remember = !_remember),
                 onLogin: _loading ? null : _onLogin,
               )
                   .animate()
@@ -265,7 +271,9 @@ class _FormCard extends StatelessWidget {
     required this.passFocus,
     required this.obscure,
     required this.loading,
+    required this.remember,
     required this.onToggleObscure,
+    required this.onToggleRemember,
     required this.onLogin,
   });
 
@@ -275,7 +283,9 @@ class _FormCard extends StatelessWidget {
   final FocusNode passFocus;
   final bool obscure;
   final bool loading;
+  final bool remember;
   final VoidCallback onToggleObscure;
+  final VoidCallback onToggleRemember;
   final VoidCallback? onLogin;
 
   @override
@@ -334,23 +344,31 @@ class _FormCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Sp.md),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: TextButton(
-              onPressed: () {},
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Sp.sm,
-                  vertical: Sp.xs,
+          // Row: "تذكرني" toggle on the visual right (RTL start) +
+          // "نسيت كلمة المرور؟" link on the visual left (RTL end).
+          Row(
+            children: [
+              _RememberToggle(
+                value: remember,
+                onChanged: onToggleRemember,
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () {},
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Sp.sm,
+                    vertical: Sp.xs,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                child: Text(
+                  'نسيت كلمة المرور؟',
+                  style: AppType.link(color: AppColors.brand),
+                ),
               ),
-              child: Text(
-                'نسيت كلمة المرور؟',
-                style: AppType.link(color: AppColors.brand),
-              ),
-            ),
+            ],
           ),
           const SizedBox(height: Sp.lg),
           _PrimaryButton(label: 'دخول', loading: loading, onTap: onLogin),
@@ -402,6 +420,57 @@ class _LabeledInput extends StatelessWidget {
         ),
         child,
       ],
+    );
+  }
+}
+
+class _RememberToggle extends StatelessWidget {
+  const _RememberToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(R.sm),
+      child: InkWell(
+        onTap: onChanged,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Sp.sm,
+            vertical: Sp.xs,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Custom check box — Material's Checkbox is too noisy here.
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: value ? AppColors.brand : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: value ? AppColors.brand : AppColors.borderStrong,
+                    width: 1.5,
+                  ),
+                ),
+                child: value
+                    ? const Icon(Icons.check_rounded,
+                        color: Colors.white, size: 14)
+                    : null,
+              ),
+              const SizedBox(width: Sp.sm),
+              Text('تذكرني',
+                  style: AppType.link(color: AppColors.textHi)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

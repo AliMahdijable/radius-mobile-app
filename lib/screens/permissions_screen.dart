@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -269,7 +270,11 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     return ok == true;
   }
 
-  void _continue() {
+  Future<void> _continue() async {
+    // Mark that we've shown perms once. Splash uses this to skip re-asking
+    // on auto-login next time the app launches.
+    await AuthStorage.markPermissionsShown();
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const HomePlaceholder()),
     );
