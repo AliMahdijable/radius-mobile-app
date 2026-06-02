@@ -208,10 +208,12 @@ class _Logo extends StatelessWidget {
           ],
         ),
         padding: const EdgeInsets.all(Sp.lg),
+        // Render the company logo as-is. Tinting it via colorBlendMode.srcIn
+        // collapses the internal negative-space (between geometric strokes)
+        // into a solid silhouette — incident 2026-06-02 produced a green
+        // square. Show the original mark instead.
         child: Image.asset(
           'assets/images/logo.png',
-          color: AppColors.brand,
-          colorBlendMode: BlendMode.srcIn,
           fit: BoxFit.contain,
         ),
       ),
