@@ -20,8 +20,11 @@ dependencies:
   # Biometric login
   local_auth: ^2.3.0
 
-  # Token storage (will be wired in later phase)
+  # Token storage
   flutter_secure_storage: ^9.2.4
+
+  # HTTP
+  dio: ^5.7.0
 
 dev_dependencies:
   flutter_test:

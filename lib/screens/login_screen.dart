@@ -3,13 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../api/auth_api.dart';
+import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
-/// Login — Soft Pastel + Premium aesthetic. Forest-green brand on cream.
-/// The company logo is tinted brand via colorBlendMode so it lives in
-/// the palette without needing a separate asset.
+/// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
+/// Persists token on success via AuthStorage. On failure shows a snackbar.
+///
+/// Layout note: previous version used ConstrainedBox + Spacer + animations,
+/// which tripped Flutter's semantics assertions during animation frames
+/// (`!semantics.parentDataDirty`). Replaced with a flat Column inside
+/// SingleChildScrollView — no Spacer, no min-height tricks.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -34,18 +40,66 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _showSnack(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: AppType.button(color: Colors.white)),
+        backgroundColor: error ? AppColors.error : AppColors.brand,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.md),
+        ),
+        margin: const EdgeInsets.all(Sp.lg),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _onLogin() async {
+    final user = _userCtrl.text.trim();
+    final pass = _passCtrl.text;
+    if (user.isEmpty || pass.isEmpty) {
+      _showSnack('فضلاً أدخل اسم المستخدم وكلمة المرور.', error: true);
+      return;
+    }
     HapticFeedback.lightImpact();
     setState(() => _loading = true);
-    // TODO[wire-auth]: hit /api/auth/login here. For now just simulate.
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final result = await AuthApi.login(username: user, password: pass);
     if (!mounted) return;
     setState(() => _loading = false);
-    // TODO[navigate-home]: navigate to /home once shell screen exists.
+
+    switch (result) {
+      case LoginSuccess(:final token, :final adminId, :final adminUsername, :final displayName, :final requires2fa):
+        await AuthStorage.saveSession(
+          token: token,
+          adminId: adminId,
+          adminUsername: adminUsername,
+          displayName: displayName,
+        );
+        if (!mounted) return;
+        HapticFeedback.mediumImpact();
+        _showSnack(
+          requires2fa
+              ? 'تم الدخول — يحتاج تحقق ثنائي'
+              : 'مرحباً $displayName 👋',
+        );
+        // TODO[home-screen]: navigate to home once it exists.
+      case LoginFailure(:final message):
+        HapticFeedback.heavyImpact();
+        _showSnack(message, error: true);
+    }
   }
 
   Future<void> _onBiometric() async {
     HapticFeedback.selectionClick();
+    final token = await AuthStorage.readToken();
+    if (token == null || token.isEmpty) {
+      _showSnack('سجّل الدخول مرة بكلمة المرور أولاً ليتفعّل الدخول السريع.',
+          error: true);
+      return;
+    }
     final auth = LocalAuthentication();
     try {
       final ok = await auth.authenticate(
@@ -57,10 +111,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (!mounted) return;
       if (ok) {
-        // TODO[biometric-login]: load saved token + nav to home.
+        final name = await AuthStorage.readDisplayName() ?? 'مستخدم';
+        _showSnack('مرحباً $name 👋');
+        // TODO[home-screen]: navigate to home once it exists.
       }
     } catch (_) {
-      // device may not support biometrics — silent fallback to password
+      if (!mounted) return;
+      _showSnack('الجهاز لا يدعم البصمة أو لم يتم تفعيلها.', error: true);
     }
   }
 
@@ -68,66 +125,62 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
+      // resizeToAvoidBottomInset lets the layout shift up when the keyboard
+      // appears — without ConstrainedBox/Spacer fighting the new constraints.
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(
             horizontal: Sp.xxl,
-            vertical: Sp.xl,
+            vertical: Sp.xxl,
           ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.sizeOf(context).height -
-                  MediaQuery.paddingOf(context).vertical -
-                  Sp.xl * 2,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: Sp.mega),
-                _Logo()
-                    .animate()
-                    .scale(
-                      begin: const Offset(0.6, 0.6),
-                      end: const Offset(1, 1),
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.easeOutBack,
-                    )
-                    .fadeIn(duration: const Duration(milliseconds: 400)),
-                const SizedBox(height: Sp.xl),
-                _BrandTitle()
-                    .animate()
-                    .fadeIn(
-                      delay: const Duration(milliseconds: 200),
-                      duration: const Duration(milliseconds: 400),
-                    )
-                    .slideY(begin: 0.1, end: 0),
-                const SizedBox(height: Sp.mega),
-                _FormCard(
-                  userCtrl: _userCtrl,
-                  passCtrl: _passCtrl,
-                  userFocus: _userFocus,
-                  passFocus: _passFocus,
-                  obscure: _obscure,
-                  loading: _loading,
-                  onToggleObscure: () => setState(() => _obscure = !_obscure),
-                  onLogin: _loading ? null : _onLogin,
-                )
-                    .animate()
-                    .fadeIn(
-                      delay: const Duration(milliseconds: 350),
-                      duration: const Duration(milliseconds: 400),
-                    )
-                    .slideY(begin: 0.08, end: 0),
-                const SizedBox(height: Sp.xl),
-                _BiometricButton(onTap: _onBiometric).animate().fadeIn(
-                      delay: const Duration(milliseconds: 500),
-                      duration: const Duration(milliseconds: 400),
-                    ),
-                const Spacer(),
-                const SizedBox(height: Sp.xl),
-                _Footer(),
-              ],
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: Sp.huge),
+              const _Logo()
+                  .animate()
+                  .scale(
+                    begin: const Offset(0.7, 0.7),
+                    end: const Offset(1, 1),
+                    duration: const Duration(milliseconds: 550),
+                    curve: Curves.easeOutBack,
+                  )
+                  .fadeIn(duration: const Duration(milliseconds: 350)),
+              const SizedBox(height: Sp.xl),
+              const _BrandTitle()
+                  .animate()
+                  .fadeIn(
+                    delay: const Duration(milliseconds: 200),
+                    duration: const Duration(milliseconds: 350),
+                  )
+                  .slideY(begin: 0.1, end: 0),
+              const SizedBox(height: Sp.huge),
+              _FormCard(
+                userCtrl: _userCtrl,
+                passCtrl: _passCtrl,
+                userFocus: _userFocus,
+                passFocus: _passFocus,
+                obscure: _obscure,
+                loading: _loading,
+                onToggleObscure: () => setState(() => _obscure = !_obscure),
+                onLogin: _loading ? null : _onLogin,
+              )
+                  .animate()
+                  .fadeIn(
+                    delay: const Duration(milliseconds: 320),
+                    duration: const Duration(milliseconds: 350),
+                  )
+                  .slideY(begin: 0.06, end: 0),
+              const SizedBox(height: Sp.lg),
+              _BiometricButton(onTap: _onBiometric).animate().fadeIn(
+                    delay: const Duration(milliseconds: 450),
+                    duration: const Duration(milliseconds: 350),
+                  ),
+              const SizedBox(height: Sp.huge),
+              const _Footer(),
+              const SizedBox(height: Sp.lg),
+            ],
           ),
         ),
       ),
@@ -136,6 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _Logo extends StatelessWidget {
+  const _Logo();
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -154,7 +208,6 @@ class _Logo extends StatelessWidget {
           ],
         ),
         padding: const EdgeInsets.all(Sp.lg),
-        // Logo tinted brand-green so it lives in the palette.
         child: Image.asset(
           'assets/images/logo.png',
           color: AppColors.brand,
@@ -167,6 +220,7 @@ class _Logo extends StatelessWidget {
 }
 
 class _BrandTitle extends StatelessWidget {
+  const _BrandTitle();
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -234,7 +288,7 @@ class _FormCard extends StatelessWidget {
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => passFocus.requestFocus(),
               style: AppType.input(color: AppColors.textHi),
-              decoration: _inputDecoration(hint: 'مثلاً ali300'),
+              decoration: _decoration(hint: 'مثلاً admin@ali300'),
             ),
           ),
           const SizedBox(height: Sp.lg),
@@ -247,7 +301,7 @@ class _FormCard extends StatelessWidget {
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => onLogin?.call(),
               style: AppType.input(color: AppColors.textHi),
-              decoration: _inputDecoration(
+              decoration: _decoration(
                 hint: '••••••',
                 suffix: IconButton(
                   splashRadius: 18,
@@ -289,7 +343,7 @@ class _FormCard extends StatelessWidget {
     );
   }
 
-  InputDecoration _inputDecoration({required String hint, Widget? suffix}) {
+  InputDecoration _decoration({required String hint, Widget? suffix}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: AppType.input(color: AppColors.textLow),
@@ -406,6 +460,7 @@ class _BiometricButton extends StatelessWidget {
 }
 
 class _Footer extends StatelessWidget {
+  const _Footer();
   @override
   Widget build(BuildContext context) {
     return Center(
