@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
 import 'theme/colors.dart';
@@ -19,16 +20,19 @@ void main() async {
     ),
   );
 
-  // Try to bring up Firebase. Wrapped because GoogleService-Info.plist /
-  // google-services.json may not be present on a fresh clone yet. If
-  // it fails the app still launches — NotificationService falls back to
-  // permission_handler for the OS prompt.
+  // Bring up Firebase with options baked into firebase_options.dart —
+  // same approach as v1. This bypasses the GoogleService-Info.plist /
+  // google-services.json wiring entirely, so the build doesn't depend
+  // on the plist being registered in the Xcode project (most common
+  // cause of TestFlight white-screen). Still wrapped just in case.
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     NotificationService.markFirebaseReady(true);
   } catch (e) {
     if (kDebugMode) {
-      debugPrint('Firebase init skipped: $e');
+      debugPrint('Firebase init failed: $e');
     }
     NotificationService.markFirebaseReady(false);
   }
