@@ -113,34 +113,34 @@ class _StatCell extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(Sp.md),
+      padding: const EdgeInsets.all(Sp.sm + 4), // 12px — slightly tighter
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(icon, color: accent, size: 18),
+                child: Icon(icon, color: accent, size: 16),
               ),
               const SizedBox(width: Sp.sm),
               Expanded(
                 child: Text(
                   label,
                   style: AppType.label(color: AppColors.textMid)
-                      .copyWith(fontSize: 12),
+                      .copyWith(fontSize: 11),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: Sp.md),
+          const SizedBox(height: Sp.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -149,7 +149,7 @@ class _StatCell extends StatelessWidget {
                 child: Text(
                   value,
                   style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 24,
+                    fontSize: 20, // was 24
                     fontWeight: FontWeight.w700,
                     height: 1.1,
                   ),
@@ -162,15 +162,15 @@ class _StatCell extends StatelessWidget {
                 Text(
                   unit!,
                   style: AppType.subtitle(color: AppColors.textLow)
-                      .copyWith(fontSize: 11),
+                      .copyWith(fontSize: 10),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             delta,
-            style: AppType.muted(color: deltaColor).copyWith(fontSize: 11),
+            style: AppType.muted(color: deltaColor).copyWith(fontSize: 10),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

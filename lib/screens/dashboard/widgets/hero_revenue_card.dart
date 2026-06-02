@@ -23,8 +23,7 @@ class HeroRevenueCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      // Compact: padding lg (16) instead of xl (20).
-      padding: const EdgeInsets.all(Sp.lg),
+      padding: const EdgeInsets.all(Sp.md), // tighter than lg per round-6
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -67,9 +66,9 @@ class HeroRevenueCard extends StatelessWidget {
               Text(
                 formatIQD(stats.netToday),
                 style: AppType.title(color: AppColors.textHi).copyWith(
-                  fontSize: 30,
+                  fontSize: 26, // was 30
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.7,
+                  letterSpacing: -0.5,
                   height: 1.05,
                 ),
               ),
@@ -86,7 +85,7 @@ class HeroRevenueCard extends StatelessWidget {
           ),
           const SizedBox(height: Sp.sm),
           SizedBox(
-            height: 36,
+            height: 32, // was 36
             child: LineChart(
               LineChartData(
                 lineBarsData: [

@@ -28,27 +28,27 @@ class SubscribersCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(Sp.lg),
+      padding: const EdgeInsets.all(Sp.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               const Icon(Icons.people_alt_rounded,
-                  color: AppColors.brand, size: 18),
+                  color: AppColors.brand, size: 20),
               const SizedBox(width: Sp.sm),
               Text('المشتركون',
                   style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 14)),
+                      .copyWith(fontSize: 16)),
               const Spacer(),
               Text(
                 '${(activeRatio * 100).round()}% نشط',
                 style: AppType.muted(color: AppColors.brand)
-                    .copyWith(fontSize: 11),
+                    .copyWith(fontSize: 12),
               ),
             ],
           ),
-          const SizedBox(height: Sp.lg),
+          const SizedBox(height: Sp.xl),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -115,31 +115,31 @@ class _TotalWithRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const size = 120.0; // up from 96 — gives the total number more room
     return SizedBox(
-      width: 96,
-      height: 96,
+      width: size,
+      height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
           // Background ring (light gray)
-          SizedBox(
-            width: 96,
-            height: 96,
+          const SizedBox(
+            width: size,
+            height: size,
             child: CircularProgressIndicator(
               value: 1,
-              strokeWidth: 6,
+              strokeWidth: 7,
               backgroundColor: Colors.transparent,
-              valueColor:
-                  AlwaysStoppedAnimation(AppColors.border),
+              valueColor: AlwaysStoppedAnimation(AppColors.border),
             ),
           ),
           // Brand ring — active percentage
           SizedBox(
-            width: 96,
-            height: 96,
+            width: size,
+            height: size,
             child: CircularProgressIndicator(
               value: ratio.clamp(0, 1),
-              strokeWidth: 6,
+              strokeWidth: 7,
               backgroundColor: Colors.transparent,
               valueColor:
                   const AlwaysStoppedAnimation(AppColors.brand),
@@ -152,7 +152,7 @@ class _TotalWithRing extends StatelessWidget {
               Text(
                 formatIQD(total),
                 style: AppType.title(color: AppColors.textHi).copyWith(
-                  fontSize: 22,
+                  fontSize: 26,
                   fontWeight: FontWeight.w800,
                   height: 1.05,
                 ),
@@ -161,7 +161,7 @@ class _TotalWithRing extends StatelessWidget {
               Text(
                 'إجمالي',
                 style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 10),
+                    .copyWith(fontSize: 11),
               ),
             ],
           ),
@@ -186,8 +186,8 @@ class _Mini extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: Sp.sm,
-        vertical: Sp.sm,
+        horizontal: Sp.md,
+        vertical: Sp.md,
       ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.07),
@@ -196,11 +196,11 @@ class _Mini extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 6,
-            height: 6,
+            width: 7,
+            height: 7,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 7),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +209,7 @@ class _Mini extends StatelessWidget {
                 Text(
                   '$value',
                   style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 15,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                     height: 1.1,
                   ),
@@ -217,7 +217,7 @@ class _Mini extends StatelessWidget {
                 Text(
                   label,
                   style: AppType.muted(color: AppColors.textMid)
-                      .copyWith(fontSize: 10),
+                      .copyWith(fontSize: 11),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
