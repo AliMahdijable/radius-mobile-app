@@ -8,7 +8,7 @@ import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
-import 'home_placeholder.dart';
+import 'main_shell.dart';
 
 /// Shown after the first successful login. Two OS permissions:
 ///   1. Notifications (push)
@@ -276,7 +276,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     await AuthStorage.markPermissionsShown();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomePlaceholder()),
+      MaterialPageRoute(builder: (_) => const MainShell()),
     );
   }
 

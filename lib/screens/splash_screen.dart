@@ -5,7 +5,7 @@ import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
-import 'home_placeholder.dart';
+import 'main_shell.dart';
 import 'login_screen.dart';
 import 'permissions_screen.dart';
 
@@ -50,7 +50,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (token != null && token.isNotEmpty && autoLogin) {
       // Trusted session: skip everything to home. The token will be
       // refreshed/validated in the background by API calls when needed.
-      next = const HomePlaceholder();
+      next = const MainShell();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered. Send
       // them back to the login form (token will be overwritten on success).

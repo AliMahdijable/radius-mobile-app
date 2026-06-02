@@ -8,7 +8,7 @@ import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
-import 'home_placeholder.dart';
+import 'main_shell.dart';
 import 'permissions_screen.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
@@ -121,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (ok) {
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePlaceholder()),
+          MaterialPageRoute(builder: (_) => const MainShell()),
         );
       }
     } catch (_) {

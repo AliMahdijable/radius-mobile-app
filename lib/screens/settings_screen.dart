@@ -1,0 +1,210 @@
+import 'package:flutter/material.dart';
+
+import '../services/auth_storage.dart';
+import '../theme/colors.dart';
+import '../theme/spacing.dart';
+import '../theme/typography.dart';
+import 'login_screen.dart';
+
+/// Basic settings — version, identity, logout. Will grow next iteration.
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  String _name = '';
+  String _id = '';
+
+  @override
+  void initState() {
+    super.initState();
+    AuthStorage.readDisplayName().then((n) {
+      if (mounted) setState(() => _name = n ?? '');
+    });
+    AuthStorage.readAdminId().then((i) {
+      if (mounted) setState(() => _id = i ?? '');
+    });
+  }
+
+  Future<void> _logout() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.lg),
+        ),
+        title: Text('تأكيد تسجيل الخروج',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 18)),
+        content: Text(
+          'سيتم مسح الجلسة المحفوظة وستحتاج لتسجيل الدخول من جديد.',
+          style: AppType.subtitle(color: AppColors.textMid)
+              .copyWith(height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('إلغاء', style: AppType.button(color: AppColors.textMid)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('خروج', style: AppType.button(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await AuthStorage.clear();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            Sp.lg,
+            Sp.lg,
+            Sp.lg,
+            Sp.huge * 2,
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: Sp.lg),
+              child: Text('الإعدادات',
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 22)),
+            ),
+            _IdentityCard(name: _name, id: _id),
+            const SizedBox(height: Sp.lg),
+            _Row(
+              icon: Icons.info_outline_rounded,
+              label: 'الإصدار',
+              trailing: 'v2.0.0 (87)',
+            ),
+            const SizedBox(height: Sp.huge),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: Material(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(R.md),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: _logout,
+                  child: Center(
+                    child: Text(
+                      'تسجيل الخروج',
+                      style: AppType.button(color: AppColors.error),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IdentityCard extends StatelessWidget {
+  const _IdentityCard({required this.name, required this.id});
+  final String name;
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(Sp.lg),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.brand.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(R.md),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              name.isEmpty ? '?' : name.characters.first,
+              style: AppType.title(color: AppColors.brand)
+                  .copyWith(fontSize: 22),
+            ),
+          ),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? 'مستخدم' : name,
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 16),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  id.isEmpty ? '—' : 'ID: $id',
+                  style: AppType.subtitle(color: AppColors.textMid)
+                      .copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  const _Row({required this.icon, required this.label, this.trailing});
+  final IconData icon;
+  final String label;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Sp.lg,
+        vertical: Sp.md,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.textMid, size: 20),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Text(label,
+                style: AppType.label(color: AppColors.textHi)),
+          ),
+          if (trailing != null)
+            Text(trailing!,
+                style:
+                    AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}

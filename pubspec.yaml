@@ -29,6 +29,9 @@ dependencies:
   # OS permission requests (notifications etc)
   permission_handler: ^11.3.1
 
+  # Charts (sparkline on hero revenue card, etc.)
+  fl_chart: ^0.70.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
