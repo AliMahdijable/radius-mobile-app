@@ -69,6 +69,10 @@ class _MainShellState extends State<MainShell> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      // BottomAppBar with a continuous brand-green hairline along its top
+      // edge. The active tab paints a white strip at the same position
+      // so the green line visually 'breaks' at the active tab — that's
+      // the indicator (per user feedback round 6 follow-up).
       bottomNavigationBar: BottomAppBar(
         color: AppColors.surface,
         elevation: 0,
@@ -76,35 +80,42 @@ class _MainShellState extends State<MainShell> {
         notchMargin: 6,
         padding: EdgeInsets.zero,
         height: 64,
-        child: Row(
-          children: [
-            _NavTab(
-              icon: Icons.home_rounded,
-              label: 'الرئيسية',
-              selected: _tab == 0,
-              onTap: () => setState(() => _tab = 0),
+        child: Container(
+          decoration: const BoxDecoration(
+            border: Border(
+              top: BorderSide(color: AppColors.brand, width: 2),
             ),
-            _NavTab(
-              icon: Icons.people_alt_rounded,
-              label: 'المشتركون',
-              selected: _tab == 1,
-              onTap: () => setState(() => _tab = 1),
-            ),
-            // Notch space for the FAB
-            const SizedBox(width: 56),
-            _NavTab(
-              icon: Icons.insert_chart_rounded,
-              label: 'التقارير',
-              selected: _tab == 2,
-              onTap: () => setState(() => _tab = 2),
-            ),
-            _NavTab(
-              icon: Icons.settings_outlined,
-              label: 'الضبط',
-              selected: _tab == 3,
-              onTap: () => setState(() => _tab = 3),
-            ),
-          ],
+          ),
+          child: Row(
+            children: [
+              _NavTab(
+                icon: Icons.home_rounded,
+                label: 'الرئيسية',
+                selected: _tab == 0,
+                onTap: () => setState(() => _tab = 0),
+              ),
+              _NavTab(
+                icon: Icons.people_alt_rounded,
+                label: 'المشتركون',
+                selected: _tab == 1,
+                onTap: () => setState(() => _tab = 1),
+              ),
+              // Notch space for the FAB
+              const SizedBox(width: 56),
+              _NavTab(
+                icon: Icons.insert_chart_rounded,
+                label: 'التقارير',
+                selected: _tab == 2,
+                onTap: () => setState(() => _tab = 2),
+              ),
+              _NavTab(
+                icon: Icons.settings_outlined,
+                label: 'الضبط',
+                selected: _tab == 3,
+                onTap: () => setState(() => _tab = 3),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -136,41 +147,44 @@ class _NavTab extends StatelessWidget {
             onTap();
           },
           child: Stack(
-            alignment: Alignment.topCenter,
             children: [
-              // Brand-green top indicator on the active tab. A thin pill
-              // riding the top edge of the bar so it reads as 'this tab
-              // is selected' without coloring the whole cell.
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                width: selected ? 32 : 0,
-                height: 3,
-                decoration: const BoxDecoration(
-                  color: AppColors.brand,
-                  borderRadius: BorderRadius.vertical(
-                    bottom: Radius.circular(2),
+              // White overlay strip on TOP of the active tab — sits on
+              // top of the bar's brand-green border, visually 'cutting'
+              // the line at the selected position. AnimatedOpacity so
+              // the effect cross-fades when switching tabs.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: selected ? 1 : 0,
+                  child: Container(
+                    height: 2,
+                    color: AppColors.surface,
                   ),
                 ),
               ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedScale(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    scale: selected ? 1.08 : 1.0,
-                    child: Icon(icon, color: color, size: 22),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    style:
-                        AppType.muted(color: color).copyWith(fontSize: 10),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedScale(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      scale: selected ? 1.08 : 1.0,
+                      child: Icon(icon, color: color, size: 22),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      style: AppType.muted(color: color)
+                          .copyWith(fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
