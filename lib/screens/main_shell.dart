@@ -143,6 +143,12 @@ class _PillBar extends StatelessWidget {
               ),
             ],
           ),
+          // clipBehavior is the fix for round-10 followup — the brand
+          // green indicator at the edge slot was sticking out past the
+          // bar's rounded corner. Clipping the Stack to the same shape
+          // confines it. The FAB no longer lifts above (it now sits
+          // fully inside the pill), so clipping doesn't chop it.
+          clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
               // Sliding brand-green pill that marks the active tab.
@@ -296,41 +302,33 @@ class _FabSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FAB lifted slightly above the pill so it reads as a 'primary'
-    // action without falling out of the bar visually.
+    // FAB sits fully inside the bar now (no negative translate). The
+    // bar's Clip.antiAlias would have chopped its top otherwise.
+    // The white ring + brand-tinted shadow still give it presence
+    // without floating outside the pill.
     return SizedBox(
       width: slotWidth,
       child: Center(
-        child: Transform.translate(
-          offset: const Offset(0, -10),
-          child: Material(
-            color: AppColors.brand,
-            shape: const CircleBorder(),
-            elevation: 0,
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onTap();
-              },
-              customBorder: const CircleBorder(),
-              child: Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.surface, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.brand.withValues(alpha: 0.36),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 26),
+        child: Material(
+          color: AppColors.brand,
+          shape: const CircleBorder(),
+          elevation: 0,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            customBorder: const CircleBorder(),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.surface, width: 2),
               ),
+              child: const Icon(Icons.add_rounded,
+                  color: Colors.white, size: 24),
             ),
           ),
         ),
