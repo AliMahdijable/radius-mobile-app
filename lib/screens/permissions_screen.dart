@@ -25,7 +25,13 @@ class PermissionsScreen extends StatefulWidget {
   State<PermissionsScreen> createState() => _PermissionsScreenState();
 }
 
-enum _PermState { unknown, granted, deniedOnce, permanentlyDenied, requesting }
+enum _PermState {
+  unknown,
+  granted,
+  notYetRequested, // never been asked → button shows "تفعيل"
+  truePermanentlyDenied, // .request() actually returned denied → settings
+  requesting,
+}
 
 class _PermissionsScreenState extends State<PermissionsScreen>
     with WidgetsBindingObserver {
@@ -70,7 +76,6 @@ class _PermissionsScreenState extends State<PermissionsScreen>
             available.contains(BiometricType.weak)) {
           kind = 'البصمة';
         } else {
-          // Device supports it but nothing enrolled yet.
           kind = null;
           canBio = false;
         }
@@ -79,34 +84,37 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 
     if (!mounted) return;
     setState(() {
-      _notif = _mapNotif(notif);
+      // INTENTIONAL: we only flip to `granted` when iOS confirms it.
+      // Everything else (denied, permanentlyDenied, restricted) collapses
+      // to `notYetRequested` so the user sees a "تفعيل" button and we
+      // attempt .request() — which is the ONLY way to know iOS's real
+      // answer. permission_handler on iOS reports `permanentlyDenied` on
+      // a fresh install (no choice ever made), so trusting the cached
+      // status meant we'd show "افتح الإعدادات" forever, even after a
+      // full reinstall — incident 2026-06-02.
+      _notif = notif.isGranted ? _PermState.granted : _PermState.notYetRequested;
       _bioAvailable = canBio;
       _bioKind = kind;
-      // Biometric has no permission concept — "granted" only after the
-      // user successfully proves they can authenticate at least once.
-      // Until then, leave it unknown.
-      if (!canBio) _bio = _PermState.deniedOnce;
+      if (!canBio) _bio = _PermState.notYetRequested;
     });
-  }
-
-  _PermState _mapNotif(PermissionStatus s) {
-    if (s.isGranted || s.isLimited || s.isProvisional) return _PermState.granted;
-    if (s.isPermanentlyDenied) return _PermState.permanentlyDenied;
-    if (s.isDenied || s.isRestricted) return _PermState.deniedOnce;
-    return _PermState.unknown;
   }
 
   // ── Notification ───────────────────────────────────────────────────
   Future<void> _onNotifTap() async {
     HapticFeedback.selectionClick();
     if (_notif == _PermState.granted) return;
-    if (_notif == _PermState.permanentlyDenied) {
+
+    // truePermanentlyDenied is reached ONLY after .request() actually
+    // returned denied (meaning iOS confirmed the user previously refused).
+    // Tap → open settings; the lifecycle observer re-reads on resume.
+    if (_notif == _PermState.truePermanentlyDenied) {
       await openAppSettings();
       return;
     }
-    // Soft ask first — explain WHY before consuming the one-shot iOS prompt.
-    // If the user says "ليس الآن" we never call .request(), keeping that
-    // single iOS opportunity available for a future, better-timed ask.
+
+    // Otherwise (notYetRequested / unknown): always attempt the request.
+    // Don't trust the cached status — permission_handler on iOS lies and
+    // reports denied even on a fresh install.
     final agreed = await _showSoftAskDialog(
       icon: Icons.notifications_active_rounded,
       title: 'تفعيل الإشعارات',
@@ -119,10 +127,20 @@ class _PermissionsScreenState extends State<PermissionsScreen>
       confirmLabel: 'تفعيل الإشعارات',
     );
     if (!agreed || !mounted) return;
+
     setState(() => _notif = _PermState.requesting);
     final res = await Permission.notification.request();
     if (!mounted) return;
-    setState(() => _notif = _mapNotif(res));
+
+    if (res.isGranted) {
+      setState(() => _notif = _PermState.granted);
+    } else {
+      // .request() returned denied — NOW we can trust that iOS truly
+      // blocks us (either user just denied in the popup, or iOS already
+      // had a stored decision). Flip to truePermanentlyDenied so the
+      // next tap routes to system settings.
+      setState(() => _notif = _PermState.truePermanentlyDenied);
+    }
   }
 
   // ── Biometric ──────────────────────────────────────────────────────
@@ -156,10 +174,11 @@ class _PermissionsScreenState extends State<PermissionsScreen>
         ),
       );
       if (!mounted) return;
-      setState(() => _bio = ok ? _PermState.granted : _PermState.deniedOnce);
+      setState(() =>
+          _bio = ok ? _PermState.granted : _PermState.notYetRequested);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _bio = _PermState.deniedOnce);
+      setState(() => _bio = _PermState.notYetRequested);
     }
   }
 
@@ -349,32 +368,20 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     );
   }
 
-  String _notifButtonLabel() {
-    switch (_notif) {
-      case _PermState.granted:
-        return 'مفعّلة';
-      case _PermState.permanentlyDenied:
-        return 'افتح إعدادات النظام';
-      case _PermState.requesting:
-        return 'جاري الطلب...';
-      case _PermState.deniedOnce:
-      case _PermState.unknown:
-        return 'تفعيل';
-    }
-  }
+  String _notifButtonLabel() => switch (_notif) {
+        _PermState.granted => 'مفعّلة',
+        _PermState.truePermanentlyDenied => 'افتح إعدادات النظام',
+        _PermState.requesting => 'جاري الطلب...',
+        _PermState.notYetRequested || _PermState.unknown => 'تفعيل',
+      };
 
   String _bioButtonLabel() {
     if (!_bioAvailable) return 'افتح إعدادات النظام';
-    switch (_bio) {
-      case _PermState.granted:
-        return 'مفعّلة';
-      case _PermState.requesting:
-        return 'جاري المصادقة...';
-      case _PermState.deniedOnce:
-      case _PermState.permanentlyDenied:
-      case _PermState.unknown:
-        return 'تفعيل';
-    }
+    return switch (_bio) {
+      _PermState.granted => 'مفعّلة',
+      _PermState.requesting => 'جاري المصادقة...',
+      _ => 'تفعيل',
+    };
   }
 }
 
@@ -481,9 +488,9 @@ class _StateBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (state) {
       _PermState.granted => ('مفعّلة', AppColors.brand, Icons.check_rounded),
-      _PermState.permanentlyDenied =>
+      _PermState.truePermanentlyDenied =>
         ('بحاجة إعدادات', AppColors.error, Icons.settings_rounded),
-      _PermState.deniedOnce =>
+      _PermState.notYetRequested =>
         ('غير مفعّلة', AppColors.textLow, Icons.circle_outlined),
       _PermState.requesting =>
         ('...', AppColors.textMid, Icons.more_horiz_rounded),
@@ -527,7 +534,7 @@ class _Button extends StatelessWidget {
   Widget build(BuildContext context) {
     if (state == _PermState.granted) return const SizedBox.shrink();
     final loading = state == _PermState.requesting;
-    final danger = state == _PermState.permanentlyDenied;
+    final danger = state == _PermState.truePermanentlyDenied;
     final bg = danger
         ? AppColors.error.withValues(alpha: 0.1)
         : AppColors.brand.withValues(alpha: 0.1);
