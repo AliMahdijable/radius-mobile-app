@@ -43,6 +43,11 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  void _onSearchTap() {
+    HapticFeedback.selectionClick();
+    // TODO[quick-search]: open a spotlight-style sheet for cross-app search.
+  }
+
   @override
   Widget build(BuildContext context) {
     // extendBody:false (default) so the tab content stops at the bar edge.
@@ -50,11 +55,59 @@ class _MainShellState extends State<MainShell> {
     // transparent bar — content visibly bled through the bottom gap.
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(index: _tab, children: _tabs),
+      body: Stack(
+        children: [
+          IndexedStack(index: _tab, children: _tabs),
+          // Floating quick-search pill — bottom right, above the tab bar.
+          // Per user request: a quiet shortcut for opening a global search
+          // without burning the center FAB on something less frequent.
+          Positioned(
+            right: Sp.lg,
+            bottom: Sp.lg,
+            child: _QuickSearchButton(onTap: _onSearchTap),
+          ),
+        ],
+      ),
       bottomNavigationBar: _BottomBar(
         current: _tab,
         onChanged: (i) => setState(() => _tab = i),
         onFabTap: _onFabTap,
+      ),
+    );
+  }
+}
+
+class _QuickSearchButton extends StatelessWidget {
+  const _QuickSearchButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      shape: const CircleBorder(),
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.search_rounded,
+              color: AppColors.brand, size: 22),
+        ),
       ),
     );
   }

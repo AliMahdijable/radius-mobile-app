@@ -7,7 +7,6 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/hero_revenue_card.dart';
-import 'widgets/quick_actions_row.dart';
 import 'widgets/recent_activities.dart';
 import 'widgets/section_header.dart';
 import 'widgets/stats_grid.dart';
@@ -83,7 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   .fadeIn(duration: const Duration(milliseconds: 300))
                   .slideY(begin: 0.03, end: 0),
               const SizedBox(height: Sp.md),
-              const QuickActionsRow()
+              StatsGrid(stats: mockDailyStats)
                   .animate()
                   .fadeIn(
                     delay: const Duration(milliseconds: 80),
@@ -91,18 +90,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   )
                   .slideY(begin: 0.03, end: 0),
               const SizedBox(height: Sp.md),
-              StatsGrid(stats: mockDailyStats)
-                  .animate()
-                  .fadeIn(
-                    delay: const Duration(milliseconds: 160),
-                    duration: const Duration(milliseconds: 300),
-                  )
-                  .slideY(begin: 0.03, end: 0),
-              const SizedBox(height: Sp.md),
               HeroRevenueCard(stats: mockDailyStats)
                   .animate()
                   .fadeIn(
-                    delay: const Duration(milliseconds: 240),
+                    delay: const Duration(milliseconds: 160),
                     duration: const Duration(milliseconds: 300),
                   )
                   .slideY(begin: 0.03, end: 0),

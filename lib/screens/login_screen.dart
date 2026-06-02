@@ -341,31 +341,15 @@ class _FormCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Sp.md),
-          // Row: "تذكرني" toggle on the visual right (RTL start) +
-          // "نسيت كلمة المرور؟" link on the visual left (RTL end).
-          Row(
-            children: [
-              _RememberToggle(
-                value: remember,
-                onChanged: onToggleRemember,
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: () {},
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Sp.sm,
-                    vertical: Sp.xs,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'نسيت كلمة المرور؟',
-                  style: AppType.link(color: AppColors.brand),
-                ),
-              ),
-            ],
+          // Forgot-password link removed per user request — admins
+          // who lose their password are reset by their parent admin, no
+          // public reset flow exists. Toggle stays aligned to RTL start.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: _RememberToggle(
+              value: remember,
+              onChanged: onToggleRemember,
+            ),
           ),
           const SizedBox(height: Sp.lg),
           _PrimaryButton(label: 'دخول', loading: loading, onTap: onLogin),
