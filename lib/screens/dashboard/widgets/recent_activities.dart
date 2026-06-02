@@ -99,6 +99,7 @@ class _Row extends StatelessWidget {
             vertical: Sp.md,
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 34,
@@ -111,30 +112,53 @@ class _Row extends StatelessWidget {
               ),
               const SizedBox(width: Sp.md),
               Expanded(
-                child: Text(
-                  n.title,
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title can wrap to two lines — the v1 activity rows
+                    // include the full action description (e.g.
+                    // 'تفعيل المشترك ahmed@x | الباقة: B-Economy | السعر:
+                    // 35,000 IQD | نقدي') which would clip to '...' on
+                    // a single line.
+                    Text(
+                      n.title,
+                      style: AppType.label(color: AppColors.textHi)
+                          .copyWith(fontSize: 13, height: 1.35),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          n.timeLabel,
+                          style: AppType.muted(color: AppColors.textLow)
+                              .copyWith(fontSize: 11),
+                        ),
+                        if (n.amount != 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 3,
+                            height: 3,
+                            decoration: const BoxDecoration(
+                              color: AppColors.textLow,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${n.amount < 0 ? '-' : '+'}${formatIQD(n.amount)} د.ع',
+                            style: AppType.label(
+                              color: n.amount < 0
+                                  ? AppColors.error
+                                  : AppColors.brand,
+                            ).copyWith(fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: Sp.sm),
-              if (n.amount != 0) ...[
-                Text(
-                  '${n.amount < 0 ? '-' : '+'}${formatIQD(n.amount)}',
-                  style: AppType.label(
-                    color: n.amount < 0
-                        ? AppColors.error
-                        : AppColors.brand,
-                  ).copyWith(fontSize: 12),
-                ),
-                const SizedBox(width: Sp.sm),
-              ],
-              Text(
-                n.timeLabel,
-                style:
-                    AppType.muted(color: AppColors.textLow).copyWith(fontSize: 11),
               ),
             ],
           ),

@@ -107,13 +107,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       last7Days: mockDailyStats.last7Days,
     );
 
-    // SubscribersStats from SAS4 when available.
+    // SubscribersStats — SAS4 for the totals, /api/subscribers/with-phones
+    // single pass for the near-expiry count (subs with 0-3 days left).
     final subs = SubscribersStats(
       total: _sas4Live?.total ?? mockSubscribers.total,
       active: _sas4Live?.active ?? mockSubscribers.active,
       online: _sas4Live?.online ?? mockSubscribers.online,
       expired: _sas4Live?.expired ?? mockSubscribers.expired,
-      nearExpiry: mockSubscribers.nearExpiry,
+      nearExpiry: _debtorsLive?.nearExpiry ?? mockSubscribers.nearExpiry,
     );
 
     return Scaffold(

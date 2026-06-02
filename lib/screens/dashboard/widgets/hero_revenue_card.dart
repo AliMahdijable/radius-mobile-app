@@ -2,54 +2,87 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../api/dashboard_api.dart';
 import '../../../core/mock/dashboard_data.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-enum _Period { day, week, month }
-
-/// Net-revenue hero with a day / week / month switcher (matches the v1
-/// web version per user request round 8). Each period swaps in its own
-/// total, delta vs previous period, and sparkline points.
+/// Revenue hero — labelled "الإيرادات" (was "صافي اليوم"). Pulls live
+/// totals from /api/reports/finance for whichever period the user picks
+/// (day / week / month). The number on display is `data.totals.total_payments`,
+/// exactly what the v1 web Financial Reports page shows as "الإيرادات".
 class HeroRevenueCard extends StatefulWidget {
   const HeroRevenueCard({super.key, required this.stats});
-
-  /// Kept on the API for backwards compat — the daily fallback comes
-  /// from this object when the mock day-only data isn't useful (e.g.,
-  /// once we wire a real per-period endpoint later).
-  final DailyStats stats;
+  final DailyStats stats; // kept for the sparkline placeholder
 
   @override
   State<HeroRevenueCard> createState() => _HeroRevenueCardState();
 }
 
 class _HeroRevenueCardState extends State<HeroRevenueCard> {
-  _Period _period = _Period.day;
+  RevenuePeriod _period = RevenuePeriod.day;
 
-  NetRevenuePeriod get _data => switch (_period) {
-        _Period.day => mockRevenueDaily,
-        _Period.week => mockRevenueWeekly,
-        _Period.month => mockRevenueMonthly,
+  // Cache live results per period so flipping back to a previously-loaded
+  // tab is instant. Each entry: null = not loaded yet, value = live result.
+  final Map<RevenuePeriod, int?> _liveAmounts = {
+    RevenuePeriod.day: null,
+    RevenuePeriod.week: null,
+    RevenuePeriod.month: null,
+  };
+  RevenuePeriod? _loading;
+
+  @override
+  void initState() {
+    super.initState();
+    // Warm the current tab on first build.
+    _refresh(_period);
+  }
+
+  Future<void> _refresh(RevenuePeriod p) async {
+    setState(() => _loading = p);
+    final r = await DashboardApi.fetchRevenue(p);
+    if (!mounted) return;
+    setState(() {
+      if (r != null) _liveAmounts[p] = r.amount;
+      _loading = null;
+    });
+  }
+
+  int get _displayAmount {
+    final live = _liveAmounts[_period];
+    if (live != null) return live;
+    // Fallback: while loading or on failure, show the mock for the
+    // matching period so the card isn't blank.
+    return switch (_period) {
+      RevenuePeriod.day => mockRevenueDaily.amount,
+      RevenuePeriod.week => mockRevenueWeekly.amount,
+      RevenuePeriod.month => mockRevenueMonthly.amount,
+    };
+  }
+
+  String get _periodLabel => switch (_period) {
+        RevenuePeriod.day => 'اليوم',
+        RevenuePeriod.week => 'هذا الأسبوع',
+        RevenuePeriod.month => 'هذا الشهر',
       };
 
-  String get _deltaLabel => switch (_period) {
-        _Period.day => 'مقارنة بأمس',
-        _Period.week => 'مقارنة بالأسبوع السابق',
-        _Period.month => 'مقارنة بالشهر السابق',
+  List<int> get _sparkline => switch (_period) {
+        RevenuePeriod.day => mockRevenueDaily.points,
+        RevenuePeriod.week => mockRevenueWeekly.points,
+        RevenuePeriod.month => mockRevenueMonthly.points,
       };
 
-  void _select(_Period p) {
+  void _select(RevenuePeriod p) {
     if (p == _period) return;
     HapticFeedback.selectionClick();
     setState(() => _period = p);
+    if (_liveAmounts[p] == null) _refresh(p);
   }
 
   @override
   Widget build(BuildContext context) {
-    final d = _data;
-    final isUp = d.deltaPct >= 0;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -72,7 +105,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ),
               const SizedBox(width: Sp.sm),
               Text(
-                'صافي ${d.label}',
+                'الإيرادات • $_periodLabel',
                 style: AppType.label(color: AppColors.textMid)
                     .copyWith(fontSize: 12),
               ),
@@ -86,7 +119,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                formatIQD(d.amount),
+                formatIQD(_displayAmount),
                 style: AppType.title(color: AppColors.textHi).copyWith(
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
@@ -104,31 +137,16 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                 ),
               ),
               const Spacer(),
-              Row(
-                children: [
-                  Icon(
-                    isUp
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded,
-                    color: isUp ? AppColors.brand : AppColors.error,
-                    size: 12,
+              if (_loading == _period)
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.6,
+                    color: AppColors.brand,
                   ),
-                  const SizedBox(width: 2),
-                  Text(
-                    formatDeltaPct(d.deltaPct),
-                    style: AppType.label(
-                      color: isUp ? AppColors.brand : AppColors.error,
-                    ).copyWith(fontSize: 11),
-                  ),
-                ],
-              ),
+                ),
             ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            _deltaLabel,
-            style: AppType.muted(color: AppColors.textLow)
-                .copyWith(fontSize: 10),
           ),
           const SizedBox(height: Sp.sm),
           SizedBox(
@@ -157,8 +175,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                         ),
                       ),
                       spots: [
-                        for (int i = 0; i < d.points.length; i++)
-                          FlSpot(i.toDouble(), d.points[i].toDouble()),
+                        for (int i = 0; i < _sparkline.length; i++)
+                          FlSpot(i.toDouble(), _sparkline[i].toDouble()),
                       ],
                     ),
                   ],
@@ -179,8 +197,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
 
 class _PeriodTabs extends StatelessWidget {
   const _PeriodTabs({required this.current, required this.onSelect});
-  final _Period current;
-  final ValueChanged<_Period> onSelect;
+  final RevenuePeriod current;
+  final ValueChanged<RevenuePeriod> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -193,15 +211,15 @@ class _PeriodTabs extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _tab(_Period.day, 'يومي'),
-          _tab(_Period.week, 'أسبوعي'),
-          _tab(_Period.month, 'شهري'),
+          _tab(RevenuePeriod.day, 'يومي'),
+          _tab(RevenuePeriod.week, 'أسبوعي'),
+          _tab(RevenuePeriod.month, 'شهري'),
         ],
       ),
     );
   }
 
-  Widget _tab(_Period p, String label) {
+  Widget _tab(RevenuePeriod p, String label) {
     final selected = current == p;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -221,7 +239,10 @@ class _PeriodTabs extends StatelessWidget {
           label,
           style: AppType.muted(
             color: selected ? Colors.white : AppColors.textMid,
-          ).copyWith(fontSize: 10, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+          ).copyWith(
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
         ),
       ),
     );

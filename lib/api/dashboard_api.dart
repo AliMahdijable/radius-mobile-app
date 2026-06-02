@@ -28,9 +28,22 @@ class WhatsAppStatusResult {
 }
 
 class DebtorsResult {
-  const DebtorsResult({required this.count, required this.total});
+  const DebtorsResult({
+    required this.count,
+    required this.total,
+    required this.nearExpiry,
+  });
   final int count;
   final int total;
+  /// Subscribers whose remaining days fall in [0, 3] — soon-to-expire.
+  final int nearExpiry;
+}
+
+enum RevenuePeriod { day, week, month }
+
+class RevenueResult {
+  const RevenueResult({required this.amount});
+  final int amount;
 }
 
 class DashboardApi {
@@ -71,10 +84,10 @@ class DashboardApi {
     }
   }
 
-  /// GET /api/subscribers/with-phones
-  /// Returns the admin's subscribers; we walk the list and count those
-  /// with a negative `notes` field — same way v1's dashboard_provider
-  /// computes the debtors metric. Returns count + total amount (positive).
+  /// GET /api/subscribers/with-phones — single pass over the subscriber
+  /// list. Returns the debtors metric (count + total IQD) AND the
+  /// near-expiry counter (subs whose remaining_days fall in [0, 3]).
+  /// Replaces v1's two-pass approach with one network call + one loop.
   static Future<DebtorsResult?> fetchDebtors() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
@@ -87,29 +100,109 @@ class DashboardApi {
       if (body['success'] != true) return null;
       final data = (body['data'] as List?) ?? const [];
 
-      var count = 0;
-      var total = 0;
+      var debtCount = 0;
+      var debtTotal = 0;
+      var nearExpiry = 0;
       for (final raw in data) {
         if (raw is! Map) continue;
-        final notesRaw =
-            (raw['notes'] ?? raw['comments'] ?? '').toString().replaceAll(',', '').trim();
+
+        // Debt detection (negative notes/comments). Falls back to
+        // hasDebt + debt fields the way v1's dashboard_provider does.
+        final notesRaw = (raw['notes'] ?? raw['comments'] ?? '')
+            .toString()
+            .replaceAll(',', '')
+            .trim();
         var notesVal = double.tryParse(notesRaw) ?? 0;
-        // Fallback: hasDebt + debt fields, same as v1's dashboard logic.
         if (notesVal == 0 && (raw['hasDebt'] == true || raw['hasDebt'] == 1)) {
           final d = raw['debt'];
           if (d is num && d != 0) notesVal = -d.abs().toDouble();
         }
         if (notesVal < 0) {
-          count++;
-          total += notesVal.abs().round();
+          debtCount++;
+          debtTotal += notesVal.abs().round();
+        }
+
+        // Near-expiry: 0..3 remaining days. SAS4 names this field
+        // 'remaining_days'; some rows expose 'daysRemaining'.
+        final daysRaw = raw['remaining_days'] ?? raw['daysRemaining'];
+        final days = daysRaw is num
+            ? daysRaw.toInt()
+            : int.tryParse(daysRaw?.toString() ?? '');
+        if (days != null && days >= 0 && days <= 3) {
+          nearExpiry++;
         }
       }
-      return DebtorsResult(count: count, total: total);
+      return DebtorsResult(
+        count: debtCount,
+        total: debtTotal,
+        nearExpiry: nearExpiry,
+      );
     } on DioException {
       return null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// GET /api/reports/finance?date_from=...&date_to=...
+  /// Same endpoint the v1 web Financial Reports page uses. Returns
+  /// `data.totals.total_payments` which v1 displays as "الإيرادات" —
+  /// the sum of PAYMENT_ADD + DEBT_PAY + BALANCE_DEDUCT + ACTIVATE_CASH
+  /// over the date range. We build the range from a [period] enum:
+  ///   day   → today 00:00:00 → 23:59:59
+  ///   week  → 7 days ago → now
+  ///   month → 30 days ago → now
+  static Future<RevenueResult?> fetchRevenue(RevenuePeriod period) async {
+    final token = await AuthStorage.readToken();
+    if (token == null) return null;
+    final (from, to) = _rangeFor(period);
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/reports/finance',
+        queryParameters: {
+          'date_from': from,
+          'date_to': to,
+          // Don't waste bandwidth on logs; we only want the total.
+          'limit_logs': 1,
+        },
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final totals = (body['data'] as Map?)?['totals'] as Map?;
+      final v = totals?['total_payments'];
+      if (v == null) return null;
+      final amount = v is num ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
+      return RevenueResult(amount: amount);
+    } on DioException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static (String, String) _rangeFor(RevenuePeriod p) {
+    // Backend expects YYYY-MM-DD HH:mm:ss in Baghdad time. We compute
+    // in the device's local TZ — close enough for one-shot dashboard
+    // queries (Iraq is the only operating region; the device clocks
+    // there match Asia/Baghdad).
+    final now = DateTime.now();
+    String d(DateTime t) =>
+        '${t.year.toString().padLeft(4, '0')}-'
+        '${t.month.toString().padLeft(2, '0')}-'
+        '${t.day.toString().padLeft(2, '0')}';
+    final today = d(now);
+    final to = '$today 23:59:59';
+    String from;
+    switch (p) {
+      case RevenuePeriod.day:
+        from = '$today 00:00:00';
+      case RevenuePeriod.week:
+        from = '${d(now.subtract(const Duration(days: 6)))} 00:00:00';
+      case RevenuePeriod.month:
+        from = '${d(now.subtract(const Duration(days: 29)))} 00:00:00';
+    }
+    return (from, to);
   }
 
   /// GET /api/whatsapp/connection-status/:adminId
