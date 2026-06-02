@@ -220,20 +220,12 @@ class _Logo extends StatelessWidget {
           ],
         ),
         padding: const EdgeInsets.all(Sp.xl),
-        child: ColorFiltered(
-          // Maps violet (and any colored pixel) to brand green while keeping
-          // transparent areas transparent. The matrix forces R=brand.R,
-          // G=brand.G, B=brand.B, A=source.A.
-          colorFilter: const ColorFilter.matrix(<double>[
-            0, 0, 0, 0, 0x2D / 1.0,   // R out = brand R (45)
-            0, 0, 0, 0, 0x5F / 1.0,   // G out = brand G (95)
-            0, 0, 0, 0, 0x47 / 1.0,   // B out = brand B (71)
-            0, 0, 0, 1, 0,            // A out = source alpha (preserves shape)
-          ]),
-          child: Image.asset(
-            'assets/images/logo.png',
-            fit: BoxFit.contain,
-          ),
+        // The PNG itself is now pre-tinted brand-green with the white
+        // background converted to transparent (recolor_logo.js, 2026-06-02).
+        // No runtime tinting needed — what you see is what's in the asset.
+        child: Image.asset(
+          'assets/images/logo.png',
+          fit: BoxFit.contain,
         ),
       ),
     );

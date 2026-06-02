@@ -9,12 +9,14 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'home_placeholder.dart';
 
-/// One-time setup screen shown after the first successful login.
-/// Asks for two OS-level permissions:
-///   1. Notifications (FCM-style push)
+/// Shown after the first successful login. Two OS permissions:
+///   1. Notifications (push)
 ///   2. Biometric (Face ID / Touch ID)
-/// Each row reflects its live status. "متابعة" forwards to home; user can
-/// skip permissions and grant them later from settings.
+///
+/// iOS quirk: once a permission is denied, calling .request() again does
+/// nothing — the system won't re-prompt. So when the live status reports
+/// "denied" (or permanently denied), the button switches to "افتح الإعدادات"
+/// which opens the OS app settings page.
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
 
@@ -22,87 +24,118 @@ class PermissionsScreen extends StatefulWidget {
   State<PermissionsScreen> createState() => _PermissionsScreenState();
 }
 
-enum _PermStatus { unknown, granted, denied, requesting }
+enum _PermState { unknown, granted, deniedOnce, permanentlyDenied, requesting }
 
-class _PermissionsScreenState extends State<PermissionsScreen> {
-  _PermStatus _notifStatus = _PermStatus.unknown;
-  _PermStatus _bioStatus = _PermStatus.unknown;
+class _PermissionsScreenState extends State<PermissionsScreen>
+    with WidgetsBindingObserver {
+  _PermState _notif = _PermState.unknown;
+  _PermState _bio = _PermState.unknown;
   bool _bioAvailable = true;
+  String? _bioKind; // "بصمة" / "Face ID" — what the device actually has
 
   @override
   void initState() {
     super.initState();
-    _refreshStatus();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
   }
 
-  Future<void> _refreshStatus() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check status when returning from system Settings.
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
     final notif = await Permission.notification.status;
     final auth = LocalAuthentication();
     bool canBio = false;
+    String? kind;
     try {
-      canBio = await auth.canCheckBiometrics && await auth.isDeviceSupported();
-    } catch (_) {}
+      canBio = await auth.isDeviceSupported();
+      if (canBio) {
+        final available = await auth.getAvailableBiometrics();
+        if (available.contains(BiometricType.face)) {
+          kind = 'Face ID';
+        } else if (available.contains(BiometricType.fingerprint)) {
+          kind = 'البصمة';
+        } else if (available.contains(BiometricType.strong) ||
+            available.contains(BiometricType.weak)) {
+          kind = 'البصمة';
+        } else {
+          // Device supports it but nothing enrolled yet.
+          kind = null;
+          canBio = false;
+        }
+      }
+    } catch (_) {/* keep defaults */}
+
     if (!mounted) return;
     setState(() {
-      _notifStatus = notif.isGranted ? _PermStatus.granted : _PermStatus.denied;
+      _notif = _mapNotif(notif);
       _bioAvailable = canBio;
-      _bioStatus = canBio ? _PermStatus.unknown : _PermStatus.denied;
+      _bioKind = kind;
+      // Biometric has no permission concept — "granted" only after the
+      // user successfully proves they can authenticate at least once.
+      // Until then, leave it unknown.
+      if (!canBio) _bio = _PermState.deniedOnce;
     });
   }
 
-  Future<void> _requestNotifications() async {
-    HapticFeedback.selectionClick();
-    setState(() => _notifStatus = _PermStatus.requesting);
-    final res = await Permission.notification.request();
-    if (!mounted) return;
-    setState(() => _notifStatus =
-        res.isGranted ? _PermStatus.granted : _PermStatus.denied);
-    if (res.isPermanentlyDenied) {
-      _showOpenSettingsSnack();
-    }
+  _PermState _mapNotif(PermissionStatus s) {
+    if (s.isGranted || s.isLimited || s.isProvisional) return _PermState.granted;
+    if (s.isPermanentlyDenied) return _PermState.permanentlyDenied;
+    if (s.isDenied || s.isRestricted) return _PermState.deniedOnce;
+    return _PermState.unknown;
   }
 
-  Future<void> _requestBiometric() async {
+  // ── Notification ───────────────────────────────────────────────────
+  Future<void> _onNotifTap() async {
     HapticFeedback.selectionClick();
-    setState(() => _bioStatus = _PermStatus.requesting);
+    if (_notif == _PermState.granted) return;
+    if (_notif == _PermState.deniedOnce || _notif == _PermState.unknown) {
+      setState(() => _notif = _PermState.requesting);
+      final res = await Permission.notification.request();
+      if (!mounted) return;
+      setState(() => _notif = _mapNotif(res));
+      return;
+    }
+    // permanentlyDenied → open settings; system Settings handles the rest.
+    await openAppSettings();
+  }
+
+  // ── Biometric ──────────────────────────────────────────────────────
+  Future<void> _onBioTap() async {
+    HapticFeedback.selectionClick();
+    if (_bio == _PermState.granted) return;
+    if (!_bioAvailable) {
+      // Likely simulator without enrolled biometric, OR a device with the
+      // sensor disabled. Push them to system settings to set it up.
+      await openAppSettings();
+      return;
+    }
+    setState(() => _bio = _PermState.requesting);
     final auth = LocalAuthentication();
     try {
       final ok = await auth.authenticate(
-        localizedReason: 'فعّل بصمتك أو Face ID لتسجيل دخول أسرع لاحقاً',
+        localizedReason: 'فعّل ${_bioKind ?? "البصمة"} لتسجيل دخول أسرع لاحقاً',
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
         ),
       );
       if (!mounted) return;
-      setState(() =>
-          _bioStatus = ok ? _PermStatus.granted : _PermStatus.denied);
+      setState(() => _bio = ok ? _PermState.granted : _PermState.deniedOnce);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _bioStatus = _PermStatus.denied);
+      setState(() => _bio = _PermState.deniedOnce);
     }
-  }
-
-  void _showOpenSettingsSnack() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'تم رفض الإذن. افتح إعدادات النظام لتفعيله يدوياً.',
-          style: AppType.button(color: Colors.white),
-        ),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'الإعدادات',
-          textColor: Colors.white,
-          onPressed: openAppSettings,
-        ),
-        margin: const EdgeInsets.all(Sp.lg),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(R.md),
-        ),
-      ),
-    );
   }
 
   void _continue() {
@@ -127,13 +160,14 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   .fadeIn(duration: const Duration(milliseconds: 350))
                   .slideY(begin: 0.06, end: 0),
               const SizedBox(height: Sp.huge),
-              _PermissionRow(
+              _PermCard(
                 icon: Icons.notifications_active_rounded,
                 title: 'إشعارات النظام',
                 body:
-                    'لتنبيهك بانتهاء اشتراك مشترك، تسديد دين، أو ربط واتساب — حتى لو التطبيق مغلق.',
-                status: _notifStatus,
-                onRequest: _requestNotifications,
+                    'لتنبيهك بانتهاء اشتراك، تسديد دين، أو ربط واتساب — حتى لو التطبيق مغلق.',
+                state: _notif,
+                buttonLabel: _notifButtonLabel(),
+                onTap: _onNotifTap,
               )
                   .animate()
                   .fadeIn(
@@ -142,14 +176,15 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   )
                   .slideY(begin: 0.05, end: 0),
               const SizedBox(height: Sp.lg),
-              _PermissionRow(
+              _PermCard(
                 icon: Icons.fingerprint_rounded,
                 title: 'بصمة / Face ID',
                 body: _bioAvailable
-                    ? 'دخول سريع بدون كتابة كلمة المرور في كل مرة.'
-                    : 'الجهاز لا يدعم البصمة. يمكنك الاستمرار بدون.',
-                status: _bioStatus,
-                onRequest: _bioAvailable ? _requestBiometric : null,
+                    ? 'دخول سريع بـ${_bioKind ?? "البصمة"} بدون كتابة كلمة المرور.'
+                    : 'الجهاز لا يدعم البصمة أو لم يتم تسجيلها بعد. يمكنك الاستمرار بدون.',
+                state: _bio,
+                buttonLabel: _bioButtonLabel(),
+                onTap: _onBioTap,
               )
                   .animate()
                   .fadeIn(
@@ -162,12 +197,48 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                     delay: const Duration(milliseconds: 450),
                     duration: const Duration(milliseconds: 350),
                   ),
-              const SizedBox(height: Sp.lg),
+              const SizedBox(height: Sp.sm),
+              TextButton(
+                onPressed: _continue,
+                child: Text(
+                  'تخطّى الآن',
+                  style: AppType.link(color: AppColors.textMid),
+                ),
+              ),
+              const SizedBox(height: Sp.sm),
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _notifButtonLabel() {
+    switch (_notif) {
+      case _PermState.granted:
+        return 'مفعّلة';
+      case _PermState.permanentlyDenied:
+        return 'افتح إعدادات النظام';
+      case _PermState.requesting:
+        return 'جاري الطلب...';
+      case _PermState.deniedOnce:
+      case _PermState.unknown:
+        return 'تفعيل';
+    }
+  }
+
+  String _bioButtonLabel() {
+    if (!_bioAvailable) return 'افتح إعدادات النظام';
+    switch (_bio) {
+      case _PermState.granted:
+        return 'مفعّلة';
+      case _PermState.requesting:
+        return 'جاري المصادقة...';
+      case _PermState.deniedOnce:
+      case _PermState.permanentlyDenied:
+      case _PermState.unknown:
+        return 'تفعيل';
+    }
   }
 }
 
@@ -191,32 +262,36 @@ class _Header extends StatelessWidget {
         const SizedBox(height: Sp.lg),
         Text(
           'إذونات الجهاز',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 24),
+          style:
+              AppType.title(color: AppColors.textHi).copyWith(fontSize: 24),
         ),
         const SizedBox(height: Sp.xs),
         Text(
-          'فعّل الإذونات التالية لتعمل بشكل أفضل. يمكنك تخطّيها وتفعيلها لاحقاً من الإعدادات.',
-          style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.6),
+          'فعّل الإذونات التالية لتعمل بشكل أفضل. يمكنك تخطّيها وتفعيلها لاحقاً.',
+          style: AppType.subtitle(color: AppColors.textMid)
+              .copyWith(height: 1.6),
         ),
       ],
     );
   }
 }
 
-class _PermissionRow extends StatelessWidget {
-  const _PermissionRow({
+class _PermCard extends StatelessWidget {
+  const _PermCard({
     required this.icon,
     required this.title,
     required this.body,
-    required this.status,
-    required this.onRequest,
+    required this.state,
+    required this.buttonLabel,
+    required this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String body;
-  final _PermStatus status;
-  final VoidCallback? onRequest;
+  final _PermState state;
+  final String buttonLabel;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +322,7 @@ class _PermissionRow extends StatelessWidget {
                     style: AppType.button(color: AppColors.textHi)
                         .copyWith(fontSize: 16)),
               ),
-              _StatusBadge(status: status),
+              _StateBadge(state: state),
             ],
           ),
           const SizedBox(height: Sp.md),
@@ -255,32 +330,29 @@ class _PermissionRow extends StatelessWidget {
               style: AppType.subtitle(color: AppColors.textMid)
                   .copyWith(height: 1.55)),
           const SizedBox(height: Sp.md),
-          if (status != _PermStatus.granted)
-            _RowButton(
-              label: status == _PermStatus.requesting
-                  ? 'جاري الطلب...'
-                  : 'تفعيل',
-              loading: status == _PermStatus.requesting,
-              enabled: onRequest != null && status != _PermStatus.requesting,
-              onTap: onRequest,
-            ),
+          _Button(label: buttonLabel, state: state, onTap: onTap),
         ],
       ),
     );
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-  final _PermStatus status;
+class _StateBadge extends StatelessWidget {
+  const _StateBadge({required this.state});
+  final _PermState state;
 
   @override
   Widget build(BuildContext context) {
-    final (label, color, icon) = switch (status) {
-      _PermStatus.granted => ('مفعّلة', AppColors.brand, Icons.check_rounded),
-      _PermStatus.denied => ('غير مفعّلة', AppColors.textLow, Icons.circle_outlined),
-      _PermStatus.requesting => ('...', AppColors.textMid, Icons.more_horiz_rounded),
-      _PermStatus.unknown => ('—', AppColors.textLow, Icons.circle_outlined),
+    final (label, color, icon) = switch (state) {
+      _PermState.granted => ('مفعّلة', AppColors.brand, Icons.check_rounded),
+      _PermState.permanentlyDenied =>
+        ('بحاجة إعدادات', AppColors.error, Icons.settings_rounded),
+      _PermState.deniedOnce =>
+        ('غير مفعّلة', AppColors.textLow, Icons.circle_outlined),
+      _PermState.requesting =>
+        ('...', AppColors.textMid, Icons.more_horiz_rounded),
+      _PermState.unknown =>
+        ('—', AppColors.textLow, Icons.circle_outlined),
     };
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -297,55 +369,54 @@ class _StatusBadge extends StatelessWidget {
           Icon(icon, color: color, size: 12),
           const SizedBox(width: 4),
           Text(label,
-              style:
-                  AppType.muted(color: color).copyWith(fontSize: 11)),
+              style: AppType.muted(color: color).copyWith(fontSize: 11)),
         ],
       ),
     );
   }
 }
 
-class _RowButton extends StatelessWidget {
-  const _RowButton({
+class _Button extends StatelessWidget {
+  const _Button({
     required this.label,
-    required this.loading,
-    required this.enabled,
+    required this.state,
     required this.onTap,
   });
 
   final String label;
-  final bool loading;
-  final bool enabled;
-  final VoidCallback? onTap;
+  final _PermState state;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    if (state == _PermState.granted) return const SizedBox.shrink();
+    final loading = state == _PermState.requesting;
+    final danger = state == _PermState.permanentlyDenied;
+    final bg = danger
+        ? AppColors.error.withValues(alpha: 0.1)
+        : AppColors.brand.withValues(alpha: 0.1);
+    final fg = danger ? AppColors.error : AppColors.brand;
+
     return SizedBox(
       height: 44,
       child: Material(
-        color: enabled
-            ? AppColors.brand.withValues(alpha: 0.1)
-            : AppColors.surfaceInput,
+        color: bg,
         borderRadius: BorderRadius.circular(R.md),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: enabled ? onTap : null,
+          onTap: loading ? null : onTap,
           child: Center(
             child: loading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppColors.brand,
+                      color: fg,
                     ),
                   )
                 : Text(label,
-                    style: AppType.button(
-                            color: enabled
-                                ? AppColors.brand
-                                : AppColors.textLow)
-                        .copyWith(fontSize: 14)),
+                    style: AppType.button(color: fg).copyWith(fontSize: 14)),
           ),
         ),
       ),
