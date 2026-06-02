@@ -206,20 +206,23 @@ class _Logo extends StatelessWidget {
     // shows through), violet shapes get re-colored to brand.
     return Center(
       child: Container(
-        width: 160,
-        height: 160,
+        width: 190,
+        height: 190,
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(R.xl),
+          // Smaller corner radius — feels less like an iOS app icon,
+          // more like a premium brand mark on a card.
+          borderRadius: BorderRadius.circular(R.lg),
           boxShadow: [
             BoxShadow(
               color: AppColors.brand.withValues(alpha: 0.14),
-              blurRadius: 40,
-              offset: const Offset(0, 20),
+              blurRadius: 44,
+              offset: const Offset(0, 22),
             ),
           ],
         ),
-        padding: const EdgeInsets.all(Sp.xl),
+        // Tight padding so the mark fills more of the card.
+        padding: const EdgeInsets.all(Sp.md),
         // The PNG itself is now pre-tinted brand-green with the white
         // background converted to transparent (recolor_logo.js, 2026-06-02).
         // No runtime tinting needed — what you see is what's in the asset.
