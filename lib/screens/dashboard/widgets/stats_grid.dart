@@ -14,61 +14,33 @@ class StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    // Round 8: dropped مدفوعات and منتهين per user request — those live
+    // elsewhere now (payments will surface inside the revenue card, and
+    // total expired count is already in the SubscribersCard ring).
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _StatCell(
-                icon: Icons.bolt_rounded,
-                accent: AppColors.brand,
-                label: 'تفعيلات',
-                value: '${stats.activations}',
-                delta: '${stats.activationsDelta > 0 ? '+' : ''}${stats.activationsDelta} أمس',
-                deltaUp: stats.activationsDelta >= 0,
-              ),
-            ),
-            const SizedBox(width: Sp.md),
-            Expanded(
-              child: _StatCell(
-                icon: Icons.payments_rounded,
-                accent: AppColors.brand,
-                label: 'مدفوعات',
-                value: formatIQD(stats.payments),
-                unit: 'د.ع',
-                delta: formatDeltaPct(stats.paymentsDeltaPct),
-                deltaUp: stats.paymentsDeltaPct >= 0,
-              ),
-            ),
-          ],
+        Expanded(
+          child: _StatCell(
+            icon: Icons.bolt_rounded,
+            accent: AppColors.brand,
+            label: 'تفعيلات',
+            value: '${stats.activations}',
+            delta:
+                '${stats.activationsDelta > 0 ? '+' : ''}${stats.activationsDelta} أمس',
+            deltaUp: stats.activationsDelta >= 0,
+          ),
         ),
-        const SizedBox(height: Sp.md),
-        Row(
-          children: [
-            Expanded(
-              child: _StatCell(
-                icon: Icons.account_balance_wallet_rounded,
-                accent: AppColors.error,
-                label: 'مدينين',
-                value: '${stats.debtorsCount}',
-                delta: '${formatIQD(stats.debtorsTotal)} د.ع',
-                deltaUp: false,
-                flipDeltaSemantics: true,
-              ),
-            ),
-            const SizedBox(width: Sp.md),
-            Expanded(
-              child: _StatCell(
-                icon: Icons.access_time_filled_rounded,
-                accent: const Color(0xFFE08F2D),
-                label: 'منتهين',
-                value: '${stats.expiredToday}',
-                delta: 'اليوم',
-                deltaUp: false,
-                flipDeltaSemantics: true,
-              ),
-            ),
-          ],
+        const SizedBox(width: Sp.md),
+        Expanded(
+          child: _StatCell(
+            icon: Icons.account_balance_wallet_rounded,
+            accent: AppColors.error,
+            label: 'مدينين',
+            value: '${stats.debtorsCount}',
+            delta: '${formatIQD(stats.debtorsTotal)} د.ع',
+            deltaUp: false,
+            flipDeltaSemantics: true,
+          ),
         ),
       ],
     );

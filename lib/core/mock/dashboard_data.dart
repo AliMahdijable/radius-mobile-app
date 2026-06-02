@@ -41,6 +41,44 @@ const mockDailyStats = DailyStats(
   last7Days: [420000, 380000, 510000, 590000, 470000, 540000, 635000],
 );
 
+/// Net revenue summary for a period (daily / weekly / monthly).
+/// The hero card cycles between these via its tab selector.
+class NetRevenuePeriod {
+  const NetRevenuePeriod({
+    required this.label,
+    required this.amount,
+    required this.deltaPct,
+    required this.points,
+  });
+  final String label;
+  final int amount;
+  final double deltaPct;
+  final List<int> points;
+}
+
+const mockRevenueDaily = NetRevenuePeriod(
+  label: 'اليوم',
+  amount: 635000,
+  deltaPct: 0.12,
+  points: [420000, 380000, 510000, 590000, 470000, 540000, 635000],
+);
+
+const mockRevenueWeekly = NetRevenuePeriod(
+  label: 'هذا الأسبوع',
+  amount: 3545000,
+  deltaPct: 0.08,
+  points: [2900000, 3200000, 3100000, 3400000, 3545000],
+);
+
+const mockRevenueMonthly = NetRevenuePeriod(
+  label: 'هذا الشهر',
+  amount: 14250000,
+  deltaPct: 0.15,
+  points: [
+    8500000, 10200000, 11800000, 12500000, 13100000, 13700000, 14250000,
+  ],
+);
+
 class SubscribersStats {
   const SubscribersStats({
     required this.total,
