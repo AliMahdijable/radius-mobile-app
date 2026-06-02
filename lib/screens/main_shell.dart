@@ -9,9 +9,14 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'subscribers_screen.dart';
 
-/// 4 bottom tabs (Home / Subscribers / Reports / Settings) with a center
-/// FAB raised above the bar for quick add actions. Tab state preserved
-/// via IndexedStack so the user's scroll position survives switching.
+/// Pill-style floating bottom bar (round-3 redesign):
+///   - Detached from the screen edges (floats with margin all around).
+///   - Pill shape (fully rounded) with subtle elevation.
+///   - 4 tab icons + center FAB; FAB protrudes slightly above the pill.
+///   - Active tab gets a brand-tinted background behind its icon, not
+///     just an oversized icon — reads more clearly than the old style.
+///   - Quick-search button moved into the pill (replaces what used to
+///     be a separate FAB) so the screen feels less busy.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -36,8 +41,7 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: AppColors.surface,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(R.xl)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
       ),
       builder: (_) => const _QuickAddSheet(),
     );
@@ -45,165 +49,142 @@ class _MainShellState extends State<MainShell> {
 
   void _onSearchTap() {
     HapticFeedback.selectionClick();
-    // TODO[quick-search]: open a spotlight-style sheet for cross-app search.
+    // TODO[quick-search]: open spotlight-style global search.
   }
 
   @override
   Widget build(BuildContext context) {
-    // extendBody:false (default) so the tab content stops at the bar edge.
-    // Previous value `true` made the body extend behind a partially-
-    // transparent bar — content visibly bled through the bottom gap.
     return Scaffold(
       backgroundColor: AppColors.bg,
+      extendBody: true,
       body: Stack(
         children: [
           IndexedStack(index: _tab, children: _tabs),
-          // Floating quick-search pill — bottom right, above the tab bar.
-          // Per user request: a quiet shortcut for opening a global search
-          // without burning the center FAB on something less frequent.
-          Positioned(
-            right: Sp.lg,
-            bottom: Sp.lg,
-            child: _QuickSearchButton(onTap: _onSearchTap),
+          // Pill bar sits on top of body with a transparent area below it.
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Sp.md,
+                  0,
+                  Sp.md,
+                  Sp.sm,
+                ),
+                child: _PillBar(
+                  current: _tab,
+                  onChanged: (i) => setState(() => _tab = i),
+                  onFabTap: _onFabTap,
+                  onSearchTap: _onSearchTap,
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      bottomNavigationBar: _BottomBar(
-        current: _tab,
-        onChanged: (i) => setState(() => _tab = i),
-        onFabTap: _onFabTap,
-      ),
     );
   }
 }
 
-class _QuickSearchButton extends StatelessWidget {
-  const _QuickSearchButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      shape: const CircleBorder(),
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.search_rounded,
-              color: AppColors.brand, size: 22),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomBar extends StatelessWidget {
-  const _BottomBar({
+class _PillBar extends StatelessWidget {
+  const _PillBar({
     required this.current,
     required this.onChanged,
     required this.onFabTap,
+    required this.onSearchTap,
   });
 
   final int current;
   final ValueChanged<int> onChanged;
   final VoidCallback onFabTap;
+  final VoidCallback onSearchTap;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.topCenter,
-        children: [
-          Container(
-            height: 72,
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
-            child: Row(
-              children: [
-                _NavItem(
-                  icon: Icons.home_rounded,
-                  label: 'الرئيسية',
-                  selected: current == 0,
-                  onTap: () => onChanged(0),
-                ),
-                _NavItem(
-                  icon: Icons.people_alt_rounded,
-                  label: 'المشتركون',
-                  selected: current == 1,
-                  onTap: () => onChanged(1),
-                ),
-                // Spacer for the floating center FAB
-                const SizedBox(width: 64),
-                _NavItem(
-                  icon: Icons.insert_chart_rounded,
-                  label: 'التقارير',
-                  selected: current == 2,
-                  onTap: () => onChanged(2),
-                ),
-                _NavItem(
-                  icon: Icons.settings_outlined,
-                  label: 'الضبط',
-                  selected: current == 3,
-                  onTap: () => onChanged(3),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: -18,
-            child: GestureDetector(
-              onTap: onFabTap,
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.brand,
-                  shape: BoxShape.circle,
-                  // Thin matching-bg ring + restrained shadow so the FAB
-                  // reads as a confident pill, not a glowing emergency button.
-                  border: Border.all(color: AppColors.surface, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.brand.withValues(alpha: 0.18),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 24),
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+          child: Row(
+            children: [
+              _NavSlot(
+                icon: Icons.home_rounded,
+                label: 'الرئيسية',
+                selected: current == 0,
+                onTap: () => onChanged(0),
+              ),
+              _NavSlot(
+                icon: Icons.people_alt_rounded,
+                label: 'المشتركون',
+                selected: current == 1,
+                onTap: () => onChanged(1),
+              ),
+              // Spacer for the floating FAB above.
+              const SizedBox(width: 56),
+              _NavSlot(
+                icon: Icons.insert_chart_rounded,
+                label: 'التقارير',
+                selected: current == 2,
+                onTap: () => onChanged(2),
+              ),
+              _NavSlot(
+                icon: Icons.settings_outlined,
+                label: 'الضبط',
+                selected: current == 3,
+                onTap: () => onChanged(3),
+              ),
+            ],
+          ),
+        ),
+        // Floating + button — slightly above the pill, brand-color, white
+        // ring matching the page background so it looks "lifted".
+        Positioned(
+          top: -20,
+          child: GestureDetector(
+            onTap: onFabTap,
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: AppColors.brand,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.bg, width: 4),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brand.withValues(alpha: 0.22),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.add_rounded,
+                  color: Colors.white, size: 26),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  const _NavItem({
+class _NavSlot extends StatelessWidget {
+  const _NavSlot({
     required this.icon,
     required this.label,
     required this.selected,
@@ -217,32 +198,61 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.brand : AppColors.textLow;
     return Expanded(
       child: Material(
         color: Colors.transparent,
+        shape: const CircleBorder(),
         child: InkWell(
           onTap: () {
             HapticFeedback.selectionClick();
             onTap();
           },
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedScale(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOutBack,
-                scale: selected ? 1.1 : 1.0,
-                child: Icon(icon, color: color, size: 24),
+          customBorder: const CircleBorder(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(
+              vertical: Sp.sm,
+              horizontal: 4,
+            ),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.brand.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(R.pill),
+            ),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    color: selected ? AppColors.brand : AppColors.textMid,
+                    size: 22,
+                  ),
+                  // Label only appears on the active tab — keeps the
+                  // inactive icons clean and lets the active tab carry
+                  // a clear contextual label.
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: selected
+                        ? Padding(
+                            padding: const EdgeInsets.only(
+                              right: 6,
+                              left: 4,
+                            ),
+                            child: Text(
+                              label,
+                              style: AppType.label(color: AppColors.brand)
+                                  .copyWith(fontSize: 12),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: AppType.muted(color: color).copyWith(fontSize: 10),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+            ),
           ),
         ),
       ),

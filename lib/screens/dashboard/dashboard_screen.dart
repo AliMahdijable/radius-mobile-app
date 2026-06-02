@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../api/dashboard_api.dart';
 import '../../core/mock/dashboard_data.dart';
 import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
@@ -35,10 +36,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _displayName = '';
   String _adminUsername = '';
 
+  // Live data — null until first fetch resolves. Each field falls back
+  // to its mock counterpart in build() so the dashboard is never blank.
+  WhatsAppStatusResult? _waLive;
+  DailyActivationsResult? _activationsLive;
+
   @override
   void initState() {
     super.initState();
     _loadIdentity();
+    _refreshLive();
   }
 
   Future<void> _loadIdentity() async {
@@ -48,6 +55,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       _displayName = name ?? '';
       _adminUsername = id ?? '';
+    });
+  }
+
+  /// Pull-to-refresh handler — fires both API calls in parallel.
+  /// SAS4-backed stats (total/active/online/expired) will be wired in
+  /// the next iteration; for now those fall back to mock.
+  Future<void> _refreshLive() async {
+    final results = await Future.wait([
+      DashboardApi.fetchWhatsAppStatus(),
+      DashboardApi.fetchDailyActivations(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _waLive = results[0] as WhatsAppStatusResult?;
+      _activationsLive = results[1] as DailyActivationsResult?;
     });
   }
 
@@ -61,20 +83,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Live WhatsApp status when available, otherwise the mock placeholder.
+    final waStatus = _waLive == null
+        ? mockWhatsApp
+        : WhatsAppStatus(
+            connected: _waLive!.connected,
+            phone: _waLive!.phone.isNotEmpty
+                ? _waLive!.phone
+                : mockWhatsApp.phone,
+            sentToday: mockWhatsApp.sentToday,
+            queuePending: mockWhatsApp.queuePending,
+          );
+    // Live daily activations when available, falling back to mock fields
+    // for cells we haven't wired yet (payments, debtors, etc).
+    final dailyStats = _activationsLive == null
+        ? mockDailyStats
+        : DailyStats(
+            netToday: mockDailyStats.netToday,
+            netDeltaPct: mockDailyStats.netDeltaPct,
+            activations: _activationsLive!.activations,
+            activationsDelta: mockDailyStats.activationsDelta,
+            payments: mockDailyStats.payments,
+            paymentsDeltaPct: mockDailyStats.paymentsDeltaPct,
+            debtorsCount: mockDailyStats.debtorsCount,
+            debtorsTotal: mockDailyStats.debtorsTotal,
+            expiredToday: mockDailyStats.expiredToday,
+            last7Days: mockDailyStats.last7Days,
+          );
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           color: AppColors.brand,
-          onRefresh: () async => _loadIdentity(),
+          onRefresh: () async {
+            await Future.wait([_loadIdentity(), _refreshLive()]);
+          },
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge * 3),
             children: [
               _Header(
                 displayName: _displayName,
                 greeting: _greeting(),
-                whatsApp: mockWhatsApp,
+                whatsApp: waStatus,
               ),
               const SizedBox(height: Sp.lg),
               const SubscribersCard(stats: mockSubscribers)
@@ -82,7 +134,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   .fadeIn(duration: const Duration(milliseconds: 300))
                   .slideY(begin: 0.03, end: 0),
               const SizedBox(height: Sp.md),
-              StatsGrid(stats: mockDailyStats)
+              StatsGrid(stats: dailyStats)
                   .animate()
                   .fadeIn(
                     delay: const Duration(milliseconds: 80),
@@ -90,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   )
                   .slideY(begin: 0.03, end: 0),
               const SizedBox(height: Sp.md),
-              HeroRevenueCard(stats: mockDailyStats)
+              HeroRevenueCard(stats: dailyStats)
                   .animate()
                   .fadeIn(
                     delay: const Duration(milliseconds: 160),
@@ -194,14 +246,7 @@ class _WAStatusChip extends StatelessWidget {
               status.connected ? 'واتساب متصل' : 'واتساب منقطع',
               style: AppType.muted(color: c).copyWith(fontSize: 11),
             ),
-            if (status.connected) ...[
-              const SizedBox(width: 4),
-              Text(
-                '• ${status.sentToday} اليوم',
-                style: AppType.muted(color: c.withValues(alpha: 0.7))
-                    .copyWith(fontSize: 11),
-              ),
-            ] else ...[
+            if (!status.connected) ...[
               const SizedBox(width: 6),
               Container(
                 width: 1,
