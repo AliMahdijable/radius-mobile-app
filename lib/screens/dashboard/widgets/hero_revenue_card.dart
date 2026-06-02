@@ -20,10 +20,11 @@ class HeroRevenueCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.xl),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(Sp.xl),
+      // Compact: padding lg (16) instead of xl (20).
+      padding: const EdgeInsets.all(Sp.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -40,11 +41,25 @@ class HeroRevenueCard extends StatelessWidget {
               const SizedBox(width: Sp.sm),
               Text(
                 'الصافي اليوم',
-                style: AppType.label(color: AppColors.textMid),
+                style: AppType.label(color: AppColors.textMid)
+                    .copyWith(fontSize: 12),
+              ),
+              const Spacer(),
+              Icon(
+                isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                color: isUp ? AppColors.brand : AppColors.error,
+                size: 12,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                formatDeltaPct(stats.netDeltaPct),
+                style: AppType.label(
+                  color: isUp ? AppColors.brand : AppColors.error,
+                ).copyWith(fontSize: 11),
               ),
             ],
           ),
-          const SizedBox(height: Sp.md),
+          const SizedBox(height: Sp.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -52,43 +67,26 @@ class HeroRevenueCard extends StatelessWidget {
               Text(
                 formatIQD(stats.netToday),
                 style: AppType.title(color: AppColors.textHi).copyWith(
-                  fontSize: 44,
+                  fontSize: 30,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -1,
+                  letterSpacing: -0.7,
                   height: 1.05,
                 ),
               ),
-              const SizedBox(width: Sp.sm),
+              const SizedBox(width: 6),
               Padding(
-                padding: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.only(bottom: 3),
                 child: Text(
                   'د.ع',
                   style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 14),
+                      .copyWith(fontSize: 12),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: Sp.xs),
-          Row(
-            children: [
-              Icon(
-                isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                color: isUp ? AppColors.brand : AppColors.error,
-                size: 14,
-              ),
-              const SizedBox(width: 2),
-              Text(
-                '${formatDeltaPct(stats.netDeltaPct)} مقارنة بأمس',
-                style: AppType.label(
-                  color: isUp ? AppColors.brand : AppColors.error,
-                ).copyWith(fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.lg),
+          const SizedBox(height: Sp.sm),
           SizedBox(
-            height: 60,
+            height: 36,
             child: LineChart(
               LineChartData(
                 lineBarsData: [

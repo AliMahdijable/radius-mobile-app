@@ -12,14 +12,19 @@ import 'widgets/recent_activities.dart';
 import 'widgets/section_header.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
-import 'widgets/whatsapp_card.dart';
 
-/// Main home dashboard. Greeting + hero revenue + 4 quick stats + subscribers
-/// summary + WhatsApp status + recent activity feed.
+/// Dashboard order (per user feedback round 2):
+///   1. Header: greeting + admin name + WA status chip + bell + settings.
+///   2. Subscribers card (was 3rd — moved to top, it's the highest-value
+///      info for an ISP operator opening the app).
+///   3. Quick actions (4 buttons).
+///   4. 2×2 stats grid.
+///   5. Hero revenue card — shrunk and demoted; it's nice to see but not
+///      the most-actionable piece of info.
+///   6. Recent activities feed.
 ///
-/// All data is mock for now (see lib/core/mock/dashboard_data.dart). Real
-/// API wiring comes in the next iteration, screen-by-screen so we can
-/// verify each integration.
+/// WhatsApp standalone card removed — its status now lives inline next to
+/// the admin name in the header so a glance at the top reveals everything.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -65,17 +70,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           color: AppColors.brand,
           onRefresh: () async => _loadIdentity(),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              Sp.lg,
-              Sp.md,
-              Sp.lg,
-              // Leave room for the bottom nav + FAB notch.
-              Sp.huge + Sp.huge,
-            ),
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
-              _Header(displayName: _displayName, greeting: _greeting()),
+              _Header(
+                displayName: _displayName,
+                greeting: _greeting(),
+                whatsApp: mockWhatsApp,
+              ),
               const SizedBox(height: Sp.lg),
-              HeroRevenueCard(stats: mockDailyStats)
+              const SubscribersCard(stats: mockSubscribers)
                   .animate()
                   .fadeIn(duration: const Duration(milliseconds: 300))
                   .slideY(begin: 0.03, end: 0),
@@ -83,7 +86,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const QuickActionsRow()
                   .animate()
                   .fadeIn(
-                    delay: const Duration(milliseconds: 60),
+                    delay: const Duration(milliseconds: 80),
                     duration: const Duration(milliseconds: 300),
                   )
                   .slideY(begin: 0.03, end: 0),
@@ -91,23 +94,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               StatsGrid(stats: mockDailyStats)
                   .animate()
                   .fadeIn(
-                    delay: const Duration(milliseconds: 120),
-                    duration: const Duration(milliseconds: 300),
-                  )
-                  .slideY(begin: 0.03, end: 0),
-              const SizedBox(height: Sp.md),
-              const SubscribersCard(stats: mockSubscribers)
-                  .animate()
-                  .fadeIn(
                     delay: const Duration(milliseconds: 160),
                     duration: const Duration(milliseconds: 300),
                   )
                   .slideY(begin: 0.03, end: 0),
               const SizedBox(height: Sp.md),
-              const WhatsAppCard(status: mockWhatsApp)
+              HeroRevenueCard(stats: mockDailyStats)
                   .animate()
                   .fadeIn(
-                    delay: const Duration(milliseconds: 220),
+                    delay: const Duration(milliseconds: 240),
                     duration: const Duration(milliseconds: 300),
                   )
                   .slideY(begin: 0.03, end: 0),
@@ -117,7 +112,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTrailingTap: () {},
               ),
               const RecentActivities(items: mockActivities).animate().fadeIn(
-                    delay: const Duration(milliseconds: 300),
+                    delay: const Duration(milliseconds: 320),
                     duration: const Duration(milliseconds: 300),
                   ),
             ],
@@ -129,13 +124,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.displayName, required this.greeting});
+  const _Header({
+    required this.displayName,
+    required this.greeting,
+    required this.whatsApp,
+  });
   final String displayName;
   final String greeting;
+  final WhatsAppStatus whatsApp;
 
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: Column(
@@ -149,6 +150,8 @@ class _Header extends StatelessWidget {
                 style: AppType.title(color: AppColors.textHi)
                     .copyWith(fontSize: 22),
               ),
+              const SizedBox(height: 6),
+              _WAStatusChip(status: whatsApp),
             ],
           ),
         ),
@@ -163,6 +166,66 @@ class _Header extends StatelessWidget {
           onTap: () {},
         ),
       ],
+    );
+  }
+}
+
+class _WAStatusChip extends StatelessWidget {
+  const _WAStatusChip({required this.status});
+  final WhatsAppStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = status.connected ? AppColors.brand : AppColors.error;
+    return InkWell(
+      onTap: () {},
+      borderRadius: BorderRadius.circular(R.pill),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Sp.sm,
+          vertical: 4,
+        ),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(color: c.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              status.connected ? 'واتساب متصل' : 'واتساب منقطع',
+              style: AppType.muted(color: c).copyWith(fontSize: 11),
+            ),
+            if (status.connected) ...[
+              const SizedBox(width: 4),
+              Text(
+                '• ${status.sentToday} اليوم',
+                style: AppType.muted(color: c.withValues(alpha: 0.7))
+                    .copyWith(fontSize: 11),
+              ),
+            ] else ...[
+              const SizedBox(width: 6),
+              Container(
+                width: 1,
+                height: 10,
+                color: c.withValues(alpha: 0.3),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'ربط',
+                style: AppType.label(color: c).copyWith(fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
