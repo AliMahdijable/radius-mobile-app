@@ -110,16 +110,20 @@ class _PillBar extends StatelessWidget {
         // little narrower than a slot so it doesn't touch its neighbors.
         const totalSlots = 5;
         final slotWidth = c.maxWidth / totalSlots;
-        // Slot indexes in left-to-right order. RTL flips the visual side
-        // but the data order stays logical. We map tab index → slot:
-        //   tab 0 (home)        → slot 0
-        //   tab 1 (subscribers) → slot 1
-        //   FAB                 → slot 2 (center)
-        //   tab 2 (reports)     → slot 3
-        //   tab 3 (settings)    → slot 4
+        // Logical slot order: [home, subs, FAB, reports, settings].
+        // In RTL the visual order is reversed — slot 0 sits at the
+        // visual RIGHT, not the LEFT. Positioned.left is physical
+        // (Stack ignores Directionality), so we have to translate the
+        // logical slot to a visual-from-left coordinate ourselves.
         final activeSlot = current < _tabsBefore ? current : current + 1;
-        final indicatorLeft = slotWidth * activeSlot + 6;
-        final indicatorWidth = slotWidth - 12;
+        final isRtl = Directionality.of(context) == TextDirection.rtl;
+        final visualSlot =
+            isRtl ? (totalSlots - 1 - activeSlot) : activeSlot;
+        // Indicator pill: 4px inset from each side of its slot. Tight
+        // enough to look distinct, loose enough that 'المشتركون' (the
+        // longest tab label) doesn't get clipped.
+        final indicatorLeft = slotWidth * visualSlot + 4;
+        final indicatorWidth = slotWidth - 8;
 
         return Container(
           height: 60,
@@ -249,20 +253,26 @@ class _TabSlot extends StatelessWidget {
                 ),
               ),
               child: selected
-                  ? Row(
+                  ? Padding(
                       key: const ValueKey('on'),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          label,
-                          style: AppType.label(color: Colors.white)
-                              .copyWith(fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(icon, color: Colors.white, size: 16),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              label,
+                              style: AppType.label(color: Colors.white)
+                                  .copyWith(fontSize: 11),
+                              maxLines: 1,
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   : Icon(
                       icon,
