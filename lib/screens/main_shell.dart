@@ -9,14 +9,11 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'subscribers_screen.dart';
 
-/// Pill-style floating bottom bar (round-3 redesign):
-///   - Detached from the screen edges (floats with margin all around).
-///   - Pill shape (fully rounded) with subtle elevation.
-///   - 4 tab icons + center FAB; FAB protrudes slightly above the pill.
-///   - Active tab gets a brand-tinted background behind its icon, not
-///     just an oversized icon — reads more clearly than the old style.
-///   - Quick-search button moved into the pill (replaces what used to
-///     be a separate FAB) so the screen feels less busy.
+/// Round 5 bottom bar — stuck to the bottom edge (not floating), FAB
+/// integrated via a circular notch cut into the bar. This is the classic
+/// Material BottomAppBar + FloatingActionButton.centerDocked pattern;
+/// reads as a single cohesive surface instead of two separate floating
+/// elements like the previous pill design.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -47,144 +44,65 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  void _onSearchTap() {
-    HapticFeedback.selectionClick();
-    // TODO[quick-search]: open spotlight-style global search.
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      extendBody: true,
-      body: Stack(
-        children: [
-          IndexedStack(index: _tab, children: _tabs),
-          // Pill bar sits on top of body with a transparent area below it.
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Sp.md,
-                  0,
-                  Sp.md,
-                  Sp.sm,
-                ),
-                child: _PillBar(
-                  current: _tab,
-                  onChanged: (i) => setState(() => _tab = i),
-                  onFabTap: _onFabTap,
-                  onSearchTap: _onSearchTap,
-                ),
-              ),
+      body: IndexedStack(index: _tab, children: _tabs),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _onFabTap,
+        backgroundColor: AppColors.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        highlightElevation: 0,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add_rounded, size: 28),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomAppBar(
+        color: AppColors.surface,
+        elevation: 0,
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 6,
+        padding: EdgeInsets.zero,
+        height: 64,
+        child: Row(
+          children: [
+            _NavTab(
+              icon: Icons.home_rounded,
+              label: 'الرئيسية',
+              selected: _tab == 0,
+              onTap: () => setState(() => _tab = 0),
             ),
-          ),
-        ],
+            _NavTab(
+              icon: Icons.people_alt_rounded,
+              label: 'المشتركون',
+              selected: _tab == 1,
+              onTap: () => setState(() => _tab = 1),
+            ),
+            // Notch space for the FAB
+            const SizedBox(width: 56),
+            _NavTab(
+              icon: Icons.insert_chart_rounded,
+              label: 'التقارير',
+              selected: _tab == 2,
+              onTap: () => setState(() => _tab = 2),
+            ),
+            _NavTab(
+              icon: Icons.settings_outlined,
+              label: 'الضبط',
+              selected: _tab == 3,
+              onTap: () => setState(() => _tab = 3),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _PillBar extends StatelessWidget {
-  const _PillBar({
-    required this.current,
-    required this.onChanged,
-    required this.onFabTap,
-    required this.onSearchTap,
-  });
-
-  final int current;
-  final ValueChanged<int> onChanged;
-  final VoidCallback onFabTap;
-  final VoidCallback onSearchTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.topCenter,
-      children: [
-        Container(
-          height: 64,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.pill),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.07),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
-          child: Row(
-            children: [
-              _NavSlot(
-                icon: Icons.home_rounded,
-                label: 'الرئيسية',
-                selected: current == 0,
-                onTap: () => onChanged(0),
-              ),
-              _NavSlot(
-                icon: Icons.people_alt_rounded,
-                label: 'المشتركون',
-                selected: current == 1,
-                onTap: () => onChanged(1),
-              ),
-              // Spacer for the floating FAB above.
-              const SizedBox(width: 56),
-              _NavSlot(
-                icon: Icons.insert_chart_rounded,
-                label: 'التقارير',
-                selected: current == 2,
-                onTap: () => onChanged(2),
-              ),
-              _NavSlot(
-                icon: Icons.settings_outlined,
-                label: 'الضبط',
-                selected: current == 3,
-                onTap: () => onChanged(3),
-              ),
-            ],
-          ),
-        ),
-        // Floating + button — slightly above the pill, brand-color, white
-        // ring matching the page background so it looks "lifted".
-        Positioned(
-          top: -20,
-          child: GestureDetector(
-            onTap: onFabTap,
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.brand,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.bg, width: 4),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.brand.withValues(alpha: 0.22),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.add_rounded,
-                  color: Colors.white, size: 26),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _NavSlot extends StatelessWidget {
-  const _NavSlot({
+class _NavTab extends StatelessWidget {
+  const _NavTab({
     required this.icon,
     required this.label,
     required this.selected,
@@ -198,61 +116,32 @@ class _NavSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = selected ? AppColors.brand : AppColors.textMid;
     return Expanded(
       child: Material(
         color: Colors.transparent,
-        shape: const CircleBorder(),
         child: InkWell(
           onTap: () {
             HapticFeedback.selectionClick();
             onTap();
           },
-          customBorder: const CircleBorder(),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(
-              vertical: Sp.sm,
-              horizontal: 4,
-            ),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.brand.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(R.pill),
-            ),
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    color: selected ? AppColors.brand : AppColors.textMid,
-                    size: 22,
-                  ),
-                  // Label only appears on the active tab — keeps the
-                  // inactive icons clean and lets the active tab carry
-                  // a clear contextual label.
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    child: selected
-                        ? Padding(
-                            padding: const EdgeInsets.only(
-                              right: 6,
-                              left: 4,
-                            ),
-                            child: Text(
-                              label,
-                              style: AppType.label(color: AppColors.brand)
-                                  .copyWith(fontSize: 12),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedScale(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                scale: selected ? 1.1 : 1.0,
+                child: Icon(icon, color: color, size: 22),
               ),
-            ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: AppType.muted(color: color).copyWith(fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),
@@ -283,19 +172,19 @@ class _QuickAddSheet extends StatelessWidget {
           ),
           _QuickItem(
             icon: Icons.person_add_rounded,
-            color: const Color(0xFF3B82F6),
+            color: Color(0xFF3B82F6),
             title: 'مشترك جديد',
             subtitle: 'إضافة مشترك للنظام',
           ),
           _QuickItem(
             icon: Icons.payments_rounded,
-            color: const Color(0xFF8B5CF6),
+            color: Color(0xFF8B5CF6),
             title: 'تسديد دين',
             subtitle: 'استلام دفعة من مشترك',
           ),
           _QuickItem(
             icon: Icons.chat_bubble_rounded,
-            color: const Color(0xFFE08F2D),
+            color: Color(0xFFE08F2D),
             title: 'رسالة واتساب',
             subtitle: 'إرسال رسالة فردية',
           ),
@@ -356,7 +245,7 @@ class _QuickItem extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_back_ios_new_rounded,
+              Icon(Icons.arrow_back_ios_new_rounded,
                   size: 12, color: AppColors.textLow),
             ],
           ),
