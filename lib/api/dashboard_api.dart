@@ -27,6 +27,12 @@ class WhatsAppStatusResult {
   final String phone;
 }
 
+class DebtorsResult {
+  const DebtorsResult({required this.count, required this.total});
+  final int count;
+  final int total;
+}
+
 class DashboardApi {
   DashboardApi._();
 
@@ -58,6 +64,47 @@ class DashboardApi {
             .map((e) => Map<String, dynamic>.from(e))
             .toList(),
       );
+    } on DioException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// GET /api/subscribers/with-phones
+  /// Returns the admin's subscribers; we walk the list and count those
+  /// with a negative `notes` field — same way v1's dashboard_provider
+  /// computes the debtors metric. Returns count + total amount (positive).
+  static Future<DebtorsResult?> fetchDebtors() async {
+    final token = await AuthStorage.readToken();
+    if (token == null) return null;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/subscribers/with-phones',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final data = (body['data'] as List?) ?? const [];
+
+      var count = 0;
+      var total = 0;
+      for (final raw in data) {
+        if (raw is! Map) continue;
+        final notesRaw =
+            (raw['notes'] ?? raw['comments'] ?? '').toString().replaceAll(',', '').trim();
+        var notesVal = double.tryParse(notesRaw) ?? 0;
+        // Fallback: hasDebt + debt fields, same as v1's dashboard logic.
+        if (notesVal == 0 && (raw['hasDebt'] == true || raw['hasDebt'] == 1)) {
+          final d = raw['debt'];
+          if (d is num && d != 0) notesVal = -d.abs().toDouble();
+        }
+        if (notesVal < 0) {
+          count++;
+          total += notesVal.abs().round();
+        }
+      }
+      return DebtorsResult(count: count, total: total);
     } on DioException {
       return null;
     } catch (_) {

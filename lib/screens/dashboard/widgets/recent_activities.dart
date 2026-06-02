@@ -6,11 +6,15 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Recent activity feed for home — last N events, one row each.
+/// Recent activity feed for home. Accepts either mock Activity values
+/// or backend rows from /api/activities/daily-activations (raw maps);
+/// the row widget knows how to read both shapes.
 class RecentActivities extends StatelessWidget {
   const RecentActivities({super.key, required this.items});
 
-  final List<Activity> items;
+  /// Either `List<Activity>` (mock) or `List<Map<String, dynamic>>`
+  /// (backend rows from /api/activities/daily-activations).
+  final List<dynamic> items;
 
   @override
   Widget build(BuildContext context) {
@@ -39,13 +43,52 @@ class RecentActivities extends StatelessWidget {
   }
 }
 
+/// Internal normalized shape — both Activity and raw API maps land here.
 class _Row extends StatelessWidget {
   const _Row({required this.item});
-  final Activity item;
+  final dynamic item;
+
+  ({IconData icon, Color color, String title, int amount, String timeLabel})
+      _normalize() {
+    if (item is Activity) {
+      final a = item as Activity;
+      final visual = _visualForKind(a.kind);
+      return (
+        icon: visual.$1,
+        color: visual.$2,
+        title: a.title,
+        amount: a.amount,
+        timeLabel: humanMinutesAgo(a.minutesAgo),
+      );
+    }
+    // Backend row shape from /api/activities/daily-activations.
+    final m = (item as Map).cast<String, dynamic>();
+    final action = (m['action'] ?? m['action_type'] ?? '').toString();
+    final visual = _visualForAction(action);
+    final username = (m['target_name'] ??
+            m['subscriber_username'] ??
+            m['username'] ??
+            '')
+        .toString();
+    final descr = (m['action_description'] ?? m['description'] ?? '').toString();
+    final title = descr.isNotEmpty
+        ? descr
+        : (username.isNotEmpty ? '$action: $username' : action);
+    final amount = _readAmount(m);
+    final created = m['created_at']?.toString();
+    final timeLabel = _humanCreatedAt(created);
+    return (
+      icon: visual.$1,
+      color: visual.$2,
+      title: title,
+      amount: amount,
+      timeLabel: timeLabel,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color) = _visualFor(item.kind);
+    final n = _normalize();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -61,15 +104,15 @@ class _Row extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
+                  color: n.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(icon, color: color, size: 18),
+                child: Icon(n.icon, color: n.color, size: 18),
               ),
               const SizedBox(width: Sp.md),
               Expanded(
                 child: Text(
-                  item.title,
+                  n.title,
                   style: AppType.label(color: AppColors.textHi)
                       .copyWith(fontSize: 13),
                   maxLines: 1,
@@ -77,11 +120,11 @@ class _Row extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Sp.sm),
-              if (item.amount != 0) ...[
+              if (n.amount != 0) ...[
                 Text(
-                  '${item.amount < 0 ? '-' : '+'}${formatIQD(item.amount)}',
+                  '${n.amount < 0 ? '-' : '+'}${formatIQD(n.amount)}',
                   style: AppType.label(
-                    color: item.amount < 0
+                    color: n.amount < 0
                         ? AppColors.error
                         : AppColors.brand,
                   ).copyWith(fontSize: 12),
@@ -89,7 +132,7 @@ class _Row extends StatelessWidget {
                 const SizedBox(width: Sp.sm),
               ],
               Text(
-                humanMinutesAgo(item.minutesAgo),
+                n.timeLabel,
                 style:
                     AppType.muted(color: AppColors.textLow).copyWith(fontSize: 11),
               ),
@@ -100,7 +143,7 @@ class _Row extends StatelessWidget {
     );
   }
 
-  static (IconData, Color) _visualFor(ActivityKind k) => switch (k) {
+  static (IconData, Color) _visualForKind(ActivityKind k) => switch (k) {
         ActivityKind.activation => (Icons.bolt_rounded, AppColors.brand),
         ActivityKind.extension =>
           (Icons.loop_rounded, Color(0xFF3B82F6)),
@@ -113,4 +156,43 @@ class _Row extends StatelessWidget {
         ActivityKind.system =>
           (Icons.settings_suggest_rounded, AppColors.textMid),
       };
+
+  /// Maps backend action_type strings to (icon, color).
+  static (IconData, Color) _visualForAction(String action) {
+    final lower = action.toLowerCase();
+    if (lower.contains('activ')) return (Icons.bolt_rounded, AppColors.brand);
+    if (lower.contains('extend')) {
+      return (Icons.loop_rounded, const Color(0xFF3B82F6));
+    }
+    if (lower.contains('pay') || lower.contains('debt_pay')) {
+      return (Icons.payments_rounded, AppColors.brand);
+    }
+    if (lower.contains('debt') || lower.contains('add_debt')) {
+      return (Icons.account_balance_wallet_rounded, AppColors.error);
+    }
+    if (lower.contains('whatsapp') || lower.contains('message')) {
+      return (Icons.chat_bubble_rounded, const Color(0xFFE08F2D));
+    }
+    return (Icons.history_rounded, AppColors.textMid);
+  }
+
+  static int _readAmount(Map<String, dynamic> m) {
+    final raw = m['amount'] ?? m['paid_amount'] ?? m['debt_amount'];
+    if (raw == null) return 0;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString()) ?? 0;
+  }
+
+  static String _humanCreatedAt(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    final t = DateTime.tryParse(iso);
+    if (t == null) return '';
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return 'الآن';
+    if (diff.inMinutes < 60) return 'قبل ${diff.inMinutes} د';
+    if (diff.inHours < 24) return 'قبل ${diff.inHours} س';
+    final days = diff.inDays;
+    if (days == 1) return 'قبل يوم';
+    return 'قبل $days أيام';
+  }
 }

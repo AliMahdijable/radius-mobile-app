@@ -35,6 +35,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   WhatsAppStatusResult? _waLive;
   DailyActivationsResult? _activationsLive;
   Sas4Stats? _sas4Live;
+  DebtorsResult? _debtorsLive;
 
   @override
   void initState() {
@@ -60,12 +61,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       DashboardApi.fetchWhatsAppStatus(),
       DashboardApi.fetchDailyActivations(),
       Sas4Api.fetchAll(),
+      DashboardApi.fetchDebtors(),
     ]);
     if (!mounted) return;
     setState(() {
       _waLive = results[0] as WhatsAppStatusResult?;
       _activationsLive = results[1] as DailyActivationsResult?;
       _sas4Live = results[2] as Sas4Stats?;
+      _debtorsLive = results[3] as DebtorsResult?;
     });
   }
 
@@ -98,8 +101,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       activationsDelta: mockDailyStats.activationsDelta,
       payments: mockDailyStats.payments,
       paymentsDeltaPct: mockDailyStats.paymentsDeltaPct,
-      debtorsCount: mockDailyStats.debtorsCount,
-      debtorsTotal: mockDailyStats.debtorsTotal,
+      debtorsCount: _debtorsLive?.count ?? mockDailyStats.debtorsCount,
+      debtorsTotal: _debtorsLive?.total ?? mockDailyStats.debtorsTotal,
       expiredToday: mockDailyStats.expiredToday,
       last7Days: mockDailyStats.last7Days,
     );
@@ -169,7 +172,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     trailingLabel: 'اعرض الكل',
                     onTrailingTap: () {},
                   ),
-                  const RecentActivities(items: mockActivities)
+                  RecentActivities(
+                    items: _activationsLive?.recent.isNotEmpty == true
+                        ? _activationsLive!.recent
+                        : mockActivities,
+                  )
                       .animate()
                       .fadeIn(
                         delay: const Duration(milliseconds: 240),
