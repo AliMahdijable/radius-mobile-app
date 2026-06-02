@@ -49,11 +49,11 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: IndexedStack(index: _tab, children: _tabs),
-      // Inverted FAB (round-7 follow-up): white surface + brand-green
-      // plus icon, with a 2px brand-green ring so the white circle reads
-      // against the white bar instead of disappearing into it.
+      // Inverted FAB lifted ABOVE the bar (round-8): user wanted the bar
+      // shorter and the circle 'raised'. Negative Y offset pushes the
+      // FAB up so it floats mostly above the bar's top line.
       floatingActionButton: Transform.translate(
-        offset: const Offset(0, 14),
+        offset: const Offset(0, -8),
         child: SizedBox(
           width: 48,
           height: 48,
@@ -83,9 +83,9 @@ class _MainShellState extends State<MainShell> {
         color: AppColors.surface,
         elevation: 0,
         padding: EdgeInsets.zero,
-        // Shorter bar per user feedback — 64→54. Tabs use a more compact
-        // icon+label stack to fit comfortably in the reduced height.
-        height: 54,
+        // Bar is now just as tall as the icon+label stack (round-8).
+        // 46px = 2px top border + ~20px icon + 3px gap + ~14px label + slack.
+        height: 46,
         child: Container(
           decoration: const BoxDecoration(
             border: Border(
@@ -185,18 +185,19 @@ class _NavTab extends StatelessWidget {
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   AnimatedScale(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOutCubic,
                     scale: selected ? 1.08 : 1.0,
-                    child: Icon(icon, color: color, size: 22),
+                    child: Icon(icon, color: color, size: 20),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     label,
                     style:
-                        AppType.muted(color: color).copyWith(fontSize: 10),
+                        AppType.muted(color: color).copyWith(fontSize: 9.5),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
