@@ -258,13 +258,13 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
           ),
           _IconChip(
-            icon: Icons.search_rounded,
-            onTap: () => showQuickSearch(context),
+            icon: Icons.notifications_none_rounded,
+            badge: 3,
+            onTap: () {},
           ),
           const SizedBox(width: Sp.sm),
           _IconChip(
-            icon: Icons.notifications_none_rounded,
-            badge: 3,
+            icon: Icons.settings_outlined,
             onTap: () {},
           ),
         ],

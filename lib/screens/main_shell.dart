@@ -6,6 +6,7 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'reports_screen.dart';
+import 'search/quick_search_overlay.dart';
 import 'settings_screen.dart';
 import 'subscribers_screen.dart';
 
@@ -48,26 +49,33 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(index: _tab, children: _tabs),
-      // Inverted FAB lifted ABOVE the bar (round-8): user wanted the bar
-      // shorter and the circle 'raised'. Negative Y offset pushes the
-      // FAB up so it floats mostly above the bar's top line.
-      floatingActionButton: Transform.translate(
-        offset: const Offset(0, -8),
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: FloatingActionButton(
-            onPressed: _onFabTap,
-            backgroundColor: AppColors.surface,
-            foregroundColor: AppColors.brand,
-            elevation: 0,
-            highlightElevation: 0,
-            shape: const CircleBorder(
-              side: BorderSide(color: AppColors.brand, width: 2),
-            ),
-            child: const Icon(Icons.add_rounded, size: 26),
+      // Stack the body so we can float a standalone search pill on the
+      // right side, above the home tab (round-9 ask from the user).
+      body: Stack(
+        children: [
+          IndexedStack(index: _tab, children: _tabs),
+          Positioned(
+            right: Sp.lg,
+            // 46 (bar height) + a small gap above it
+            bottom: 56,
+            child: _SearchPill(onTap: () => showQuickSearch(context)),
           ),
+        ],
+      ),
+      // FAB back to brand-green (round-9: 'رجعها لون خاضر') and centered
+      // on the bar's top edge with no Y offset — its vertical midpoint
+      // lines up with the bar so it reads as docked, not floating.
+      floatingActionButton: SizedBox(
+        width: 48,
+        height: 48,
+        child: FloatingActionButton(
+          onPressed: _onFabTap,
+          backgroundColor: AppColors.brand,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          highlightElevation: 0,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.add_rounded, size: 26),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -205,6 +213,44 @@ class _NavTab extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchPill extends StatelessWidget {
+  const _SearchPill({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.brand, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.search_rounded,
+              color: AppColors.brand, size: 20),
         ),
       ),
     );
