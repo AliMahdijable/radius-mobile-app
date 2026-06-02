@@ -26,6 +26,9 @@ dependencies:
   # HTTP
   dio: ^5.7.0
 
+  # OS permission requests (notifications etc)
+  permission_handler: ^11.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

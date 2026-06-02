@@ -8,6 +8,8 @@ import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'home_placeholder.dart';
+import 'permissions_screen.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -80,12 +82,14 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
         HapticFeedback.mediumImpact();
-        _showSnack(
-          requires2fa
-              ? 'تم الدخول — يحتاج تحقق ثنائي'
-              : 'مرحباً $displayName 👋',
+        if (requires2fa) {
+          _showSnack('تم الدخول — يحتاج تحقق ثنائي');
+          // TODO[2fa-screen]: route to 2FA when that screen exists.
+          return;
+        }
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const PermissionsScreen()),
         );
-        // TODO[home-screen]: navigate to home once it exists.
       case LoginFailure(:final message):
         HapticFeedback.heavyImpact();
         _showSnack(message, error: true);
@@ -111,9 +115,10 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (!mounted) return;
       if (ok) {
-        final name = await AuthStorage.readDisplayName() ?? 'مستخدم';
-        _showSnack('مرحباً $name 👋');
-        // TODO[home-screen]: navigate to home once it exists.
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomePlaceholder()),
+        );
       }
     } catch (_) {
       if (!mounted) return;
@@ -192,29 +197,43 @@ class _Logo extends StatelessWidget {
   const _Logo();
   @override
   Widget build(BuildContext context) {
+    // Tint the logo brand-green using BlendMode.modulate via ColorFilter.
+    // The logo is violet shapes on a transparent/white background.
+    // We render it inside a ShaderMask that:
+    //   1. Takes the alpha mask from the image (the violet shapes only).
+    //   2. Fills the masked area with brand green.
+    // White/transparent areas of the source stay transparent (white card
+    // shows through), violet shapes get re-colored to brand.
     return Center(
       child: Container(
-        width: 120,
-        height: 120,
+        width: 160,
+        height: 160,
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(R.xl),
           boxShadow: [
             BoxShadow(
-              color: AppColors.brand.withValues(alpha: 0.12),
-              blurRadius: 32,
-              offset: const Offset(0, 16),
+              color: AppColors.brand.withValues(alpha: 0.14),
+              blurRadius: 40,
+              offset: const Offset(0, 20),
             ),
           ],
         ),
-        padding: const EdgeInsets.all(Sp.lg),
-        // Render the company logo as-is. Tinting it via colorBlendMode.srcIn
-        // collapses the internal negative-space (between geometric strokes)
-        // into a solid silhouette — incident 2026-06-02 produced a green
-        // square. Show the original mark instead.
-        child: Image.asset(
-          'assets/images/logo.png',
-          fit: BoxFit.contain,
+        padding: const EdgeInsets.all(Sp.xl),
+        child: ColorFiltered(
+          // Maps violet (and any colored pixel) to brand green while keeping
+          // transparent areas transparent. The matrix forces R=brand.R,
+          // G=brand.G, B=brand.B, A=source.A.
+          colorFilter: const ColorFilter.matrix(<double>[
+            0, 0, 0, 0, 0x2D / 1.0,   // R out = brand R (45)
+            0, 0, 0, 0, 0x5F / 1.0,   // G out = brand G (95)
+            0, 0, 0, 0, 0x47 / 1.0,   // B out = brand B (71)
+            0, 0, 0, 1, 0,            // A out = source alpha (preserves shape)
+          ]),
+          child: Image.asset(
+            'assets/images/logo.png',
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     );
