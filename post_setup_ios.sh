@@ -31,5 +31,13 @@ set_or_add "NSFaceIDUsageDescription" \
 
 set_or_add "CFBundleDisplayName" "MyServices Radius"
 
+# Voice search overlay (mic button) — iOS refuses to start
+# SFSpeechRecognizer + AVAudioSession without these usage strings.
+set_or_add "NSMicrophoneUsageDescription" \
+  "نستخدم الميكروفون للبحث الصوتي عن المشتركين والإجراءات."
+
+set_or_add "NSSpeechRecognitionUsageDescription" \
+  "نستخدم التعرف على الصوت لتحويل كلامك إلى بحث نصي داخل التطبيق."
+
 echo ""
 echo "✅ Done. Rebuild iOS to apply: flutter clean && flutter run -d ios"

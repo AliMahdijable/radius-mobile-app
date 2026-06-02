@@ -49,9 +49,9 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: IndexedStack(index: _tab, children: _tabs),
-      // Smaller, dropped-in FAB per user feedback round 6 — felt 'too big'
-      // and 'too high'. Use a 48×48 button pushed 14px deeper into the bar
-      // so it reads as integrated, not floating above.
+      // Inverted FAB (round-7 follow-up): white surface + brand-green
+      // plus icon, with a 2px brand-green ring so the white circle reads
+      // against the white bar instead of disappearing into it.
       floatingActionButton: Transform.translate(
         offset: const Offset(0, 14),
         child: SizedBox(
@@ -59,12 +59,14 @@ class _MainShellState extends State<MainShell> {
           height: 48,
           child: FloatingActionButton(
             onPressed: _onFabTap,
-            backgroundColor: AppColors.brand,
-            foregroundColor: Colors.white,
+            backgroundColor: AppColors.surface,
+            foregroundColor: AppColors.brand,
             elevation: 0,
             highlightElevation: 0,
-            shape: const CircleBorder(),
-            child: const Icon(Icons.add_rounded, size: 24),
+            shape: const CircleBorder(
+              side: BorderSide(color: AppColors.brand, width: 2),
+            ),
+            child: const Icon(Icons.add_rounded, size: 26),
           ),
         ),
       ),
@@ -81,7 +83,9 @@ class _MainShellState extends State<MainShell> {
         color: AppColors.surface,
         elevation: 0,
         padding: EdgeInsets.zero,
-        height: 64,
+        // Shorter bar per user feedback — 64→54. Tabs use a more compact
+        // icon+label stack to fit comfortably in the reduced height.
+        height: 54,
         child: Container(
           decoration: const BoxDecoration(
             border: Border(

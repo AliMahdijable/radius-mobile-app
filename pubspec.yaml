@@ -40,6 +40,11 @@ dependencies:
   # Charts (sparkline on hero revenue card, etc.)
   fl_chart: ^0.70.2
 
+  # Voice → text for the quick-search overlay's mic button. On-device
+  # recognizer (no server round-trip), supports Arabic via the iOS /
+  # Android system recognizers.
+  speech_to_text: ^7.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

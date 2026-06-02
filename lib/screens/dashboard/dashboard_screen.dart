@@ -8,6 +8,7 @@ import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../search/quick_search_overlay.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import 'widgets/section_header.dart';
@@ -250,13 +251,13 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
           ),
           _IconChip(
-            icon: Icons.notifications_none_rounded,
-            badge: 3,
-            onTap: () {},
+            icon: Icons.search_rounded,
+            onTap: () => showQuickSearch(context),
           ),
           const SizedBox(width: Sp.sm),
           _IconChip(
-            icon: Icons.settings_outlined,
+            icon: Icons.notifications_none_rounded,
+            badge: 3,
             onTap: () {},
           ),
         ],
