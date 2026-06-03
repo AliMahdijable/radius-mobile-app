@@ -105,10 +105,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!_sas4Loaded || !_debtorsLoaded) return null;
     if (_sas4Live == null) return null;
     return SubscribersStats(
-      total: _sas4Live!.total,
-      active: _sas4Live!.active,
-      online: _sas4Live!.online,
-      expired: _sas4Live!.expired,
+      total: _sas4Live!.total ?? 0,
+      active: _sas4Live!.active ?? 0,
+      online: _sas4Live!.online ?? 0,
+      expired: _sas4Live!.expired ?? 0,
       nearExpiry: _debtorsLive?.nearExpiry ?? 0,
     );
   }
