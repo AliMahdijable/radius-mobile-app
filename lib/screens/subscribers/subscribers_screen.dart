@@ -29,6 +29,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   Timer? _debounce;
 
   List<Subscriber> _all = [];
+  Map<String, Map<String, dynamic>> _lastPayments = {};
   bool _loading = true;
   bool _refreshing = false;
 
@@ -60,22 +61,44 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await SubscribersApi.loadAll();
+    await _fetchAndMerge();
     if (!mounted) return;
-    setState(() {
-      _all = list ?? [];
-      _loading = false;
-    });
+    setState(() => _loading = false);
   }
 
   Future<void> _refresh() async {
     setState(() => _refreshing = true);
-    final list = await SubscribersApi.loadAll();
+    await _fetchAndMerge();
     if (!mounted) return;
-    setState(() {
-      _all = list ?? _all;
-      _refreshing = false;
-    });
+    setState(() => _refreshing = false);
+  }
+
+  /// Pulls the 3 sources in parallel (subscribers + online list + last
+  /// payments) then merges: online flag is set per username, payments
+  /// land in a separate map keyed by username. Mirrors v1's
+  /// loadSubscribers → loadOnlineUsers → loadLastPayments sequence but
+  /// runs them concurrently to cut wall time.
+  Future<void> _fetchAndMerge() async {
+    final results = await Future.wait([
+      SubscribersApi.loadAll(),
+      SubscribersApi.loadOnline(),
+      SubscribersApi.loadLastPayments(),
+    ]);
+    final list = results[0] as List<Subscriber>?;
+    final online = results[1] as Set<String>?;
+    final payments = results[2] as Map<String, Map<String, dynamic>>?;
+
+    if (list == null) return;
+    final onlineSet = online ?? const <String>{};
+    final merged = list.map((s) {
+      final isOn = onlineSet.contains(s.username.toLowerCase());
+      // Only rebuild the model if the flag actually changes — avoids
+      // wasting allocations on the common case where nothing is online.
+      if (isOn == s.isOnlineFlag) return s;
+      return s.copyWithOnline(online: isOn);
+    }).toList();
+    _all = merged;
+    _lastPayments = payments ?? {};
   }
 
   void _onSearchChanged() {
@@ -402,6 +425,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                               return SubscriberCardV2(
                                 sub: s,
                                 selected: isSelected,
+                                lastPayment: _lastPayments[s.username],
                                 onTap: () {
                                   if (_selectionMode) {
                                     _toggleSelect(s);

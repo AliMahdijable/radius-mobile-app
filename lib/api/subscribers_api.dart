@@ -5,12 +5,99 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 
+/// Set of usernames currently online (from /api/v2/online-users) and a
+/// map of username→last-payment row (from /api/subscribers/
+/// last-financial-movements). Both are merged into the subscribers list
+/// on the screen side so cards can show the live flags + payment line
+/// without re-fetching per row.
+class LiveOverlay {
+  const LiveOverlay({
+    required this.onlineUsernames,
+    required this.lastPaymentByUsername,
+  });
+  final Set<String> onlineUsernames;
+  final Map<String, Map<String, dynamic>> lastPaymentByUsername;
+}
+
 /// Subscribers API — wraps the same endpoints v1 uses so v2 reads the
 /// exact same data the v1 mobile app reads. The list comes from the
 /// backend /api/subscribers/with-phones endpoint which already joins
 /// active subscribers with their stored phones, debts, and discounts.
 class SubscribersApi {
   SubscribersApi._();
+
+  /// GET /api/v2/online-users — list of subscribers currently
+  /// connected (SAS4 online widget, paginated 8×250 on the backend).
+  /// Returns just the lowercase usernames for fast O(1) membership tests.
+  static Future<Set<String>?> loadOnline() async {
+    final token = await AuthStorage.readToken();
+    if (token == null) return null;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/online-users',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        if (!kReleaseMode) {
+          debugPrint('🟡 v2/online-users: success!=true body=$body');
+        }
+        return null;
+      }
+      final rows = (body['data'] as List?) ?? const [];
+      final out = <String>{};
+      for (final row in rows) {
+        if (row is Map) {
+          final u = row['username']?.toString().toLowerCase();
+          if (u != null && u.isNotEmpty) out.add(u);
+        }
+      }
+      return out;
+    } on DioException catch (e) {
+      _log('v2/online-users', e);
+      return null;
+    } catch (e) {
+      _log('v2/online-users', e);
+      return null;
+    }
+  }
+
+  /// GET /api/subscribers/last-financial-movements/{adminId} — recent
+  /// payment per subscriber. Same endpoint v1 hits; falls back to
+  /// last-payments if the modern one isn't available.
+  static Future<Map<String, Map<String, dynamic>>?> loadLastPayments() async {
+    final token = await AuthStorage.readToken();
+    final adminId = await AuthStorage.readAdminId();
+    if (token == null || adminId == null) return null;
+    Future<Map<String, Map<String, dynamic>>?> tryUrl(String url) async {
+      try {
+        final r = await ApiClient.dio.get<Map<String, dynamic>>(
+          url,
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+        final body = r.data ?? const {};
+        if (body['success'] != true) return null;
+        final list = (body['payments'] as List?) ?? const [];
+        final out = <String, Map<String, dynamic>>{};
+        for (final p in list) {
+          if (p is Map) {
+            final u = p['subscriber_username']?.toString();
+            if (u != null && u.isNotEmpty) {
+              out[u] = Map<String, dynamic>.from(p);
+            }
+          }
+        }
+        return out;
+      } catch (e) {
+        _log(url, e);
+        return null;
+      }
+    }
+    final modern = await tryUrl(
+        '/api/subscribers/last-financial-movements/$adminId');
+    if (modern != null) return modern;
+    return tryUrl('/api/subscribers/last-payments/$adminId');
+  }
 
   /// GET /api/subscribers/with-phones — returns every subscriber with
   /// phone/debt/discount/expiration prefilled.

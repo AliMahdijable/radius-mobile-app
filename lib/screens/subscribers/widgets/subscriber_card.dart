@@ -15,12 +15,16 @@ class SubscriberCardV2 extends StatelessWidget {
     super.key,
     required this.sub,
     required this.selected,
+    this.lastPayment,
     required this.onTap,
     required this.onLongPress,
   });
 
   final Subscriber sub;
   final bool selected;
+  /// Raw row from /api/subscribers/last-financial-movements (keyed by
+  /// username on the parent). null = no recent payment.
+  final Map<String, dynamic>? lastPayment;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -184,6 +188,10 @@ class SubscriberCardV2 extends StatelessWidget {
                     ],
                   ),
                 ],
+                if (lastPayment != null) ...[
+                  const SizedBox(height: 6),
+                  _LastPaymentLine(payment: lastPayment!),
+                ],
               ],
             ),
           ),
@@ -228,6 +236,73 @@ class SubscriberCardV2 extends StatelessWidget {
     if (sub.isNearExpiry) return LucideIcons.triangleAlert;
     if (sub.isOnline) return LucideIcons.wifi;
     return LucideIcons.circleCheck;
+  }
+}
+
+/// Last-payment line — 'آخر تسديد قبل X — N د.ع'. Reads the action
+/// description + amount + created_at fields from the backend's
+/// last-financial-movements row. Skipped silently for payments older
+/// than 30 days so cards don't list stale activity.
+class _LastPaymentLine extends StatelessWidget {
+  const _LastPaymentLine({required this.payment});
+  final Map<String, dynamic> payment;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = _readAmount(payment);
+    final createdRaw = payment['created_at']?.toString();
+    final action = (payment['action_type'] ?? payment['action'] ?? '').toString();
+    if (createdRaw == null || createdRaw.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final created = DateTime.tryParse(createdRaw);
+    if (created == null) return const SizedBox.shrink();
+    final diff = DateTime.now().difference(created);
+    if (diff.inDays > 30) return const SizedBox.shrink();
+    final timeLabel = _humanAgo(diff);
+    final actionLabel = _humanAction(action);
+    return Row(
+      children: [
+        const Icon(LucideIcons.banknote,
+            size: 13, color: AppColors.brand),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            '$actionLabel • $timeLabel${amount != 0 ? ' • ${formatIQD(amount.abs())} د.ع' : ''}',
+            style: AppType.muted(color: AppColors.brand)
+                .copyWith(fontSize: 11),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static int _readAmount(Map<String, dynamic> m) {
+    final raw = m['amount'] ?? m['paid_amount'] ?? m['debt_amount'];
+    if (raw == null) return 0;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString().replaceAll(',', '')) ?? 0;
+  }
+
+  static String _humanAgo(Duration d) {
+    if (d.inMinutes < 1) return 'الآن';
+    if (d.inHours < 1) return 'قبل ${d.inMinutes} د';
+    if (d.inDays < 1) return 'قبل ${d.inHours} س';
+    if (d.inDays == 1) return 'قبل يوم';
+    return 'قبل ${d.inDays} أيام';
+  }
+
+  static String _humanAction(String action) {
+    final lower = action.toLowerCase();
+    if (lower.contains('activate')) return 'تفعيل';
+    if (lower.contains('extend')) return 'تمديد';
+    if (lower.contains('debt_pay') || lower.contains('debtpay')) return 'تسديد دين';
+    if (lower.contains('payment') || lower.contains('pay')) return 'دفعة';
+    if (lower.contains('balance_add')) return 'إضافة دين';
+    if (lower.contains('balance_deduct')) return 'حسم رصيد';
+    return 'حركة مالية';
   }
 }
 
