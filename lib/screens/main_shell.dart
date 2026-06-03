@@ -8,7 +8,7 @@ import 'dashboard/dashboard_screen.dart';
 import 'reports_screen.dart';
 import 'search/quick_search_overlay.dart';
 import 'settings_screen.dart';
-import 'subscribers_screen.dart';
+import 'subscribers/subscribers_screen.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
