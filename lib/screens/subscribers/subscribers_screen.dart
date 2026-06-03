@@ -615,21 +615,16 @@ class _PageSizePicker extends StatelessWidget {
           PopupMenuItem(value: o, child: Text('$o / صفحة')),
       ],
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(R.pill),
-          border: Border.all(color: AppColors.border),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$current / صفحة',
+            Text('$current',
                 style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11)),
-            const SizedBox(width: 4),
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 2),
             const Icon(LucideIcons.chevronDown,
-                size: 12, color: AppColors.textMid),
+                size: 11, color: AppColors.textMid),
           ],
         ),
       ),
