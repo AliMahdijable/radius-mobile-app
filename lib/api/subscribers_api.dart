@@ -23,8 +23,23 @@ class SubscribersApi {
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return null;
+      if (body['success'] != true) {
+        if (!kReleaseMode) {
+          debugPrint('🟡 subscribers/with-phones: success!=true body=$body');
+        }
+        return null;
+      }
       final data = (body['data'] as List?) ?? const [];
+      // Diagnostic: dump the FIRST row's keys + sample values so we
+      // can see which field actually carries the package name (the v2
+      // model was reading null for hakem@poox — maybe SAS4 puts it
+      // somewhere we haven't tried). One-shot — first row only.
+      if (!kReleaseMode && data.isNotEmpty && data.first is Map) {
+        final first = data.first as Map;
+        debugPrint('🔍 first subscriber keys: ${first.keys.toList()}');
+        debugPrint('🔍 first subscriber profile_details=${first['profile_details']}');
+        debugPrint('🔍 first subscriber profile_name=${first['profile_name']} name=${first['name']} profile_id=${first['profile_id']}');
+      }
       return data
           .whereType<Map>()
           .map((m) => Subscriber.fromJson(Map<String, dynamic>.from(m)))

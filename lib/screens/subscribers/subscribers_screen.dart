@@ -351,15 +351,16 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
               }),
             ),
             const SizedBox(height: Sp.sm),
-            // Stats bar
+            // Stats bar — keep the row tight; the page-size picker is a
+            // plain text link.
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 4),
               child: Row(
                 children: [
                   Text(
-                    '${pageStart + 1}-$pageEnd من ${filtered.length}',
-                    style: AppType.muted(color: AppColors.textMid)
-                        .copyWith(fontSize: 11),
+                    '${filtered.isEmpty ? 0 : pageStart + 1}-$pageEnd / ${filtered.length}',
+                    style: AppType.muted(color: AppColors.textLow)
+                        .copyWith(fontSize: 10),
                   ),
                   const Spacer(),
                   _PageSizePicker(
@@ -374,7 +375,6 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: Sp.sm),
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.brand,
@@ -614,19 +614,16 @@ class _PageSizePicker extends StatelessWidget {
         for (final o in options)
           PopupMenuItem(value: o, child: Text('$o / صفحة')),
       ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('$current',
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
-            const SizedBox(width: 2),
-            const Icon(LucideIcons.chevronDown,
-                size: 11, color: AppColors.textMid),
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$current/صفحة',
+              style: AppType.muted(color: AppColors.textLow)
+                  .copyWith(fontSize: 10, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 2),
+          const Icon(LucideIcons.chevronDown,
+              size: 10, color: AppColors.textLow),
+        ],
       ),
     );
   }

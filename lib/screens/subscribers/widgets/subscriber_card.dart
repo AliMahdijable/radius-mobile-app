@@ -193,15 +193,16 @@ class SubscriberCardV2 extends StatelessWidget {
   }
 
   /// Formats SAS4's expiration string ('2026-09-30 00:00:00' or
-  /// '2026-09-30') to a short Arabic-friendly 'YYYY/MM/DD'. Returns
-  /// '—' for null/empty so the row still aligns with siblings.
+  /// '2026-09-30') to 'YYYY/MM/DD HH:MM'. Time is included so admins
+  /// can see the exact moment a subscription ends, not just the date.
+  /// Returns '—' for null/empty so the row stays aligned.
   static String _formatExpiration(String? raw) {
     if (raw == null || raw.trim().isEmpty) return '—';
     final s = raw.trim();
     final t = DateTime.tryParse(s) ?? DateTime.tryParse(s.split(' ').first);
     if (t == null) return s.split(' ').first;
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${t.year}/${two(t.month)}/${two(t.day)}';
+    return '${t.year}/${two(t.month)}/${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 
   // ───────── status helpers ─────────
