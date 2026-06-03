@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -64,8 +65,19 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
             if (mounted) setState(() => _listening = false);
           }
         },
-        onError: (_) {
-          if (mounted) setState(() => _listening = false);
+        onError: (err) {
+          if (kDebugMode) debugPrint('🎙️ error: ${err.errorMsg}');
+          if (!mounted) return;
+          setState(() => _listening = false);
+          // 'language-not-supported' = the Arabic locale isn't installed
+          // on the device's recognizer. Tell the user where to get it.
+          if (err.errorMsg.contains('language-not-supported') ||
+              err.errorMsg.contains('error_language_not_supported')) {
+            _showSnack(
+              'العربية غير منزّلة. ادخل: Settings → Apps → Google →\n'
+              'Voice → Offline speech recognition → نزّل العربية',
+            );
+          }
         },
       );
       if (mounted) setState(() => _speechReady = ok);
@@ -91,42 +103,19 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       _showSnack('التعرّف على الصوت غير متاح على هذا الجهاز');
       return;
     }
-    // Pick a locale to listen in. Priority:
-    //  1. Iraqi Arabic, then Saudi Arabic (exact match, normalized).
-    //  2. Any Arabic dialect the device has installed.
-    //  3. English (so search still works on devices without Arabic).
-    //  4. null → speech engine's own default.
-    //
-    // Devices return locale IDs in mixed formats ('ar-IQ', 'ar_IQ',
-    // 'ar-iq') so we normalize underscores→dashes and lowercase before
-    // comparing. Critically: we NEVER abort here — voice search must
-    // still work even when Arabic isn't installed.
+    // Force Arabic — Android's SpeechRecognizer accepts BCP-47 tags
+    // even when locales() doesn't list them, and the device-default
+    // fallback (English on most TECNO/MediaTek units) is exactly what
+    // we DON'T want. We pass 'ar' (the language-only tag) because that
+    // matches whichever Arabic dialect is installed without requiring
+    // an exact country code. If Arabic truly isn't available, the
+    // recognizer raises an error which our onError clears _listening.
     final locales = await _speech.locales();
-    final ids = locales.map((l) => l.localeId).toList();
-    String norm(String s) => s.toLowerCase().replaceAll('_', '-');
-    String? exact(List<String> wants) {
-      for (final w in wants) {
-        final hit = ids.firstWhere(
-          (id) => norm(id) == norm(w),
-          orElse: () => '',
-        );
-        if (hit.isNotEmpty) return hit;
-      }
-      return null;
+    if (kDebugMode) {
+      final ids = locales.map((l) => l.localeId).join(', ');
+      debugPrint('🎙️ available locales: [$ids]');
     }
-    String? prefix(String p) {
-      final hit = ids.firstWhere(
-        (id) => norm(id).startsWith(p),
-        orElse: () => '',
-      );
-      return hit.isEmpty ? null : hit;
-    }
-    final localeId = exact(['ar-IQ', 'ar-SA']) ??
-        prefix('ar') ??
-        exact(['en-US']) ??
-        prefix('en');
-    // If the device has no usable locale at all we still call listen
-    // with localeId=null so the engine falls back to its own default.
+    const localeId = 'ar';
     setState(() => _listening = true);
     await _speech.listen(
       onResult: (r) {

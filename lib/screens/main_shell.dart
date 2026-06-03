@@ -349,10 +349,10 @@ class _QuickAddSheet extends StatelessWidget {
             subtitle: 'استلام دفعة من مشترك',
           ),
           _QuickItem(
-            icon: Icons.chat_bubble_rounded,
+            icon: Icons.receipt_long_rounded,
             color: Color(0xFFE08F2D),
-            title: 'رسالة واتساب',
-            subtitle: 'إرسال رسالة فردية',
+            title: 'إضافة صرفية',
+            subtitle: 'تسجيل مصروف جديد',
           ),
         ],
       ),

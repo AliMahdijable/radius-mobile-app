@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/mock/dashboard_data.dart';
 import '../../../core/util/format.dart';
@@ -63,7 +64,7 @@ class SubscribersCard extends StatelessWidget {
                           child: _Mini(
                             value: stats.active,
                             label: 'نشط',
-                            icon: Icons.check_circle_rounded,
+                            icon: LucideIcons.circleCheck,
                             color: AppColors.brand,
                           ),
                         ),
@@ -71,8 +72,8 @@ class SubscribersCard extends StatelessWidget {
                         Expanded(
                           child: _Mini(
                             value: stats.online,
-                            label: 'متصل',
-                            icon: Icons.wifi_rounded,
+                            label: 'متصل الآن',
+                            icon: LucideIcons.wifi,
                             color: const Color(0xFF3B82F6),
                           ),
                         ),
@@ -85,7 +86,7 @@ class SubscribersCard extends StatelessWidget {
                           child: _Mini(
                             value: stats.expired,
                             label: 'منتهي',
-                            icon: Icons.block_rounded,
+                            icon: LucideIcons.timerOff,
                             color: AppColors.error,
                           ),
                         ),
@@ -94,7 +95,7 @@ class SubscribersCard extends StatelessWidget {
                           child: _Mini(
                             value: stats.nearExpiry,
                             label: 'قارب الانتهاء',
-                            icon: Icons.schedule_rounded,
+                            icon: LucideIcons.triangleAlert,
                             color: const Color(0xFFE08F2D),
                           ),
                         ),
@@ -208,7 +209,9 @@ class _Mini extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: color, size: 22),
+            // Smaller than the counter so the number stays the focal
+            // point of the tile (per user request).
+            Icon(icon, color: color, size: 16),
             Text(
               '$value',
               style: AppType.title(color: AppColors.textHi).copyWith(
