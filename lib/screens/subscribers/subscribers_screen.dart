@@ -89,20 +89,20 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     });
   }
 
-  // ───────── filtering / sorting ─────────
+  // ───────── filtering / sorting (matches v1 predicates exactly) ─────────
   List<Subscriber> get _filteredAll {
     Iterable<Subscriber> it = _all;
     switch (_filter) {
       case SubscriberFilter.all:
         break;
       case SubscriberFilter.active:
-        it = it.where((s) => s.isActive);
+        it = it.where((s) => s.isActive); // not-expired (disabled included)
       case SubscriberFilter.online:
-        it = it.where((s) => s.isOnlineFlag);
+        it = it.where((s) => s.isOnline);
       case SubscriberFilter.offline:
-        it = it.where((s) => !s.isOnlineFlag && s.isEnabled);
+        it = it.where((s) => s.isOffline); // not-online AND not-expired
       case SubscriberFilter.disabled:
-        it = it.where((s) => !s.isEnabled);
+        it = it.where((s) => s.isDisabled);
       case SubscriberFilter.expired:
         it = it.where((s) => s.isExpired);
       case SubscriberFilter.debtors:
@@ -156,10 +156,9 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     return {
       SubscriberFilter.all: _all.length,
       SubscriberFilter.active: _all.where((s) => s.isActive).length,
-      SubscriberFilter.online: _all.where((s) => s.isOnlineFlag).length,
-      SubscriberFilter.offline:
-          _all.where((s) => !s.isOnlineFlag && s.isEnabled).length,
-      SubscriberFilter.disabled: _all.where((s) => !s.isEnabled).length,
+      SubscriberFilter.online: _all.where((s) => s.isOnline).length,
+      SubscriberFilter.offline: _all.where((s) => s.isOffline).length,
+      SubscriberFilter.disabled: _all.where((s) => s.isDisabled).length,
       SubscriberFilter.expired: _all.where((s) => s.isExpired).length,
       SubscriberFilter.debtors: _all.where((s) => s.hasDebt).length,
       SubscriberFilter.nearExpiry: _all.where((s) => s.isNearExpiry).length,

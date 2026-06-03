@@ -74,17 +74,50 @@ class Subscriber {
   bool get hasCredit => balanceAmount > 0;
   double get debtAbs => balanceAmount.abs();
 
+  /// Parsed expiration date — null when SAS4 sent an unparseable value.
+  /// Mirrors v1's SubscriberModel._parsedExpiration so the date-based
+  /// predicates below behave identically to v1.
+  DateTime? get parsedExpiration {
+    final raw = expiration;
+    if (raw == null || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw.trim()) ??
+        DateTime.tryParse(raw.trim().split(' ').first);
+  }
+
+  /// Matches v1: prefer the parsed date (so we catch expirations that
+  /// happen mid-day); fall back to remainingDays for rows missing a
+  /// date string.
   bool get isExpired {
+    final exp = parsedExpiration;
+    if (exp != null) return exp.isBefore(DateTime.now());
     final d = remainingDays;
     return d != null && d < 0;
   }
 
+  /// v1 rule: 'قارب الانتهاء' is 1..3 days remaining (NOT 0 — 0 means
+  /// it expires today, which v1 treats as expired-or-about-to-expire).
+  /// When we have a parsed date we measure actual hours instead, so a
+  /// sub that expires in 2 days at 3pm is included.
   bool get isNearExpiry {
+    final exp = parsedExpiration;
+    if (exp != null) {
+      if (exp.isBefore(DateTime.now())) return false;
+      return exp.difference(DateTime.now()).inDays <= 3;
+    }
     final d = remainingDays;
-    return d != null && d >= 0 && d <= 3;
+    return d != null && d >= 1 && d <= 3;
   }
 
-  bool get isActive => isEnabled && !isExpired;
+  /// v1 says: active = not-expired. Disabled subscribers are NOT
+  /// excluded from this count — they have a separate 'disabled' filter.
+  bool get isActive => !isExpired;
+
+  bool get isDisabled => !isEnabled;
+  bool get isOnline => isOnlineFlag;
+
+  /// v1: offline = (not online) AND (not expired). Disabled subscribers
+  /// are counted as offline here (their own filter shows them separately).
+  bool get isOffline => !isOnline && !isExpired;
 
   factory Subscriber.fromJson(Map<String, dynamic> j) {
     int? toInt(dynamic v) {

@@ -205,28 +205,28 @@ class SubscriberCardV2 extends StatelessWidget {
     return '${t.year}/${two(t.month)}/${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 
-  // ───────── status helpers ─────────
+  // ───────── status helpers (priority matches v1 visual order) ─────────
   Color _statusColor() {
-    if (!sub.isEnabled) return const Color(0xFF6D4C41);
+    if (sub.isDisabled) return const Color(0xFF6D4C41);
     if (sub.isExpired) return AppColors.error;
     if (sub.isNearExpiry) return const Color(0xFFE08F2D);
-    if (sub.isOnlineFlag) return const Color(0xFF3B82F6);
+    if (sub.isOnline) return const Color(0xFF3B82F6);
     return AppColors.brand;
   }
 
   String _statusLabel() {
-    if (!sub.isEnabled) return 'معطّل';
+    if (sub.isDisabled) return 'معطّل';
     if (sub.isExpired) return 'منتهي';
     if (sub.isNearExpiry) return 'قارب الانتهاء';
-    if (sub.isOnlineFlag) return 'متصل';
+    if (sub.isOnline) return 'متصل';
     return 'نشط';
   }
 
   IconData _statusIcon() {
-    if (!sub.isEnabled) return LucideIcons.ban;
+    if (sub.isDisabled) return LucideIcons.ban;
     if (sub.isExpired) return LucideIcons.timerOff;
     if (sub.isNearExpiry) return LucideIcons.triangleAlert;
-    if (sub.isOnlineFlag) return LucideIcons.wifi;
+    if (sub.isOnline) return LucideIcons.wifi;
     return LucideIcons.circleCheck;
   }
 }
