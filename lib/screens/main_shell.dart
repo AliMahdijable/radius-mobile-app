@@ -58,9 +58,11 @@ class _MainShellState extends State<MainShell> {
         children: [
           IndexedStack(index: _tab, children: _tabs),
           // Standalone search pill floats above the bar on the right.
+          // bottom = bar height (64) + bar bottom padding (Sp.sm) +
+          // safe-area inset + a gap so it doesn't touch the bar.
           Positioned(
             right: Sp.lg,
-            bottom: 96,
+            bottom: 64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 16,
             child: _SearchPill(onTap: () => showQuickSearch(context)),
           ),
         ],

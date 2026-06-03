@@ -140,11 +140,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
+              // Extra-tall bottom padding so the last activity row clears
+              // the floating bottom bar (~64 bar + safe area + breathing
+              // room). Using Sp.huge * 2 (64) wasn't enough on phones with
+              // a gesture bar — the last card got chopped.
+              padding: EdgeInsets.fromLTRB(
                 Sp.lg,
                 Sp.md,
                 Sp.lg,
-                Sp.huge * 2,
+                Sp.huge * 3 + MediaQuery.paddingOf(context).bottom,
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
@@ -170,23 +174,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       .slideY(begin: 0.03, end: 0),
                   SectionHeader(
                     label: _activationsLive == null
-                        ? 'آخر النشاطات (عرض تجريبي — تعذّر الجلب)'
-                        : _activationsLive!.recent.isEmpty
-                            ? 'آخر النشاطات (لا توجد اليوم)'
-                            : 'آخر النشاطات',
+                        ? 'آخر النشاطات (تعذّر الجلب)'
+                        : 'آخر النشاطات',
                     trailingLabel: 'اعرض الكل',
                     onTrailingTap: () {},
                   ),
-                  RecentActivities(
-                    items: _activationsLive?.recent.isNotEmpty == true
-                        ? _activationsLive!.recent
-                        : mockActivities,
-                  )
-                      .animate()
-                      .fadeIn(
-                        delay: const Duration(milliseconds: 240),
-                        duration: const Duration(milliseconds: 280),
-                      ),
+                  // Three real states:
+                  //  1. fetch failed (_activationsLive == null) → mock fallback,
+                  //     header already says 'تعذّر الجلب' in red.
+                  //  2. fetch succeeded but no rows → real empty card.
+                  //  3. fetch succeeded with rows → live list.
+                  if (_activationsLive == null)
+                    RecentActivities(items: mockActivities)
+                        .animate()
+                        .fadeIn(
+                          delay: const Duration(milliseconds: 240),
+                          duration: const Duration(milliseconds: 280),
+                        )
+                  else if (_activationsLive!.recent.isEmpty)
+                    const _NoActivitiesYet()
+                  else
+                    RecentActivities(items: _activationsLive!.recent)
+                        .animate()
+                        .fadeIn(
+                          delay: const Duration(milliseconds: 240),
+                          duration: const Duration(milliseconds: 280),
+                        ),
                 ]),
               ),
             ),
@@ -283,6 +296,44 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.greeting != greeting ||
       old.whatsApp.connected != whatsApp.connected ||
       old.whatsApp.phone != whatsApp.phone;
+}
+
+/// Empty-state card for when /api/activities/daily-activations returned
+/// success but the list is empty — no activations yet today.
+class _NoActivitiesYet extends StatelessWidget {
+  const _NoActivitiesYet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: Sp.huge, horizontal: Sp.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.inbox_rounded,
+              color: AppColors.textLow, size: 32),
+          const SizedBox(height: Sp.sm),
+          Text(
+            'لا توجد نشاطات اليوم',
+            style: AppType.label(color: AppColors.textMid)
+                .copyWith(fontSize: 14),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'سيظهر هنا أي تفعيل أو تمديد بمجرد حدوثه',
+            style: AppType.muted(color: AppColors.textLow)
+                .copyWith(fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _WAStatusChip extends StatelessWidget {

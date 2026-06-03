@@ -170,6 +170,7 @@ class DashboardApi {
   ///   month → 30 days ago → now
   static Future<RevenueResult?> fetchRevenue(RevenuePeriod period) async {
     final token = await AuthStorage.readToken();
+    final adminId = await AuthStorage.readAdminId();
     if (token == null) return null;
     final (from, to) = _rangeFor(period);
     try {
@@ -178,6 +179,10 @@ class DashboardApi {
         queryParameters: {
           'date_from': from,
           'date_to': to,
+          // Filter to THIS admin only. Without user_id the backend
+          // returns revenue across all admins, which is why v2 was
+          // showing ~15M when the web showed ~200K for the same period.
+          if (adminId != null) 'user_id': adminId,
           // Don't waste bandwidth on logs; we only want the total.
           'limit_logs': 1,
         },
