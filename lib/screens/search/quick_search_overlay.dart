@@ -91,16 +91,36 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       _showSnack('التعرّف على الصوت غير متاح على هذا الجهاز');
       return;
     }
-    // Prefer Iraqi Arabic, then Saudi Arabic, then English; fall back
-    // to the system default if none of those are installed.
+    // Find the best Arabic locale the device supports. Devices return
+    // locale IDs in mixed formats — 'ar-IQ', 'ar_IQ', 'ar-iq', or just
+    // 'ar' — so we lowercase-match against language prefixes, then fall
+    // back to any Arabic variant the device has installed (EG, AE, JO,
+    // LB, etc. — the dialect drifts but Arabic is still recognized).
     final locales = await _speech.locales();
-    final preferred = ['ar-IQ', 'ar_IQ', 'ar-SA', 'ar_SA', 'en_US'];
-    String? localeId;
-    for (final p in preferred) {
-      if (locales.any((l) => l.localeId == p)) {
-        localeId = p;
-        break;
+    final ids = locales.map((l) => l.localeId).toList();
+    String? pick(List<String> wants) {
+      for (final w in wants) {
+        final hit = ids.firstWhere(
+          (id) => id.toLowerCase().replaceAll('_', '-') ==
+              w.toLowerCase().replaceAll('_', '-'),
+          orElse: () => '',
+        );
+        if (hit.isNotEmpty) return hit;
       }
+      return null;
+    }
+    var localeId = pick(['ar-IQ', 'ar-SA']) ??
+        ids.firstWhere(
+          (id) => id.toLowerCase().startsWith('ar'),
+          orElse: () => '',
+        );
+    if (localeId.isEmpty) {
+      // No Arabic locale at all → tell the user what to do.
+      _showSnack(
+        'لا توجد لغة عربية مثبّتة للبحث الصوتي.\n'
+        'إعدادات → النظام → اللغة → الإدخال الصوتي → نزّل العربية',
+      );
+      return;
     }
     setState(() => _listening = true);
     await _speech.listen(

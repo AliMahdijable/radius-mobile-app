@@ -74,5 +74,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ package visibility: without this, speech_to_text
+             cannot discover the system's RecognitionService implementation
+             (Google app, Samsung's, etc.) and silently falls back to
+             whatever's the default — which may not include Arabic. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
     </queries>
 </manifest>
