@@ -20,9 +20,9 @@ android/local.properties
 android/**/GeneratedPluginRegistrant.java
 android/key.properties
 
-# Secrets
-google-services.json
-GoogleService-Info.plist
+# Secrets (Firebase config files are committed: this is a private repo and
+# the Firebase keys are protected by Security Rules, not by obscurity.
+# Keystore + key.properties are the real secrets and remain ignored above.)
 .env
 
 # IDE
