@@ -91,37 +91,42 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       _showSnack('التعرّف على الصوت غير متاح على هذا الجهاز');
       return;
     }
-    // Find the best Arabic locale the device supports. Devices return
-    // locale IDs in mixed formats — 'ar-IQ', 'ar_IQ', 'ar-iq', or just
-    // 'ar' — so we lowercase-match against language prefixes, then fall
-    // back to any Arabic variant the device has installed (EG, AE, JO,
-    // LB, etc. — the dialect drifts but Arabic is still recognized).
+    // Pick a locale to listen in. Priority:
+    //  1. Iraqi Arabic, then Saudi Arabic (exact match, normalized).
+    //  2. Any Arabic dialect the device has installed.
+    //  3. English (so search still works on devices without Arabic).
+    //  4. null → speech engine's own default.
+    //
+    // Devices return locale IDs in mixed formats ('ar-IQ', 'ar_IQ',
+    // 'ar-iq') so we normalize underscores→dashes and lowercase before
+    // comparing. Critically: we NEVER abort here — voice search must
+    // still work even when Arabic isn't installed.
     final locales = await _speech.locales();
     final ids = locales.map((l) => l.localeId).toList();
-    String? pick(List<String> wants) {
+    String norm(String s) => s.toLowerCase().replaceAll('_', '-');
+    String? exact(List<String> wants) {
       for (final w in wants) {
         final hit = ids.firstWhere(
-          (id) => id.toLowerCase().replaceAll('_', '-') ==
-              w.toLowerCase().replaceAll('_', '-'),
+          (id) => norm(id) == norm(w),
           orElse: () => '',
         );
         if (hit.isNotEmpty) return hit;
       }
       return null;
     }
-    var localeId = pick(['ar-IQ', 'ar-SA']) ??
-        ids.firstWhere(
-          (id) => id.toLowerCase().startsWith('ar'),
-          orElse: () => '',
-        );
-    if (localeId.isEmpty) {
-      // No Arabic locale at all → tell the user what to do.
-      _showSnack(
-        'لا توجد لغة عربية مثبّتة للبحث الصوتي.\n'
-        'إعدادات → النظام → اللغة → الإدخال الصوتي → نزّل العربية',
+    String? prefix(String p) {
+      final hit = ids.firstWhere(
+        (id) => norm(id).startsWith(p),
+        orElse: () => '',
       );
-      return;
+      return hit.isEmpty ? null : hit;
     }
+    final localeId = exact(['ar-IQ', 'ar-SA']) ??
+        prefix('ar') ??
+        exact(['en-US']) ??
+        prefix('en');
+    // If the device has no usable locale at all we still call listen
+    // with localeId=null so the engine falls back to its own default.
     setState(() => _listening = true);
     await _speech.listen(
       onResult: (r) {

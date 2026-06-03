@@ -63,6 +63,7 @@ class SubscribersCard extends StatelessWidget {
                           child: _Mini(
                             value: stats.active,
                             label: 'نشط',
+                            icon: Icons.check_circle_rounded,
                             color: AppColors.brand,
                           ),
                         ),
@@ -70,7 +71,8 @@ class SubscribersCard extends StatelessWidget {
                         Expanded(
                           child: _Mini(
                             value: stats.online,
-                            label: 'متصل الآن',
+                            label: 'متصل',
+                            icon: Icons.wifi_rounded,
                             color: const Color(0xFF3B82F6),
                           ),
                         ),
@@ -83,6 +85,7 @@ class SubscribersCard extends StatelessWidget {
                           child: _Mini(
                             value: stats.expired,
                             label: 'منتهي',
+                            icon: Icons.block_rounded,
                             color: AppColors.error,
                           ),
                         ),
@@ -91,6 +94,7 @@ class SubscribersCard extends StatelessWidget {
                           child: _Mini(
                             value: stats.nearExpiry,
                             label: 'قارب الانتهاء',
+                            icon: Icons.schedule_rounded,
                             color: const Color(0xFFE08F2D),
                           ),
                         ),
@@ -175,53 +179,58 @@ class _Mini extends StatelessWidget {
   const _Mini({
     required this.value,
     required this.label,
+    required this.icon,
     required this.color,
   });
 
   final int value;
   final String label;
+  final IconData icon;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
+    // Vertical layout: icon + value on the top row, full-width label
+    // below. Labels like 'قارب الانتهاء' wouldn't fit horizontally next
+    // to the value chip — putting them on their own line lets them
+    // breathe without clipping or font-shrinking.
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: Sp.md,
-        vertical: Sp.md,
+        horizontal: Sp.sm,
+        vertical: Sp.sm,
       ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 14),
+              const Spacer(),
+              Text(
+                '$value',
+                style: AppType.title(color: AppColors.textHi).copyWith(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$value',
-                  style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: AppType.muted(color: AppColors.textMid)
-                      .copyWith(fontSize: 11),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          const SizedBox(height: 2),
+          // Label spans full width — 'قارب الانتهاء' (4 words+) fits.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              label,
+              style: AppType.muted(color: AppColors.textMid)
+                  .copyWith(fontSize: 11, height: 1.2),
             ),
           ),
         ],
