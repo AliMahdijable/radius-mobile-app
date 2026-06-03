@@ -15,6 +15,16 @@ void _logErr(String endpoint, Object err) {
   }
 }
 
+void _logSilent(String endpoint, String reason, dynamic body) {
+  if (kReleaseMode) return;
+  debugPrint('🟡 $endpoint returned null: $reason | body=$body');
+}
+
+void _logStart(String endpoint) {
+  if (kReleaseMode) return;
+  debugPrint('🔵 $endpoint → calling');
+}
+
 /// Dashboard data fetchers. Each call returns a typed result or `null`
 /// on failure — callers fall back to a previous value or a sensible
 /// placeholder rather than blocking the whole screen on one slow call.
@@ -65,9 +75,14 @@ class DashboardApi {
   /// Backend aggregates today's activation + extension counts and the
   /// last N recent activity rows. Same endpoint v1 uses.
   static Future<DailyActivationsResult?> fetchDailyActivations() async {
+    _logStart('daily-activations');
     final token = await AuthStorage.readToken();
     final adminId = await AuthStorage.readAdminId();
-    if (token == null || adminId == null) return null;
+    if (token == null || adminId == null) {
+      _logSilent('daily-activations',
+          'missing token or adminId (token=${token != null} adminId=$adminId)', null);
+      return null;
+    }
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities/daily-activations',
@@ -75,7 +90,10 @@ class DashboardApi {
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return null;
+      if (body['success'] != true) {
+        _logSilent('daily-activations', 'success != true', body);
+        return null;
+      }
       final counts = (body['counts'] as Map?) ?? const {};
       final list = (body['data'] as List?) ?? const [];
       return DailyActivationsResult(
@@ -103,15 +121,22 @@ class DashboardApi {
   /// near-expiry counter (subs whose remaining_days fall in [0, 3]).
   /// Replaces v1's two-pass approach with one network call + one loop.
   static Future<DebtorsResult?> fetchDebtors() async {
+    _logStart('subscribers/with-phones');
     final token = await AuthStorage.readToken();
-    if (token == null) return null;
+    if (token == null) {
+      _logSilent('subscribers/with-phones', 'missing token', null);
+      return null;
+    }
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/subscribers/with-phones',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return null;
+      if (body['success'] != true) {
+        _logSilent('subscribers/with-phones', 'success != true', body);
+        return null;
+      }
       final data = (body['data'] as List?) ?? const [];
 
       var debtCount = 0;
@@ -169,9 +194,13 @@ class DashboardApi {
   ///   week  → 7 days ago → now
   ///   month → 30 days ago → now
   static Future<RevenueResult?> fetchRevenue(RevenuePeriod period) async {
+    _logStart('reports/finance(${period.name})');
     final token = await AuthStorage.readToken();
     final adminId = await AuthStorage.readAdminId();
-    if (token == null) return null;
+    if (token == null) {
+      _logSilent('reports/finance', 'missing token', null);
+      return null;
+    }
     final (from, to) = _rangeFor(period);
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -179,20 +208,23 @@ class DashboardApi {
         queryParameters: {
           'date_from': from,
           'date_to': to,
-          // Filter to THIS admin only. Without user_id the backend
-          // returns revenue across all admins, which is why v2 was
-          // showing ~15M when the web showed ~200K for the same period.
           if (adminId != null) 'user_id': adminId,
-          // Don't waste bandwidth on logs; we only want the total.
           'limit_logs': 1,
         },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return null;
+      if (body['success'] != true) {
+        _logSilent('reports/finance', 'success != true', body);
+        return null;
+      }
       final totals = (body['data'] as Map?)?['totals'] as Map?;
       final v = totals?['total_payments'];
-      if (v == null) return null;
+      if (v == null) {
+        _logSilent('reports/finance',
+            'data.totals.total_payments missing', body);
+        return null;
+      }
       final amount = v is num ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
       return RevenueResult(amount: amount);
     } on DioException catch (e) {
@@ -232,9 +264,15 @@ class DashboardApi {
   /// Returns whether the admin's WhatsApp session is live + the bound
   /// phone number for display. Used by the dashboard header chip.
   static Future<WhatsAppStatusResult?> fetchWhatsAppStatus() async {
+    _logStart('whatsapp/connection-status');
     final token = await AuthStorage.readToken();
     final adminId = await AuthStorage.readAdminId();
-    if (token == null || adminId == null) return null;
+    if (token == null || adminId == null) {
+      _logSilent('whatsapp/connection-status',
+          'missing token or adminId (token=${token != null} adminId=$adminId)',
+          null);
+      return null;
+    }
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/whatsapp/connection-status/$adminId',
