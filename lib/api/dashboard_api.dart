@@ -1,7 +1,19 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+
+void _logErr(String endpoint, Object err) {
+  if (kReleaseMode) return;
+  if (err is DioException) {
+    final code = err.response?.statusCode;
+    final body = err.response?.data;
+    debugPrint('🔴 $endpoint failed: status=$code body=$body');
+  } else {
+    debugPrint('🔴 $endpoint failed: $err');
+  }
+}
 
 /// Dashboard data fetchers. Each call returns a typed result or `null`
 /// on failure — callers fall back to a previous value or a sensible
@@ -77,9 +89,11 @@ class DashboardApi {
             .map((e) => Map<String, dynamic>.from(e))
             .toList(),
       );
-    } on DioException {
+    } on DioException catch (e) {
+      _logErr('daily-activations', e);
       return null;
-    } catch (_) {
+    } catch (e) {
+      _logErr('daily-activations', e);
       return null;
     }
   }
@@ -137,9 +151,11 @@ class DashboardApi {
         total: debtTotal,
         nearExpiry: nearExpiry,
       );
-    } on DioException {
+    } on DioException catch (e) {
+      _logErr('subscribers/with-phones', e);
       return null;
-    } catch (_) {
+    } catch (e) {
+      _logErr('subscribers/with-phones', e);
       return null;
     }
   }
@@ -174,9 +190,11 @@ class DashboardApi {
       if (v == null) return null;
       final amount = v is num ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
       return RevenueResult(amount: amount);
-    } on DioException {
+    } on DioException catch (e) {
+      _logErr('reports/finance(${period.name}) from=$from to=$to', e);
       return null;
-    } catch (_) {
+    } catch (e) {
+      _logErr('reports/finance(${period.name})', e);
       return null;
     }
   }
@@ -222,9 +240,11 @@ class DashboardApi {
         connected: body['connected'] == true || body['isConnected'] == true,
         phone: (body['phone'] ?? body['whatsappPhone'] ?? '').toString(),
       );
-    } on DioException {
+    } on DioException catch (e) {
+      _logErr('whatsapp/connection-status', e);
       return null;
-    } catch (_) {
+    } catch (e) {
+      _logErr('whatsapp/connection-status', e);
       return null;
     }
   }

@@ -169,7 +169,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       )
                       .slideY(begin: 0.03, end: 0),
                   SectionHeader(
-                    label: 'آخر النشاطات',
+                    label: _activationsLive == null
+                        ? 'آخر النشاطات (عرض تجريبي — تعذّر الجلب)'
+                        : _activationsLive!.recent.isEmpty
+                            ? 'آخر النشاطات (لا توجد اليوم)'
+                            : 'آخر النشاطات',
                     trailingLabel: 'اعرض الكل',
                     onTrailingTap: () {},
                   ),

@@ -31,6 +31,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     RevenuePeriod.week: null,
     RevenuePeriod.month: null,
   };
+  // Periods whose fetch failed — so we can clearly label the card as
+  // demo data instead of presenting mock numbers as live.
+  final Set<RevenuePeriod> _failed = {};
   RevenuePeriod? _loading;
 
   @override
@@ -41,14 +44,24 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   }
 
   Future<void> _refresh(RevenuePeriod p) async {
-    setState(() => _loading = p);
+    setState(() {
+      _loading = p;
+      _failed.remove(p);
+    });
     final r = await DashboardApi.fetchRevenue(p);
     if (!mounted) return;
     setState(() {
-      if (r != null) _liveAmounts[p] = r.amount;
+      if (r != null) {
+        _liveAmounts[p] = r.amount;
+      } else {
+        _failed.add(p);
+      }
       _loading = null;
     });
   }
+
+  bool get _showingDemo =>
+      _liveAmounts[_period] == null && _failed.contains(_period);
 
   int get _displayAmount {
     final live = _liveAmounts[_period];
@@ -105,9 +118,12 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ),
               const SizedBox(width: Sp.sm),
               Text(
-                'الإيرادات • $_periodLabel',
-                style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12),
+                _showingDemo
+                    ? 'الإيرادات • $_periodLabel (تجريبي)'
+                    : 'الإيرادات • $_periodLabel',
+                style: AppType.label(
+                  color: _showingDemo ? AppColors.error : AppColors.textMid,
+                ).copyWith(fontSize: 12),
               ),
               const Spacer(),
               _PeriodTabs(current: _period, onSelect: _select),

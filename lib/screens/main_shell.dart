@@ -85,9 +85,11 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-/// Floating pill nav. 4 tabs + a center FAB rendered as a 5th 'slot'.
-/// The brand-green indicator pill slides between tab slots via
-/// AnimatedAlignment + AnimatedContainer.
+/// Clean professional bottom nav — 4 tab icons with a brand-green tint
+/// + label for the active one, plus a center FAB. No oversized pill, no
+/// sliding background. Active state = icon turns brand-green and shows a
+/// tiny dot underneath. Inactive = muted icon only. The shell is a
+/// floating white pill with a soft shadow, slim enough to feel light.
 class _PillBar extends StatelessWidget {
   const _PillBar({
     required this.current,
@@ -99,115 +101,55 @@ class _PillBar extends StatelessWidget {
   final ValueChanged<int> onTabTap;
   final VoidCallback onFabTap;
 
-  static const _tabsBefore = 2; // tabs 0,1 sit before the FAB slot
-  static const _tabsAfter = 2;  // tabs 2,3 sit after the FAB slot
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
-        // Each slot is 1/5 of the bar width; the green indicator is a
-        // little narrower than a slot so it doesn't touch its neighbors.
         const totalSlots = 5;
         final slotWidth = c.maxWidth / totalSlots;
-        // Logical slot order: [home, subs, FAB, reports, settings].
-        // In RTL the visual order is reversed — slot 0 sits at the
-        // visual RIGHT, not the LEFT. Positioned.left is physical
-        // (Stack ignores Directionality), so we have to translate the
-        // logical slot to a visual-from-left coordinate ourselves.
-        final activeSlot = current < _tabsBefore ? current : current + 1;
-        final isRtl = Directionality.of(context) == TextDirection.rtl;
-        final visualSlot =
-            isRtl ? (totalSlots - 1 - activeSlot) : activeSlot;
-        // Indicator pill: 4px inset from each side of its slot. Tight
-        // enough to look distinct, loose enough that 'المشتركون' (the
-        // longest tab label) doesn't get clipped.
-        final indicatorLeft = slotWidth * visualSlot + 4;
-        final indicatorWidth = slotWidth - 8;
-
         return Container(
-          height: 60,
+          height: 64,
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(32),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-              BoxShadow(
-                color: AppColors.brand.withValues(alpha: 0.06),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          // clipBehavior is the fix for round-10 followup — the brand
-          // green indicator at the edge slot was sticking out past the
-          // bar's rounded corner. Clipping the Stack to the same shape
-          // confines it. The FAB no longer lifts above (it now sits
-          // fully inside the pill), so clipping doesn't chop it.
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
+          child: Row(
             children: [
-              // Sliding brand-green pill that marks the active tab.
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 320),
-                curve: Curves.easeOutCubic,
-                left: indicatorLeft,
-                top: 8,
-                bottom: 8,
-                width: indicatorWidth,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.brand,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.brand.withValues(alpha: 0.32),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                ),
+              _TabSlot(
+                icon: Icons.home_rounded,
+                label: 'الرئيسية',
+                slotWidth: slotWidth,
+                selected: current == 0,
+                onTap: () => _select(0),
               ),
-              // Tab labels sit ABOVE the indicator. Each slot is a
-              // fixed-width cell laid out left to right.
-              Row(
-                children: [
-                  _TabSlot(
-                    icon: Icons.home_rounded,
-                    label: 'الرئيسية',
-                    slotWidth: slotWidth,
-                    selected: current == 0,
-                    onTap: () => _select(0),
-                  ),
-                  _TabSlot(
-                    icon: Icons.people_alt_rounded,
-                    label: 'المشتركون',
-                    slotWidth: slotWidth,
-                    selected: current == 1,
-                    onTap: () => _select(1),
-                  ),
-                  // Middle slot: the integrated FAB.
-                  _FabSlot(slotWidth: slotWidth, onTap: onFabTap),
-                  _TabSlot(
-                    icon: Icons.insert_chart_rounded,
-                    label: 'التقارير',
-                    slotWidth: slotWidth,
-                    selected: current == 2,
-                    onTap: () => _select(2),
-                  ),
-                  _TabSlot(
-                    icon: Icons.settings_outlined,
-                    label: 'الضبط',
-                    slotWidth: slotWidth,
-                    selected: current == 3,
-                    onTap: () => _select(3),
-                  ),
-                ],
+              _TabSlot(
+                icon: Icons.people_alt_rounded,
+                label: 'المشتركون',
+                slotWidth: slotWidth,
+                selected: current == 1,
+                onTap: () => _select(1),
+              ),
+              _FabSlot(slotWidth: slotWidth, onTap: onFabTap),
+              _TabSlot(
+                icon: Icons.insert_chart_rounded,
+                label: 'التقارير',
+                slotWidth: slotWidth,
+                selected: current == 2,
+                onTap: () => _select(2),
+              ),
+              _TabSlot(
+                icon: Icons.settings_outlined,
+                label: 'الضبط',
+                slotWidth: slotWidth,
+                selected: current == 3,
+                onTap: () => _select(3),
               ),
             ],
           ),
@@ -239,54 +181,48 @@ class _TabSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fg = selected ? AppColors.brand : AppColors.textLow;
     return SizedBox(
       width: slotWidth,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(22),
-          child: Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SizeTransition(
-                  axis: Axis.horizontal,
-                  axisAlignment: -1,
-                  sizeFactor: anim,
-                  child: child,
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: fg, size: selected ? 24 : 22),
+              const SizedBox(height: 3),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: AppType.muted(color: fg).copyWith(
+                  fontSize: 10,
+                  fontWeight:
+                      selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+                child: Text(label, maxLines: 1, overflow: TextOverflow.fade),
+              ),
+              const SizedBox(height: 3),
+              // Tiny dot under the active tab. Reserves the same 4px of
+              // vertical space whether selected or not so labels don't shift.
+              SizedBox(
+                height: 4,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: selected ? 1 : 0,
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: const BoxDecoration(
+                      color: AppColors.brand,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                 ),
               ),
-              child: selected
-                  ? Padding(
-                      key: const ValueKey('on'),
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(icon, color: Colors.white, size: 16),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              label,
-                              style: AppType.label(color: Colors.white)
-                                  .copyWith(fontSize: 11),
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Icon(
-                      icon,
-                      key: const ValueKey('off'),
-                      color: AppColors.textLow,
-                      size: 22,
-                    ),
-            ),
+            ],
           ),
         ),
       ),
@@ -302,10 +238,6 @@ class _FabSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FAB sits fully inside the bar now (no negative translate). The
-    // bar's Clip.antiAlias would have chopped its top otherwise.
-    // The white ring + brand-tinted shadow still give it presence
-    // without floating outside the pill.
     return SizedBox(
       width: slotWidth,
       child: Center(
@@ -321,14 +253,20 @@ class _FabSlot extends StatelessWidget {
             },
             customBorder: const CircleBorder(),
             child: Container(
-              width: 44,
-              height: 44,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: AppColors.surface, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brand.withValues(alpha: 0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: const Icon(Icons.add_rounded,
-                  color: Colors.white, size: 24),
+                  color: Colors.white, size: 26),
             ),
           ),
         ),
