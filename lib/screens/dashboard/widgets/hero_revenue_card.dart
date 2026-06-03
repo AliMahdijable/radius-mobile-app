@@ -1,21 +1,21 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/dashboard_api.dart';
-import '../../../core/mock/dashboard_data.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Revenue hero — labelled "الإيرادات" (was "صافي اليوم"). Pulls live
-/// totals from /api/reports/finance for whichever period the user picks
-/// (day / week / month). The number on display is `data.totals.total_payments`,
-/// exactly what the v1 web Financial Reports page shows as "الإيرادات".
+/// Revenue hero card. Pulls live totals from /api/reports/finance for
+/// the selected period (day/week/month). No mock fallbacks — while a
+/// period is loading we show a spinner and dashes; on error we show an
+/// inline error label. Sparkline is omitted until the timeseries field
+/// is wired (it was previously rendering mock points, which the user
+/// noticed and asked us to drop).
 class HeroRevenueCard extends StatefulWidget {
-  const HeroRevenueCard({super.key, required this.stats});
-  final DailyStats stats; // kept for the sparkline placeholder
+  const HeroRevenueCard({super.key});
 
   @override
   State<HeroRevenueCard> createState() => _HeroRevenueCardState();
@@ -24,22 +24,19 @@ class HeroRevenueCard extends StatefulWidget {
 class _HeroRevenueCardState extends State<HeroRevenueCard> {
   RevenuePeriod _period = RevenuePeriod.day;
 
-  // Cache live results per period so flipping back to a previously-loaded
-  // tab is instant. Each entry: null = not loaded yet, value = live result.
-  final Map<RevenuePeriod, int?> _liveAmounts = {
+  // null = not loaded yet; -1 = fetch failed; else = live total.
+  // Using a sentinel keeps the cache shape simple without a parallel set.
+  final Map<RevenuePeriod, int?> _amounts = {
     RevenuePeriod.day: null,
     RevenuePeriod.week: null,
     RevenuePeriod.month: null,
   };
-  // Periods whose fetch failed — so we can clearly label the card as
-  // demo data instead of presenting mock numbers as live.
   final Set<RevenuePeriod> _failed = {};
   RevenuePeriod? _loading;
 
   @override
   void initState() {
     super.initState();
-    // Warm the current tab on first build.
     _refresh(_period);
   }
 
@@ -52,7 +49,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     if (!mounted) return;
     setState(() {
       if (r != null) {
-        _liveAmounts[p] = r.amount;
+        _amounts[p] = r.amount;
       } else {
         _failed.add(p);
       }
@@ -60,20 +57,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     });
   }
 
-  bool get _showingDemo =>
-      _liveAmounts[_period] == null && _failed.contains(_period);
-
-  int get _displayAmount {
-    final live = _liveAmounts[_period];
-    if (live != null) return live;
-    // Fallback: while loading or on failure, show the mock for the
-    // matching period so the card isn't blank.
-    return switch (_period) {
-      RevenuePeriod.day => mockRevenueDaily.amount,
-      RevenuePeriod.week => mockRevenueWeekly.amount,
-      RevenuePeriod.month => mockRevenueMonthly.amount,
-    };
-  }
+  bool get _periodFailed => _failed.contains(_period);
+  bool get _periodLoading => _loading == _period && _amounts[_period] == null;
+  int? get _amount => _amounts[_period];
 
   String get _periodLabel => switch (_period) {
         RevenuePeriod.day => 'اليوم',
@@ -81,17 +67,11 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
         RevenuePeriod.month => 'هذا الشهر',
       };
 
-  List<int> get _sparkline => switch (_period) {
-        RevenuePeriod.day => mockRevenueDaily.points,
-        RevenuePeriod.week => mockRevenueWeekly.points,
-        RevenuePeriod.month => mockRevenueMonthly.points,
-      };
-
   void _select(RevenuePeriod p) {
     if (p == _period) return;
     HapticFeedback.selectionClick();
     setState(() => _period = p);
-    if (_liveAmounts[p] == null) _refresh(p);
+    if (_amounts[p] == null && !_failed.contains(p)) _refresh(p);
   }
 
   @override
@@ -118,12 +98,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ),
               const SizedBox(width: Sp.sm),
               Text(
-                _showingDemo
-                    ? 'الإيرادات • $_periodLabel (تجريبي)'
-                    : 'الإيرادات • $_periodLabel',
-                style: AppType.label(
-                  color: _showingDemo ? AppColors.error : AppColors.textMid,
-                ).copyWith(fontSize: 12),
+                'الإيرادات • $_periodLabel',
+                style: AppType.label(color: AppColors.textMid)
+                    .copyWith(fontSize: 12),
               ),
               const Spacer(),
               _PeriodTabs(current: _period, onSelect: _select),
@@ -131,79 +108,51 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
           ),
           const SizedBox(height: Sp.sm),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                formatIQD(_displayAmount),
-                style: AppType.title(color: AppColors.textHi).copyWith(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                  height: 1.05,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text(
-                  'د.ع',
-                  style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 12),
-                ),
-              ),
-              const Spacer(),
-              if (_loading == _period)
+              if (_periodLoading)
                 const SizedBox(
-                  width: 12,
-                  height: 12,
+                  width: 22,
+                  height: 22,
                   child: CircularProgressIndicator(
-                    strokeWidth: 1.6,
+                    strokeWidth: 2.2,
                     color: AppColors.brand,
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: Sp.sm),
-          SizedBox(
-            height: 32,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: LineChart(
-                key: ValueKey(_period),
-                LineChartData(
-                  lineBarsData: [
-                    LineChartBarData(
-                      isCurved: true,
-                      curveSmoothness: 0.35,
-                      color: AppColors.brand,
-                      barWidth: 2.2,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        gradient: LinearGradient(
-                          colors: [
-                            AppColors.brand.withValues(alpha: 0.25),
-                            AppColors.brand.withValues(alpha: 0),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
-                      spots: [
-                        for (int i = 0; i < _sparkline.length; i++)
-                          FlSpot(i.toDouble(), _sparkline[i].toDouble()),
-                      ],
+                )
+              else if (_periodFailed)
+                Row(
+                  children: [
+                    const Icon(LucideIcons.triangleAlert,
+                        color: AppColors.error, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'تعذّر الجلب — اسحب للتحديث',
+                      style: AppType.label(color: AppColors.error)
+                          .copyWith(fontSize: 12),
                     ),
                   ],
-                  gridData: const FlGridData(show: false),
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  lineTouchData: const LineTouchData(enabled: false),
-                  minY: 0,
+                )
+              else if (_amount != null) ...[
+                Text(
+                  formatIQD(_amount!),
+                  style: AppType.title(color: AppColors.textHi).copyWith(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    height: 1.05,
+                  ),
                 ),
-              ),
-            ),
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    'د.ع',
+                    style: AppType.subtitle(color: AppColors.textMid)
+                        .copyWith(fontSize: 12),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -243,10 +192,7 @@ class _PeriodTabs extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 4,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: selected ? AppColors.brand : Colors.transparent,
           borderRadius: BorderRadius.circular(R.pill),
@@ -264,3 +210,6 @@ class _PeriodTabs extends StatelessWidget {
     );
   }
 }
+
+// Sparkline (fl_chart LineChart) dropped along with mock data — re-add
+// once /api/reports/finance's `data.timeseries` is wired into RevenueResult.

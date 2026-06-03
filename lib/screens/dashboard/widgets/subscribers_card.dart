@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/mock/dashboard_data.dart';
 import '../../../core/util/format.dart';
+import '../../../models/dashboard.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -10,18 +10,18 @@ import '../../../theme/typography.dart';
 /// Subscribers card v2: hero total on the left with a brand-tinted
 /// progress ring around it, status grid on the right.
 ///
-/// Designed to read in one glance:
-/// - Total dominates (left).
-/// - 4 status mini-tiles tell you what's healthy + what needs attention.
+/// stats=null → loading skeleton (no fabricated numbers). Real data
+/// flows in once SAS4 + debtors fetches complete.
 class SubscribersCard extends StatelessWidget {
   const SubscribersCard({super.key, required this.stats});
 
-  final SubscribersStats stats;
+  final SubscribersStats? stats;
 
   @override
   Widget build(BuildContext context) {
-    final activeRatio =
-        stats.total == 0 ? 0.0 : stats.active / stats.total;
+    if (stats == null) return const _Skeleton();
+    final s = stats!;
+    final activeRatio = s.total == 0 ? 0.0 : s.active / s.total;
 
     return Container(
       decoration: BoxDecoration(
@@ -53,7 +53,7 @@ class SubscribersCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _TotalWithRing(total: stats.total, ratio: activeRatio),
+              _TotalWithRing(total: s.total, ratio: activeRatio),
               const SizedBox(width: Sp.lg),
               Expanded(
                 child: Column(
@@ -62,7 +62,7 @@ class SubscribersCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _Mini(
-                            value: stats.active,
+                            value: s.active,
                             label: 'نشط',
                             icon: LucideIcons.circleCheck,
                             color: AppColors.brand,
@@ -71,7 +71,7 @@ class SubscribersCard extends StatelessWidget {
                         const SizedBox(width: Sp.sm),
                         Expanded(
                           child: _Mini(
-                            value: stats.online,
+                            value: s.online,
                             label: 'متصل الآن',
                             icon: LucideIcons.wifi,
                             color: const Color(0xFF3B82F6),
@@ -84,7 +84,7 @@ class SubscribersCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _Mini(
-                            value: stats.expired,
+                            value: s.expired,
                             label: 'منتهي',
                             icon: LucideIcons.timerOff,
                             color: AppColors.error,
@@ -93,7 +93,7 @@ class SubscribersCard extends StatelessWidget {
                         const SizedBox(width: Sp.sm),
                         Expanded(
                           child: _Mini(
-                            value: stats.nearExpiry,
+                            value: s.nearExpiry,
                             label: 'قارب الانتهاء',
                             icon: LucideIcons.triangleAlert,
                             color: const Color(0xFFE08F2D),
@@ -107,6 +107,34 @@ class SubscribersCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Loading skeleton for the subscribers card. Same outer shape so the
+/// layout doesn't jump when real data arrives.
+class _Skeleton extends StatelessWidget {
+  const _Skeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppColors.brand,
+          ),
+        ),
       ),
     );
   }

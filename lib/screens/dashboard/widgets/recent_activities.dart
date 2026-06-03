@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/mock/dashboard_data.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Recent activity feed for home. Accepts either mock Activity values
-/// or backend rows from /api/activities/daily-activations (raw maps);
-/// the row widget knows how to read both shapes.
+/// Recent activity feed for home. Backend rows from
+/// /api/activities/daily-activations are raw maps; the row widget reads
+/// each field directly. No mock fallback — loading/empty/error states
+/// are rendered by the dashboard.
 class RecentActivities extends StatelessWidget {
   const RecentActivities({super.key, required this.items});
 
-  /// Either `List<Activity>` (mock) or `List<Map<String, dynamic>>`
-  /// (backend rows from /api/activities/daily-activations).
-  final List<dynamic> items;
+  /// Backend rows from /api/activities/daily-activations.
+  final List<Map<String, dynamic>> items;
 
   @override
   Widget build(BuildContext context) {
@@ -43,26 +42,13 @@ class RecentActivities extends StatelessWidget {
   }
 }
 
-/// Internal normalized shape — both Activity and raw API maps land here.
 class _Row extends StatelessWidget {
   const _Row({required this.item});
-  final dynamic item;
+  final Map<String, dynamic> item;
 
   ({IconData icon, Color color, String title, int amount, String timeLabel})
       _normalize() {
-    if (item is Activity) {
-      final a = item as Activity;
-      final visual = _visualForKind(a.kind);
-      return (
-        icon: visual.$1,
-        color: visual.$2,
-        title: a.title,
-        amount: a.amount,
-        timeLabel: humanMinutesAgo(a.minutesAgo),
-      );
-    }
-    // Backend row shape from /api/activities/daily-activations.
-    final m = (item as Map).cast<String, dynamic>();
+    final m = item;
     final action = (m['action'] ?? m['action_type'] ?? '').toString();
     final visual = _visualForAction(action);
     final username = (m['target_name'] ??
@@ -166,20 +152,6 @@ class _Row extends StatelessWidget {
       ),
     );
   }
-
-  static (IconData, Color) _visualForKind(ActivityKind k) => switch (k) {
-        ActivityKind.activation => (Icons.bolt_rounded, AppColors.brand),
-        ActivityKind.extension =>
-          (Icons.loop_rounded, Color(0xFF3B82F6)),
-        ActivityKind.payment =>
-          (Icons.payments_rounded, AppColors.brand),
-        ActivityKind.debt =>
-          (Icons.account_balance_wallet_rounded, AppColors.error),
-        ActivityKind.message =>
-          (Icons.chat_bubble_rounded, Color(0xFFE08F2D)),
-        ActivityKind.system =>
-          (Icons.settings_suggest_rounded, AppColors.textMid),
-      };
 
   /// Maps backend action_type strings to (icon, color).
   static (IconData, Color) _visualForAction(String action) {

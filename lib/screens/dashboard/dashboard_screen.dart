@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/dashboard_api.dart';
 import '../../api/sas4_api.dart';
-import '../../core/mock/dashboard_data.dart';
+import '../../models/dashboard.dart';
 import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../search/quick_search_overlay.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import 'widgets/section_header.dart';
@@ -16,12 +16,10 @@ import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
-/// the body scrolls underneath (round 5 request). Data sources:
-///   - SAS4 widget endpoints → total / active / expired / online (real).
-///   - /api/activities/daily-activations → today's activations (real).
-///   - /api/whatsapp/connection-status → WA chip (real).
-///   - mock data still backs payments, debtors, net revenue, recent
-///     activities until those backend endpoints are added.
+/// the body scrolls underneath. All data is LIVE — there are no mock
+/// fallbacks anywhere. When data hasn't loaded yet each card shows a
+/// loading shimmer; when a fetch fails the card shows an explicit
+/// error state, never invented numbers.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -31,11 +29,15 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _displayName = '';
-  String _adminUsername = '';
   WhatsAppStatusResult? _waLive;
   DailyActivationsResult? _activationsLive;
   Sas4Stats? _sas4Live;
   DebtorsResult? _debtorsLive;
+
+  bool _waLoaded = false;
+  bool _activationsLoaded = false;
+  bool _sas4Loaded = false;
+  bool _debtorsLoaded = false;
 
   @override
   void initState() {
@@ -46,29 +48,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadIdentity() async {
     final name = await AuthStorage.readDisplayName();
-    final id = await AuthStorage.readAdminId();
     if (!mounted) return;
-    setState(() {
-      _displayName = name ?? '';
-      _adminUsername = id ?? '';
-    });
+    setState(() => _displayName = name ?? '');
   }
 
   Future<void> _refreshLive() async {
-    // Fire all live calls in parallel; each is allowed to fail without
-    // taking down the others.
-    final results = await Future.wait([
-      DashboardApi.fetchWhatsAppStatus(),
-      DashboardApi.fetchDailyActivations(),
-      Sas4Api.fetchAll(),
-      DashboardApi.fetchDebtors(),
-    ]);
-    if (!mounted) return;
     setState(() {
-      _waLive = results[0] as WhatsAppStatusResult?;
-      _activationsLive = results[1] as DailyActivationsResult?;
-      _sas4Live = results[2] as Sas4Stats?;
-      _debtorsLive = results[3] as DebtorsResult?;
+      _waLoaded = false;
+      _activationsLoaded = false;
+      _sas4Loaded = false;
+      _debtorsLoaded = false;
+    });
+    // Independent fetches — each updates its loaded flag as soon as it
+    // returns so cards can light up one by one instead of all-or-nothing.
+    DashboardApi.fetchWhatsAppStatus().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _waLive = r;
+        _waLoaded = true;
+      });
+    });
+    DashboardApi.fetchDailyActivations().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _activationsLive = r;
+        _activationsLoaded = true;
+      });
+    });
+    Sas4Api.fetchAll().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _sas4Live = r;
+        _sas4Loaded = true;
+      });
+    });
+    DashboardApi.fetchDebtors().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _debtorsLive = r;
+        _debtorsLoaded = true;
+      });
     });
   }
 
@@ -80,43 +99,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return 'مساء الخير';
   }
 
+  SubscribersStats? get _subscribersStats {
+    // Wait for both SAS4 and debtors (the latter feeds nearExpiry).
+    // Either one failing is enough to surface an error to the user.
+    if (!_sas4Loaded || !_debtorsLoaded) return null;
+    if (_sas4Live == null) return null;
+    return SubscribersStats(
+      total: _sas4Live!.total,
+      active: _sas4Live!.active,
+      online: _sas4Live!.online,
+      expired: _sas4Live!.expired,
+      nearExpiry: _debtorsLive?.nearExpiry ?? 0,
+    );
+  }
+
+  DailyStats? get _dailyStats {
+    if (!_activationsLoaded || !_debtorsLoaded) return null;
+    return DailyStats(
+      activations: _activationsLive?.activations ?? 0,
+      debtorsCount: _debtorsLive?.count ?? 0,
+      debtorsTotal: _debtorsLive?.total ?? 0,
+    );
+  }
+
+  WhatsAppStatus? get _waStatus {
+    if (!_waLoaded) return null;
+    if (_waLive == null) return null;
+    return WhatsAppStatus(
+      connected: _waLive!.connected,
+      phone: _waLive!.phone,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Build live-merged data objects. Each prefers live; falls back to mock.
-    final waStatus = _waLive == null
-        ? mockWhatsApp
-        : WhatsAppStatus(
-            connected: _waLive!.connected,
-            phone: _waLive!.phone.isNotEmpty
-                ? _waLive!.phone
-                : mockWhatsApp.phone,
-            sentToday: mockWhatsApp.sentToday,
-            queuePending: mockWhatsApp.queuePending,
-          );
-
-    final dailyStats = DailyStats(
-      netToday: mockDailyStats.netToday,
-      netDeltaPct: mockDailyStats.netDeltaPct,
-      activations: _activationsLive?.activations ?? mockDailyStats.activations,
-      activationsDelta: mockDailyStats.activationsDelta,
-      payments: mockDailyStats.payments,
-      paymentsDeltaPct: mockDailyStats.paymentsDeltaPct,
-      debtorsCount: _debtorsLive?.count ?? mockDailyStats.debtorsCount,
-      debtorsTotal: _debtorsLive?.total ?? mockDailyStats.debtorsTotal,
-      expiredToday: mockDailyStats.expiredToday,
-      last7Days: mockDailyStats.last7Days,
-    );
-
-    // SubscribersStats — SAS4 for the totals, /api/subscribers/with-phones
-    // single pass for the near-expiry count (subs with 0-3 days left).
-    final subs = SubscribersStats(
-      total: _sas4Live?.total ?? mockSubscribers.total,
-      active: _sas4Live?.active ?? mockSubscribers.active,
-      online: _sas4Live?.online ?? mockSubscribers.online,
-      expired: _sas4Live?.expired ?? mockSubscribers.expired,
-      nearExpiry: _debtorsLive?.nearExpiry ?? mockSubscribers.nearExpiry,
-    );
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: RefreshIndicator(
@@ -126,24 +142,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: CustomScrollView(
           slivers: [
-            // Pinned header — sticks to top while content scrolls.
-            // We pass topInset so the delegate can extend over the notch
-            // and pad its content below it (fixes the 'BOTTOM OVERFLOWED
-            // BY 20 PIXELS' yellow stripe from round 5).
             SliverPersistentHeader(
               pinned: true,
               delegate: _PinnedHeaderDelegate(
                 displayName: _displayName,
                 greeting: _greeting(),
-                whatsApp: waStatus,
+                whatsApp: _waStatus,
+                waLoaded: _waLoaded,
                 topInset: MediaQuery.paddingOf(context).top,
               ),
             ),
             SliverPadding(
-              // Extra-tall bottom padding so the last activity row clears
-              // the floating bottom bar (~64 bar + safe area + breathing
-              // room). Using Sp.huge * 2 (64) wasn't enough on phones with
-              // a gesture bar — the last card got chopped.
               padding: EdgeInsets.fromLTRB(
                 Sp.lg,
                 Sp.md,
@@ -152,12 +161,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  SubscribersCard(stats: subs)
+                  SubscribersCard(stats: _subscribersStats)
                       .animate()
                       .fadeIn(duration: const Duration(milliseconds: 280))
                       .slideY(begin: 0.03, end: 0),
                   const SizedBox(height: Sp.md),
-                  StatsGrid(stats: dailyStats)
+                  StatsGrid(stats: _dailyStats)
                       .animate()
                       .fadeIn(
                         delay: const Duration(milliseconds: 80),
@@ -165,7 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       )
                       .slideY(begin: 0.03, end: 0),
                   const SizedBox(height: Sp.md),
-                  HeroRevenueCard(stats: dailyStats)
+                  const HeroRevenueCard()
                       .animate()
                       .fadeIn(
                         delay: const Duration(milliseconds: 160),
@@ -173,24 +182,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       )
                       .slideY(begin: 0.03, end: 0),
                   SectionHeader(
-                    label: _activationsLive == null
-                        ? 'آخر النشاطات (تعذّر الجلب)'
-                        : 'آخر النشاطات',
+                    label: !_activationsLoaded
+                        ? 'آخر النشاطات'
+                        : _activationsLive == null
+                            ? 'آخر النشاطات (تعذّر الجلب)'
+                            : 'آخر النشاطات',
                     trailingLabel: 'اعرض الكل',
                     onTrailingTap: () {},
                   ),
-                  // Three real states:
-                  //  1. fetch failed (_activationsLive == null) → mock fallback,
-                  //     header already says 'تعذّر الجلب' in red.
-                  //  2. fetch succeeded but no rows → real empty card.
-                  //  3. fetch succeeded with rows → live list.
-                  if (_activationsLive == null)
-                    RecentActivities(items: mockActivities)
-                        .animate()
-                        .fadeIn(
-                          delay: const Duration(milliseconds: 240),
-                          duration: const Duration(milliseconds: 280),
-                        )
+                  if (!_activationsLoaded)
+                    const _ActivitiesLoading()
+                  else if (_activationsLive == null)
+                    const _ActivitiesError()
                   else if (_activationsLive!.recent.isEmpty)
                     const _NoActivitiesYet()
                   else
@@ -210,96 +213,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-/// Delegate for the pinned header. Min and max extent are equal so the
-/// header doesn't collapse — it just stays at the top with a subtle
-/// hairline divider that appears when content scrolls under it.
-class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
-  _PinnedHeaderDelegate({
-    required this.displayName,
-    required this.greeting,
-    required this.whatsApp,
-    required this.topInset,
-  });
-
-  final String displayName;
-  final String greeting;
-  final WhatsAppStatus whatsApp;
-
-  /// Status-bar / notch padding. Added to the extent so the header
-  /// extends UNDER the notch (status bar text stays visible above)
-  /// and content lives below it with [topInset] of internal padding.
-  final double topInset;
-
-  // Content height (greeting + name + WA chip + padding) is ~108. Plus
-  // topInset (notch) gives the total visible extent. Same value for min
-  // and max so the header never collapses.
-  static const double _contentHeight = 108;
+class _ActivitiesLoading extends StatelessWidget {
+  const _ActivitiesLoading();
 
   @override
-  double get minExtent => _contentHeight + topInset;
-
-  @override
-  double get maxExtent => _contentHeight + topInset;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    // No hairline divider — the line that appeared during scroll near
-    // the WA chip felt visually noisy. The header just sits on the bg
-    // color and lets the content scroll under it transparently.
+  Widget build(BuildContext context) {
     return Container(
-      color: AppColors.bg,
-      padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, Sp.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      height: 120,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.2,
+            color: AppColors.brand,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivitiesError extends StatelessWidget {
+  const _ActivitiesError();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: Sp.huge, horizontal: Sp.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+      ),
+      child: Column(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(greeting,
-                    style: AppType.subtitle(color: AppColors.textMid)),
-                const SizedBox(height: 2),
-                Text(
-                  displayName.isEmpty ? 'مرحباً' : displayName,
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 20),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                _WAStatusChip(status: whatsApp),
-              ],
-            ),
-          ),
-          _IconChip(
-            icon: Icons.notifications_none_rounded,
-            badge: 3,
-            onTap: () {},
-          ),
-          const SizedBox(width: Sp.sm),
-          _IconChip(
-            icon: Icons.settings_outlined,
-            onTap: () {},
-          ),
+          const Icon(LucideIcons.triangleAlert,
+              color: AppColors.error, size: 28),
+          const SizedBox(height: Sp.sm),
+          Text('تعذّر جلب آخر النشاطات',
+              style: AppType.label(color: AppColors.error)
+                  .copyWith(fontSize: 13)),
+          const SizedBox(height: 4),
+          Text('اسحب للأسفل لإعادة المحاولة',
+              style: AppType.muted(color: AppColors.textLow)
+                  .copyWith(fontSize: 11)),
         ],
       ),
     );
   }
-
-  @override
-  bool shouldRebuild(_PinnedHeaderDelegate old) =>
-      old.displayName != displayName ||
-      old.greeting != greeting ||
-      old.whatsApp.connected != whatsApp.connected ||
-      old.whatsApp.phone != whatsApp.phone;
 }
 
-/// Empty-state card for when /api/activities/daily-activations returned
-/// success but the list is empty — no activations yet today.
 class _NoActivitiesYet extends StatelessWidget {
   const _NoActivitiesYet();
 
@@ -315,72 +284,139 @@ class _NoActivitiesYet extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.inbox_rounded,
-              color: AppColors.textLow, size: 32),
+          const Icon(LucideIcons.inbox, color: AppColors.textLow, size: 32),
           const SizedBox(height: Sp.sm),
-          Text(
-            'لا توجد نشاطات اليوم',
-            style: AppType.label(color: AppColors.textMid)
-                .copyWith(fontSize: 14),
-          ),
+          Text('لا توجد نشاطات اليوم',
+              style: AppType.label(color: AppColors.textMid)
+                  .copyWith(fontSize: 14)),
           const SizedBox(height: 4),
-          Text(
-            'سيظهر هنا أي تفعيل أو تمديد بمجرد حدوثه',
-            style: AppType.muted(color: AppColors.textLow)
-                .copyWith(fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
+          Text('سيظهر هنا أي تفعيل أو تمديد بمجرد حدوثه',
+              style: AppType.muted(color: AppColors.textLow)
+                  .copyWith(fontSize: 12),
+              textAlign: TextAlign.center),
         ],
       ),
     );
   }
 }
 
+/// Pinned header. Renders the WhatsApp chip as a loading state while
+/// the connection check is in flight (no fake 'connected' fallback).
+class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _PinnedHeaderDelegate({
+    required this.displayName,
+    required this.greeting,
+    required this.whatsApp,
+    required this.waLoaded,
+    required this.topInset,
+  });
+
+  final String displayName;
+  final String greeting;
+  final WhatsAppStatus? whatsApp;
+  final bool waLoaded;
+  final double topInset;
+
+  static const double _contentHeight = 108;
+
+  @override
+  double get minExtent => _contentHeight + topInset;
+  @override
+  double get maxExtent => _contentHeight + topInset;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: AppColors.bg,
+      padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, Sp.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(greeting, style: AppType.subtitle(color: AppColors.textMid)),
+                const SizedBox(height: 2),
+                Text(
+                  displayName.isEmpty ? 'مرحباً' : displayName,
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 20),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                _WAStatusChip(status: whatsApp, loaded: waLoaded),
+              ],
+            ),
+          ),
+          _IconChip(
+            icon: Icons.notifications_none_rounded,
+            badge: 3,
+            onTap: () {},
+          ),
+          const SizedBox(width: Sp.sm),
+          _IconChip(icon: Icons.settings_outlined, onTap: () {}),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_PinnedHeaderDelegate old) =>
+      old.displayName != displayName ||
+      old.greeting != greeting ||
+      old.waLoaded != waLoaded ||
+      old.whatsApp?.connected != whatsApp?.connected ||
+      old.whatsApp?.phone != whatsApp?.phone;
+}
+
 class _WAStatusChip extends StatelessWidget {
-  const _WAStatusChip({required this.status});
-  final WhatsAppStatus status;
+  const _WAStatusChip({required this.status, required this.loaded});
+  final WhatsAppStatus? status;
+  final bool loaded;
 
   @override
   Widget build(BuildContext context) {
-    final c = status.connected ? AppColors.brand : AppColors.error;
-    return InkWell(
-      onTap: () {},
-      borderRadius: BorderRadius.circular(R.pill),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Sp.sm,
-          vertical: 4,
-        ),
-        decoration: BoxDecoration(
-          color: c.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(R.pill),
-          border: Border.all(color: c.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    // 3 visual states: loading dot, connected (brand), disconnected (red).
+    final Color c;
+    final String label;
+    if (!loaded) {
+      c = AppColors.textMid;
+      label = 'جارٍ التحقق…';
+    } else if (status?.connected == true) {
+      c = AppColors.brand;
+      label = 'واتساب متصل';
+    } else {
+      c = AppColors.error;
+      label = 'واتساب منقطع';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(R.pill),
+        border: Border.all(color: c.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!loaded)
+            SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(strokeWidth: 1.4, color: c),
+            )
+          else
             Container(
               width: 7,
               height: 7,
               decoration: BoxDecoration(color: c, shape: BoxShape.circle),
             ),
-            const SizedBox(width: 6),
-            Text(
-              status.connected ? 'واتساب متصل' : 'واتساب منقطع',
-              style: AppType.muted(color: c).copyWith(fontSize: 11),
-            ),
-            if (!status.connected) ...[
-              const SizedBox(width: 6),
-              Container(
-                width: 1,
-                height: 10,
-                color: c.withValues(alpha: 0.3),
-              ),
-              const SizedBox(width: 6),
-              Text('ربط', style: AppType.label(color: c).copyWith(fontSize: 11)),
-            ],
-          ],
-        ),
+          const SizedBox(width: 6),
+          Text(label,
+              style: AppType.muted(color: c).copyWith(fontSize: 11)),
+        ],
       ),
     );
   }
@@ -429,11 +465,9 @@ class _IconChip extends StatelessWidget {
                 border: Border.all(color: AppColors.bg, width: 2),
               ),
               alignment: Alignment.center,
-              child: Text(
-                '$badge',
-                style: AppType.muted(color: Colors.white)
-                    .copyWith(fontSize: 10, height: 1),
-              ),
+              child: Text('$badge',
+                  style: AppType.muted(color: Colors.white)
+                      .copyWith(fontSize: 10, height: 1)),
             ),
           ),
       ],
