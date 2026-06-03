@@ -97,7 +97,7 @@ class SubscriberCardV2 extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: Sp.sm),
-                // Status label + meta line
+                // Row 1: status label + package
                 Row(
                   children: [
                     Container(
@@ -115,23 +115,28 @@ class SubscriberCardV2 extends StatelessWidget {
                             .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
                       ),
                     ),
-                    if (sub.profileName?.isNotEmpty ?? false) ...[
-                      const SizedBox(width: 8),
-                      const Icon(LucideIcons.wifi,
-                          size: 12, color: AppColors.textMid),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          sub.profileName!,
-                          style: AppType.muted(color: AppColors.textMid)
-                              .copyWith(fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                    const SizedBox(width: 8),
+                    const Icon(LucideIcons.package,
+                        size: 12, color: AppColors.textMid),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        (sub.profileName?.isNotEmpty ?? false)
+                            ? sub.profileName!
+                            : 'بدون باقة',
+                        style: AppType.muted(color: AppColors.textMid)
+                            .copyWith(fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Row 2: phone + expiration date
+                Row(
+                  children: [
                     if (sub.displayPhone.isNotEmpty) ...[
-                      const SizedBox(width: 8),
                       const Icon(LucideIcons.phone,
                           size: 12, color: AppColors.textMid),
                       const SizedBox(width: 4),
@@ -140,7 +145,16 @@ class SubscriberCardV2 extends StatelessWidget {
                         style: AppType.muted(color: AppColors.textMid)
                             .copyWith(fontSize: 11),
                       ),
+                      const SizedBox(width: 10),
                     ],
+                    const Icon(LucideIcons.calendar,
+                        size: 12, color: AppColors.textMid),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatExpiration(sub.expiration),
+                      style: AppType.muted(color: AppColors.textMid)
+                          .copyWith(fontSize: 11),
+                    ),
                   ],
                 ),
                 if (sub.balanceAmount != 0) ...[
@@ -176,6 +190,18 @@ class SubscriberCardV2 extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Formats SAS4's expiration string ('2026-09-30 00:00:00' or
+  /// '2026-09-30') to a short Arabic-friendly 'YYYY/MM/DD'. Returns
+  /// '—' for null/empty so the row still aligns with siblings.
+  static String _formatExpiration(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '—';
+    final s = raw.trim();
+    final t = DateTime.tryParse(s) ?? DateTime.tryParse(s.split(' ').first);
+    if (t == null) return s.split(' ').first;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}/${two(t.month)}/${two(t.day)}';
   }
 
   // ───────── status helpers ─────────

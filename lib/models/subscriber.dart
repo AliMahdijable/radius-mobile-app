@@ -108,8 +108,15 @@ class Subscriber {
       return s == '1' || s == 'true' || s == 'yes';
     }
 
+    // SAS4 returns `profile_details: { id, name }` on each subscriber.
+    // Read that first (matches v1 model), then fall back to the flat
+    // fields the column-list query returns.
+    final pd = j['profile_details'];
+    final pdName = pd is Map ? pd['name'] : null;
+    final pdId = pd is Map ? pd['id'] : null;
+
     return Subscriber(
-      idx: j['idx']?.toString() ?? j['id']?.toString(),
+      idx: j['id']?.toString() ?? j['idx']?.toString(),
       username: (j['username'] ?? '').toString(),
       firstname: (j['firstname'] ?? '').toString(),
       lastname: (j['lastname'] ?? '').toString(),
@@ -120,10 +127,12 @@ class Subscriber {
       notes: j['notes']?.toString() ?? j['comments']?.toString(),
       hasDebtFlag: toBool(j['hasDebt']),
       debt: toDouble(j['debt']),
-      profileName: j['profile_name']?.toString() ??
+      profileName: pdName?.toString() ??
+          j['profile_name']?.toString() ??
           j['profileName']?.toString() ??
-          j['profile']?.toString(),
-      profileId: toInt(j['profile_id'] ?? j['profileId']),
+          j['name']?.toString() ??
+          j['package_name']?.toString(),
+      profileId: toInt(pdId ?? j['profile_id'] ?? j['profileId']),
       parentUsername: j['parent_username']?.toString() ??
           j['parentUsername']?.toString(),
       isEnabled: toBool(j['enabled'] ?? j['isEnabled'], dflt: true),
