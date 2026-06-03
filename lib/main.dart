@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
@@ -52,6 +53,13 @@ class MyServicesApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.light,
         scaffoldBackgroundColor: AppColors.bg,
+        // Cairo as the default font for the WHOLE app. This catches
+        // every Text widget — incl. ElevatedButton/FilledButton/
+        // TextButton labels that don't pass an explicit style — so
+        // we don't have to retrofit AppType.button() on each Text.
+        textTheme: GoogleFonts.cairoTextTheme(
+          ThemeData.light().textTheme,
+        ),
         colorScheme: const ColorScheme.light(
           primary: AppColors.brand,
           onPrimary: Colors.white,

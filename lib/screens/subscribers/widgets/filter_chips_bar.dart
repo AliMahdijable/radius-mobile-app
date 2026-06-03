@@ -5,9 +5,11 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Filter chips for the subscribers list. 8 chips, each shows its count
-/// in a smaller text below the label. Horizontally scrollable so all
-/// chips fit on narrow phones.
+/// Filter chips for the subscribers list — minimalist pill row. The
+/// active chip expands to show its label + count on a brand-colored
+/// pill; inactive chips collapse to a tiny icon-only circle with the
+/// count next to it. This keeps the row visually quiet until the user
+/// has picked something, then makes the active choice obvious.
 enum SubscriberFilter { all, active, online, offline, disabled, expired, debtors, nearExpiry }
 
 class FilterChipsBar extends StatelessWidget {
@@ -36,12 +38,12 @@ class FilterChipsBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 64,
+      height: 42,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
         itemCount: _defs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: Sp.sm),
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final d = _defs[i];
           final selected = current == d.key;
@@ -86,54 +88,59 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? color : color.withValues(alpha: 0.08);
-    final fg = selected ? Colors.white : color;
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(R.pill),
-      child: InkWell(
-        onTap: onTap,
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: selected ? color : Colors.transparent,
         borderRadius: BorderRadius.circular(R.pill),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.pill),
-            border: Border.all(
-              color: selected
-                  ? color
-                  : color.withValues(alpha: 0.25),
-              width: 1,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.pill),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.symmetric(
+              horizontal: selected ? 12 : 10,
+              vertical: 6,
             ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: fg, size: 14),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: AppType.label(color: fg).copyWith(
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.pill),
+              border: Border.all(
+                color: selected
+                    ? Colors.transparent
+                    : AppColors.border,
               ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? Colors.white.withValues(alpha: 0.22)
-                      : color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.pill),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: selected ? Colors.white : color,
+                  size: 13,
                 ),
-                child: Text(
+                if (selected) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: AppType.label(color: Colors.white).copyWith(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 5),
+                Text(
                   '$count',
-                  style: AppType.muted(color: fg).copyWith(
+                  style: AppType.muted(
+                    color: selected ? Colors.white : AppColors.textMid,
+                  ).copyWith(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
