@@ -178,7 +178,7 @@ class _TotalWithRing extends StatelessWidget {
 class _Mini extends StatelessWidget {
   const _Mini({
     required this.value,
-    required this.label,
+    required this.label, // kept as tooltip — long-press for the word
     required this.icon,
     required this.color,
   });
@@ -190,50 +190,35 @@ class _Mini extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Vertical layout: icon + value on the top row, full-width label
-    // below. Labels like 'قارب الانتهاء' wouldn't fit horizontally next
-    // to the value chip — putting them on their own line lets them
-    // breathe without clipping or font-shrinking.
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Sp.sm,
-        vertical: Sp.sm,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 14),
-              const Spacer(),
-              Text(
-                '$value',
-                style: AppType.title(color: AppColors.textHi).copyWith(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  height: 1.1,
-                ),
+    // Icon-only design — the icon alone carries the meaning, and the
+    // Arabic word kept clipping in narrow tiles. Long-press still shows
+    // the label as a tooltip for users who want to confirm.
+    return Tooltip(
+      message: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Sp.md,
+          vertical: Sp.md,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Icon(icon, color: color, size: 22),
+            Text(
+              '$value',
+              style: AppType.title(color: AppColors.textHi).copyWith(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
               ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          // Label spans full width — 'قارب الانتهاء' (4 words+) fits.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              label,
-              style: AppType.muted(color: AppColors.textMid)
-                  .copyWith(fontSize: 11, height: 1.2),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
