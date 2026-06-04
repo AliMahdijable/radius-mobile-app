@@ -1,128 +1,238 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
-import '../../../models/dashboard.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// 2-cell grid of quick stats: activations + debtors.
-/// stats=null → both cells show a loading spinner instead of fabricated
-/// numbers.
+/// Replaces the previous activations+debtors counters with v1's pair of
+/// gradient hero cards: balance + reward points on the left, debtors
+/// (total IQD as hero, count as a small line at the bottom) on the
+/// right. Mirrors mobile-app/lib/screens/dashboard_screen.dart
+/// _BalancePointsCard + _DebtCard 1:1, just modernized typography.
+///
+/// wallet/debtors=null while the API calls are in flight → both cells
+/// render a loading spinner instead of fabricated numbers.
 class StatsGrid extends StatelessWidget {
-  const StatsGrid({super.key, required this.stats});
+  const StatsGrid({
+    super.key,
+    required this.wallet,
+    required this.debtors,
+  });
 
-  final DailyStats? stats;
+  final WalletResult? wallet;
+  final DebtorsResult? debtors;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCell(
-            icon: Icons.bolt_rounded,
-            accent: AppColors.brand,
-            label: 'تفعيلات',
-            value: stats == null ? null : '${stats!.activations}',
-            delta: null,
-          ),
-        ),
-        const SizedBox(width: Sp.md),
-        Expanded(
-          child: _StatCell(
-            icon: Icons.account_balance_wallet_rounded,
-            accent: AppColors.error,
-            label: 'مدينين',
-            value: stats == null ? null : '${stats!.debtorsCount}',
-            delta: stats == null
-                ? null
-                : '${formatIQD(stats!.debtorsTotal)} د.ع',
-          ),
-        ),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _BalancePointsCard(wallet: wallet)),
+          const SizedBox(width: Sp.md),
+          Expanded(child: _DebtCard(debtors: debtors)),
+        ],
+      ),
     );
   }
 }
 
-class _StatCell extends StatelessWidget {
-  const _StatCell({
-    required this.icon,
-    required this.accent,
-    required this.label,
-    required this.value,
-    required this.delta,
-  });
-
-  final IconData icon;
-  final Color accent;
-  final String label;
-  /// `null` = loading. The cell shows a spinner instead of a number.
-  final String? value;
-  final String? delta;
+/// Green gradient card — hero balance with the reward-point count as a
+/// small chip below. v1's primaryGradient ported to the v2 brand color.
+class _BalancePointsCard extends StatelessWidget {
+  const _BalancePointsCard({required this.wallet});
+  final WalletResult? wallet;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2D5F47), Color(0xFF1F4634)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brand.withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.all(Sp.sm + 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(icon, color: accent, size: 16),
-              ),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppType.label(color: AppColors.textMid)
-                      .copyWith(fontSize: 11),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              const Icon(LucideIcons.wallet, color: Colors.white, size: 16),
+              const SizedBox(width: 5),
+              Text(
+                'الرصيد',
+                style: AppType.muted(
+                  color: Colors.white.withValues(alpha: 0.85),
+                ).copyWith(fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          const SizedBox(height: Sp.sm),
-          if (value == null)
+          const SizedBox(height: 8),
+          if (wallet == null)
             const SizedBox(
               height: 22,
               width: 22,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppColors.brand,
+                color: Colors.white,
               ),
             )
-          else
-            Text(
-              value!,
-              style: AppType.title(color: AppColors.textHi).copyWith(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
+          else ...[
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    formatIQD(wallet!.balance.round()),
+                    style: AppType.title(color: Colors.white).copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'IQD',
+                    style: AppType.muted(
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ).copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          const SizedBox(height: 3),
-          Text(
-            delta ?? '',
-            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 10),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                const Icon(LucideIcons.star,
+                    color: Color(0xFFFCD34D), size: 13),
+                const SizedBox(width: 4),
+                Text(
+                  '${formatIQD(wallet!.points.round())} نقطة',
+                  style: AppType.muted(
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ).copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Orange gradient card — hero debt total in IQD with the debtors count
+/// as a small line below. Mirrors v1's _DebtCard exactly.
+class _DebtCard extends StatelessWidget {
+  const _DebtCard({required this.debtors});
+  final DebtorsResult? debtors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEA580C), Color(0xFFC2410C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(R.lg),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFEA580C).withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.creditCard,
+                  color: Colors.white, size: 16),
+              const SizedBox(width: 5),
+              Text(
+                'المدينون',
+                style: AppType.muted(
+                  color: Colors.white.withValues(alpha: 0.85),
+                ).copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (debtors == null)
+            const SizedBox(
+              height: 22,
+              width: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          else ...[
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    formatIQD(debtors!.total),
+                    style: AppType.title(color: Colors.white).copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'IQD',
+                    style: AppType.muted(
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ).copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Icon(LucideIcons.users,
+                    color: Colors.white.withValues(alpha: 0.85), size: 13),
+                const SizedBox(width: 4),
+                Text(
+                  '${debtors!.count} مشترك',
+                  style: AppType.muted(
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ).copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -73,15 +73,15 @@ class SubscribersCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Sp.lg),
-          // Hero row: big total on the right, ring on the left
+          // Hero row: ring + 2×2 mini grid on the trailing side. The
+          // vertical-list iteration felt too tall on home; back to a
+          // compact 2-by-2 per the user.
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               _TotalWithRing(total: s.total, ratio: activeRatio),
               const SizedBox(width: Sp.lg),
-              Expanded(
-                child: _statsList(s),
-              ),
+              Expanded(child: _statsGrid(s)),
             ],
           ),
         ],
@@ -89,51 +89,64 @@ class SubscribersCard extends StatelessWidget {
     );
   }
 
-  /// Vertical list of 4 stat lines on the trailing side of the hero.
-  /// Each line is a compact pill: icon + label + value, with the value
-  /// on the far end. Reads top-to-bottom in priority order (active →
-  /// online → expired → near expiry).
-  Widget _statsList(SubscribersStats s) {
+  /// 2×2 compact grid next to the ring. Tooltips carry the label on
+  /// long-press so the icons can stay self-explanatory at small size.
+  Widget _statsGrid(SubscribersStats s) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _StatLine(
-          icon: LucideIcons.circleCheck,
-          label: 'نشط',
-          value: s.active,
-          color: AppColors.brand,
+        Row(
+          children: [
+            Expanded(
+              child: _Mini(
+                icon: LucideIcons.circleCheck,
+                label: 'نشط',
+                value: s.active,
+                color: AppColors.brand,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _Mini(
+                icon: LucideIcons.wifi,
+                label: 'متصل الآن',
+                value: s.online,
+                color: const Color(0xFF3B82F6),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
-        _StatLine(
-          icon: LucideIcons.wifi,
-          label: 'متصل الآن',
-          value: s.online,
-          color: const Color(0xFF3B82F6),
-        ),
-        const SizedBox(height: 6),
-        _StatLine(
-          icon: LucideIcons.timerOff,
-          label: 'منتهي',
-          value: s.expired,
-          color: AppColors.error,
-        ),
-        const SizedBox(height: 6),
-        _StatLine(
-          icon: LucideIcons.triangleAlert,
-          label: 'قارب الانتهاء',
-          value: s.nearExpiry,
-          color: const Color(0xFFE08F2D),
+        Row(
+          children: [
+            Expanded(
+              child: _Mini(
+                icon: LucideIcons.timerOff,
+                label: 'منتهي',
+                value: s.expired,
+                color: AppColors.error,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _Mini(
+                icon: LucideIcons.triangleAlert,
+                label: 'قارب الانتهاء',
+                value: s.nearExpiry,
+                color: const Color(0xFFE08F2D),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-/// One row in the stats list — icon chip, label, value. Larger than the
-/// old 2×2 grid; reads cleanly without label truncation since each row
-/// has the full card width to spread out.
-class _StatLine extends StatelessWidget {
-  const _StatLine({
+/// One tile in the 2×2 mini grid. Icon + value on a tinted pill —
+/// no inline label (it'd clip with 4-tile width). Long-press shows
+/// the Arabic label as a tooltip.
+class _Mini extends StatelessWidget {
+  const _Mini({
     required this.icon,
     required this.label,
     required this.value,
@@ -149,32 +162,22 @@ class _StatLine extends StatelessWidget {
     return Tooltip(
       message: label,
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(color: color.withValues(alpha: 0.15)),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: color, size: 14),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            Icon(icon, color: color, size: 15),
             Text(
               '$value',
-              style: AppType.title(color: color).copyWith(
-                fontSize: 15,
+              style: AppType.title(color: AppColors.textHi).copyWith(
+                fontSize: 17,
                 fontWeight: FontWeight.w800,
-                height: 1,
+                height: 1.1,
               ),
             ),
           ],

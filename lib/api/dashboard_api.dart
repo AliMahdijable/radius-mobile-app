@@ -63,6 +63,15 @@ class DebtorsResult {
 
 enum RevenuePeriod { day, week, month }
 
+/// Manager wallet snapshot — balance (managers carry credit for activations)
+/// + reward points (SAS4 incentive system). Pulled from /api/v2/admin-widgets
+/// which wraps SAS4's wd_balance + wd_reward_points widgets.
+class WalletResult {
+  const WalletResult({required this.balance, required this.points});
+  final num balance;
+  final num points;
+}
+
 class RevenueResult {
   const RevenueResult({required this.amount});
   final int amount;
@@ -258,6 +267,40 @@ class DashboardApi {
         from = '${d(now.subtract(const Duration(days: 29)))} 00:00:00';
     }
     return (from, to);
+  }
+
+  /// GET /api/v2/admin-widgets — `{success, balance, points}`.
+  /// Backend already aggregates SAS4's wd_balance + wd_reward_points
+  /// widgets for us.
+  static Future<WalletResult?> fetchWallet() async {
+    _logStart('v2/admin-widgets');
+    final token = await AuthStorage.readToken();
+    if (token == null) {
+      _logSilent('v2/admin-widgets', 'missing token', null);
+      return null;
+    }
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/admin-widgets',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        _logSilent('v2/admin-widgets', 'success != true', body);
+        return null;
+      }
+      final balance = body['balance'];
+      final points = body['points'];
+      return WalletResult(
+        balance: balance is num ? balance : (num.tryParse(balance.toString()) ?? 0),
+        points: points is num ? points : (num.tryParse(points.toString()) ?? 0),
+      );
+    } on DioException catch (e) {
+      _logErr('v2/admin-widgets', e);
+      return null;
+    } catch (e) {
+      _logErr('v2/admin-widgets', e);
+      return null;
+    }
   }
 
   /// GET /api/whatsapp/connection-status/:adminId

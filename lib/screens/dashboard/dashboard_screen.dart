@@ -33,11 +33,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DailyActivationsResult? _activationsLive;
   Sas4Stats? _sas4Live;
   DebtorsResult? _debtorsLive;
+  WalletResult? _walletLive;
 
   bool _waLoaded = false;
   bool _activationsLoaded = false;
   bool _sas4Loaded = false;
   bool _debtorsLoaded = false;
+  bool _walletLoaded = false;
 
   @override
   void initState() {
@@ -58,6 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _activationsLoaded = false;
       _sas4Loaded = false;
       _debtorsLoaded = false;
+      _walletLoaded = false;
     });
     // Independent fetches — each updates its loaded flag as soon as it
     // returns so cards can light up one by one instead of all-or-nothing.
@@ -89,6 +92,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _debtorsLoaded = true;
       });
     });
+    DashboardApi.fetchWallet().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _walletLive = r;
+        _walletLoaded = true;
+      });
+    });
   }
 
   String _greeting() {
@@ -110,15 +120,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       online: _sas4Live!.online ?? 0,
       expired: _sas4Live!.expired ?? 0,
       nearExpiry: _debtorsLive?.nearExpiry ?? 0,
-    );
-  }
-
-  DailyStats? get _dailyStats {
-    if (!_activationsLoaded || !_debtorsLoaded) return null;
-    return DailyStats(
-      activations: _activationsLive?.activations ?? 0,
-      debtorsCount: _debtorsLive?.count ?? 0,
-      debtorsTotal: _debtorsLive?.total ?? 0,
     );
   }
 
@@ -166,7 +167,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       .fadeIn(duration: const Duration(milliseconds: 280))
                       .slideY(begin: 0.03, end: 0),
                   const SizedBox(height: Sp.md),
-                  StatsGrid(stats: _dailyStats)
+                  StatsGrid(
+                    wallet: _walletLoaded ? _walletLive : null,
+                    debtors: _debtorsLoaded ? _debtorsLive : null,
+                  )
                       .animate()
                       .fadeIn(
                         delay: const Duration(milliseconds: 80),
