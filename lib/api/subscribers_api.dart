@@ -165,6 +165,14 @@ class SubscribersApi {
         return null;
       }
       final rows = (body['data'] as List?) ?? const [];
+      // Diagnostic: dump the first online row so we can see whether
+      // the byte counters actually come through from the backend.
+      // The user's report said DL/UL show as 0 on the card; this log
+      // tells us whether the data is missing or just being mis-merged.
+      if (!kReleaseMode && rows.isNotEmpty && rows.first is Map) {
+        final first = rows.first as Map;
+        debugPrint('🔍 online[0]: $first');
+      }
       final out = <String, OnlineSessionInfo>{};
       int? toInt(dynamic v) {
         if (v == null) return null;

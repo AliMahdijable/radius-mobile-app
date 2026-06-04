@@ -601,42 +601,45 @@ class _LiveSessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ip = sub.ipAddress?.trim();
     final session = sub.sessionTime;
-    final dl = sub.downloadBytes ?? 0;
-    final ul = sub.uploadBytes ?? 0;
+    final dl = sub.downloadBytes;
+    final ul = sub.uploadBytes;
     final device = sub.deviceVendor?.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    // Wrap so the IP / duration / DL / UL / device chips flow onto a
+    // second line when they don't all fit — keeps the row compact even
+    // when SAS4 returns large device-vendor strings.
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        // Row 1: IP (tappable) + session duration
-        Row(
-          children: [
-            if (ip != null && ip.isNotEmpty) ...[
-              InkWell(
-                onTap: () => launchUrl(
-                  Uri.parse('http://$ip'),
-                  mode: LaunchMode.externalApplication,
+        if (ip != null && ip.isNotEmpty)
+          InkWell(
+            onTap: () => launchUrl(
+              Uri.parse('http://$ip'),
+              mode: LaunchMode.externalApplication,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.network,
+                    size: 12, color: Color(0xFF26A69A)),
+                const SizedBox(width: 3),
+                Text(
+                  ip,
+                  style: AppType.label(color: const Color(0xFF26A69A))
+                      .copyWith(
+                          fontSize: 11, fontWeight: FontWeight.w800),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.network,
-                        size: 12, color: Color(0xFF26A69A)),
-                    const SizedBox(width: 3),
-                    Text(
-                      ip,
-                      style: AppType.label(color: const Color(0xFF26A69A))
-                          .copyWith(
-                              fontSize: 11, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(width: 2),
-                    const Icon(LucideIcons.externalLink,
-                        size: 9, color: Color(0xFF80CBC4)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-            ],
-            if (session != null && session > 0) ...[
+                const SizedBox(width: 2),
+                const Icon(LucideIcons.externalLink,
+                    size: 9, color: Color(0xFF80CBC4)),
+              ],
+            ),
+          ),
+        if (session != null && session > 0)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               const Icon(LucideIcons.timer,
                   size: 12, color: AppColors.textMid),
               const SizedBox(width: 3),
@@ -646,45 +649,49 @@ class _LiveSessionRow extends StatelessWidget {
                     .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
               ),
             ],
-          ],
-        ),
-        const SizedBox(height: 4),
-        // Row 2: download + upload + device vendor
-        Row(
-          children: [
-            const Icon(LucideIcons.arrowDownToLine,
-                size: 12, color: Color(0xFF26A69A)),
-            const SizedBox(width: 3),
-            Text(
-              _formatBytes(dl),
-              style: AppType.label(color: const Color(0xFF26A69A))
-                  .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(width: 12),
-            const Icon(LucideIcons.arrowUpFromLine,
-                size: 12, color: Color(0xFF3B82F6)),
-            const SizedBox(width: 3),
-            Text(
-              _formatBytes(ul),
-              style: AppType.label(color: const Color(0xFF3B82F6))
-                  .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-            if (device != null &&
-                device.isNotEmpty &&
-                device.toLowerCase() != 'unknown') ...[
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  device,
-                  style: AppType.muted(color: AppColors.textLow)
-                      .copyWith(fontSize: 10),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          ),
+        // Download / Upload only when SAS4 actually has byte counters.
+        // Showing '0 B' for online users without traffic data is just
+        // visual noise — better to omit until /api/v2/online-users
+        // returns a positive count.
+        if (dl != null && dl > 0)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(LucideIcons.arrowDownToLine,
+                  size: 12, color: Color(0xFF26A69A)),
+              const SizedBox(width: 3),
+              Text(
+                _formatBytes(dl),
+                style: AppType.label(color: const Color(0xFF26A69A))
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
               ),
             ],
-          ],
-        ),
+          ),
+        if (ul != null && ul > 0)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(LucideIcons.arrowUpFromLine,
+                  size: 12, color: Color(0xFF3B82F6)),
+              const SizedBox(width: 3),
+              Text(
+                _formatBytes(ul),
+                style: AppType.label(color: const Color(0xFF3B82F6))
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        if (device != null &&
+            device.isNotEmpty &&
+            device.toLowerCase() != 'unknown')
+          Text(
+            device,
+            style: AppType.muted(color: AppColors.textLow)
+                .copyWith(fontSize: 10),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
       ],
     );
   }
