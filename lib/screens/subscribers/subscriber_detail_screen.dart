@@ -434,6 +434,11 @@ class _SubscriptionCard extends StatelessWidget {
   }
 }
 
+/// Slim one-line balance card — wrapping the section header pattern
+/// would duplicate the 'دين على المشترك' label inside the title, so we
+/// render a single inline row: icon + label on the leading edge, the
+/// amount as a colored chip on the trailing edge. Reads at-a-glance
+/// without dominating the screen like the previous hero number did.
 class _BalanceCard extends StatelessWidget {
   const _BalanceCard({required this.sub});
   final Subscriber sub;
@@ -443,36 +448,54 @@ class _BalanceCard extends StatelessWidget {
     final isDebt = sub.hasDebt;
     final color = isDebt ? AppColors.error : AppColors.brand;
     final label = isDebt ? 'دين على المشترك' : 'رصيد للمشترك';
-    return _SectionCard(
-      icon: isDebt ? LucideIcons.creditCard : LucideIcons.wallet,
-      title: label,
-      accent: color,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2, bottom: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                formatIQD(sub.debtAbs.round()),
-                style: AppType.title(color: color).copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.4,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'د.ع',
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+            child: Icon(
+              isDebt ? LucideIcons.creditCard : LucideIcons.wallet,
+              color: color,
+              size: 13,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: AppType.label(color: AppColors.textHi).copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(R.pill),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: Text(
+              '${formatIQD(sub.debtAbs.round())} د.ع',
+              style: AppType.label(color: color).copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
