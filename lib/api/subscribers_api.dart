@@ -242,12 +242,19 @@ class SubscribersApi {
   }
 
   /// Raw fetch — used internally by the cache. Don't call directly.
+  /// Hits /api/v2/subscribers (NOT /api/subscribers/with-phones).
+  /// The legacy with-phones endpoint asks SAS4 for column 'idx' which
+  /// SAS4 doesn't honor — the response comes back without a primary
+  /// key, breaking activate/extend/disconnect (user's logs showed
+  /// id=null idx=null on every row). /api/v2/subscribers asks SAS4
+  /// for BOTH 'idx' AND 'id' so the primary key always lands, exactly
+  /// like v1's direct SAS4 admin_list call.
   static Future<List<Subscriber>?> _loadAllRaw() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/subscribers/with-phones',
+        '/api/v2/subscribers',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
