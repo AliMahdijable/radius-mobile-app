@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -65,7 +67,7 @@ class SubscribersCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(R.pill),
                 ),
                 child: Text(
-                  '${(activeRatio * 100).round()}% نشط',
+                  '${(activeRatio * 100).round()}% فعال',
                   style: AppType.muted(color: AppColors.brand)
                       .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
                 ),
@@ -215,6 +217,11 @@ class _Skeleton extends StatelessWidget {
   }
 }
 
+/// Ring + total — sized to match the 2×2 mini grid next to it so the
+/// row looks balanced (was 120px, dominating the card). The progress
+/// arc uses a gradient sweep (brand → teal → brand) for a modern,
+/// less flat look. Painted manually so we get gradient + rounded cap
+/// + custom stroke width without fighting CircularProgressIndicator.
 class _TotalWithRing extends StatelessWidget {
   const _TotalWithRing({required this.total, required this.ratio});
 
@@ -223,59 +230,93 @@ class _TotalWithRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const size = 120.0; // up from 96 — gives the total number more room
+    const size = 92.0; // matches the 2×2 grid height to its right
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Background ring (light gray)
-          const SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: 1,
-              strokeWidth: 7,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation(AppColors.border),
-            ),
+          CustomPaint(
+            size: const Size(size, size),
+            painter: _GradientRingPainter(ratio: ratio.clamp(0, 1)),
           ),
-          // Brand ring — active percentage
-          SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: ratio.clamp(0, 1),
-              strokeWidth: 7,
-              backgroundColor: Colors.transparent,
-              valueColor:
-                  const AlwaysStoppedAnimation(AppColors.brand),
-              strokeCap: StrokeCap.round,
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                formatIQD(total),
-                style: AppType.title(color: AppColors.textHi).copyWith(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  height: 1.05,
+          Padding(
+            // Inset matches the stroke so the text never collides with
+            // the arc, even on long totals like 12,345.
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    formatIQD(total),
+                    style: AppType.title(color: AppColors.textHi).copyWith(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      height: 1.05,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'إجمالي',
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11),
-              ),
-            ],
+                const SizedBox(height: 1),
+                Text(
+                  'إجمالي',
+                  style: AppType.muted(color: AppColors.textLow)
+                      .copyWith(fontSize: 9, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _GradientRingPainter extends CustomPainter {
+  _GradientRingPainter({required this.ratio});
+  final double ratio;
+
+  static const _stroke = 6.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - _stroke) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    // Background ring — subtle so it's just a hint of where the arc lives.
+    final bgPaint = Paint()
+      ..color = AppColors.border.withValues(alpha: 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _stroke;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    if (ratio <= 0) return;
+
+    // Sweep gradient brand → teal → brand. Starting angle is rotated so
+    // the gradient seam doesn't sit at the top (where the arc begins).
+    final gradient = SweepGradient(
+      colors: const [
+        Color(0xFF2D5F47), // brand dark
+        Color(0xFF14B8A6), // teal accent (mid)
+        Color(0xFF2D5F47), // brand dark again so the end ties to the start
+      ],
+      stops: const [0.0, 0.5, 1.0],
+      transform: const GradientRotation(-math.pi / 2),
+    );
+    final fgPaint = Paint()
+      ..shader = gradient.createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * ratio, false, fgPaint);
+  }
+
+  @override
+  bool shouldRepaint(_GradientRingPainter old) => old.ratio != ratio;
 }
 
