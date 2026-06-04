@@ -173,7 +173,11 @@ class SubscriberCardV2 extends StatelessWidget {
             ],
           ),
         ),
-        _ExpiryBadge(remaining: sub.remainingDays, disabled: disabled),
+        _ExpiryBadge(
+          remaining: sub.remainingDays,
+          expiration: sub.parsedExpiration,
+          disabled: disabled,
+        ),
       ],
     );
   }
@@ -294,8 +298,17 @@ class _StatusIconBadge extends StatelessWidget {
 /// urgency signal — color-coded so a red badge instantly tells you
 /// there's a problem before you read anything else.
 class _ExpiryBadge extends StatelessWidget {
-  const _ExpiryBadge({required this.remaining, required this.disabled});
+  const _ExpiryBadge({
+    required this.remaining,
+    required this.expiration,
+    required this.disabled,
+  });
   final int? remaining;
+  /// Parsed expiration timestamp. Used when [remaining]==0 so we can
+  /// switch the badge from a useless 'اليوم'/'0 يوم' to the actual
+  /// hours/minutes left — admins want to know if the sub expires in
+  /// 5 hours or 30 minutes.
+  final DateTime? expiration;
   final bool disabled;
 
   @override
@@ -323,10 +336,14 @@ class _ExpiryBadge extends StatelessWidget {
         icon: LucideIcons.timerOff,
       );
     } else if (remaining! == 0) {
+      // Same-day expiry: split hours/minutes from the parsed timestamp.
+      // Falls back to a static 'اليوم' label when we don't have a
+      // parseable expiration (rare).
+      final hm = _hoursMinutesUntil(expiration);
       v = (
         color: AppColors.error,
-        big: '0',
-        small: 'اليوم',
+        big: hm.$1,
+        small: hm.$2,
         icon: LucideIcons.triangleAlert,
       );
     } else if (remaining! <= 3) {
@@ -371,7 +388,7 @@ class _ExpiryBadge extends StatelessWidget {
               Text(
                 v.big,
                 style: AppType.title(color: v.color).copyWith(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w800,
                   height: 1,
                 ),
@@ -392,6 +409,25 @@ class _ExpiryBadge extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Returns `(big, small)` strings for a same-day expiry.
+  ///  hours >= 1 → ('5س', '30د')
+  ///  hours == 0 → ('30', 'دقيقة') or ('1', 'دقيقة') / ('45', 'دقيقة')
+  ///  past expiry → ('0', 'منتهي')  (defensive — shouldn't hit here)
+  static (String, String) _hoursMinutesUntil(DateTime? exp) {
+    if (exp == null) return ('0', 'اليوم');
+    final diff = exp.difference(DateTime.now());
+    if (diff.isNegative) return ('0', 'منتهي');
+    final h = diff.inHours;
+    final mLeft = diff.inMinutes - h * 60;
+    if (h >= 1) {
+      // Two-line layout: hours on top, minutes underneath.
+      return ('${h}س', '${mLeft}د');
+    }
+    // Less than an hour — show minutes only.
+    final m = diff.inMinutes.clamp(0, 59);
+    return ('$m', 'دقيقة');
   }
 }
 
