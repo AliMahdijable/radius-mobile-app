@@ -10,18 +10,21 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
-/// Subscriber details — direct port of v1's
-/// mobile-app/lib/screens/subscribers/subscriber_details_screen.dart
-/// in a v2 visual shell. Sections, in order:
-///   1. Header — avatar + status + name + username + close button.
-///   2. Top action row — تعديل / تمديد / تفعيل / حذف / اتصال / واتساب
-///      (the first 4 are Phase 3+; the last 2 launch tel: / wa.me now).
-///   3. Live session (when isOnline) — IP / MAC / session duration +
-///      download / upload bytes as stat cards.
-///   4. Subscription info — package + price + expiration + remaining
-///      days + parent manager.
-///   5. Disconnect button (when online + idx known) — calls SAS4 to
-///      kick the user off the network. Confirmation dialog first.
+/// Subscriber details — v2 visual shell over v1's structure. Layout
+/// top→bottom (info → operations):
+///   1. Header — avatar + status + name + username + close.
+///   2. Live session card (when online) — IP / MAC / duration + DL/UL.
+///   3. Subscription card — package + price + expiry + parent + phone.
+///   4. Balance hero card (when non-zero).
+///   5. Operations card AT THE BOTTOM — every action v1 surfaces in
+///      its FAB sheet, in a single 3-column grid: تعديل / تفعيل /
+///      تمديد / إضافة دين / تسديد دين / خصم سريع / سجل الحركات /
+///      تذكير دين / تذكير انتهاء / توليد رابط / إرسال المعلومات /
+///      حذف / تعطيل-تفعيل حساب / اتصال / واتساب / فصل المستخدم.
+///
+/// Info cards are intentionally tight (smaller padding, 4px row gaps)
+/// so the operations grid has room to breathe without scrolling on
+/// most phones.
 class SubscriberDetailScreen extends StatefulWidget {
   const SubscriberDetailScreen({super.key, required this.sub});
   final Subscriber sub;
@@ -47,29 +50,28 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   Sp.lg,
-                  Sp.md,
+                  Sp.sm,
                   Sp.lg,
-                  Sp.huge * 2,
+                  Sp.huge,
                 ),
                 children: [
-                  _ActionRow(sub: sub),
-                  const SizedBox(height: Sp.md),
                   if (sub.isOnline) ...[
                     _LiveSessionCard(sub: sub),
-                    const SizedBox(height: Sp.md),
+                    const SizedBox(height: Sp.sm),
                   ],
                   _SubscriptionCard(sub: sub),
                   if (sub.balanceAmount != 0) ...[
-                    const SizedBox(height: Sp.md),
+                    const SizedBox(height: Sp.sm),
                     _BalanceCard(sub: sub),
                   ],
-                  if (sub.isOnline && sub.idx != null) ...[
-                    const SizedBox(height: Sp.lg),
-                    _DisconnectButton(
-                      busy: _disconnecting,
-                      onPressed: _confirmDisconnect,
-                    ),
-                  ],
+                  const SizedBox(height: Sp.md),
+                  _OperationsCard(
+                    sub: sub,
+                    disconnecting: _disconnecting,
+                    onDisconnect: sub.isOnline && sub.idx != null
+                        ? _confirmDisconnect
+                        : null,
+                  ),
                 ],
               ),
             ),
@@ -83,9 +85,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('فصل المستخدم',
-            style: AppType.label(color: AppColors.textHi)
-                .copyWith(fontSize: 16, fontWeight: FontWeight.w800)),
+        title: Text(
+          'فصل المستخدم',
+          style: AppType.label(color: AppColors.textHi)
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
         content: Text(
           'سيتم قطع جلسة ${sub.fullName} الحالية من الشبكة. سيحتاج '
           'لإعادة الاتصال يدوياً.',
@@ -116,7 +120,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (!mounted) return;
     setState(() {
       _disconnecting = false;
-      // Optimistic flip — the card list will catch up on next refresh.
       if (success) sub = sub.copyWithOnline(online: false);
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -150,29 +153,29 @@ class _Header extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               Container(
-                width: 50,
-                height: 50,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.14),
                   shape: BoxShape.circle,
-                  border:
-                      Border.all(color: statusColor.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3)),
                 ),
                 alignment: Alignment.center,
-                child: Icon(_statusIcon(sub), color: statusColor, size: 24),
+                child: Icon(_statusIcon(sub), color: statusColor, size: 22),
               ),
               if (sub.isOnline)
                 Positioned(
                   bottom: 0,
                   right: 0,
                   child: Container(
-                    width: 14,
-                    height: 14,
+                    width: 12,
+                    height: 12,
                     decoration: BoxDecoration(
                       color: AppColors.brand,
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: AppColors.surface, width: 2),
+                      border:
+                          Border.all(color: AppColors.surface, width: 2),
                     ),
                   ),
                 ),
@@ -186,7 +189,7 @@ class _Header extends StatelessWidget {
                 Text(
                   sub.fullName,
                   style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
@@ -198,15 +201,14 @@ class _Header extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                          horizontal: 6, vertical: 1),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.pill),
                       ),
                       child: Text(
                         statusLabel,
-                        style:
-                            AppType.muted(color: statusColor).copyWith(
+                        style: AppType.muted(color: statusColor).copyWith(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                         ),
@@ -218,7 +220,7 @@ class _Header extends StatelessWidget {
                         sub.username,
                         style: AppType.muted(color: AppColors.textLow)
                             .copyWith(
-                                fontSize: 12, fontWeight: FontWeight.w500),
+                                fontSize: 11, fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -229,8 +231,9 @@ class _Header extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(LucideIcons.x),
+            icon: const Icon(LucideIcons.x, size: 20),
             color: AppColors.textMid,
+            visualDensity: VisualDensity.compact,
             onPressed: onClose,
           ),
         ],
@@ -263,139 +266,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.sub});
-  final Subscriber sub;
-
-  @override
-  Widget build(BuildContext context) {
-    final phone = sub.displayPhone;
-    return SizedBox(
-      height: 78,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _Action(
-            icon: LucideIcons.zap,
-            label: 'تفعيل',
-            color: AppColors.brand,
-            onTap: () => _todo(context, 'تفعيل سريع — قيد التطوير'),
-          ),
-          _Action(
-            icon: LucideIcons.repeat,
-            label: 'تمديد',
-            color: const Color(0xFF3B82F6),
-            onTap: () => _todo(context, 'تمديد — قيد التطوير'),
-          ),
-          _Action(
-            icon: LucideIcons.pencil,
-            label: 'تعديل',
-            color: const Color(0xFF8B5CF6),
-            onTap: () => _todo(context, 'تعديل — قيد التطوير'),
-          ),
-          _Action(
-            icon: LucideIcons.trash2,
-            label: 'حذف',
-            color: AppColors.error,
-            onTap: () => _todo(context, 'حذف — قيد التطوير'),
-          ),
-          if (phone.isNotEmpty) ...[
-            _Action(
-              icon: LucideIcons.phone,
-              label: 'اتصال',
-              color: const Color(0xFF14B8A6),
-              onTap: () => _launchUri(context, Uri.parse('tel:$phone')),
-            ),
-            _Action(
-              icon: LucideIcons.messageCircle,
-              label: 'واتساب',
-              color: const Color(0xFF25D366),
-              onTap: () => _launchUri(context,
-                  Uri.parse('https://wa.me/${_digits(phone)}')),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
-
-  static void _todo(BuildContext ctx, String msg) {
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.textHi,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  static Future<void> _launchUri(BuildContext ctx, Uri uri) async {
-    final ok = await canLaunchUrl(uri);
-    if (!ok) {
-      if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('لا يمكن فتح الرابط')),
-      );
-      return;
-    }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-}
-
-class _Action extends StatelessWidget {
-  const _Action({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8),
-      child: Material(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(R.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(R.md),
-          child: Container(
-            width: 72,
-            padding: const EdgeInsets.symmetric(vertical: Sp.sm),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.md),
-              border: Border.all(color: color.withValues(alpha: 0.2)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 22),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: AppType.label(color: color).copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _LiveSessionCard extends StatelessWidget {
   const _LiveSessionCard({required this.sub});
   final Subscriber sub;
@@ -413,7 +283,6 @@ class _LiveSessionCard extends StatelessWidget {
             label: 'IP',
             value: sub.ipAddress!,
             valueColor: const Color(0xFF3B82F6),
-            // Most ONT/router web UIs sit on plain HTTP.
             onTap: () => launchUrl(
               Uri.parse('http://${sub.ipAddress}'),
               mode: LaunchMode.externalApplication,
@@ -426,7 +295,7 @@ class _LiveSessionCard extends StatelessWidget {
             label: 'مدة الجلسة',
             value: _formatDuration(sub.sessionTime!),
           ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
@@ -437,7 +306,7 @@ class _LiveSessionCard extends StatelessWidget {
                 color: AppColors.brand,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: _BytesCard(
                 icon: LucideIcons.upload,
@@ -515,7 +384,8 @@ class _SubscriptionCard extends StatelessWidget {
             icon: LucideIcons.phone,
             label: 'رقم الهاتف',
             value: sub.displayPhone,
-            onTap: () => Clipboard.setData(ClipboardData(text: sub.displayPhone)),
+            onTap: () =>
+                Clipboard.setData(ClipboardData(text: sub.displayPhone)),
             trailing: LucideIcons.copy,
           ),
       ],
@@ -547,32 +417,203 @@ class _BalanceCard extends StatelessWidget {
       accent: color,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: Sp.sm),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  formatIQD(sub.debtAbs.round()),
-                  style: AppType.title(color: color).copyWith(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
+          padding: const EdgeInsets.only(top: 2, bottom: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                formatIQD(sub.debtAbs.round()),
+                style: AppType.title(color: color).copyWith(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.4,
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  'د.ع',
-                  style: AppType.muted(color: AppColors.textMid)
-                      .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'د.ع',
+                style: AppType.muted(color: AppColors.textMid)
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Dedicated operations card at the bottom — every action v1 surfaces
+/// in its FAB sheet, rendered as a 3-column grid of small tinted
+/// chips. Stubbed actions snack 'قيد التطوير' until the matching
+/// sheet/dialog is built in the later phases; live actions (call,
+/// WhatsApp, disconnect) are wired now.
+class _OperationsCard extends StatelessWidget {
+  const _OperationsCard({
+    required this.sub,
+    required this.disconnecting,
+    required this.onDisconnect,
+  });
+
+  final Subscriber sub;
+  final bool disconnecting;
+  final VoidCallback? onDisconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = sub.displayPhone;
+    final ops = <_Op>[
+      _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
+          () => _todo(context, 'تعديل — قيد التطوير (مرحلة 4)')),
+      _Op(LucideIcons.zap, 'تفعيل', const Color(0xFF14B8A6),
+          () => _todo(context, 'تفعيل — قيد التطوير (مرحلة 3)')),
+      _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
+          () => _todo(context, 'تمديد — قيد التطوير (مرحلة 3)')),
+      _Op(LucideIcons.plus, 'إضافة دين', const Color(0xFFE08F2D),
+          () => _todo(context, 'إضافة دين — قيد التطوير (مرحلة 3)')),
+      if (sub.hasDebt)
+        _Op(LucideIcons.banknote, 'تسديد دين', Colors.green,
+            () => _todo(context, 'تسديد دين — قيد التطوير (مرحلة 3)')),
+      _Op(LucideIcons.tag, 'خصم سريع', const Color(0xFF14B8A6),
+          () => _todo(context, 'خصم سريع — قيد التطوير (مرحلة 3)')),
+      _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
+          () => _todo(context, 'سجل الحركات — قيد التطوير')),
+      if (sub.hasDebt)
+        _Op(LucideIcons.bellRing, 'تذكير دين', Colors.orange,
+            () => _todo(context, 'تذكير دين — قيد التطوير')),
+      if (sub.isNearExpiry)
+        _Op(LucideIcons.alarmClock, 'تذكير انتهاء', Colors.deepOrange,
+            () => _todo(context, 'تذكير انتهاء — قيد التطوير')),
+      _Op(LucideIcons.link, 'توليد رابط', Colors.indigo,
+          () => _todo(context, 'توليد رابط — قيد التطوير')),
+      _Op(LucideIcons.info, 'إرسال المعلومات', Colors.blueAccent,
+          () => _todo(context, 'إرسال المعلومات — قيد التطوير')),
+      _Op(
+        sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
+        sub.isDisabled ? 'تفعيل حساب' : 'تعطيل',
+        sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
+        () => _todo(context,
+            '${sub.isDisabled ? 'تفعيل' : 'تعطيل'} — قيد التطوير'),
+      ),
+      _Op(LucideIcons.trash2, 'حذف', AppColors.error,
+          () => _todo(context, 'حذف — قيد التطوير (مرحلة 4)')),
+      if (phone.isNotEmpty)
+        _Op(LucideIcons.phone, 'اتصال', const Color(0xFF14B8A6),
+            () => _launchUri(context, Uri.parse('tel:$phone'))),
+      if (phone.isNotEmpty)
+        _Op(
+          LucideIcons.messageCircle,
+          'واتساب',
+          const Color(0xFF25D366),
+          () => _launchUri(
+              context, Uri.parse('https://wa.me/${_digits(phone)}')),
+        ),
+      if (sub.isOnline && sub.idx != null)
+        _Op(LucideIcons.power, disconnecting ? 'جاري الفصل' : 'فصل المستخدم',
+            AppColors.error, onDisconnect ?? () {}),
+    ];
+
+    return _SectionCard(
+      icon: LucideIcons.layers,
+      title: 'العمليات',
+      accent: AppColors.brand,
+      children: [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 1.7,
+          ),
+          itemCount: ops.length,
+          itemBuilder: (_, i) => _OpTile(op: ops[i]),
+        ),
+      ],
+    );
+  }
+
+  static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
+
+  static void _todo(BuildContext ctx, String msg) {
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: AppColors.textHi,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  static Future<void> _launchUri(BuildContext ctx, Uri uri) async {
+    final ok = await canLaunchUrl(uri);
+    if (!ok) {
+      if (!ctx.mounted) return;
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('لا يمكن فتح الرابط')),
+      );
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+class _Op {
+  const _Op(this.icon, this.label, this.color, this.onTap);
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+}
+
+class _OpTile extends StatelessWidget {
+  const _OpTile({required this.op});
+  final _Op op;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: op.color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(R.sm),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          op.onTap();
+        },
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: op.color.withValues(alpha: 0.18)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(op.icon, color: op.color, size: 18),
+              const SizedBox(height: 3),
+              Flexible(
+                child: Text(
+                  op.label,
+                  style: AppType.label(color: op.color).copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -593,7 +634,7 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(Sp.md),
+      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.sm),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
@@ -605,24 +646,24 @@ class _SectionCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(icon, color: accent, size: 14),
+                child: Icon(icon, color: accent, size: 12),
               ),
-              const SizedBox(width: Sp.sm),
+              const SizedBox(width: 6),
               Text(
                 title,
                 style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: Sp.sm),
+          const SizedBox(height: 4),
           ...children,
         ],
       ),
@@ -650,15 +691,15 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.textMid, size: 15),
-          const SizedBox(width: 8),
+          Icon(icon, color: AppColors.textMid, size: 13),
+          const SizedBox(width: 6),
           Text(
             label,
             style: AppType.muted(color: AppColors.textMid)
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
           Flexible(
@@ -666,15 +707,15 @@ class _InfoRow extends StatelessWidget {
               value,
               style: AppType.label(
                 color: valueColor ?? AppColors.textHi,
-              ).copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+              ).copyWith(fontSize: 12, fontWeight: FontWeight.w700),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,
             ),
           ),
           if (trailing != null) ...[
-            const SizedBox(width: 6),
-            Icon(trailing, color: AppColors.textLow, size: 13),
+            const SizedBox(width: 4),
+            Icon(trailing, color: AppColors.textLow, size: 12),
           ],
         ],
       ),
@@ -704,7 +745,7 @@ class _BytesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(R.sm),
@@ -715,20 +756,20 @@ class _BytesCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 13),
-              const SizedBox(width: 5),
+              Icon(icon, color: color, size: 11),
+              const SizedBox(width: 4),
               Text(
                 label,
                 style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 10, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             _formatBytes(bytes),
             style: AppType.title(color: color).copyWith(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
             ),
@@ -748,39 +789,5 @@ class _BytesCard extends StatelessWidget {
       i++;
     }
     return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
-  }
-}
-
-class _DisconnectButton extends StatelessWidget {
-  const _DisconnectButton({required this.busy, required this.onPressed});
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.error,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(R.md),
-          ),
-        ),
-        onPressed: busy ? null : onPressed,
-        icon: busy
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(LucideIcons.power, size: 18),
-        label: Text(busy ? 'جاري الفصل...' : 'فصل المستخدم'),
-      ),
-    );
   }
 }
