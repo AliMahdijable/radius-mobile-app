@@ -153,8 +153,14 @@ class Subscriber {
     final pdName = pd is Map ? pd['name'] : null;
     final pdId = pd is Map ? pd['id'] : null;
 
+    // Match v1's SubscriberModel.fromJson exactly:
+    // `(json['id'] ?? json['idx'])?.toString()`. The user's diagnostic
+    // log of with-phones returned neither key — suggests SAS4 isn't
+    // honoring our `idx` column request for some tree shapes. We log
+    // the raw row at the API layer so we can see what IS there.
+    final idRaw = j['id'] ?? j['idx'];
     return Subscriber(
-      idx: j['id']?.toString() ?? j['idx']?.toString(),
+      idx: idRaw?.toString(),
       username: (j['username'] ?? '').toString(),
       firstname: (j['firstname'] ?? '').toString(),
       lastname: (j['lastname'] ?? '').toString(),
