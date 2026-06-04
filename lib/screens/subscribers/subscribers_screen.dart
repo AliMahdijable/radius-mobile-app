@@ -18,7 +18,13 @@ import 'widgets/subscriber_card.dart';
 /// sort sheet, pagination, multi-select via long-press, bulk action bar
 /// (toggle/delete wired to backend, renew deferred to Phase 5).
 class SubscribersScreen extends StatefulWidget {
-  const SubscribersScreen({super.key});
+  const SubscribersScreen({super.key, this.initialFilter});
+
+  /// Optional starting filter — supplied when the screen is opened from
+  /// a dashboard card tap. When the user changes the ValueKey on this
+  /// widget (via MainShell), `initialState` runs again and the new
+  /// filter is applied.
+  final SubscriberFilter? initialFilter;
 
   @override
   State<SubscribersScreen> createState() => _SubscribersScreenState();
@@ -34,7 +40,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   bool _refreshing = false;
 
   String _query = '';
-  SubscriberFilter _filter = SubscriberFilter.all;
+  late SubscriberFilter _filter;
   SortField _sortField = SortField.remainingDays;
   SortDirection _sortDir = SortDirection.desc;
   int _page = 0;
@@ -48,6 +54,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   @override
   void initState() {
     super.initState();
+    _filter = widget.initialFilter ?? SubscriberFilter.all;
     _load();
     _searchCtrl.addListener(_onSearchChanged);
   }

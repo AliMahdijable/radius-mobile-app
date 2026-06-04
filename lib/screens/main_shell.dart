@@ -9,6 +9,7 @@ import 'reports_screen.dart';
 import 'search/quick_search_overlay.dart';
 import 'settings_screen.dart';
 import 'subscribers/subscribers_screen.dart';
+import 'subscribers/widgets/filter_chips_bar.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
@@ -28,13 +29,12 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
-
-  static const _tabs = <Widget>[
-    DashboardScreen(),
-    SubscribersScreen(),
-    ReportsScreen(),
-    SettingsScreen(),
-  ];
+  // Initial filter for the subscribers screen when opened via a
+  // dashboard card tap. Bumped on every navigate so SubscribersScreen
+  // sees a fresh ValueKey and re-applies the filter even if the user
+  // taps the same KPI twice.
+  SubscriberFilter? _pendingSubsFilter;
+  int _subsNonce = 0;
 
   void _onFabTap() {
     HapticFeedback.selectionClick();
@@ -49,14 +49,39 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  /// Public entry point for any tab to jump to the subscribers list
+  /// with a specific filter pre-applied (dashboard taps use this).
+  void _openSubscribers(SubscriberFilter? filter) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _tab = 1;
+      _pendingSubsFilter = filter;
+      _subsNonce++;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Build the tab list each frame so the subscribers screen can pick
+    // up a fresh initialFilter via its ValueKey (IndexedStack keeps the
+    // others around — they don't rebuild).
+    final tabs = <Widget>[
+      DashboardScreen(onOpenSubscribers: _openSubscribers),
+      SubscribersScreen(
+        key: ValueKey(
+            'subs-${_pendingSubsFilter?.name ?? 'all'}-$_subsNonce'),
+        initialFilter: _pendingSubsFilter,
+      ),
+      const ReportsScreen(),
+      const SettingsScreen(),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       extendBody: true, // body draws under the floating bar
       body: Stack(
         children: [
-          IndexedStack(index: _tab, children: _tabs),
+          IndexedStack(index: _tab, children: tabs),
           // Standalone search pill floats above the bar on the right.
           // bottom = bar height (64) + bar bottom padding (Sp.sm) +
           // safe-area inset + a gap so it doesn't touch the bar.

@@ -5,19 +5,24 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/util/format.dart';
 import '../../../models/dashboard.dart';
+import '../../../screens/subscribers/widgets/filter_chips_bar.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Subscribers card v2: hero total on the left with a brand-tinted
-/// progress ring around it, status grid on the right.
+/// Subscribers card v2: hero ring with the total + a tappable 5-tile
+/// grid (نشط، متصل، غير متصل، منتهي، قارب الانتهاء). Each tile + the
+/// ring itself jumps to the subscribers screen with the matching
+/// filter when [onOpen] is provided.
 ///
-/// stats=null → loading skeleton (no fabricated numbers). Real data
-/// flows in once SAS4 + debtors fetches complete.
+/// stats=null → loading skeleton (no fabricated numbers).
 class SubscribersCard extends StatelessWidget {
-  const SubscribersCard({super.key, required this.stats});
+  const SubscribersCard({super.key, required this.stats, this.onOpen});
 
   final SubscribersStats? stats;
+  /// Called with the desired filter on KPI taps. MainShell wires this
+  /// through DashboardScreen to switch tabs + apply the filter.
+  final ValueChanged<SubscriberFilter?>? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -75,14 +80,19 @@ class SubscribersCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Sp.lg),
-          // Hero row: ring + 2×2 mini grid on the trailing side. The
-          // vertical-list iteration felt too tall on home; back to a
-          // compact 2-by-2 per the user.
+          // Hero row: tappable ring + 5 tappable mini-tiles arranged
+          // as 3 across × 2 down on the trailing side (last cell empty).
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _TotalWithRing(total: s.total, ratio: activeRatio),
-              const SizedBox(width: Sp.lg),
+              _TotalWithRing(
+                total: s.total,
+                ratio: activeRatio,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.all),
+              ),
+              const SizedBox(width: Sp.md),
               Expanded(child: _statsGrid(s)),
             ],
           ),
@@ -91,8 +101,10 @@ class SubscribersCard extends StatelessWidget {
     );
   }
 
-  /// 2×2 compact grid next to the ring. Tooltips carry the label on
-  /// long-press so the icons can stay self-explanatory at small size.
+  /// 3×2 grid of tappable stat tiles. Order top→bottom, RTL right→left:
+  ///   row 1: نشط، متصل، غير متصل
+  ///   row 2: منتهي، قارب الانتهاء، (empty)
+  /// Each tile pushes the subscribers screen with its matching filter.
   Widget _statsGrid(SubscribersStats s) {
     return Column(
       children: [
@@ -104,20 +116,38 @@ class SubscribersCard extends StatelessWidget {
                 label: 'نشط',
                 value: s.active,
                 color: AppColors.brand,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.active),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Expanded(
               child: _Mini(
                 icon: LucideIcons.wifi,
-                label: 'متصل الآن',
+                label: 'متصل',
                 value: s.online,
                 color: const Color(0xFF3B82F6),
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.online),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: _Mini(
+                icon: LucideIcons.wifiOff,
+                label: 'غير متصل',
+                value: s.offline,
+                color: const Color(0xFF90A4AE),
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.offline),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 5),
         Row(
           children: [
             Expanded(
@@ -126,17 +156,27 @@ class SubscribersCard extends StatelessWidget {
                 label: 'منتهي',
                 value: s.expired,
                 color: AppColors.error,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.expired),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Expanded(
               child: _Mini(
                 icon: LucideIcons.triangleAlert,
                 label: 'قارب الانتهاء',
                 value: s.nearExpiry,
                 color: const Color(0xFFE08F2D),
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.nearExpiry),
               ),
             ),
+            const SizedBox(width: 5),
+            // Empty placeholder keeps the 3-column geometry intact so
+            // tile widths in row 2 match row 1.
+            const Expanded(child: SizedBox.shrink()),
           ],
         ),
       ],
@@ -153,36 +193,45 @@ class _Mini extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
   final IconData icon;
   final String label;
   final int value;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: label,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
+      child: Material(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.sm),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(color: color.withValues(alpha: 0.18)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon, color: color, size: 15),
-            Text(
-              '$value',
-              style: AppType.title(color: AppColors.textHi).copyWith(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.sm),
+              border: Border.all(color: color.withValues(alpha: 0.18)),
             ),
-          ],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: color, size: 14),
+                Text(
+                  '$value',
+                  style: AppType.title(color: AppColors.textHi).copyWith(
+                    fontSize: 14, // Smaller — 3 columns are tighter
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -223,53 +272,65 @@ class _Skeleton extends StatelessWidget {
 /// less flat look. Painted manually so we get gradient + rounded cap
 /// + custom stroke width without fighting CircularProgressIndicator.
 class _TotalWithRing extends StatelessWidget {
-  const _TotalWithRing({required this.total, required this.ratio});
+  const _TotalWithRing({
+    required this.total,
+    required this.ratio,
+    this.onTap,
+  });
 
   final int total;
   final double ratio;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    const size = 92.0; // matches the 2×2 grid height to its right
+    const size = 86.0; // slightly smaller — matches 2 mini rows + gap
     return SizedBox(
       width: size,
       height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: const Size(size, size),
-            painter: _GradientRingPainter(ratio: ratio.clamp(0, 1)),
-          ),
-          Padding(
-            // Inset matches the stroke so the text never collides with
-            // the arc, even on long totals like 12,345.
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    formatIQD(total),
-                    style: AppType.title(color: AppColors.textHi).copyWith(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      height: 1.05,
-                      letterSpacing: -0.3,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(size, size),
+                painter: _GradientRingPainter(ratio: ratio.clamp(0, 1)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        formatIQD(total),
+                        style: AppType.title(color: AppColors.textHi).copyWith(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          height: 1.05,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'إجمالي',
+                      style: AppType.muted(color: AppColors.textLow)
+                          .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'إجمالي',
-                  style: AppType.muted(color: AppColors.textLow)
-                      .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -25,10 +25,15 @@ class StatsGrid extends StatelessWidget {
     super.key,
     required this.wallet,
     required this.debtors,
+    this.onOpenDebtors,
   });
 
   final WalletResult? wallet;
   final DebtorsResult? debtors;
+  /// Tapping the debt card opens the subscribers screen with the
+  /// debtors filter pre-applied. No equivalent for the wallet card —
+  /// it isn't a list view target.
+  final VoidCallback? onOpenDebtors;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +43,9 @@ class StatsGrid extends StatelessWidget {
         children: [
           Expanded(child: _BalancePointsCard(wallet: wallet)),
           const SizedBox(width: Sp.md),
-          Expanded(child: _DebtCard(debtors: debtors)),
+          Expanded(
+            child: _DebtCard(debtors: debtors, onTap: onOpenDebtors),
+          ),
         ],
       ),
     );
@@ -94,8 +101,9 @@ class _BalancePointsCard extends StatelessWidget {
 }
 
 class _DebtCard extends StatelessWidget {
-  const _DebtCard({required this.debtors});
+  const _DebtCard({required this.debtors, this.onTap});
   final DebtorsResult? debtors;
+  final VoidCallback? onTap;
 
   static const _accent = Color(0xFFEA580C); // warm orange
 
@@ -105,6 +113,7 @@ class _DebtCard extends StatelessWidget {
       icon: LucideIcons.creditCard,
       iconAccent: _accent,
       title: 'المدينون',
+      onTap: onTap,
       body: debtors == null
           ? const _Spinner(color: _accent)
           : Column(
@@ -142,30 +151,45 @@ class _ShellCard extends StatelessWidget {
     required this.iconAccent,
     required this.title,
     required this.body,
+    this.onTap,
   });
 
   final IconData icon;
   final Color iconAccent;
   final String title;
   final Widget body;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+        child: Container(
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
+          child: _buildBody(),
+        ),
       ),
-      child: Column(
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [

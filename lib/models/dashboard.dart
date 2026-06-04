@@ -19,6 +19,7 @@ class SubscribersStats {
     required this.total,
     required this.active,
     required this.online,
+    required this.offline,
     required this.expired,
     required this.nearExpiry,
   });
@@ -26,6 +27,7 @@ class SubscribersStats {
   final int total;
   final int active;
   final int online;
+  final int offline;
   final int expired;
   final int nearExpiry;
 }

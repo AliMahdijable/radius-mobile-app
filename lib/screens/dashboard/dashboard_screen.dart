@@ -9,6 +9,7 @@ import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../subscribers/widgets/filter_chips_bar.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import 'widgets/section_header.dart';
@@ -21,7 +22,12 @@ import 'widgets/subscribers_card.dart';
 /// loading shimmer; when a fetch fails the card shows an explicit
 /// error state, never invented numbers.
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onOpenSubscribers});
+
+  /// Set by MainShell — when any dashboard KPI tile is tapped, calls
+  /// this with the matching filter so the shell can switch tabs and
+  /// pre-apply the filter on the subscribers screen.
+  final ValueChanged<SubscriberFilter?>? onOpenSubscribers;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -110,15 +116,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   SubscribersStats? get _subscribersStats {
-    // Wait for both SAS4 and debtors (the latter feeds nearExpiry).
-    // Either one failing is enough to surface an error to the user.
     if (!_sas4Loaded || !_debtorsLoaded) return null;
     if (_sas4Live == null) return null;
+    final total = _sas4Live!.total ?? 0;
+    final active = _sas4Live!.active ?? 0;
+    final online = _sas4Live!.online ?? 0;
+    final expired = _sas4Live!.expired ?? 0;
+    // Offline = active subscribers who aren't currently connected. Active
+    // already excludes expired, so this matches v1's
+    // (!isOnline && !isExpired) predicate without double-counting
+    // expired subs.
+    final offline = (active - online).clamp(0, total);
     return SubscribersStats(
-      total: _sas4Live!.total ?? 0,
-      active: _sas4Live!.active ?? 0,
-      online: _sas4Live!.online ?? 0,
-      expired: _sas4Live!.expired ?? 0,
+      total: total,
+      active: active,
+      online: online,
+      offline: offline,
+      expired: expired,
       nearExpiry: _debtorsLive?.nearExpiry ?? 0,
     );
   }
@@ -162,7 +176,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  SubscribersCard(stats: _subscribersStats)
+                  SubscribersCard(
+                    stats: _subscribersStats,
+                    onOpen: widget.onOpenSubscribers,
+                  )
                       .animate()
                       .fadeIn(duration: const Duration(milliseconds: 280))
                       .slideY(begin: 0.03, end: 0),
@@ -170,6 +187,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   StatsGrid(
                     wallet: _walletLoaded ? _walletLive : null,
                     debtors: _debtorsLoaded ? _debtorsLive : null,
+                    onOpenDebtors: () => widget.onOpenSubscribers
+                        ?.call(SubscriberFilter.debtors),
                   )
                       .animate()
                       .fadeIn(
