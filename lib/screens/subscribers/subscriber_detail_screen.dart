@@ -9,6 +9,8 @@ import '../../models/subscriber.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'sheets/activate_sheet.dart';
+import 'sheets/extend_sheet.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -523,9 +525,9 @@ class _OperationsCard extends StatelessWidget {
       _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
           () => _todo(context, 'تعديل — قيد التطوير (مرحلة 4)')),
       _Op(LucideIcons.zap, 'تفعيل', const Color(0xFF14B8A6),
-          () => _todo(context, 'تفعيل — قيد التطوير (مرحلة 3)')),
+          () => showActivateSheet(context, sub)),
       _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
-          () => _todo(context, 'تمديد — قيد التطوير (مرحلة 3)')),
+          () => showExtendSheet(context, sub)),
       _Op(LucideIcons.plus, 'إضافة دين', const Color(0xFFE08F2D),
           () => _todo(context, 'إضافة دين — قيد التطوير (مرحلة 3)')),
       if (sub.hasDebt)

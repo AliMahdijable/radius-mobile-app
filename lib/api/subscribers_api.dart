@@ -281,6 +281,125 @@ class SubscribersApi {
     }
   }
 
+  /// GET /api/v2/subscribers/:idx/activation-data — pulls everything
+  /// the activate sheet needs to display in one round-trip:
+  ///   - sale price (user_price), already adjusted for sub-reseller
+  ///     n_required_amount fallback
+  ///   - active discount + price after discount
+  ///   - profile name + duration + units (renewal length)
+  ///   - current balance (subscriber notes)
+  ///   - manager balance + reward points
+  /// The whole map is cached on the screen side and re-sent on activate
+  /// (the backend enforces this — see /activate endpoint comment about
+  /// SAS4 session lock).
+  static Future<Map<String, dynamic>?> fetchActivationData(String idx) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/activation-data',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        if (!kReleaseMode) {
+          debugPrint('🟡 activation-data($idx): success!=true body=$body');
+        }
+        return null;
+      }
+      return (body['data'] as Map?)?.cast<String, dynamic>();
+    } on DioException catch (e) {
+      _log('activation-data/$idx', e);
+      return null;
+    } catch (e) {
+      _log('activation-data/$idx', e);
+      return null;
+    }
+  }
+
+  /// Result of an activate call. ok=true on success; ok=false carries
+  /// the backend's Arabic error message for the UI.
+  static Future<({bool ok, String? message})> activate({
+    required String idx,
+    required String paymentType, // 'cash' | 'partial-cash' | 'non-cash'
+    required Map<String, dynamic> activationData,
+    int? partialAmount,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/activate',
+        data: {
+          'paymentType': paymentType,
+          'activationData': activationData,
+          if (paymentType == 'partial-cash' && partialAmount != null)
+            'partialAmount': partialAmount,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('activate/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر التفعيل');
+    } catch (e) {
+      _log('activate/$idx', e);
+      return (ok: false, message: 'تعذّر التفعيل');
+    }
+  }
+
+  /// GET /api/v2/subscribers/:idx/extension-options — the list of
+  /// packages this subscriber can extend INTO + current
+  /// manager_balance + reward_points_balance. The current profile is
+  /// excluded by the backend (you can't extend into the same package).
+  /// Each entry: id, name, price, reward_points_required, duration.
+  static Future<Map<String, dynamic>?> fetchExtensionOptions(String idx) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/extension-options',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        if (!kReleaseMode) {
+          debugPrint('🟡 extension-options($idx): success!=true body=$body');
+        }
+        return null;
+      }
+      return (body['data'] as Map?)?.cast<String, dynamic>();
+    } on DioException catch (e) {
+      _log('extension-options/$idx', e);
+      return null;
+    } catch (e) {
+      _log('extension-options/$idx', e);
+      return null;
+    }
+  }
+
+  /// POST /api/v2/subscribers/:idx/extend — extend into a new package.
+  /// Method: 'balance' (charge manager wallet) or 'points' (deduct
+  /// reward points).
+  static Future<({bool ok, String? message})> extend({
+    required String idx,
+    required String profileId,
+    required String method, // 'balance' | 'points'
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/extend',
+        data: {'profile_id': profileId, 'method': method},
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('extend/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر التمديد');
+    } catch (e) {
+      _log('extend/$idx', e);
+      return (ok: false, message: 'تعذّر التمديد');
+    }
+  }
+
   /// GET /user/disconnect/acctid/{idx} on SAS4 — forces the subscriber
   /// off the network if they currently have an active session. Mirrors
   /// v1's `disconnectUser`. SAS4 returns 200 on success; any non-200
