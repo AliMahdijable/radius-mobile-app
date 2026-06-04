@@ -190,31 +190,30 @@ class _ShellCard extends StatelessWidget {
 
   Widget _buildBody() {
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: iconAccent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(icon, color: iconAccent, size: 14),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: iconAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(R.sm),
               ),
-              const SizedBox(width: Sp.sm),
-              Text(
-                title,
-                style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.sm),
-          body,
-        ],
-      ),
+              child: Icon(icon, color: iconAccent, size: 14),
+            ),
+            const SizedBox(width: Sp.sm),
+            Text(
+              title,
+              style: AppType.label(color: AppColors.textMid)
+                  .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: Sp.sm),
+        body,
+      ],
     );
   }
 }
