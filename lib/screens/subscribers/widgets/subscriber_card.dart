@@ -252,6 +252,7 @@ class _LastPaymentLine extends StatelessWidget {
     final amount = _readAmount(payment);
     final createdRaw = payment['created_at']?.toString();
     final action = (payment['action_type'] ?? payment['action'] ?? '').toString();
+    final paymentType = payment['payment_type']?.toString();
     if (createdRaw == null || createdRaw.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -260,7 +261,7 @@ class _LastPaymentLine extends StatelessWidget {
     final diff = DateTime.now().difference(created);
     if (diff.inDays > 30) return const SizedBox.shrink();
     final timeLabel = _humanAgo(diff);
-    final actionLabel = _humanAction(action);
+    final actionLabel = _humanAction(action, paymentType: paymentType);
     return Row(
       children: [
         const Icon(LucideIcons.banknote,
@@ -294,15 +295,16 @@ class _LastPaymentLine extends StatelessWidget {
     return 'قبل ${d.inDays} أيام';
   }
 
-  static String _humanAction(String action) {
-    final lower = action.toLowerCase();
-    if (lower.contains('activate')) return 'تفعيل';
-    if (lower.contains('extend')) return 'تمديد';
-    if (lower.contains('debt_pay') || lower.contains('debtpay')) return 'تسديد دين';
-    if (lower.contains('payment') || lower.contains('pay')) return 'دفعة';
-    if (lower.contains('balance_add')) return 'إضافة دين';
-    if (lower.contains('balance_deduct')) return 'حسم رصيد';
-    return 'حركة مالية';
+  /// Mirrors v1's subscriber_card._movementLabel(): everything that
+  /// isn't an explicit SUBSCRIBER_ACTIVATE is labelled 'تسديد دين'.
+  /// The activate case differentiates partial-cash for clarity.
+  static String _humanAction(String action, {String? paymentType}) {
+    if (action.toUpperCase() == 'SUBSCRIBER_ACTIVATE') {
+      return (paymentType ?? '').contains('جزئي')
+          ? 'تفعيل نقدي جزئي'
+          : 'تفعيل نقدي';
+    }
+    return 'تسديد دين';
   }
 }
 

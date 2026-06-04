@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 
@@ -35,29 +36,53 @@ class Sas4Api {
   /// allowed to fail (returns null) — partial results still update the
   /// dashboard rather than blocking everything on one slow endpoint.
   static Future<Sas4Stats> fetchAll() async {
+    if (!kReleaseMode) debugPrint('🔵 SAS4 widgets → calling');
     final token = await AuthStorage.readToken();
-    if (token == null) return const Sas4Stats();
+    if (token == null) {
+      if (!kReleaseMode) {
+        debugPrint('🟡 SAS4 widgets: no token in AuthStorage');
+      }
+      return const Sas4Stats();
+    }
 
     final opts = Options(headers: {
       'Authorization': 'Bearer $token',
       'x-auth-token': token,
     });
 
+    Future<dynamic> hit(String name, String url) {
+      return _dio.get(url, options: opts).then((r) {
+        if (!kReleaseMode) {
+          debugPrint('🟢 SAS4 $name: status=${r.statusCode} data=${r.data}');
+        }
+        return r;
+      }).catchError((e) {
+        if (!kReleaseMode) debugPrint('🔴 SAS4 $name failed: $e');
+        return null;
+      });
+    }
+
     final results = await Future.wait<dynamic>([
-      _dio.get(_kUsersCount, options: opts).catchError((_) => null),
-      _dio.get(_kActiveCount, options: opts).catchError((_) => null),
-      _dio.get(_kExpiredCount, options: opts).catchError((_) => null),
-      _dio.get(_kOnline, options: opts).catchError((_) => null),
-      _dio.get(_kBalance, options: opts).catchError((_) => null),
+      hit('users_count', _kUsersCount),
+      hit('active_count', _kActiveCount),
+      hit('expired_count', _kExpiredCount),
+      hit('online', _kOnline),
+      hit('balance', _kBalance),
     ]);
 
-    return Sas4Stats(
+    final stats = Sas4Stats(
       total: _toInt(results[0]),
       active: _toInt(results[1]),
       expired: _toInt(results[2]),
       online: _toInt(results[3]),
       balance: _toString(results[4]),
     );
+    if (!kReleaseMode) {
+      debugPrint(
+          '🟢 SAS4 final stats: total=${stats.total} active=${stats.active} '
+          'expired=${stats.expired} online=${stats.online} balance=${stats.balance}');
+    }
+    return stats;
   }
 
   static int? _toInt(dynamic resp) {
