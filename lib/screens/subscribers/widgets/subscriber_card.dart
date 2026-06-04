@@ -233,29 +233,42 @@ class SubscriberCardV2 extends StatelessWidget {
     );
   }
 
-  // ───────── status helpers (priority matches v1 visual order) ─────────
+  // ───────── status visual (1:1 from v1 _resolveStatusVisual) ─────────
+  // mobile-app/lib/widgets/subscriber_card.dart:478-520. 7 combinations:
+  //   disabled             → ban       slate-400
+  //   online + expired     → wifi      purple-500   ← 'متصل ومنتهي'
+  //   online + nearExpiry  → wifi      amber-500
+  //   online + active      → wifi      blue-600
+  //   offline + expired    → wifiOff   red-500
+  //   offline + nearExpiry → wifiOff   amber-500
+  //   offline + active     → wifiOff   emerald-500
   Color _statusColor() {
-    if (sub.isDisabled) return const Color(0xFF6D4C41);
-    if (sub.isExpired) return AppColors.error;
-    if (sub.isNearExpiry) return const Color(0xFFE08F2D);
-    if (sub.isOnline) return const Color(0xFF3B82F6);
-    return AppColors.brand;
+    if (sub.isDisabled) return const Color(0xFF94A3B8); // slate-400
+    if (sub.isOnline) {
+      if (sub.isExpired) return const Color(0xFF8B5CF6); // purple-500
+      if (sub.isNearExpiry) return const Color(0xFFF59E0B); // amber-500
+      return const Color(0xFF2563EB); // blue-600
+    }
+    if (sub.isExpired) return const Color(0xFFEF4444); // red-500
+    if (sub.isNearExpiry) return const Color(0xFFF59E0B); // amber-500
+    return const Color(0xFF10B981); // emerald-500
   }
 
   String _statusLabel() {
     if (sub.isDisabled) return 'معطّل';
+    if (sub.isOnline) {
+      if (sub.isExpired) return 'متصل / منتهي';
+      if (sub.isNearExpiry) return 'متصل / قارب';
+      return 'متصل';
+    }
     if (sub.isExpired) return 'منتهي';
     if (sub.isNearExpiry) return 'قارب الانتهاء';
-    if (sub.isOnline) return 'متصل';
     return 'نشط';
   }
 
   IconData _statusIcon() {
     if (sub.isDisabled) return LucideIcons.ban;
-    if (sub.isExpired) return LucideIcons.timerOff;
-    if (sub.isNearExpiry) return LucideIcons.triangleAlert;
-    if (sub.isOnline) return LucideIcons.wifi;
-    return LucideIcons.circleCheck;
+    return sub.isOnline ? LucideIcons.wifi : LucideIcons.wifiOff;
   }
 
   /// Formats SAS4's expiration string ('2026-09-30 00:00:00' or

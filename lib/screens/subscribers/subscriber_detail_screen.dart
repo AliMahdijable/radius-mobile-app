@@ -243,28 +243,35 @@ class _Header extends StatelessWidget {
     );
   }
 
+  // Same 7-state visual matrix as the list card —
+  // mobile-app/lib/widgets/subscriber_card.dart:478-520.
   static Color _statusColor(Subscriber s) {
-    if (s.isDisabled) return const Color(0xFF6D4C41);
-    if (s.isExpired) return AppColors.error;
-    if (s.isNearExpiry) return const Color(0xFFE08F2D);
-    if (s.isOnline) return const Color(0xFF3B82F6);
-    return AppColors.brand;
+    if (s.isDisabled) return const Color(0xFF94A3B8);
+    if (s.isOnline) {
+      if (s.isExpired) return const Color(0xFF8B5CF6); // purple
+      if (s.isNearExpiry) return const Color(0xFFF59E0B);
+      return const Color(0xFF2563EB);
+    }
+    if (s.isExpired) return const Color(0xFFEF4444);
+    if (s.isNearExpiry) return const Color(0xFFF59E0B);
+    return const Color(0xFF10B981);
   }
 
   static String _statusLabel(Subscriber s) {
     if (s.isDisabled) return 'معطّل';
+    if (s.isOnline) {
+      if (s.isExpired) return 'متصل / منتهي';
+      if (s.isNearExpiry) return 'متصل / قارب';
+      return 'متصل';
+    }
     if (s.isExpired) return 'منتهي';
     if (s.isNearExpiry) return 'قارب الانتهاء';
-    if (s.isOnline) return 'متصل';
     return 'نشط';
   }
 
   static IconData _statusIcon(Subscriber s) {
     if (s.isDisabled) return LucideIcons.ban;
-    if (s.isExpired) return LucideIcons.timerOff;
-    if (s.isNearExpiry) return LucideIcons.triangleAlert;
-    if (s.isOnline) return LucideIcons.wifi;
-    return LucideIcons.circleCheck;
+    return s.isOnline ? LucideIcons.wifi : LucideIcons.wifiOff;
   }
 }
 
