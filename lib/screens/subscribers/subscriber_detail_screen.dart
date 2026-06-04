@@ -560,10 +560,10 @@ class _OperationsCard extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 1.15,
+            crossAxisCount: 4,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 0.95,
           ),
           itemCount: ops.length,
           itemBuilder: (_, i) => _OpCard(op: ops[i]),
@@ -636,27 +636,27 @@ class _OpCard extends StatelessWidget {
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 26,
+                height: 26,
                 decoration: BoxDecoration(
                   color: op.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
                 alignment: Alignment.center,
-                child: Icon(op.icon, color: op.color, size: 17),
+                child: Icon(op.icon, color: op.color, size: 14),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Flexible(
                 child: Text(
                   op.label,
                   style: AppType.label(color: op.color).copyWith(
-                    fontSize: 11,
+                    fontSize: 9,
                     fontWeight: FontWeight.w800,
                     height: 1.1,
                   ),
