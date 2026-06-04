@@ -250,6 +250,26 @@ class SubscribersApi {
     }
   }
 
+  /// GET /user/disconnect/acctid/{idx} on SAS4 — forces the subscriber
+  /// off the network if they currently have an active session. Mirrors
+  /// v1's `disconnectUser`. SAS4 returns 200 on success; any non-200
+  /// is treated as failure.
+  static Future<bool> disconnect(String idx) async {
+    try {
+      final r = await ApiClient.sas4.get('/user/disconnect/acctid/$idx');
+      if (!kReleaseMode) {
+        debugPrint('🟢 SAS4 disconnect $idx: status=${r.statusCode}');
+      }
+      return r.statusCode != null && r.statusCode! < 400;
+    } on DioException catch (e) {
+      _log('SAS4 disconnect/$idx', e);
+      return false;
+    } catch (e) {
+      _log('SAS4 disconnect/$idx', e);
+      return false;
+    }
+  }
+
   /// POST /api/subscribers/{id}/toggle — disable or enable.
   static Future<bool> toggle(String id, {required bool enable}) async {
     final token = await AuthStorage.readToken();

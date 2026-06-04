@@ -10,9 +10,25 @@ import '../../models/subscriber.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'subscriber_detail_screen.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
 import 'widgets/subscriber_card.dart';
+
+/// Default sort field + direction per filter — mirrors v1's
+/// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
+/// surfaced subscribers in random order; now it shows least-time-left
+/// first, which is what admins actually want when triaging expiries.
+const _defaultSortByFilter = <SubscriberFilter, (SortField, SortDirection)>{
+  SubscriberFilter.all: (SortField.remainingDays, SortDirection.desc),
+  SubscriberFilter.active: (SortField.remainingDays, SortDirection.desc),
+  SubscriberFilter.online: (SortField.remainingDays, SortDirection.desc),
+  SubscriberFilter.offline: (SortField.remainingDays, SortDirection.desc),
+  SubscriberFilter.disabled: (SortField.username, SortDirection.asc),
+  SubscriberFilter.expired: (SortField.expiration, SortDirection.desc),
+  SubscriberFilter.debtors: (SortField.notes, SortDirection.asc),
+  SubscriberFilter.nearExpiry: (SortField.remainingDays, SortDirection.asc),
+};
 
 /// Subscribers list — v2 port of v1's screen with a modernized look.
 /// Phase 1 covers: load, search (debounced), 8 filter chips with counts,
@@ -55,25 +71,32 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   @override
   void initState() {
     super.initState();
-    // Seed the filter from the notifier if one was already set (e.g.
-    // user opened the app and immediately tapped a dashboard KPI before
-    // SubscribersScreen finished mounting on a previous frame).
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
+    _applyDefaultSortFor(_filter);
     widget.filterCmd?.addListener(_onFilterCmd);
     _load();
     _searchCtrl.addListener(_onSearchChanged);
   }
 
-  /// Called when MainShell pushes a new filter via the notifier. We
-  /// only rebuild + reset paging — the cached subscriber list stays
-  /// intact, so the tab switch is instant.
+  /// Called when MainShell pushes a new filter via the notifier. Reset
+  /// paging + apply v1's default sort for the new filter so the user
+  /// sees the relevant rows up top (e.g. tapping the dashboard's
+  /// 'قارب الانتهاء' KPI surfaces least-time-left first).
   void _onFilterCmd() {
     final next = widget.filterCmd?.value;
     if (next == null || next == _filter) return;
     setState(() {
       _filter = next;
+      _applyDefaultSortFor(next);
       _page = 0;
     });
+  }
+
+  void _applyDefaultSortFor(SubscriberFilter f) {
+    final d = _defaultSortByFilter[f];
+    if (d == null) return;
+    _sortField = d.$1;
+    _sortDir = d.$2;
   }
 
   @override
@@ -403,6 +426,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
               counts: _counts(),
               onSelect: (f) => setState(() {
                 _filter = f;
+                _applyDefaultSortFor(f);
                 _page = 0;
               }),
             ),
@@ -514,8 +538,12 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   }
 
   void _openDetail(Subscriber s) {
-    // Phase 2: navigate to detail sheet/screen.
-    _showSnack('تفاصيل ${s.fullName} — قيد التطوير (مرحلة 2)');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubscriberDetailScreen(sub: s),
+        fullscreenDialog: true,
+      ),
+    );
   }
 }
 
