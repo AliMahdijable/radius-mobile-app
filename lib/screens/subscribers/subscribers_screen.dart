@@ -177,6 +177,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
           session: session.sessionTime,
           dl: session.downloadBytes,
           ul: session.uploadBytes,
+          device: session.device,
         );
       }
       return enriched;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
@@ -85,7 +86,7 @@ class SubscriberCardV2 extends StatelessWidget {
                           _buildHeader(statusColor, statusLabel, disabled),
                           const SizedBox(height: 10),
                           _buildMetadata(),
-                          if (sub.balanceAmount != 0 || lastPayment != null) ...[
+                          if (_hasFinance) ...[
                             const SizedBox(height: 10),
                             const Divider(
                               height: 1,
@@ -220,11 +221,26 @@ class SubscriberCardV2 extends StatelessWidget {
     );
   }
 
+  // Decide if there's any content under the divider — the divider
+  // shouldn't draw if we're not going to render anything.
+  bool get _hasFinance =>
+      sub.isOnline ||
+      sub.balanceAmount != 0 ||
+      lastPayment != null;
+
   // ───────── FINANCE: debt/credit chip + last-payment line ─────────
   Widget _buildFinance() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Live session row (online subscribers) — IP + duration + DL/UL
+        // + device vendor. Mirrors v1's
+        // mobile-app/lib/widgets/subscriber_card.dart:595-647.
+        if (sub.isOnline) ...[
+          _LiveSessionRow(sub: sub),
+          if (sub.balanceAmount != 0 || lastPayment != null)
+            const SizedBox(height: 4),
+        ],
         if (sub.balanceAmount != 0) _BalanceChip(sub: sub),
         if (sub.balanceAmount != 0 && lastPayment != null)
           const SizedBox(height: 4),
@@ -571,6 +587,125 @@ class _BalanceChip extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Live session info row — IP (tappable to open the device's web UI),
+/// session duration, DL/UL bytes, device vendor. Mirrors v1's
+/// subscriber_card online row (lines 595-647).
+class _LiveSessionRow extends StatelessWidget {
+  const _LiveSessionRow({required this.sub});
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    final ip = sub.ipAddress?.trim();
+    final session = sub.sessionTime;
+    final dl = sub.downloadBytes ?? 0;
+    final ul = sub.uploadBytes ?? 0;
+    final device = sub.deviceVendor?.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Row 1: IP (tappable) + session duration
+        Row(
+          children: [
+            if (ip != null && ip.isNotEmpty) ...[
+              InkWell(
+                onTap: () => launchUrl(
+                  Uri.parse('http://$ip'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(LucideIcons.network,
+                        size: 12, color: Color(0xFF26A69A)),
+                    const SizedBox(width: 3),
+                    Text(
+                      ip,
+                      style: AppType.label(color: const Color(0xFF26A69A))
+                          .copyWith(
+                              fontSize: 11, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(LucideIcons.externalLink,
+                        size: 9, color: Color(0xFF80CBC4)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            if (session != null && session > 0) ...[
+              const Icon(LucideIcons.timer,
+                  size: 12, color: AppColors.textMid),
+              const SizedBox(width: 3),
+              Text(
+                _formatDuration(session),
+                style: AppType.label(color: AppColors.textMid)
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        // Row 2: download + upload + device vendor
+        Row(
+          children: [
+            const Icon(LucideIcons.arrowDownToLine,
+                size: 12, color: Color(0xFF26A69A)),
+            const SizedBox(width: 3),
+            Text(
+              _formatBytes(dl),
+              style: AppType.label(color: const Color(0xFF26A69A))
+                  .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(width: 12),
+            const Icon(LucideIcons.arrowUpFromLine,
+                size: 12, color: Color(0xFF3B82F6)),
+            const SizedBox(width: 3),
+            Text(
+              _formatBytes(ul),
+              style: AppType.label(color: const Color(0xFF3B82F6))
+                  .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+            if (device != null &&
+                device.isNotEmpty &&
+                device.toLowerCase() != 'unknown') ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  device,
+                  style: AppType.muted(color: AppColors.textLow)
+                      .copyWith(fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _formatDuration(int seconds) {
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    if (h > 0) return '${h}س ${m}د';
+    return '${m}د';
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    var v = bytes.toDouble();
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
   }
 }
 

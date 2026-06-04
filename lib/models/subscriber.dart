@@ -23,6 +23,11 @@ class Subscriber {
   final int? sessionTime;
   final int? downloadBytes;
   final int? uploadBytes;
+  /// Device vendor / OUI string from SAS4 (e.g., 'Huawei', 'Mikrotik')
+  /// — comes through /api/v2/online-users as `device`. Shown on the
+  /// online row of the subscriber card so admins can see what hardware
+  /// is connected at a glance.
+  final String? deviceVendor;
   final double? discount;
   /// Sale price (user_price) for this subscriber's package. Filled by
   /// `enrichWithPackages` from the catalogue map — the with-phones
@@ -50,6 +55,7 @@ class Subscriber {
     this.sessionTime,
     this.downloadBytes,
     this.uploadBytes,
+    this.deviceVendor,
     this.discount,
     this.price,
   });
@@ -252,6 +258,7 @@ class Subscriber {
     int? session,
     int? dl,
     int? ul,
+    String? device,
   }) {
     return Subscriber(
       idx: idx,
@@ -274,6 +281,7 @@ class Subscriber {
       sessionTime: session ?? sessionTime,
       downloadBytes: dl ?? downloadBytes,
       uploadBytes: ul ?? uploadBytes,
+      deviceVendor: device ?? deviceVendor,
       discount: discount,
       price: price,
     );

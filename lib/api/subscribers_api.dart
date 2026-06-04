@@ -15,12 +15,15 @@ class OnlineSessionInfo {
     this.sessionTime,
     this.downloadBytes,
     this.uploadBytes,
+    this.device,
   });
   final String? ip;
   final String? mac;
   final int? sessionTime;
   final int? downloadBytes;
   final int? uploadBytes;
+  /// `device` from /api/v2/online-users (SAS4 `oui` — Huawei/Mikrotik/etc).
+  final String? device;
 }
 
 /// Set of usernames currently online (from /api/v2/online-users) and a
@@ -179,6 +182,7 @@ class SubscribersApi {
           sessionTime: toInt(row['session_time']),
           downloadBytes: toInt(row['download_bytes']),
           uploadBytes: toInt(row['upload_bytes']),
+          device: row['device']?.toString(),
         );
       }
       return out;

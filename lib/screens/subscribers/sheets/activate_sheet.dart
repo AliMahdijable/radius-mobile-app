@@ -59,16 +59,57 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   _PayType _pay = _PayType.cash;
   final _partialCtrl = TextEditingController();
   int _partialAmount = 0;
+  // True while the controller text is being rewritten by us (e.g. when
+  // a chip is tapped). Lets the listener skip re-formatting recursion.
+  bool _suppressFormat = false;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _partialCtrl.addListener(() {
-      final clean =
-          _partialCtrl.text.replaceAll(',', '').replaceAll(' ', '');
-      setState(() => _partialAmount = int.tryParse(clean) ?? 0);
-    });
+    _partialCtrl.addListener(_onPartialChanged);
+  }
+
+  void _onPartialChanged() {
+    if (_suppressFormat) return;
+    final raw = _partialCtrl.text;
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    final parsed = int.tryParse(digits) ?? 0;
+    final formatted = _formatThousands(parsed);
+    if (formatted != raw) {
+      _suppressFormat = true;
+      _partialCtrl.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+      _suppressFormat = false;
+    }
+    if (parsed != _partialAmount) {
+      setState(() => _partialAmount = parsed);
+    }
+  }
+
+  void _addToPartial(int chipAmount) {
+    final next = _partialAmount + chipAmount;
+    final formatted = _formatThousands(next);
+    _suppressFormat = true;
+    _partialCtrl.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+    _suppressFormat = false;
+    setState(() => _partialAmount = next);
+  }
+
+  static String _formatThousands(int v) {
+    if (v == 0) return '';
+    final s = v.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 
   @override
@@ -318,6 +359,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         _PartialAmountField(
           controller: _partialCtrl,
           price: price.round(),
+          onChipTap: _addToPartial,
         ),
       ],
       const SizedBox(height: Sp.md),
@@ -497,9 +539,16 @@ class _PayBtn extends StatelessWidget {
 }
 
 class _PartialAmountField extends StatelessWidget {
-  const _PartialAmountField({required this.controller, required this.price});
+  const _PartialAmountField({
+    required this.controller,
+    required this.price,
+    required this.onChipTap,
+  });
   final TextEditingController controller;
   final int price;
+  /// Called with the chip value; the parent ADDS it to the current
+  /// amount (v1 behaviour — tap 25k twice → 50k).
+  final ValueChanged<int> onChipTap;
 
   static const _chips = [5000, 10000, 15000, 25000, 35000, 50000];
 
@@ -551,12 +600,7 @@ class _PartialAmountField extends StatelessWidget {
               children: [
                 for (final amount in filtered)
                   InkWell(
-                    onTap: () {
-                      controller.text = amount.toString();
-                      controller.selection = TextSelection.collapsed(
-                        offset: controller.text.length,
-                      );
-                    },
+                    onTap: () => onChipTap(amount),
                     borderRadius: BorderRadius.circular(R.pill),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
