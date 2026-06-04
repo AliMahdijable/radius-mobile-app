@@ -26,6 +26,44 @@ class LiveOverlay {
 class SubscribersApi {
   SubscribersApi._();
 
+  /// GET /api/v2/packages — fetches the package catalogue (id → name)
+  /// so we can fill in subscriber.profileName when the with-phones row
+  /// only carried profile_id (which is what SAS4 actually sends most
+  /// of the time). Mirrors v1's loadPackages + _enrichWithPackage flow.
+  /// Returns a Map keyed by profile_id (as String).
+  static Future<Map<String, String>?> loadPackages() async {
+    final token = await AuthStorage.readToken();
+    if (token == null) return null;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/packages');
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        if (!kReleaseMode) {
+          debugPrint('🟡 v2/packages: success!=true body=$body');
+        }
+        return null;
+      }
+      final rows = (body['data'] as List?) ?? const [];
+      final out = <String, String>{};
+      for (final row in rows) {
+        if (row is! Map) continue;
+        final id = (row['id'] ?? row['profile_id'])?.toString();
+        final name = (row['name'] ?? row['profile_name'])?.toString();
+        if (id != null && id.isNotEmpty && name != null && name.isNotEmpty) {
+          out[id] = name;
+        }
+      }
+      if (!kReleaseMode) debugPrint('🟢 v2/packages: ${out.length} loaded');
+      return out;
+    } on DioException catch (e) {
+      _log('v2/packages', e);
+      return null;
+    } catch (e) {
+      _log('v2/packages', e);
+      return null;
+    }
+  }
+
   /// GET /api/v2/online-users — list of subscribers currently
   /// connected (SAS4 online widget, paginated 8×250 on the backend).
   /// Returns just the lowercase usernames for fast O(1) membership tests.

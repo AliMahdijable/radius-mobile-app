@@ -107,12 +107,12 @@ class SubscriberCardV2 extends StatelessWidget {
     );
   }
 
-  // ───────── HEADER: avatar + name + handle + expiry pill ─────────
+  // ───────── HEADER: status icon badge + name + handle + expiry pill ─────────
   Widget _buildHeader(Color statusColor, String statusLabel, bool disabled) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _Avatar(name: sub.fullName, fallback: sub.username, color: statusColor),
+        _StatusIconBadge(icon: _statusIcon(), color: statusColor),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -245,6 +245,14 @@ class SubscriberCardV2 extends StatelessWidget {
     return 'نشط';
   }
 
+  IconData _statusIcon() {
+    if (sub.isDisabled) return LucideIcons.ban;
+    if (sub.isExpired) return LucideIcons.timerOff;
+    if (sub.isNearExpiry) return LucideIcons.triangleAlert;
+    if (sub.isOnline) return LucideIcons.wifi;
+    return LucideIcons.circleCheck;
+  }
+
   /// Formats SAS4's expiration string ('2026-09-30 00:00:00' or
   /// '2026-09-30') to 'YYYY/MM/DD HH:MM'. Returns '—' for null/empty.
   static String _formatExpiration(String? raw) {
@@ -257,22 +265,17 @@ class SubscriberCardV2 extends StatelessWidget {
   }
 }
 
-/// Initials avatar — first letter of fullName (or username if name is
-/// just the handle). Background uses the status color at 14% opacity so
-/// it ties visually to the rail without overpowering the row.
-class _Avatar extends StatelessWidget {
-  const _Avatar({
-    required this.name,
-    required this.fallback,
-    required this.color,
-  });
-  final String name;
-  final String fallback;
+/// Status icon badge — the card's identity at-a-glance. The icon
+/// reflects the subscriber's primary state (online/active/near-expiry/
+/// expired/disabled) and the background ties to the same color as the
+/// trailing badge + accent rail.
+class _StatusIconBadge extends StatelessWidget {
+  const _StatusIconBadge({required this.icon, required this.color});
+  final IconData icon;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final initial = _firstLetter(name.isNotEmpty ? name : fallback);
     return Container(
       width: 42,
       height: 42,
@@ -282,25 +285,8 @@ class _Avatar extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       alignment: Alignment.center,
-      child: Text(
-        initial,
-        style: AppType.title(color: color).copyWith(
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-          height: 1,
-        ),
-      ),
+      child: Icon(icon, color: color, size: 20),
     );
-  }
-
-  static String _firstLetter(String s) {
-    for (final ch in s.runes) {
-      final c = String.fromCharCode(ch);
-      // Skip whitespace + symbols. Arabic + Latin letters + digits accepted.
-      if (c.trim().isEmpty) continue;
-      return c.toUpperCase();
-    }
-    return '?';
   }
 }
 

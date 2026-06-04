@@ -83,19 +83,25 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
       SubscribersApi.loadAll(),
       SubscribersApi.loadOnline(),
       SubscribersApi.loadLastPayments(),
+      SubscribersApi.loadPackages(),
     ]);
     final list = results[0] as List<Subscriber>?;
     final online = results[1] as Set<String>?;
     final payments = results[2] as Map<String, Map<String, dynamic>>?;
+    final packages = results[3] as Map<String, String>?;
 
     if (list == null) return;
     final onlineSet = online ?? const <String>{};
+    final packagesById = packages ?? const <String, String>{};
     final merged = list.map((s) {
       final isOn = onlineSet.contains(s.username.toLowerCase());
-      // Only rebuild the model if the flag actually changes — avoids
-      // wasting allocations on the common case where nothing is online.
-      if (isOn == s.isOnlineFlag) return s;
-      return s.copyWithOnline(online: isOn);
+      // Enrich profileName from the packages list (v1's _enrichWithPackage
+      // pattern) THEN flip the online flag if it changed.
+      var enriched = s.enrichWithPackages(packagesById);
+      if (isOn != enriched.isOnlineFlag) {
+        enriched = enriched.copyWithOnline(online: isOn);
+      }
+      return enriched;
     }).toList();
     _all = merged;
     _lastPayments = payments ?? {};

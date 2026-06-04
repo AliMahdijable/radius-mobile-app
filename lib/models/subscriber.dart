@@ -178,6 +178,42 @@ class Subscriber {
     );
   }
 
+  /// Returns a copy with profileName filled in from the packages map.
+  /// No-op if we already have a non-empty profileName or if the package
+  /// map doesn't contain a match for this subscriber's profileId.
+  /// Mirrors v1's _enrichWithPackage (matches by profileId only —
+  /// profileName matching isn't useful since this method's job is to
+  /// fill the name in when it's missing).
+  Subscriber enrichWithPackages(Map<String, String> packagesById) {
+    if (profileName != null && profileName!.isNotEmpty) return this;
+    if (profileId == null) return this;
+    final found = packagesById[profileId.toString()];
+    if (found == null || found.isEmpty) return this;
+    return Subscriber(
+      idx: idx,
+      username: username,
+      firstname: firstname,
+      lastname: lastname,
+      phone: phone,
+      mobile: mobile,
+      expiration: expiration,
+      remainingDays: remainingDays,
+      notes: notes,
+      hasDebtFlag: hasDebtFlag,
+      debt: debt,
+      profileName: found,
+      profileId: profileId,
+      parentUsername: parentUsername,
+      isEnabled: isEnabled,
+      isOnlineFlag: isOnlineFlag,
+      ipAddress: ipAddress,
+      sessionTime: sessionTime,
+      downloadBytes: downloadBytes,
+      uploadBytes: uploadBytes,
+      discount: discount,
+    );
+  }
+
   Subscriber copyWithOnline({
     required bool online,
     String? ip,

@@ -28,85 +28,157 @@ class SubscribersCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.all(Sp.xl),
+      padding: const EdgeInsets.all(Sp.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with title + total badge inline
           Row(
             children: [
-              const Icon(Icons.people_alt_rounded,
-                  color: AppColors.brand, size: 20),
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: const Icon(LucideIcons.users,
+                    color: AppColors.brand, size: 16),
+              ),
               const SizedBox(width: Sp.sm),
               Text('المشتركون',
                   style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 16)),
+                      .copyWith(fontSize: 14)),
               const Spacer(),
-              Text(
-                '${(activeRatio * 100).round()}% نشط',
-                style: AppType.muted(color: AppColors.brand)
-                    .copyWith(fontSize: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(R.pill),
+                ),
+                child: Text(
+                  '${(activeRatio * 100).round()}% نشط',
+                  style: AppType.muted(color: AppColors.brand)
+                      .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: Sp.xl),
+          const SizedBox(height: Sp.lg),
+          // Hero row: big total on the right, ring on the left
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               _TotalWithRing(total: s.total, ratio: activeRatio),
               const SizedBox(width: Sp.lg),
               Expanded(
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _Mini(
-                            value: s.active,
-                            label: 'نشط',
-                            icon: LucideIcons.circleCheck,
-                            color: AppColors.brand,
-                          ),
-                        ),
-                        const SizedBox(width: Sp.sm),
-                        Expanded(
-                          child: _Mini(
-                            value: s.online,
-                            label: 'متصل الآن',
-                            icon: LucideIcons.wifi,
-                            color: const Color(0xFF3B82F6),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Sp.sm),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _Mini(
-                            value: s.expired,
-                            label: 'منتهي',
-                            icon: LucideIcons.timerOff,
-                            color: AppColors.error,
-                          ),
-                        ),
-                        const SizedBox(width: Sp.sm),
-                        Expanded(
-                          child: _Mini(
-                            value: s.nearExpiry,
-                            label: 'قارب الانتهاء',
-                            icon: LucideIcons.triangleAlert,
-                            color: const Color(0xFFE08F2D),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                child: _statsList(s),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// Vertical list of 4 stat lines on the trailing side of the hero.
+  /// Each line is a compact pill: icon + label + value, with the value
+  /// on the far end. Reads top-to-bottom in priority order (active →
+  /// online → expired → near expiry).
+  Widget _statsList(SubscribersStats s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _StatLine(
+          icon: LucideIcons.circleCheck,
+          label: 'نشط',
+          value: s.active,
+          color: AppColors.brand,
+        ),
+        const SizedBox(height: 6),
+        _StatLine(
+          icon: LucideIcons.wifi,
+          label: 'متصل الآن',
+          value: s.online,
+          color: const Color(0xFF3B82F6),
+        ),
+        const SizedBox(height: 6),
+        _StatLine(
+          icon: LucideIcons.timerOff,
+          label: 'منتهي',
+          value: s.expired,
+          color: AppColors.error,
+        ),
+        const SizedBox(height: 6),
+        _StatLine(
+          icon: LucideIcons.triangleAlert,
+          label: 'قارب الانتهاء',
+          value: s.nearExpiry,
+          color: const Color(0xFFE08F2D),
+        ),
+      ],
+    );
+  }
+}
+
+/// One row in the stats list — icon chip, label, value. Larger than the
+/// old 2×2 grid; reads cleanly without label truncation since each row
+/// has the full card width to spread out.
+class _StatLine extends StatelessWidget {
+  const _StatLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final IconData icon;
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(color: color.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                style: AppType.muted(color: AppColors.textMid)
+                    .copyWith(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              '$value',
+              style: AppType.title(color: color).copyWith(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                height: 1,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -204,53 +276,3 @@ class _TotalWithRing extends StatelessWidget {
   }
 }
 
-class _Mini extends StatelessWidget {
-  const _Mini({
-    required this.value,
-    required this.label, // kept as tooltip — long-press for the word
-    required this.icon,
-    required this.color,
-  });
-
-  final int value;
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    // Icon-only design — the icon alone carries the meaning, and the
-    // Arabic word kept clipping in narrow tiles. Long-press still shows
-    // the label as a tooltip for users who want to confirm.
-    return Tooltip(
-      message: label,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md,
-          vertical: Sp.md,
-        ),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(color: color.withValues(alpha: 0.18)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Smaller than the counter so the number stays the focal
-            // point of the tile (per user request).
-            Icon(icon, color: color, size: 16),
-            Text(
-              '$value',
-              style: AppType.title(color: AppColors.textHi).copyWith(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
