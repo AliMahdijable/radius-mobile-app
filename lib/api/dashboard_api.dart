@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+import 'subscribers_api.dart';
 
 void _logErr(String endpoint, Object err) {
   if (kReleaseMode) return;
@@ -130,68 +131,30 @@ class DashboardApi {
   /// near-expiry counter (subs whose remaining_days fall in [0, 3]).
   /// Replaces v1's two-pass approach with one network call + one loop.
   static Future<DebtorsResult?> fetchDebtors() async {
-    _logStart('subscribers/with-phones');
-    final token = await AuthStorage.readToken();
-    if (token == null) {
-      _logSilent('subscribers/with-phones', 'missing token', null);
+    _logStart('subscribers/with-phones (debtors)');
+    // Goes through SubscribersApi's process-wide cache so the dashboard
+    // and the subscribers tab share ONE fetch on app open instead of
+    // double-fetching the same heavy endpoint.
+    final list = await SubscribersApi.loadAll();
+    if (list == null) {
+      _logSilent('subscribers/with-phones', 'loadAll returned null', null);
       return null;
     }
-    try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/subscribers/with-phones',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-      final body = r.data ?? const {};
-      if (body['success'] != true) {
-        _logSilent('subscribers/with-phones', 'success != true', body);
-        return null;
+    var debtCount = 0;
+    var debtTotal = 0;
+    var nearExpiry = 0;
+    for (final s in list) {
+      if (s.hasDebt) {
+        debtCount++;
+        debtTotal += s.debtAbs.round();
       }
-      final data = (body['data'] as List?) ?? const [];
-
-      var debtCount = 0;
-      var debtTotal = 0;
-      var nearExpiry = 0;
-      for (final raw in data) {
-        if (raw is! Map) continue;
-
-        // Debt detection (negative notes/comments). Falls back to
-        // hasDebt + debt fields the way v1's dashboard_provider does.
-        final notesRaw = (raw['notes'] ?? raw['comments'] ?? '')
-            .toString()
-            .replaceAll(',', '')
-            .trim();
-        var notesVal = double.tryParse(notesRaw) ?? 0;
-        if (notesVal == 0 && (raw['hasDebt'] == true || raw['hasDebt'] == 1)) {
-          final d = raw['debt'];
-          if (d is num && d != 0) notesVal = -d.abs().toDouble();
-        }
-        if (notesVal < 0) {
-          debtCount++;
-          debtTotal += notesVal.abs().round();
-        }
-
-        // Near-expiry: 0..3 remaining days. SAS4 names this field
-        // 'remaining_days'; some rows expose 'daysRemaining'.
-        final daysRaw = raw['remaining_days'] ?? raw['daysRemaining'];
-        final days = daysRaw is num
-            ? daysRaw.toInt()
-            : int.tryParse(daysRaw?.toString() ?? '');
-        if (days != null && days >= 0 && days <= 3) {
-          nearExpiry++;
-        }
-      }
-      return DebtorsResult(
-        count: debtCount,
-        total: debtTotal,
-        nearExpiry: nearExpiry,
-      );
-    } on DioException catch (e) {
-      _logErr('subscribers/with-phones', e);
-      return null;
-    } catch (e) {
-      _logErr('subscribers/with-phones', e);
-      return null;
+      if (s.isNearExpiry) nearExpiry++;
     }
+    return DebtorsResult(
+      count: debtCount,
+      total: debtTotal,
+      nearExpiry: nearExpiry,
+    );
   }
 
   /// GET /api/reports/finance?date_from=...&date_to=...

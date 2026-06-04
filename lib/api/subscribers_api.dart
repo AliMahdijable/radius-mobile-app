@@ -19,6 +19,56 @@ class LiveOverlay {
   final Map<String, Map<String, dynamic>> lastPaymentByUsername;
 }
 
+/// Process-wide cache for the subscribers list — the with-phones
+/// endpoint is the heaviest call on the dashboard (returns every row
+/// for the admin) AND the same call powers the subscribers tab. Without
+/// this cache the app fires it TWICE on initial open. The cache is
+/// keyed by adminId and held for [_ttl]; both Dashboard.fetchDebtors and
+/// SubscribersApi.loadAll go through this gate.
+///
+/// Also de-dupes in-flight requests so 2 concurrent callers share one
+/// network call instead of racing.
+class _SubsListCache {
+  _SubsListCache._();
+  static const _ttl = Duration(seconds: 45);
+
+  static List<Subscriber>? _list;
+  static DateTime? _at;
+  static Future<List<Subscriber>?>? _inFlight;
+
+  static Future<List<Subscriber>?> get() {
+    final now = DateTime.now();
+    if (_list != null && _at != null && now.difference(_at!) < _ttl) {
+      return Future.value(_list);
+    }
+    final running = _inFlight;
+    if (running != null) return running;
+    final fresh = _fetch();
+    _inFlight = fresh;
+    return fresh;
+  }
+
+  static Future<List<Subscriber>?> _fetch() async {
+    try {
+      final result = await SubscribersApi._loadAllRaw();
+      if (result != null) {
+        _list = result;
+        _at = DateTime.now();
+      }
+      return result;
+    } finally {
+      _inFlight = null;
+    }
+  }
+
+  /// Forces a refetch on next get() — used by pull-to-refresh on the
+  /// subscribers screen so the admin always sees fresh data on demand.
+  static void invalidate() {
+    _list = null;
+    _at = null;
+  }
+}
+
 /// Subscribers API — wraps the same endpoints v1 uses so v2 reads the
 /// exact same data the v1 mobile app reads. The list comes from the
 /// backend /api/subscribers/with-phones endpoint which already joins
@@ -147,9 +197,21 @@ class SubscribersApi {
     return tryUrl('/api/subscribers/last-payments/$adminId');
   }
 
-  /// GET /api/subscribers/with-phones — returns every subscriber with
-  /// phone/debt/discount/expiration prefilled.
-  static Future<List<Subscriber>?> loadAll() async {
+  /// GET /api/subscribers/with-phones — process-wide cached for 45s
+  /// so Dashboard and SubscribersScreen don't double-fetch on app
+  /// open. Use [refreshAll] for pull-to-refresh.
+  static Future<List<Subscriber>?> loadAll() => _SubsListCache.get();
+
+  /// Forces the next `loadAll` to re-fetch from the backend instead
+  /// of serving the cached list. Hooked to the subscribers screen
+  /// pull-to-refresh.
+  static Future<List<Subscriber>?> refreshAll() {
+    _SubsListCache.invalidate();
+    return _SubsListCache.get();
+  }
+
+  /// Raw fetch — used internally by the cache. Don't call directly.
+  static Future<List<Subscriber>?> _loadAllRaw() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
     try {

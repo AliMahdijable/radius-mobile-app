@@ -93,6 +93,9 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
 
   Future<void> _refresh() async {
     setState(() => _refreshing = true);
+    // Bypass the process-wide cache so pull-to-refresh always returns
+    // fresh server data even if the cached entry is still warm.
+    await SubscribersApi.refreshAll();
     await _fetchAndMerge();
     if (!mounted) return;
     setState(() => _refreshing = false);
