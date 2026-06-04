@@ -689,7 +689,7 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.sm),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
@@ -701,24 +701,24 @@ class _SectionCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(icon, color: accent, size: 12),
+                child: Icon(icon, color: accent, size: 11),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               Text(
                 title,
                 style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           ...children,
         ],
       ),
