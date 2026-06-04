@@ -388,7 +388,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                   Text(
                     '${filtered.isEmpty ? 0 : pageStart + 1}-$pageEnd / ${filtered.length}',
                     style: AppType.muted(color: AppColors.textLow)
-                        .copyWith(fontSize: 10),
+                        .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
                   ),
                   const Spacer(),
                   _PageSizePicker(
@@ -648,10 +648,10 @@ class _PageSizePicker extends StatelessWidget {
         children: [
           Text('$current/صفحة',
               style: AppType.muted(color: AppColors.textLow)
-                  .copyWith(fontSize: 10, fontWeight: FontWeight.w600)),
+                  .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
           const SizedBox(width: 2),
           const Icon(LucideIcons.chevronDown,
-              size: 10, color: AppColors.textLow),
+              size: 11, color: AppColors.textLow),
         ],
       ),
     );
@@ -691,7 +691,7 @@ class _Pager extends StatelessWidget {
           Text(
             'صفحة ${page + 1} من $totalPages',
             style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 13,
+              fontSize: 12, // Card title tier — secondary nav text
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -878,7 +878,7 @@ class _EmptyState extends StatelessWidget {
           msg,
           textAlign: TextAlign.center,
           style: AppType.label(color: AppColors.textMid)
-              .copyWith(fontSize: 14),
+              .copyWith(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ],
     );

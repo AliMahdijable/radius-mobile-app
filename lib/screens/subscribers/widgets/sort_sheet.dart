@@ -72,7 +72,7 @@ class _SortSheetState extends State<_SortSheet> {
                 const SizedBox(width: Sp.sm),
                 Text('ترتيب القائمة',
                     style: AppType.title(color: AppColors.textHi)
-                        .copyWith(fontSize: 16)),
+                        .copyWith(fontSize: 16, fontWeight: FontWeight.w800)),
               ],
             ),
             const SizedBox(height: Sp.md),
@@ -172,7 +172,7 @@ class _DirBtn extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label,
                 style: AppType.label(color: color).copyWith(
-                  fontSize: 13,
+                  fontSize: 13, // Body tier — primary picker action
                   fontWeight: FontWeight.w700,
                 )),
           ],
@@ -216,8 +216,8 @@ class _FieldChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label,
                 style: AppType.muted(color: color).copyWith(
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12, // Card title tier
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 )),
           ],
         ),

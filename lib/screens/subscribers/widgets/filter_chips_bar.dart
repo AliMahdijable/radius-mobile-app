@@ -124,8 +124,8 @@ class _Chip extends StatelessWidget {
                   Text(
                     label,
                     style: AppType.label(color: Colors.white).copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 11, // Caption tier
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -135,7 +135,7 @@ class _Chip extends StatelessWidget {
                   style: AppType.muted(
                     color: selected ? Colors.white : AppColors.textMid,
                   ).copyWith(
-                    fontSize: 11,
+                    fontSize: 11, // Caption tier
                     fontWeight: FontWeight.w700,
                   ),
                 ),

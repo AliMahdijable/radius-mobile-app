@@ -122,7 +122,7 @@ class SubscriberCardV2 extends StatelessWidget {
               Text(
                 sub.fullName,
                 style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 15,
+                  fontSize: 14, // Section title tier
                   fontWeight: FontWeight.w800,
                   decoration:
                       disabled ? TextDecoration.lineThrough : null,
@@ -146,7 +146,7 @@ class SubscriberCardV2 extends StatelessWidget {
                   Text(
                     statusLabel,
                     style: AppType.muted(color: statusColor).copyWith(
-                      fontSize: 10,
+                      fontSize: 11, // Caption tier (was 10)
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -162,7 +162,8 @@ class SubscriberCardV2 extends StatelessWidget {
                       child: Text(
                         sub.username,
                         style: AppType.muted(color: AppColors.textLow)
-                            .copyWith(fontSize: 11),
+                            .copyWith(
+                                fontSize: 11, fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -388,7 +389,7 @@ class _ExpiryBadge extends StatelessWidget {
               Text(
                 v.big,
                 style: AppType.title(color: v.color).copyWith(
-                  fontSize: 14,
+                  fontSize: 14, // Section title tier — primary urgency signal
                   fontWeight: FontWeight.w800,
                   height: 1,
                 ),
@@ -398,7 +399,7 @@ class _ExpiryBadge extends StatelessWidget {
                 Text(
                   v.small,
                   style: AppType.muted(color: v.color).copyWith(
-                    fontSize: 9,
+                    fontSize: 10, // Tiny label tier (was 9 — illegible)
                     fontWeight: FontWeight.w700,
                     height: 1,
                   ),
@@ -451,7 +452,8 @@ class _MetaRow extends StatelessWidget {
         Flexible(
           child: Text(
             text,
-            style: AppType.muted(color: color).copyWith(fontSize: 11),
+            style: AppType.muted(color: color)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -488,7 +490,7 @@ class _BalanceChip extends StatelessWidget {
           Text(
             isDebt ? 'دين' : 'رصيد',
             style: AppType.muted(color: color).copyWith(
-              fontSize: 10,
+              fontSize: 10, // Tiny label tier
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -496,7 +498,7 @@ class _BalanceChip extends StatelessWidget {
           Text(
             '${formatIQD(sub.debtAbs.round())} د.ع',
             style: AppType.label(color: color).copyWith(
-              fontSize: 12,
+              fontSize: 12, // Card title tier — emphasis for the amount
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -534,7 +536,7 @@ class _LastPaymentLine extends StatelessWidget {
           child: Text(
             '$actionLabel • $timeLabel${amount != 0 ? ' • ${formatIQD(amount.abs())} د.ع' : ''}',
             style: AppType.muted(color: AppColors.brand)
-                .copyWith(fontSize: 10),
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
