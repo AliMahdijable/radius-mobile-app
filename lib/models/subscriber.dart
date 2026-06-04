@@ -24,6 +24,10 @@ class Subscriber {
   final int? downloadBytes;
   final int? uploadBytes;
   final double? discount;
+  /// Sale price (user_price) for this subscriber's package. Filled by
+  /// `enrichWithPackages` from the catalogue map — the with-phones
+  /// endpoint doesn't carry it. null = unknown / no price loaded.
+  final num? price;
 
   const Subscriber({
     this.idx,
@@ -47,6 +51,7 @@ class Subscriber {
     this.downloadBytes,
     this.uploadBytes,
     this.discount,
+    this.price,
   });
 
   String get fullName {
@@ -178,17 +183,20 @@ class Subscriber {
     );
   }
 
-  /// Returns a copy with profileName filled in from the packages map.
-  /// No-op if we already have a non-empty profileName or if the package
-  /// map doesn't contain a match for this subscriber's profileId.
-  /// Mirrors v1's _enrichWithPackage (matches by profileId only —
-  /// profileName matching isn't useful since this method's job is to
-  /// fill the name in when it's missing).
-  Subscriber enrichWithPackages(Map<String, String> packagesById) {
-    if (profileName != null && profileName!.isNotEmpty) return this;
+  /// Returns a copy with profileName + price filled in from the
+  /// packages catalogue map. Mirrors v1's `_enrichWithPackage` —
+  /// matches by profileId, leaves the row untouched when there's no
+  /// match. We always re-apply the price even if profileName is set,
+  /// because the price comes from priceList (sub-reseller info) which
+  /// isn't part of the with-phones row.
+  Subscriber enrichWithPackages(Map<String, PackageInfo> packagesById) {
     if (profileId == null) return this;
     final found = packagesById[profileId.toString()];
-    if (found == null || found.isEmpty) return this;
+    if (found == null) return this;
+    final newName =
+        (profileName == null || profileName!.isEmpty) ? found.name : profileName;
+    final newPrice = price ?? found.price;
+    if (newName == profileName && newPrice == price) return this;
     return Subscriber(
       idx: idx,
       username: username,
@@ -201,7 +209,7 @@ class Subscriber {
       notes: notes,
       hasDebtFlag: hasDebtFlag,
       debt: debt,
-      profileName: found,
+      profileName: newName,
       profileId: profileId,
       parentUsername: parentUsername,
       isEnabled: isEnabled,
@@ -211,6 +219,7 @@ class Subscriber {
       downloadBytes: downloadBytes,
       uploadBytes: uploadBytes,
       discount: discount,
+      price: newPrice,
     );
   }
 
@@ -243,6 +252,16 @@ class Subscriber {
       downloadBytes: dl ?? downloadBytes,
       uploadBytes: ul ?? uploadBytes,
       discount: discount,
+      price: price,
     );
   }
+}
+
+/// Package catalogue entry from /api/v2/packages — name + sale price
+/// for the subscriber. Used by `Subscriber.enrichWithPackages` to fill
+/// in fields the with-phones row doesn't carry.
+class PackageInfo {
+  const PackageInfo({required this.name, this.price});
+  final String name;
+  final num? price;
 }

@@ -26,12 +26,11 @@ class LiveOverlay {
 class SubscribersApi {
   SubscribersApi._();
 
-  /// GET /api/v2/packages — fetches the package catalogue (id → name)
-  /// so we can fill in subscriber.profileName when the with-phones row
-  /// only carried profile_id (which is what SAS4 actually sends most
-  /// of the time). Mirrors v1's loadPackages + _enrichWithPackage flow.
-  /// Returns a Map keyed by profile_id (as String).
-  static Future<Map<String, String>?> loadPackages() async {
+  /// GET /api/v2/packages — fetches the package catalogue (id → name
+  /// + sale price) so we can fill in subscriber.profileName + price
+  /// when the with-phones row only carried profile_id. Mirrors v1's
+  /// loadPackages + _enrichWithPackage flow + priceList enrichment.
+  static Future<Map<String, PackageInfo>?> loadPackages() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
     try {
@@ -44,14 +43,25 @@ class SubscribersApi {
         return null;
       }
       final rows = (body['data'] as List?) ?? const [];
-      final out = <String, String>{};
+      final out = <String, PackageInfo>{};
       for (final row in rows) {
         if (row is! Map) continue;
         final id = (row['id'] ?? row['profile_id'])?.toString();
         final name = (row['name'] ?? row['profile_name'])?.toString();
-        if (id != null && id.isNotEmpty && name != null && name.isNotEmpty) {
-          out[id] = name;
+        if (id == null || id.isEmpty || name == null || name.isEmpty) continue;
+        // Backend's /api/v2/packages returns `price` as the user-facing
+        // sale price (priceList.user_price/sale_price). 0 means 'no
+        // price loaded' — store as null so the card knows to hide the
+        // chip instead of rendering '0 د.ع'.
+        final rawPrice = row['price'] ?? row['user_price'] ?? row['sale_price'];
+        num? price;
+        if (rawPrice is num) {
+          price = rawPrice > 0 ? rawPrice : null;
+        } else {
+          final parsed = num.tryParse((rawPrice ?? '').toString().replaceAll(',', ''));
+          price = (parsed != null && parsed > 0) ? parsed : null;
         }
+        out[id] = PackageInfo(name: name, price: price);
       }
       if (!kReleaseMode) debugPrint('🟢 v2/packages: ${out.length} loaded');
       return out;

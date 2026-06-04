@@ -95,11 +95,11 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     final list = results[0] as List<Subscriber>?;
     final online = results[1] as Set<String>?;
     final payments = results[2] as Map<String, Map<String, dynamic>>?;
-    final packages = results[3] as Map<String, String>?;
+    final packages = results[3] as Map<String, PackageInfo>?;
 
     if (list == null) return;
     final onlineSet = online ?? const <String>{};
-    final packagesById = packages ?? const <String, String>{};
+    final packagesById = packages ?? const <String, PackageInfo>{};
     final merged = list.map((s) {
       final isOn = onlineSet.contains(s.username.toLowerCase());
       // Enrich profileName from the packages list (v1's _enrichWithPackage

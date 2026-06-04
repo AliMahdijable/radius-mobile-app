@@ -183,21 +183,21 @@ class SubscriberCardV2 extends StatelessWidget {
     );
   }
 
-  // ───────── METADATA: package | phone, then expiry date ─────────
+  // ───────── METADATA: package + price chip / phone, then expiry ─────────
   Widget _buildMetadata() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Package + phone in a single row
+        // Row 1: package name (with price chip beside it if known) +
+        // phone on the trailing side.
         Row(
           children: [
-            Expanded(
-              child: _MetaRow(
-                icon: LucideIcons.package,
-                text: (sub.profileName?.isNotEmpty ?? false)
+            Flexible(
+              child: _PackageWithPrice(
+                name: (sub.profileName?.isNotEmpty ?? false)
                     ? sub.profileName!
                     : 'بدون باقة',
-                color: AppColors.textMid,
+                price: sub.price,
               ),
             ),
             if (sub.displayPhone.isNotEmpty) ...[
@@ -429,6 +429,59 @@ class _ExpiryBadge extends StatelessWidget {
     // Less than an hour — show minutes only.
     final m = diff.inMinutes.clamp(0, 59);
     return ('$m', 'دقيقة');
+  }
+}
+
+/// Package name with an inline price chip on the trailing side
+/// (only rendered when the catalogue gave us a price > 0). Mirrors
+/// v1 subscriber_card.dart's two-chip pattern — package chip in brand
+/// teal, price chip in warning amber — just in v2's tighter inline form.
+class _PackageWithPrice extends StatelessWidget {
+  const _PackageWithPrice({required this.name, required this.price});
+
+  final String name;
+  final num? price;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: _MetaRow(
+            icon: LucideIcons.package,
+            text: name,
+            color: AppColors.textMid,
+          ),
+        ),
+        if (price != null) ...[
+          const SizedBox(width: 5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE08F2D).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(R.sm),
+              border: Border.all(
+                color: const Color(0xFFE08F2D).withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.tag,
+                    size: 9, color: Color(0xFFE08F2D)),
+                const SizedBox(width: 2),
+                Text(
+                  formatIQD(price!.round()),
+                  style: AppType.muted(color: const Color(0xFFE08F2D))
+                      .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 
