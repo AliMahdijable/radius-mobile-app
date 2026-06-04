@@ -3,257 +3,176 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/util/format.dart';
 import '../../../models/dashboard.dart';
 import '../../../screens/subscribers/widgets/filter_chips_bar.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Subscribers card v2: hero ring with the total + a tappable 5-tile
-/// grid (نشط، متصل، غير متصل، منتهي، قارب الانتهاء). Each tile + the
-/// ring itself jumps to the subscribers screen with the matching
-/// filter when [onOpen] is provided.
+/// Subscribers card — direct port of v1's
+/// mobile-app/lib/screens/dashboard_screen.dart layout. Same shape:
+///   • 130×130 dual-arc ring (active teal + expired red) on the leading
+///     side, big total + 'مشترك' label inside.
+///   • 5 tappable _RingStatRow on the trailing side (الفعالين, متصل الآن,
+///     غير متصل, منتهي, قريب الانتهاء).
+///   • Thin gradient progress bar underneath (active teal vs expired red).
 ///
-/// stats=null → loading skeleton (no fabricated numbers).
+/// stats=null → loading skeleton. onOpen wires each tap target back to
+/// MainShell so the subscribers tab opens with the matching filter.
 class SubscribersCard extends StatelessWidget {
   const SubscribersCard({super.key, required this.stats, this.onOpen});
 
   final SubscribersStats? stats;
-  /// Called with the desired filter on KPI taps. MainShell wires this
-  /// through DashboardScreen to switch tabs + apply the filter.
   final ValueChanged<SubscriberFilter?>? onOpen;
 
   @override
   Widget build(BuildContext context) {
     if (stats == null) return const _Skeleton();
     final s = stats!;
-    final activeRatio = s.total == 0 ? 0.0 : s.active / s.total;
+    final activeRatio = s.total > 0 ? s.active / s.total : 0.0;
+    final expiredRatio = s.total > 0 ? s.expired / s.total : 0.0;
 
     return Container(
+      padding: const EdgeInsets.all(Sp.xl),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(Sp.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with title + total badge inline
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: const Icon(LucideIcons.users,
-                    color: AppColors.brand, size: 16),
-              ),
-              const SizedBox(width: Sp.sm),
-              Text('المشتركون',
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
-                child: Text(
-                  '${(activeRatio * 100).round()}% فعال',
-                  style: AppType.muted(color: AppColors.brand)
-                      .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.md),
-          // Centered ring on top — single visual focal point.
-          Center(
-            child: _TotalWithRing(
-              total: s.total,
-              ratio: activeRatio,
-              onTap: onOpen == null
-                  ? null
-                  : () => onOpen!(SubscriberFilter.all),
-            ),
-          ),
-          const SizedBox(height: Sp.md),
-          // Full-width stat rows below — clean vertical list with no
-          // cramped grid or awkward empty cells.
-          _statsList(s),
-        ],
-      ),
-    );
-  }
-
-  /// Vertical list of 5 tappable stat rows. Order top→bottom matches
-  /// admin priority: نشط → متصل → غير متصل → منتهي → قارب الانتهاء.
-  /// Each row is the full trailing width so labels never clip.
-  Widget _statsList(SubscribersStats s) {
-    final rows = <Widget>[
-      _StatRow(
-        icon: LucideIcons.circleCheck,
-        label: 'نشط',
-        value: s.active,
-        color: AppColors.brand,
-        onTap: onOpen == null
-            ? null
-            : () => onOpen!(SubscriberFilter.active),
-      ),
-      _StatRow(
-        icon: LucideIcons.wifi,
-        label: 'متصل',
-        value: s.online,
-        color: const Color(0xFF3B82F6),
-        onTap: onOpen == null
-            ? null
-            : () => onOpen!(SubscriberFilter.online),
-      ),
-      _StatRow(
-        icon: LucideIcons.wifiOff,
-        label: 'غير متصل',
-        value: s.offline,
-        color: const Color(0xFF90A4AE),
-        onTap: onOpen == null
-            ? null
-            : () => onOpen!(SubscriberFilter.offline),
-      ),
-      _StatRow(
-        icon: LucideIcons.timerOff,
-        label: 'منتهي',
-        value: s.expired,
-        color: AppColors.error,
-        onTap: onOpen == null
-            ? null
-            : () => onOpen!(SubscriberFilter.expired),
-      ),
-      _StatRow(
-        icon: LucideIcons.triangleAlert,
-        label: 'قارب الانتهاء',
-        value: s.nearExpiry,
-        color: const Color(0xFFE08F2D),
-        onTap: onOpen == null
-            ? null
-            : () => onOpen!(SubscriberFilter.nearExpiry),
-      ),
-    ];
-    return Column(
-      children: [
-        for (int i = 0; i < rows.length; i++) ...[
-          rows[i],
-          if (i < rows.length - 1) const SizedBox(height: 4),
-        ],
-      ],
-    );
-  }
-}
-
-/// One tile in the 2×2 mini grid. Icon + value on a tinted pill —
-/// no inline label (it'd clip with 4-tile width). Long-press shows
-/// the Arabic label as a tooltip.
-/// Full-width stat row — icon chip + label + value + chevron hint.
-/// Tappable surface highlights on press; the ripple covers the whole
-/// row so it's an obvious tap target.
-class _StatRow extends StatelessWidget {
-  const _StatRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-    this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final int value;
-  final Color color;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(R.sm),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.sm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(color: color.withValues(alpha: 0.15)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, color: color, size: 12),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppType.label(color: AppColors.textHi).copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                '$value',
-                style: AppType.title(color: color).copyWith(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                LucideIcons.chevronLeft,
-                size: 12,
-                color: color.withValues(alpha: 0.5),
-              ),
-            ],
-          ),
+        borderRadius: BorderRadius.circular(R.xl),
+        border: Border.all(
+          color: AppColors.brand.withValues(alpha: 0.08),
         ),
       ),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _Ring(
+                total: s.total,
+                activeRatio: activeRatio,
+                expiredRatio: expiredRatio,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.all),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  children: [
+                    _RingStatRow(
+                      color: AppColors.brand,
+                      icon: LucideIcons.circleCheck,
+                      label: 'الفعالين',
+                      value: s.active,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.active),
+                    ),
+                    const SizedBox(height: 7),
+                    _RingStatRow(
+                      color: const Color(0xFF26A69A),
+                      icon: LucideIcons.wifi,
+                      label: 'متصل الآن',
+                      value: s.online,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.online),
+                    ),
+                    const SizedBox(height: 7),
+                    _RingStatRow(
+                      color: const Color(0xFF90A4AE),
+                      icon: LucideIcons.wifiOff,
+                      label: 'غير متصل',
+                      value: s.offline,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.offline),
+                    ),
+                    const SizedBox(height: 7),
+                    _RingStatRow(
+                      color: const Color(0xFFEF5350),
+                      icon: LucideIcons.timerOff,
+                      label: 'منتهي',
+                      value: s.expired,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.expired),
+                    ),
+                    const SizedBox(height: 7),
+                    _RingStatRow(
+                      color: Colors.deepOrange,
+                      icon: LucideIcons.triangleAlert,
+                      label: 'قريب الانتهاء',
+                      value: s.nearExpiry,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.nearExpiry),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Active vs expired gradient bar. Flex ratios match v1: when
+          // there are 0 active subs the active strip still shows a
+          // 1-flex hint so the bar isn't entirely red.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 6,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: s.active > 0 ? s.active : 1,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFF1F4634), // brand darker
+                            Color(0xFF26A69A), // teal400
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (s.expired > 0)
+                    Expanded(
+                      flex: s.expired,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.red.shade400,
+                              Colors.red.shade700,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Loading skeleton for the subscribers card. Same outer shape so the
-/// layout doesn't jump when real data arrives.
+/// Loading skeleton matching the card's resting height so the dashboard
+/// doesn't jump when real data arrives.
 class _Skeleton extends StatelessWidget {
   const _Skeleton();
-
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 220,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(R.xl),
+        border: Border.all(
+          color: AppColors.brand.withValues(alpha: 0.08),
+        ),
       ),
       child: const Center(
         child: SizedBox(
@@ -269,69 +188,57 @@ class _Skeleton extends StatelessWidget {
   }
 }
 
-/// Ring + total — sized to match the 2×2 mini grid next to it so the
-/// row looks balanced (was 120px, dominating the card). The progress
-/// arc uses a gradient sweep (brand → teal → brand) for a modern,
-/// less flat look. Painted manually so we get gradient + rounded cap
-/// + custom stroke width without fighting CircularProgressIndicator.
-class _TotalWithRing extends StatelessWidget {
-  const _TotalWithRing({
+/// 130×130 dual-arc ring with the total + 'مشترك' label centered.
+/// Same dimensions and behavior as v1's `Container(width:130, height:130)
+/// + CustomPaint(_RingPainter)`.
+class _Ring extends StatelessWidget {
+  const _Ring({
     required this.total,
-    required this.ratio,
+    required this.activeRatio,
+    required this.expiredRatio,
     this.onTap,
   });
 
   final int total;
-  final double ratio;
+  final double activeRatio;
+  final double expiredRatio;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    const size = 86.0; // slightly smaller — matches 2 mini rows + gap
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: const Size(size, size),
-                painter: _GradientRingPainter(ratio: ratio.clamp(0, 1)),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        formatIQD(total),
-                        style: AppType.title(color: AppColors.textHi).copyWith(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          height: 1.05,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'إجمالي',
-                      style: AppType.muted(color: AppColors.textLow)
-                          .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-                    ),
-                  ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 130,
+        height: 130,
+        child: CustomPaint(
+          painter: _RingPainter(
+            activeRatio: activeRatio,
+            expiredRatio: expiredRatio,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$total',
+                  style: AppType.title(color: AppColors.brand).copyWith(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  'مشترك',
+                  style: AppType.muted(
+                    color: AppColors.textHi.withValues(alpha: 0.45),
+                  ).copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -339,48 +246,144 @@ class _TotalWithRing extends StatelessWidget {
   }
 }
 
-class _GradientRingPainter extends CustomPainter {
-  _GradientRingPainter({required this.ratio});
-  final double ratio;
+/// One stat row in the trailing list. Icon-box (rounded square, 8px
+/// radius) + label + value + chevron. Tappable surface highlights on
+/// press; matches v1's _RingStatRow 1:1.
+class _RingStatRow extends StatelessWidget {
+  const _RingStatRow({
+    required this.color,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
 
-  static const _stroke = 6.0;
+  final Color color;
+  final IconData icon;
+  final String label;
+  final int value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 15),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: AppType.label(
+                color: AppColors.textHi.withValues(alpha: 0.6),
+              ).copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Text(
+            '$value',
+            style: AppType.title(color: color).copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              height: 1,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            LucideIcons.chevronLeft,
+            size: 16,
+            color: AppColors.textHi.withValues(alpha: 0.2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Direct port of v1's _RingPainter. Background ring (teal100 tint),
+/// then the active arc (teal sweep), then the expired arc (red sweep)
+/// with a 0.04 rad gap between them so they read as separate segments.
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.activeRatio, required this.expiredRatio});
+
+  final double activeRatio;
+  final double expiredRatio;
+
+  static const _stroke = 14.0;
+  static const _startAngle = -math.pi / 2;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - _stroke) / 2;
-    final rect = Rect.fromCircle(center: center, radius: radius);
+    final radius = size.width / 2 - 10;
 
-    // Background ring — subtle so it's just a hint of where the arc lives.
     final bgPaint = Paint()
-      ..color = AppColors.border.withValues(alpha: 0.7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _stroke;
-    canvas.drawCircle(center, radius, bgPaint);
-
-    if (ratio <= 0) return;
-
-    // Sweep gradient brand → teal → brand. Starting angle is rotated so
-    // the gradient seam doesn't sit at the top (where the arc begins).
-    final gradient = SweepGradient(
-      colors: const [
-        Color(0xFF2D5F47), // brand dark
-        Color(0xFF14B8A6), // teal accent (mid)
-        Color(0xFF2D5F47), // brand dark again so the end ties to the start
-      ],
-      stops: const [0.0, 0.5, 1.0],
-      transform: const GradientRotation(-math.pi / 2),
-    );
-    final fgPaint = Paint()
-      ..shader = gradient.createShader(rect)
+      ..color = const Color(0xFFB2DFDB).withValues(alpha: 0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = _stroke
       ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, radius, bgPaint);
 
-    canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * ratio, false, fgPaint);
+    if (activeRatio <= 0) return;
+
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final activeSweep = 2 * math.pi * activeRatio;
+
+    final activeGradient = SweepGradient(
+      startAngle: _startAngle,
+      endAngle: _startAngle + activeSweep,
+      colors: const [
+        Color(0xFF80CBC4), // teal300
+        Color(0xFF26A69A), // teal400
+        Color(0xFF2D5F47), // brand (teal800-ish)
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    );
+    final activePaint = Paint()
+      ..shader = activeGradient.createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, _startAngle, activeSweep, false, activePaint);
+
+    if (expiredRatio <= 0) return;
+
+    const gap = 0.04;
+    final expiredSweep = 2 * math.pi * expiredRatio;
+    final expiredGradient = SweepGradient(
+      startAngle: _startAngle + activeSweep + gap,
+      endAngle: _startAngle + activeSweep + expiredSweep,
+      colors: const [
+        Color(0xFFEF9A9A),
+        Color(0xFFE53935),
+        Color(0xFFB71C1C),
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    );
+    final expiredPaint = Paint()
+      ..shader = expiredGradient.createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      rect,
+      _startAngle + activeSweep + gap,
+      expiredSweep - gap,
+      false,
+      expiredPaint,
+    );
   }
 
   @override
-  bool shouldRepaint(_GradientRingPainter old) => old.ratio != ratio;
+  bool shouldRepaint(_RingPainter old) =>
+      old.activeRatio != activeRatio || old.expiredRatio != expiredRatio;
 }
-
