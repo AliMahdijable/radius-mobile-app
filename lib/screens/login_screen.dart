@@ -76,13 +76,14 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = false);
 
     switch (result) {
-      case LoginSuccess(:final token, :final adminId, :final adminUsername, :final displayName, :final requires2fa):
+      case LoginSuccess(:final token, :final adminId, :final adminUsername, :final displayName, :final expiresAt, :final requires2fa):
         await AuthStorage.saveSession(
           token: token,
           adminId: adminId,
           adminUsername: adminUsername,
           displayName: displayName,
           autoLogin: _remember,
+          tokenExpiry: expiresAt,
         );
         if (!mounted) return;
         HapticFeedback.mediumImpact();

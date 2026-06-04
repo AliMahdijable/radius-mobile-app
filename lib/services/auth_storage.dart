@@ -12,6 +12,7 @@ class AuthStorage {
   );
 
   static const _kToken = 'auth.token';
+  static const _kTokenExpiry = 'auth.token_expiry';
   static const _kAdminId = 'auth.admin_id';
   static const _kAdminUsername = 'auth.admin_username';
   static const _kDisplayName = 'auth.display_name';
@@ -29,6 +30,7 @@ class AuthStorage {
     required String adminUsername,
     required String displayName,
     required bool autoLogin,
+    String? tokenExpiry,
   }) async {
     await Future.wait([
       _storage.write(key: _kToken, value: token),
@@ -36,10 +38,27 @@ class AuthStorage {
       _storage.write(key: _kAdminUsername, value: adminUsername),
       _storage.write(key: _kDisplayName, value: displayName),
       _storage.write(key: _kAutoLogin, value: autoLogin ? '1' : '0'),
+      if (tokenExpiry != null)
+        _storage.write(key: _kTokenExpiry, value: tokenExpiry),
+    ]);
+  }
+
+  /// Replace just the token after a refresh. Keeps adminId / username /
+  /// display name intact so the user stays logged in across refreshes.
+  static Future<void> saveRefreshedToken({
+    required String token,
+    String? tokenExpiry,
+  }) async {
+    await Future.wait([
+      _storage.write(key: _kToken, value: token),
+      if (tokenExpiry != null)
+        _storage.write(key: _kTokenExpiry, value: tokenExpiry),
     ]);
   }
 
   static Future<String?> readToken() => _storage.read(key: _kToken);
+  static Future<String?> readTokenExpiry() =>
+      _storage.read(key: _kTokenExpiry);
   static Future<String?> readAdminId() => _storage.read(key: _kAdminId);
   static Future<String?> readDisplayName() => _storage.read(key: _kDisplayName);
 

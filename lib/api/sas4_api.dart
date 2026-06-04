@@ -1,28 +1,17 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-import '../services/auth_storage.dart';
+import 'api_client.dart';
 
 /// SAS4 widget endpoints — same set v1's dashboard_provider hits.
 /// Each call returns `{data: <number>}` so we unwrap `data` and parse.
 ///
-/// SAS4 lives at a separate host. Auth: the user's main token doubles
-/// as the SAS4 token for regular admins (and the parent admin's token
-/// for employees — that distinction lives at login time and is the
-/// same value we save in AuthStorage.readToken()).
+/// Uses ApiClient.sas4 which already has the auth interceptor wired —
+/// requests get the Bearer token attached automatically, and a 401 (or
+/// the SAS4-specific 200 OK with `message: 'Token has expired'` envelope)
+/// triggers refresh-token + retry once, transparently to the caller.
 class Sas4Api {
   Sas4Api._();
-
-  static const String _baseUrl =
-      'https://reseller-supernet.net/admin/api/index.php/api';
-
-  static final Dio _dio = Dio(BaseOptions(
-    baseUrl: _baseUrl,
-    connectTimeout: const Duration(seconds: 12),
-    receiveTimeout: const Duration(seconds: 20),
-    headers: const {'Accept': 'application/json'},
-    validateStatus: (s) => s != null && s < 500,
-  ));
 
   static const String _kUsersCount = '/widgetData/internal/wd_users_count';
   static const String _kActiveCount =
@@ -37,21 +26,9 @@ class Sas4Api {
   /// dashboard rather than blocking everything on one slow endpoint.
   static Future<Sas4Stats> fetchAll() async {
     if (!kReleaseMode) debugPrint('🔵 SAS4 widgets → calling');
-    final token = await AuthStorage.readToken();
-    if (token == null) {
-      if (!kReleaseMode) {
-        debugPrint('🟡 SAS4 widgets: no token in AuthStorage');
-      }
-      return const Sas4Stats();
-    }
-
-    final opts = Options(headers: {
-      'Authorization': 'Bearer $token',
-      'x-auth-token': token,
-    });
 
     Future<dynamic> hit(String name, String url) {
-      return _dio.get(url, options: opts).then((r) {
+      return ApiClient.sas4.get(url).then((r) {
         if (!kReleaseMode) {
           debugPrint('🟢 SAS4 $name: status=${r.statusCode} data=${r.data}');
         }
