@@ -80,7 +80,7 @@ class _BalancePointsCard extends StatelessWidget {
                       child: Text(
                         '${formatIQD(wallet!.points.round())} نقطة',
                         style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                            .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -183,7 +183,7 @@ class _ShellCard extends StatelessWidget {
               Text(
                 title,
                 style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -224,7 +224,7 @@ class _HeroAmount extends StatelessWidget {
           Text(
             'IQD',
             style: AppType.muted(color: AppColors.textLow)
-                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+                .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
           ),
         ],
       ),

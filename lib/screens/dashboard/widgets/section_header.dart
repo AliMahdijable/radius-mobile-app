@@ -24,7 +24,7 @@ class SectionHeader extends StatelessWidget {
         children: [
           Text(label,
               style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 16)),
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
           const Spacer(),
           if (trailingLabel != null)
             TextButton(
@@ -39,7 +39,8 @@ class SectionHeader extends StatelessWidget {
               ),
               child: Text(
                 trailingLabel!,
-                style: AppType.link(color: AppColors.brand),
+                style: AppType.link(color: AppColors.brand)
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
         ],

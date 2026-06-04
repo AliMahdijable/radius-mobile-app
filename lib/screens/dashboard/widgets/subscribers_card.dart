@@ -57,7 +57,7 @@ class SubscribersCard extends StatelessWidget {
               const SizedBox(width: Sp.sm),
               Text('المشتركون',
                   style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 14)),
+                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -69,7 +69,7 @@ class SubscribersCard extends StatelessWidget {
                 child: Text(
                   '${(activeRatio * 100).round()}% فعال',
                   style: AppType.muted(color: AppColors.brand)
-                      .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
+                      .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -177,7 +177,7 @@ class _Mini extends StatelessWidget {
             Text(
               '$value',
               style: AppType.title(color: AppColors.textHi).copyWith(
-                fontSize: 17,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
                 height: 1.1,
               ),
@@ -253,18 +253,18 @@ class _TotalWithRing extends StatelessWidget {
                   child: Text(
                     formatIQD(total),
                     style: AppType.title(color: AppColors.textHi).copyWith(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
                       height: 1.05,
                       letterSpacing: -0.3,
                     ),
                   ),
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(height: 2),
                 Text(
                   'إجمالي',
                   style: AppType.muted(color: AppColors.textLow)
-                      .copyWith(fontSize: 9, fontWeight: FontWeight.w700),
+                      .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
                 ),
               ],
             ),

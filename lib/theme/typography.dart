@@ -3,6 +3,22 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Cairo via google_fonts (runtime download + cache). Returns TextStyles
 /// from static methods because GoogleFonts.cairo() can't be const-evaluated.
+///
+/// ── v2 Type Scale (Material Design 3, Arabic-mobile tuned) ──────────
+///   Hero KPI       : 22pt w800 — single biggest metric on screen
+///                                (Revenue today, etc.)
+///   Headline       : 18pt w800 — secondary KPIs (wallet, debt, subs
+///                                total inside the ring)
+///   Subhead        : 16pt w800 — in-card metric values (mini grid)
+///   Section title  : 14pt w700 — 'آخر النشاطات', 'المشتركون'
+///   Card title     : 12pt w600 — 'الرصيد', 'الإيرادات • اليوم'
+///   Body           : 13pt w600 — activity titles, primary copy
+///   Body secondary : 12pt w500 — greetings, helper text
+///   Caption        : 11pt w500 — time labels, status pills, period tabs
+///   Tiny label     : 10pt w700 — 'إجمالي', 'IQD' suffixes
+///
+/// The methods below cover the primary intent; callers override fontSize
+/// for the larger headline/hero variants since those are rare.
 class AppType {
   AppType._();
 

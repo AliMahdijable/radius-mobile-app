@@ -108,8 +108,11 @@ class _Row extends StatelessWidget {
                     // a single line.
                     Text(
                       n.title,
-                      style: AppType.label(color: AppColors.textHi)
-                          .copyWith(fontSize: 13, height: 1.35),
+                      style: AppType.label(color: AppColors.textHi).copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -119,7 +122,8 @@ class _Row extends StatelessWidget {
                         Text(
                           n.timeLabel,
                           style: AppType.muted(color: AppColors.textLow)
-                              .copyWith(fontSize: 11),
+                              .copyWith(
+                                  fontSize: 11, fontWeight: FontWeight.w500),
                         ),
                         if (n.amount != 0) ...[
                           const SizedBox(width: 6),
@@ -138,7 +142,7 @@ class _Row extends StatelessWidget {
                               color: n.amount < 0
                                   ? AppColors.error
                                   : AppColors.brand,
-                            ).copyWith(fontSize: 12),
+                            ).copyWith(fontSize: 12, fontWeight: FontWeight.w700),
                           ),
                         ],
                       ],

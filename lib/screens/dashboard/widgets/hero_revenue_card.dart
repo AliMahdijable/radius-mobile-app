@@ -100,7 +100,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               Text(
                 'الإيرادات • $_periodLabel',
                 style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12),
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               _PeriodTabs(current: _period, onSelect: _select),
@@ -128,7 +128,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                     Text(
                       'تعذّر الجلب — اسحب للتحديث',
                       style: AppType.label(color: AppColors.error)
-                          .copyWith(fontSize: 12),
+                          .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ],
                 )
@@ -136,9 +136,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                 Text(
                   formatIQD(_amount!),
                   style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 26,
+                    fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
+                    letterSpacing: -0.4,
                     height: 1.05,
                   ),
                 ),
@@ -147,8 +147,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                   padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
                     'د.ع',
-                    style: AppType.subtitle(color: AppColors.textMid)
-                        .copyWith(fontSize: 12),
+                    style: AppType.subtitle(color: AppColors.textLow)
+                        .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -202,8 +202,8 @@ class _PeriodTabs extends StatelessWidget {
           style: AppType.muted(
             color: selected ? Colors.white : AppColors.textMid,
           ).copyWith(
-            fontSize: 10,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
           ),
         ),
       ),

@@ -262,11 +262,11 @@ class _ActivitiesError extends StatelessWidget {
           const SizedBox(height: Sp.sm),
           Text('تعذّر جلب آخر النشاطات',
               style: AppType.label(color: AppColors.error)
-                  .copyWith(fontSize: 13)),
+                  .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text('اسحب للأسفل لإعادة المحاولة',
               style: AppType.muted(color: AppColors.textLow)
-                  .copyWith(fontSize: 11)),
+                  .copyWith(fontSize: 11, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -292,11 +292,11 @@ class _NoActivitiesYet extends StatelessWidget {
           const SizedBox(height: Sp.sm),
           Text('لا توجد نشاطات اليوم',
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 14)),
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text('سيظهر هنا أي تفعيل أو تمديد بمجرد حدوثه',
               style: AppType.muted(color: AppColors.textLow)
-                  .copyWith(fontSize: 12),
+                  .copyWith(fontSize: 12, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center),
         ],
       ),
@@ -340,12 +340,19 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(greeting, style: AppType.subtitle(color: AppColors.textMid)),
+                Text(
+                  greeting,
+                  style: AppType.subtitle(color: AppColors.textMid)
+                      .copyWith(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   displayName.isEmpty ? 'مرحباً' : displayName,
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 20),
+                  style: AppType.title(color: AppColors.textHi).copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
