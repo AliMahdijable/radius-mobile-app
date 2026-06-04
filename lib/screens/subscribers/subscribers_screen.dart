@@ -522,6 +522,8 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                                 sub: s,
                                 selected: isSelected,
                                 lastPayment: _lastPayments[s.username],
+                                showLiveSession:
+                                    _filter == SubscriberFilter.online,
                                 onTap: () {
                                   if (_selectionMode) {
                                     _toggleSelect(s);

@@ -19,6 +19,7 @@ class SubscriberCardV2 extends StatelessWidget {
     required this.sub,
     required this.selected,
     this.lastPayment,
+    this.showLiveSession = false,
     required this.onTap,
     required this.onLongPress,
   });
@@ -26,6 +27,10 @@ class SubscriberCardV2 extends StatelessWidget {
   final Subscriber sub;
   final bool selected;
   final Map<String, dynamic>? lastPayment;
+  /// Surfaces IP / session / DL / UL / device on the card. v1 only
+  /// shows this row on the 'متصل' filter — the general list stays
+  /// scannable without per-row network noise.
+  final bool showLiveSession;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -224,7 +229,7 @@ class SubscriberCardV2 extends StatelessWidget {
   // Decide if there's any content under the divider — the divider
   // shouldn't draw if we're not going to render anything.
   bool get _hasFinance =>
-      sub.isOnline ||
+      (showLiveSession && sub.isOnline) ||
       sub.balanceAmount != 0 ||
       lastPayment != null;
 
@@ -236,7 +241,7 @@ class SubscriberCardV2 extends StatelessWidget {
         // Live session row (online subscribers) — IP + duration + DL/UL
         // + device vendor. Mirrors v1's
         // mobile-app/lib/widgets/subscriber_card.dart:595-647.
-        if (sub.isOnline) ...[
+        if (showLiveSession && sub.isOnline) ...[
           _LiveSessionRow(sub: sub),
           if (sub.balanceAmount != 0 || lastPayment != null)
             const SizedBox(height: 4),
