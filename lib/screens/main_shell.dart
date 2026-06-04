@@ -29,12 +29,19 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
-  // Initial filter for the subscribers screen when opened via a
-  // dashboard card tap. Bumped on every navigate so SubscribersScreen
-  // sees a fresh ValueKey and re-applies the filter even if the user
-  // taps the same KPI twice.
-  SubscriberFilter? _pendingSubsFilter;
-  int _subsNonce = 0;
+  // Filter command channel for the subscribers screen. Updating this
+  // notifier from a dashboard KPI tap pushes the new filter into the
+  // already-mounted SubscribersScreen WITHOUT rebuilding it — which
+  // means the cached subscriber list stays in memory and the screen
+  // appears instantly instead of re-fetching all 4 sources.
+  final ValueNotifier<SubscriberFilter?> _subsFilterCmd =
+      ValueNotifier<SubscriberFilter?>(null);
+
+  @override
+  void dispose() {
+    _subsFilterCmd.dispose();
+    super.dispose();
+  }
 
   void _onFabTap() {
     HapticFeedback.selectionClick();
@@ -51,27 +58,25 @@ class _MainShellState extends State<MainShell> {
 
   /// Public entry point for any tab to jump to the subscribers list
   /// with a specific filter pre-applied (dashboard taps use this).
+  /// Notifier listeners on SubscribersScreen pick up the change without
+  /// the widget being recreated — instant tab switch, no refetch.
   void _openSubscribers(SubscriberFilter? filter) {
     HapticFeedback.selectionClick();
-    setState(() {
-      _tab = 1;
-      _pendingSubsFilter = filter;
-      _subsNonce++;
-    });
+    if (_tab != 1) setState(() => _tab = 1);
+    // Push BOTH a marker (incrementing a value internal to the notifier
+    // by wrapping in a unique object) and the filter so same-filter
+    // re-taps still fire. We just set the value; ValueNotifier suppresses
+    // notifications when oldValue==newValue, so to bypass that we set to
+    // null first then to the real value — quick & cheap.
+    _subsFilterCmd.value = null;
+    _subsFilterCmd.value = filter;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Build the tab list each frame so the subscribers screen can pick
-    // up a fresh initialFilter via its ValueKey (IndexedStack keeps the
-    // others around — they don't rebuild).
     final tabs = <Widget>[
       DashboardScreen(onOpenSubscribers: _openSubscribers),
-      SubscribersScreen(
-        key: ValueKey(
-            'subs-${_pendingSubsFilter?.name ?? 'all'}-$_subsNonce'),
-        initialFilter: _pendingSubsFilter,
-      ),
+      SubscribersScreen(filterCmd: _subsFilterCmd),
       const ReportsScreen(),
       const SettingsScreen(),
     ];

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -18,13 +19,13 @@ import 'widgets/subscriber_card.dart';
 /// sort sheet, pagination, multi-select via long-press, bulk action bar
 /// (toggle/delete wired to backend, renew deferred to Phase 5).
 class SubscribersScreen extends StatefulWidget {
-  const SubscribersScreen({super.key, this.initialFilter});
+  const SubscribersScreen({super.key, this.filterCmd});
 
-  /// Optional starting filter — supplied when the screen is opened from
-  /// a dashboard card tap. When the user changes the ValueKey on this
-  /// widget (via MainShell), `initialState` runs again and the new
-  /// filter is applied.
-  final SubscriberFilter? initialFilter;
+  /// Filter command from MainShell. When dashboard KPIs are tapped the
+  /// ValueNotifier fires with the desired filter and this screen
+  /// applies it WITHOUT re-fetching — the list stays cached in memory
+  /// so the tab switch feels instant.
+  final ValueListenable<SubscriberFilter?>? filterCmd;
 
   @override
   State<SubscribersScreen> createState() => _SubscribersScreenState();
@@ -40,7 +41,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   bool _refreshing = false;
 
   String _query = '';
-  late SubscriberFilter _filter;
+  SubscriberFilter _filter = SubscriberFilter.all;
   SortField _sortField = SortField.remainingDays;
   SortDirection _sortDir = SortDirection.desc;
   int _page = 0;
@@ -54,13 +55,30 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   @override
   void initState() {
     super.initState();
-    _filter = widget.initialFilter ?? SubscriberFilter.all;
+    // Seed the filter from the notifier if one was already set (e.g.
+    // user opened the app and immediately tapped a dashboard KPI before
+    // SubscribersScreen finished mounting on a previous frame).
+    _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
+    widget.filterCmd?.addListener(_onFilterCmd);
     _load();
     _searchCtrl.addListener(_onSearchChanged);
   }
 
+  /// Called when MainShell pushes a new filter via the notifier. We
+  /// only rebuild + reset paging — the cached subscriber list stays
+  /// intact, so the tab switch is instant.
+  void _onFilterCmd() {
+    final next = widget.filterCmd?.value;
+    if (next == null || next == _filter) return;
+    setState(() {
+      _filter = next;
+      _page = 0;
+    });
+  }
+
   @override
   void dispose() {
+    widget.filterCmd?.removeListener(_onFilterCmd);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();

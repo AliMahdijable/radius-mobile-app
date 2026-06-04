@@ -180,6 +180,12 @@ class Subscriber {
       downloadBytes: toInt(j['download'] ?? j['downloadBytes']),
       uploadBytes: toInt(j['upload'] ?? j['uploadBytes']),
       discount: toDouble(j['discount']),
+      // The with-phones endpoint already enriches each row with the
+      // sale price (priceList.user_price). Read it directly; the
+      // packages-map enrichment only kicks in if both are absent.
+      price: toDouble(j['user_price']) ??
+          toDouble(j['sale_price']) ??
+          toDouble(j['price']),
     );
   }
 
