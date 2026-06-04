@@ -180,8 +180,19 @@ class Subscriber {
       parentUsername: j['parent_username']?.toString() ??
           j['parentUsername']?.toString(),
       isEnabled: toBool(j['enabled'] ?? j['isEnabled'], dflt: true),
-      isOnlineFlag: toBool(j['isOnline'] ?? j['is_online']),
-      ipAddress: j['ip']?.toString() ?? j['ipAddress']?.toString(),
+      // Mirror v1's exact online-flag read (subscribers_provider.dart:455-458):
+      //   isOnline = online_status==1 || is_online IN [true, 1, '1']
+      // SAS4 surfaces both names on /index/user — accept either.
+      isOnlineFlag: j['online_status'] == 1 ||
+          j['online_status'] == '1' ||
+          j['is_online'] == true ||
+          j['is_online'] == 1 ||
+          j['is_online'] == '1' ||
+          j['isOnline'] == true,
+      ipAddress: j['ip']?.toString() ??
+          j['framedipaddress']?.toString() ??
+          j['framed_ip_address']?.toString() ??
+          j['ipAddress']?.toString(),
       sessionTime: toInt(j['session_time'] ?? j['sessionTime']),
       downloadBytes: toInt(j['download'] ?? j['downloadBytes']),
       uploadBytes: toInt(j['upload'] ?? j['uploadBytes']),

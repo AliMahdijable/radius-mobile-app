@@ -145,13 +145,16 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     final onlineMap = online ?? const <String, OnlineSessionInfo>{};
     final packagesById = packages ?? const <String, PackageInfo>{};
     final merged = list.map((s) {
-      // Enrich profileName + price from the packages catalogue first
-      // (matches v1's _enrichWithPackage flow).
+      // Match v1 (subscribers_provider.dart:455-489) exactly:
+      // /api/v2/subscribers IS the source of truth for the online flag —
+      // it reads online_status / is_online directly from SAS4. The
+      // separate /api/v2/online-users call only EXISTS to enrich the
+      // live session row (IP / session time / DL / UL bytes) so the
+      // detail screen can show them. We never demote a subscriber to
+      // offline based on the online-users map missing them — doing so
+      // earlier silently zeroed out 'متصل' for the whole admin tree
+      // when the merge ran before /online-users finished.
       var enriched = s.enrichWithPackages(packagesById);
-      // If the subscriber is in the live online map, replace the
-      // online flag AND attach the session IP / time / DL / UL —
-      // those are what the detail screen reads to populate the live
-      // session card. Without this the bytes cards always showed 0 B.
       final session = onlineMap[enriched.username.toLowerCase()];
       if (session != null) {
         enriched = enriched.copyWithOnline(
@@ -161,8 +164,6 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
           dl: session.downloadBytes,
           ul: session.uploadBytes,
         );
-      } else if (enriched.isOnlineFlag) {
-        enriched = enriched.copyWithOnline(online: false);
       }
       return enriched;
     }).toList();
