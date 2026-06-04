@@ -79,106 +79,83 @@ class SubscribersCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: Sp.lg),
-          // Hero row: tappable ring + 5 tappable mini-tiles arranged
-          // as 3 across × 2 down on the trailing side (last cell empty).
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _TotalWithRing(
-                total: s.total,
-                ratio: activeRatio,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.all),
-              ),
-              const SizedBox(width: Sp.md),
-              Expanded(child: _statsGrid(s)),
-            ],
+          const SizedBox(height: Sp.md),
+          // Centered ring on top — single visual focal point.
+          Center(
+            child: _TotalWithRing(
+              total: s.total,
+              ratio: activeRatio,
+              onTap: onOpen == null
+                  ? null
+                  : () => onOpen!(SubscriberFilter.all),
+            ),
           ),
+          const SizedBox(height: Sp.md),
+          // Full-width stat rows below — clean vertical list with no
+          // cramped grid or awkward empty cells.
+          _statsList(s),
         ],
       ),
     );
   }
 
-  /// 3×2 grid of tappable stat tiles. Order top→bottom, RTL right→left:
-  ///   row 1: نشط، متصل، غير متصل
-  ///   row 2: منتهي، قارب الانتهاء، (empty)
-  /// Each tile pushes the subscribers screen with its matching filter.
-  Widget _statsGrid(SubscribersStats s) {
+  /// Vertical list of 5 tappable stat rows. Order top→bottom matches
+  /// admin priority: نشط → متصل → غير متصل → منتهي → قارب الانتهاء.
+  /// Each row is the full trailing width so labels never clip.
+  Widget _statsList(SubscribersStats s) {
+    final rows = <Widget>[
+      _StatRow(
+        icon: LucideIcons.circleCheck,
+        label: 'نشط',
+        value: s.active,
+        color: AppColors.brand,
+        onTap: onOpen == null
+            ? null
+            : () => onOpen!(SubscriberFilter.active),
+      ),
+      _StatRow(
+        icon: LucideIcons.wifi,
+        label: 'متصل',
+        value: s.online,
+        color: const Color(0xFF3B82F6),
+        onTap: onOpen == null
+            ? null
+            : () => onOpen!(SubscriberFilter.online),
+      ),
+      _StatRow(
+        icon: LucideIcons.wifiOff,
+        label: 'غير متصل',
+        value: s.offline,
+        color: const Color(0xFF90A4AE),
+        onTap: onOpen == null
+            ? null
+            : () => onOpen!(SubscriberFilter.offline),
+      ),
+      _StatRow(
+        icon: LucideIcons.timerOff,
+        label: 'منتهي',
+        value: s.expired,
+        color: AppColors.error,
+        onTap: onOpen == null
+            ? null
+            : () => onOpen!(SubscriberFilter.expired),
+      ),
+      _StatRow(
+        icon: LucideIcons.triangleAlert,
+        label: 'قارب الانتهاء',
+        value: s.nearExpiry,
+        color: const Color(0xFFE08F2D),
+        onTap: onOpen == null
+            ? null
+            : () => onOpen!(SubscriberFilter.nearExpiry),
+      ),
+    ];
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _Mini(
-                icon: LucideIcons.circleCheck,
-                label: 'نشط',
-                value: s.active,
-                color: AppColors.brand,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.active),
-              ),
-            ),
-            const SizedBox(width: 5),
-            Expanded(
-              child: _Mini(
-                icon: LucideIcons.wifi,
-                label: 'متصل',
-                value: s.online,
-                color: const Color(0xFF3B82F6),
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.online),
-              ),
-            ),
-            const SizedBox(width: 5),
-            Expanded(
-              child: _Mini(
-                icon: LucideIcons.wifiOff,
-                label: 'غير متصل',
-                value: s.offline,
-                color: const Color(0xFF90A4AE),
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.offline),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 5),
-        Row(
-          children: [
-            Expanded(
-              child: _Mini(
-                icon: LucideIcons.timerOff,
-                label: 'منتهي',
-                value: s.expired,
-                color: AppColors.error,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.expired),
-              ),
-            ),
-            const SizedBox(width: 5),
-            Expanded(
-              child: _Mini(
-                icon: LucideIcons.triangleAlert,
-                label: 'قارب الانتهاء',
-                value: s.nearExpiry,
-                color: const Color(0xFFE08F2D),
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.nearExpiry),
-              ),
-            ),
-            const SizedBox(width: 5),
-            // Empty placeholder keeps the 3-column geometry intact so
-            // tile widths in row 2 match row 1.
-            const Expanded(child: SizedBox.shrink()),
-          ],
-        ),
+        for (int i = 0; i < rows.length; i++) ...[
+          rows[i],
+          if (i < rows.length - 1) const SizedBox(height: 4),
+        ],
       ],
     );
   }
@@ -187,8 +164,11 @@ class SubscribersCard extends StatelessWidget {
 /// One tile in the 2×2 mini grid. Icon + value on a tinted pill —
 /// no inline label (it'd clip with 4-tile width). Long-press shows
 /// the Arabic label as a tooltip.
-class _Mini extends StatelessWidget {
-  const _Mini({
+/// Full-width stat row — icon chip + label + value + chevron hint.
+/// Tappable surface highlights on press; the ripple covers the whole
+/// row so it's an obvious tap target.
+class _StatRow extends StatelessWidget {
+  const _StatRow({
     required this.icon,
     required this.label,
     required this.value,
@@ -203,34 +183,57 @@ class _Mini extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: color.withValues(alpha: 0.08),
+    return Material(
+      color: color.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(R.sm),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(R.sm),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(R.sm),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.sm),
-              border: Border.all(color: color.withValues(alpha: 0.18)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, color: color, size: 14),
-                Text(
-                  '$value',
-                  style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 14, // Smaller — 3 columns are tighter
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
-                  ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: color.withValues(alpha: 0.15)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
                 ),
-              ],
-            ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: color, size: 12),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppType.label(color: AppColors.textHi).copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '$value',
+                style: AppType.title(color: color).copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                LucideIcons.chevronLeft,
+                size: 12,
+                color: color.withValues(alpha: 0.5),
+              ),
+            ],
           ),
         ),
       ),
