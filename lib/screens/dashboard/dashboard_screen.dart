@@ -170,7 +170,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                 Sp.lg,
-                Sp.md,
+                4, // tightened from Sp.md so the subscribers card sits
+                   // right under the header without dead space.
                 Sp.lg,
                 Sp.huge * 3 + MediaQuery.paddingOf(context).bottom,
               ),
@@ -340,7 +341,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final bool waLoaded;
   final double topInset;
 
-  static const double _contentHeight = 108;
+  // Tightened from 108 → 86 so there's no dead space between the
+  // WhatsApp chip and the subscribers card below the header.
+  static const double _contentHeight = 86;
 
   @override
   double get minExtent => _contentHeight + topInset;
@@ -351,7 +354,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
       color: AppColors.bg,
-      padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, Sp.sm),
+      padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

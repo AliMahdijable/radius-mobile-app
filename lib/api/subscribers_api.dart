@@ -5,6 +5,24 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 
+/// Live session data for one currently-connected subscriber. Pulled
+/// from /api/v2/online-users so we can show DL/UL bytes + session time
+/// on the detail screen without per-row fetches.
+class OnlineSessionInfo {
+  const OnlineSessionInfo({
+    this.ip,
+    this.mac,
+    this.sessionTime,
+    this.downloadBytes,
+    this.uploadBytes,
+  });
+  final String? ip;
+  final String? mac;
+  final int? sessionTime;
+  final int? downloadBytes;
+  final int? uploadBytes;
+}
+
 /// Set of usernames currently online (from /api/v2/online-users) and a
 /// map of username→last-payment row (from /api/subscribers/
 /// last-financial-movements). Both are merged into the subscribers list
@@ -124,10 +142,11 @@ class SubscribersApi {
     }
   }
 
-  /// GET /api/v2/online-users — list of subscribers currently
-  /// connected (SAS4 online widget, paginated 8×250 on the backend).
-  /// Returns just the lowercase usernames for fast O(1) membership tests.
-  static Future<Set<String>?> loadOnline() async {
+  /// GET /api/v2/online-users — keyed map from lowercase username to
+  /// the live session row (IP, MAC, session_time, download_bytes,
+  /// upload_bytes). The screen merges this into each subscriber so
+  /// the detail page can show actual DL/UL numbers instead of zeros.
+  static Future<Map<String, OnlineSessionInfo>?> loadOnline() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
     try {
@@ -143,12 +162,24 @@ class SubscribersApi {
         return null;
       }
       final rows = (body['data'] as List?) ?? const [];
-      final out = <String>{};
+      final out = <String, OnlineSessionInfo>{};
+      int? toInt(dynamic v) {
+        if (v == null) return null;
+        if (v is int) return v;
+        if (v is num) return v.toInt();
+        return int.tryParse(v.toString());
+      }
       for (final row in rows) {
-        if (row is Map) {
-          final u = row['username']?.toString().toLowerCase();
-          if (u != null && u.isNotEmpty) out.add(u);
-        }
+        if (row is! Map) continue;
+        final u = row['username']?.toString().toLowerCase();
+        if (u == null || u.isEmpty) continue;
+        out[u] = OnlineSessionInfo(
+          ip: row['ip']?.toString(),
+          mac: row['mac']?.toString(),
+          sessionTime: toInt(row['session_time']),
+          downloadBytes: toInt(row['download_bytes']),
+          uploadBytes: toInt(row['upload_bytes']),
+        );
       }
       return out;
     } on DioException catch (e) {

@@ -388,8 +388,40 @@ class _SubscriptionCard extends StatelessWidget {
                 Clipboard.setData(ClipboardData(text: sub.displayPhone)),
             trailing: LucideIcons.copy,
           ),
+        // 'آخر اتصال' for offline subscribers. v1 fetches the precise
+        // last-session timestamp from SAS4's encrypted /index/UserSessions
+        // endpoint — without client-side encryption in v2, the best we
+        // can do until a backend wrapper lands is fall back to the
+        // expiry-derived signal. Shown only for offline rows so the
+        // live session block doesn't have a redundant 'آخر اتصال'.
+        if (!sub.isOnline)
+          _InfoRow(
+            icon: LucideIcons.history,
+            label: 'آخر اتصال',
+            value: _lastSeenText(sub),
+            valueColor: AppColors.textMid,
+          ),
       ],
     );
+  }
+
+  static String _lastSeenText(Subscriber s) {
+    // Best-effort: when SAS4 isn't giving us a last-session ts, infer
+    // a coarse signal from the expiration field. If the sub is expired,
+    // last contact was at-or-before the expiry; otherwise we don't know
+    // precisely and surface 'غير متاح'.
+    if (!s.isExpired) return 'غير متاح';
+    final raw = s.expiration?.trim();
+    if (raw == null || raw.isEmpty) return 'غير معروف';
+    final t = DateTime.tryParse(raw) ??
+        DateTime.tryParse(raw.split(' ').first);
+    if (t == null) return raw.split(' ').first;
+    final diff = DateTime.now().difference(t);
+    if (diff.inDays > 365) return 'منذ أكثر من سنة';
+    if (diff.inDays > 30) return 'منذ ${(diff.inDays / 30).round()} شهر';
+    if (diff.inDays > 0) return 'منذ ${diff.inDays} يوم';
+    if (diff.inHours > 0) return 'منذ ${diff.inHours} س';
+    return 'منذ دقائق';
   }
 
   static String _expirationText(String? raw) {
@@ -520,17 +552,16 @@ class _OperationsCard extends StatelessWidget {
       title: 'العمليات',
       accent: AppColors.brand,
       children: [
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            childAspectRatio: 1.7,
-          ),
-          itemCount: ops.length,
-          itemBuilder: (_, i) => _OpTile(op: ops[i]),
+        // Tiles laid out as a wrap of pills. Each pill is icon + label
+        // inline horizontally; sizes match the chips at the top of the
+        // subscribers list filter bar (~28px tall). Much smaller than
+        // the previous grid tiles — fits 16+ actions in 4-5 rows.
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final op in ops) _OpChip(op: op),
+          ],
         ),
       ],
     );
@@ -569,45 +600,41 @@ class _Op {
   final VoidCallback onTap;
 }
 
-class _OpTile extends StatelessWidget {
-  const _OpTile({required this.op});
+/// Small inline pill — icon + label on one row. Sized like the filter
+/// chips on the subscribers list bar so a 16-action grid fits in 4-5
+/// rows without dominating the screen.
+class _OpChip extends StatelessWidget {
+  const _OpChip({required this.op});
   final _Op op;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: op.color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(R.sm),
+      borderRadius: BorderRadius.circular(R.pill),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           HapticFeedback.selectionClick();
           op.onTap();
         },
-        borderRadius: BorderRadius.circular(R.sm),
+        borderRadius: BorderRadius.circular(R.pill),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(color: op.color.withValues(alpha: 0.18)),
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: op.color.withValues(alpha: 0.22)),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(op.icon, color: op.color, size: 18),
-              const SizedBox(height: 3),
-              Flexible(
-                child: Text(
-                  op.label,
-                  style: AppType.label(color: op.color).copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
+              Icon(op.icon, color: op.color, size: 13),
+              const SizedBox(width: 5),
+              Text(
+                op.label,
+                style: AppType.label(color: op.color).copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

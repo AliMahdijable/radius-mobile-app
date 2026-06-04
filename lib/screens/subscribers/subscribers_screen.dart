@@ -137,20 +137,32 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
       SubscribersApi.loadPackages(),
     ]);
     final list = results[0] as List<Subscriber>?;
-    final online = results[1] as Set<String>?;
+    final online = results[1] as Map<String, OnlineSessionInfo>?;
     final payments = results[2] as Map<String, Map<String, dynamic>>?;
     final packages = results[3] as Map<String, PackageInfo>?;
 
     if (list == null) return;
-    final onlineSet = online ?? const <String>{};
+    final onlineMap = online ?? const <String, OnlineSessionInfo>{};
     final packagesById = packages ?? const <String, PackageInfo>{};
     final merged = list.map((s) {
-      final isOn = onlineSet.contains(s.username.toLowerCase());
-      // Enrich profileName from the packages list (v1's _enrichWithPackage
-      // pattern) THEN flip the online flag if it changed.
+      // Enrich profileName + price from the packages catalogue first
+      // (matches v1's _enrichWithPackage flow).
       var enriched = s.enrichWithPackages(packagesById);
-      if (isOn != enriched.isOnlineFlag) {
-        enriched = enriched.copyWithOnline(online: isOn);
+      // If the subscriber is in the live online map, replace the
+      // online flag AND attach the session IP / time / DL / UL —
+      // those are what the detail screen reads to populate the live
+      // session card. Without this the bytes cards always showed 0 B.
+      final session = onlineMap[enriched.username.toLowerCase()];
+      if (session != null) {
+        enriched = enriched.copyWithOnline(
+          online: true,
+          ip: session.ip,
+          session: session.sessionTime,
+          dl: session.downloadBytes,
+          ul: session.uploadBytes,
+        );
+      } else if (enriched.isOnlineFlag) {
+        enriched = enriched.copyWithOnline(online: false);
       }
       return enriched;
     }).toList();
