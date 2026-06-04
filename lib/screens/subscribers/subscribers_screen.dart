@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/subscribers_api.dart';
 import '../../models/subscriber.dart';
+import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -22,7 +23,10 @@ import 'widgets/subscriber_card.dart';
 const _defaultSortByFilter = <SubscriberFilter, (SortField, SortDirection)>{
   SubscriberFilter.all: (SortField.remainingDays, SortDirection.desc),
   SubscriberFilter.active: (SortField.remainingDays, SortDirection.desc),
-  SubscriberFilter.online: (SortField.remainingDays, SortDirection.desc),
+  // Online filter: shortest session time first (just-connected → at
+  // top). Subscribers without a session_time fall to the bottom via
+  // the comparator's null handling.
+  SubscriberFilter.online: (SortField.sessionTime, SortDirection.asc),
   SubscriberFilter.offline: (SortField.remainingDays, SortDirection.desc),
   SubscriberFilter.disabled: (SortField.username, SortDirection.asc),
   SubscriberFilter.expired: (SortField.expiration, SortDirection.desc),
@@ -74,8 +78,17 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
     _applyDefaultSortFor(_filter);
     widget.filterCmd?.addListener(_onFilterCmd);
+    // Re-fetch whenever any operation anywhere in the app mutates a
+    // subscriber (activate / extend / disconnect / toggle / delete /
+    // bulk action). Mirrors v1's notifier pattern.
+    SubscriberEvents.dataChanged.addListener(_onDataChanged);
     _load();
     _searchCtrl.addListener(_onSearchChanged);
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    _refresh();
   }
 
   /// Called when MainShell pushes a new filter via the notifier. Reset
@@ -102,6 +115,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   @override
   void dispose() {
     widget.filterCmd?.removeListener(_onFilterCmd);
+    SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -238,6 +252,15 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
           return a.balanceAmount.compareTo(b.balanceAmount);
         case SortField.parentUsername:
           return (a.parentUsername ?? '').compareTo(b.parentUsername ?? '');
+        case SortField.sessionTime:
+          // Null sessionTime sinks to the bottom regardless of asc/desc
+          // so offline rows don't clutter the head of the online list.
+          final aHas = a.sessionTime != null;
+          final bHas = b.sessionTime != null;
+          if (!aHas && !bHas) return 0;
+          if (!aHas) return _sortDir == SortDirection.asc ? 1 : -1;
+          if (!bHas) return _sortDir == SortDirection.asc ? -1 : 1;
+          return a.sessionTime!.compareTo(b.sessionTime!);
       }
     }
     list.sort(_sortDir == SortDirection.asc
@@ -327,6 +350,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     if (!mounted) return;
     Navigator.of(context).pop(); // close progress
     _exitSelection();
+    if (ok > 0) SubscriberEvents.notifyChange();
     await _refresh();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

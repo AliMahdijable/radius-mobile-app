@@ -6,6 +6,7 @@ import '../../api/dashboard_api.dart';
 import '../../api/sas4_api.dart';
 import '../../models/dashboard.dart';
 import '../../services/auth_storage.dart';
+import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -52,6 +53,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _loadIdentity();
     _refreshLive();
+    // Re-fetch dashboard KPIs whenever any subscriber operation
+    // anywhere in the app succeeds (activate/extend/disconnect/bulk
+    // toggle/delete). Matches v1's pattern of state-driven refresh.
+    SubscriberEvents.dataChanged.addListener(_onDataChanged);
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    _refreshLive();
+  }
+
+  @override
+  void dispose() {
+    SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    super.dispose();
   }
 
   Future<void> _loadIdentity() async {

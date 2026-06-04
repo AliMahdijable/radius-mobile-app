@@ -6,7 +6,15 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
 enum SortField {
-  username, firstname, profileName, phone, expiration, remainingDays, notes, parentUsername
+  username,
+  firstname,
+  profileName,
+  phone,
+  expiration,
+  remainingDays,
+  notes,
+  parentUsername,
+  sessionTime, // for the 'متصل' filter — recent connects first when asc
 }
 
 enum SortDirection { asc, desc }
@@ -18,6 +26,7 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.phone, 'رقم الهاتف', LucideIcons.phone),
   (SortField.expiration, 'تاريخ الانتهاء', LucideIcons.calendar),
   (SortField.remainingDays, 'الأيام المتبقية', LucideIcons.clock),
+  (SortField.sessionTime, 'مدة الجلسة', LucideIcons.timer),
   (SortField.notes, 'الديون', LucideIcons.wallet),
   (SortField.parentUsername, 'تابع إلى', LucideIcons.userCog),
 ];

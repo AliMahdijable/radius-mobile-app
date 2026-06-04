@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -137,6 +138,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
+    if (result.ok) SubscriberEvents.notifyChange();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content:

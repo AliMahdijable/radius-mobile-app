@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
+import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -124,6 +125,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       _disconnecting = false;
       if (success) sub = sub.copyWithOnline(online: false);
     });
+    if (success) SubscriberEvents.notifyChange();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(success ? 'تم فصل المستخدم' : 'تعذّر الفصل'),
