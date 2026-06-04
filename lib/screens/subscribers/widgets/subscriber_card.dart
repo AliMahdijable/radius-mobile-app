@@ -7,9 +7,11 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Modern subscriber card — same data v1's SubscriberCard shows, cleaner
-/// layout: status pill + name + handle in header, then a compact info
-/// row with package + expiry, and a debt/credit footer when relevant.
+/// Subscriber card v2 — banking-app style with a colored leading rail
+/// for status, an avatar with the first initial, a hero name + handle,
+/// and a prominent days-remaining badge on the right. Below that, two
+/// metadata rows (package/phone, expiration) and an optional finance
+/// strip with a debt/credit chip + last-payment line.
 class SubscriberCardV2 extends StatelessWidget {
   const SubscriberCardV2({
     super.key,
@@ -22,22 +24,15 @@ class SubscriberCardV2 extends StatelessWidget {
 
   final Subscriber sub;
   final bool selected;
-  /// Raw row from /api/subscribers/last-financial-movements (keyed by
-  /// username on the parent). null = no recent payment.
   final Map<String, dynamic>? lastPayment;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    final disabled = !sub.isEnabled;
+    final disabled = sub.isDisabled;
     final statusColor = _statusColor();
     final statusLabel = _statusLabel();
-    final statusIcon = _statusIcon();
-
-    final accentBorder = selected
-        ? Border.all(color: AppColors.brand, width: 2)
-        : Border.all(color: AppColors.border);
 
     return Material(
       color: Colors.transparent,
@@ -46,153 +41,65 @@ class SubscriberCardV2 extends StatelessWidget {
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(R.lg),
         child: Opacity(
-          opacity: disabled ? 0.6 : 1,
+          opacity: disabled ? 0.62 : 1,
           child: Container(
-            padding: const EdgeInsets.all(Sp.md),
             decoration: BoxDecoration(
               color: selected
-                  ? AppColors.brand.withValues(alpha: 0.06)
+                  ? AppColors.brand.withValues(alpha: 0.05)
                   : AppColors.surface,
               borderRadius: BorderRadius.circular(R.lg),
-              border: accentBorder,
+              border: Border.all(
+                color: selected
+                    ? AppColors.brand
+                    : AppColors.border,
+                width: selected ? 2 : 1,
+              ),
+              boxShadow: selected
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _StatusBadge(color: statusColor, icon: statusIcon),
-                    const SizedBox(width: Sp.sm),
-                    Expanded(
+            clipBehavior: Clip.antiAlias,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Status accent rail (right edge in RTL = leading)
+                  Container(
+                    width: 4,
+                    color: statusColor,
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Sp.md, Sp.md, Sp.md, Sp.md,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            sub.fullName,
-                            style: AppType.label(color: AppColors.textHi)
-                                .copyWith(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              decoration: disabled
-                                  ? TextDecoration.lineThrough
-                                  : null,
+                          _buildHeader(statusColor, statusLabel, disabled),
+                          const SizedBox(height: 10),
+                          _buildMetadata(),
+                          if (sub.balanceAmount != 0 || lastPayment != null) ...[
+                            const SizedBox(height: 10),
+                            const Divider(
+                              height: 1,
+                              color: AppColors.border,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (sub.fullName != sub.username) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              sub.username,
-                              style: AppType.muted(color: AppColors.textLow)
-                                  .copyWith(fontSize: 11),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            const SizedBox(height: 8),
+                            _buildFinance(),
                           ],
                         ],
                       ),
                     ),
-                    _ExpiryPill(
-                      remaining: sub.remainingDays,
-                      disabled: disabled,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: Sp.sm),
-                // Row 1: status label + package
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(R.pill),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: AppType.muted(color: statusColor)
-                            .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(LucideIcons.package,
-                        size: 12, color: AppColors.textMid),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        (sub.profileName?.isNotEmpty ?? false)
-                            ? sub.profileName!
-                            : 'بدون باقة',
-                        style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                // Row 2: phone + expiration date
-                Row(
-                  children: [
-                    if (sub.displayPhone.isNotEmpty) ...[
-                      const Icon(LucideIcons.phone,
-                          size: 12, color: AppColors.textMid),
-                      const SizedBox(width: 4),
-                      Text(
-                        sub.displayPhone,
-                        style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    const Icon(LucideIcons.calendar,
-                        size: 12, color: AppColors.textMid),
-                    const SizedBox(width: 4),
-                    Text(
-                      _formatExpiration(sub.expiration),
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 11),
-                    ),
-                  ],
-                ),
-                if (sub.balanceAmount != 0) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(
-                        sub.hasDebt
-                            ? LucideIcons.creditCard
-                            : LucideIcons.wallet,
-                        size: 13,
-                        color: sub.hasDebt
-                            ? AppColors.error
-                            : AppColors.brand,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        sub.hasDebt
-                            ? 'دين: ${formatIQD(sub.debtAbs.round())} د.ع'
-                            : 'رصيد: ${formatIQD(sub.debtAbs.round())} د.ع',
-                        style: AppType.label(
-                          color: sub.hasDebt
-                              ? AppColors.error
-                              : AppColors.brand,
-                        ).copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-                      ),
-                    ],
                   ),
                 ],
-                if (lastPayment != null) ...[
-                  const SizedBox(height: 6),
-                  _LastPaymentLine(payment: lastPayment!),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -200,17 +107,125 @@ class SubscriberCardV2 extends StatelessWidget {
     );
   }
 
-  /// Formats SAS4's expiration string ('2026-09-30 00:00:00' or
-  /// '2026-09-30') to 'YYYY/MM/DD HH:MM'. Time is included so admins
-  /// can see the exact moment a subscription ends, not just the date.
-  /// Returns '—' for null/empty so the row stays aligned.
-  static String _formatExpiration(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return '—';
-    final s = raw.trim();
-    final t = DateTime.tryParse(s) ?? DateTime.tryParse(s.split(' ').first);
-    if (t == null) return s.split(' ').first;
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${t.year}/${two(t.month)}/${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+  // ───────── HEADER: avatar + name + handle + expiry pill ─────────
+  Widget _buildHeader(Color statusColor, String statusLabel, bool disabled) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _Avatar(name: sub.fullName, fallback: sub.username, color: statusColor),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                sub.fullName,
+                style: AppType.label(color: AppColors.textHi).copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  decoration:
+                      disabled ? TextDecoration.lineThrough : null,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  // Status dot
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    statusLabel,
+                    style: AppType.muted(color: statusColor).copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (sub.fullName != sub.username) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 2,
+                      height: 10,
+                      color: AppColors.border,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        sub.username,
+                        style: AppType.muted(color: AppColors.textLow)
+                            .copyWith(fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        _ExpiryBadge(remaining: sub.remainingDays, disabled: disabled),
+      ],
+    );
+  }
+
+  // ───────── METADATA: package | phone, then expiry date ─────────
+  Widget _buildMetadata() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Package + phone in a single row
+        Row(
+          children: [
+            Expanded(
+              child: _MetaRow(
+                icon: LucideIcons.package,
+                text: (sub.profileName?.isNotEmpty ?? false)
+                    ? sub.profileName!
+                    : 'بدون باقة',
+                color: AppColors.textMid,
+              ),
+            ),
+            if (sub.displayPhone.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              _MetaRow(
+                icon: LucideIcons.phone,
+                text: sub.displayPhone,
+                color: AppColors.textMid,
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        _MetaRow(
+          icon: LucideIcons.calendar,
+          text: 'ينتهي ${_formatExpiration(sub.expiration)}',
+          color: AppColors.textLow,
+        ),
+      ],
+    );
+  }
+
+  // ───────── FINANCE: debt/credit chip + last-payment line ─────────
+  Widget _buildFinance() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (sub.balanceAmount != 0) _BalanceChip(sub: sub),
+        if (sub.balanceAmount != 0 && lastPayment != null)
+          const SizedBox(height: 4),
+        if (lastPayment != null) _LastPaymentLine(payment: lastPayment!),
+      ],
+    );
   }
 
   // ───────── status helpers (priority matches v1 visual order) ─────────
@@ -230,19 +245,245 @@ class SubscriberCardV2 extends StatelessWidget {
     return 'نشط';
   }
 
-  IconData _statusIcon() {
-    if (sub.isDisabled) return LucideIcons.ban;
-    if (sub.isExpired) return LucideIcons.timerOff;
-    if (sub.isNearExpiry) return LucideIcons.triangleAlert;
-    if (sub.isOnline) return LucideIcons.wifi;
-    return LucideIcons.circleCheck;
+  /// Formats SAS4's expiration string ('2026-09-30 00:00:00' or
+  /// '2026-09-30') to 'YYYY/MM/DD HH:MM'. Returns '—' for null/empty.
+  static String _formatExpiration(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '—';
+    final s = raw.trim();
+    final t = DateTime.tryParse(s) ?? DateTime.tryParse(s.split(' ').first);
+    if (t == null) return s.split(' ').first;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}/${two(t.month)}/${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 }
 
-/// Last-payment line — 'آخر تسديد قبل X — N د.ع'. Reads the action
-/// description + amount + created_at fields from the backend's
-/// last-financial-movements row. Skipped silently for payments older
-/// than 30 days so cards don't list stale activity.
+/// Initials avatar — first letter of fullName (or username if name is
+/// just the handle). Background uses the status color at 14% opacity so
+/// it ties visually to the rail without overpowering the row.
+class _Avatar extends StatelessWidget {
+  const _Avatar({
+    required this.name,
+    required this.fallback,
+    required this.color,
+  });
+  final String name;
+  final String fallback;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = _firstLetter(name.isNotEmpty ? name : fallback);
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: AppType.title(color: color).copyWith(
+          fontSize: 17,
+          fontWeight: FontWeight.w800,
+          height: 1,
+        ),
+      ),
+    );
+  }
+
+  static String _firstLetter(String s) {
+    for (final ch in s.runes) {
+      final c = String.fromCharCode(ch);
+      // Skip whitespace + symbols. Arabic + Latin letters + digits accepted.
+      if (c.trim().isEmpty) continue;
+      return c.toUpperCase();
+    }
+    return '?';
+  }
+}
+
+/// Big days-remaining badge on the trailing side. The card's main
+/// urgency signal — color-coded so a red badge instantly tells you
+/// there's a problem before you read anything else.
+class _ExpiryBadge extends StatelessWidget {
+  const _ExpiryBadge({required this.remaining, required this.disabled});
+  final int? remaining;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final ({Color color, String big, String small, IconData icon}) v;
+    if (disabled) {
+      v = (
+        color: const Color(0xFF6D4C41),
+        big: '—',
+        small: 'معطّل',
+        icon: LucideIcons.ban,
+      );
+    } else if (remaining == null) {
+      v = (
+        color: AppColors.textLow,
+        big: '—',
+        small: '',
+        icon: LucideIcons.clock,
+      );
+    } else if (remaining! < 0) {
+      v = (
+        color: AppColors.error,
+        big: '${remaining!.abs()}',
+        small: 'منتهي',
+        icon: LucideIcons.timerOff,
+      );
+    } else if (remaining! == 0) {
+      v = (
+        color: AppColors.error,
+        big: '0',
+        small: 'اليوم',
+        icon: LucideIcons.triangleAlert,
+      );
+    } else if (remaining! <= 3) {
+      v = (
+        color: const Color(0xFFE08F2D),
+        big: '${remaining!}',
+        small: 'يوم',
+        icon: LucideIcons.triangleAlert,
+      );
+    } else if (remaining! <= 7) {
+      v = (
+        color: const Color(0xFFCD8B00),
+        big: '${remaining!}',
+        small: 'يوم',
+        icon: LucideIcons.clock,
+      );
+    } else {
+      v = (
+        color: AppColors.brand,
+        big: '${remaining!}',
+        small: 'يوم',
+        icon: LucideIcons.clock,
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: v.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: v.color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(v.icon, color: v.color, size: 14),
+          const SizedBox(width: 5),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                v.big,
+                style: AppType.title(color: v.color).copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+              if (v.small.isNotEmpty) ...[
+                const SizedBox(height: 1),
+                Text(
+                  v.small,
+                  style: AppType.muted(color: v.color).copyWith(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaRow extends StatelessWidget {
+  const _MetaRow({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 12),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            text,
+            style: AppType.muted(color: color).copyWith(fontSize: 11),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BalanceChip extends StatelessWidget {
+  const _BalanceChip({required this.sub});
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDebt = sub.hasDebt;
+    final color = isDebt ? AppColors.error : AppColors.brand;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isDebt ? LucideIcons.creditCard : LucideIcons.wallet,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isDebt ? 'دين' : 'رصيد',
+            style: AppType.muted(color: color).copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${formatIQD(sub.debtAbs.round())} د.ع',
+            style: AppType.label(color: color).copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LastPaymentLine extends StatelessWidget {
   const _LastPaymentLine({required this.payment});
   final Map<String, dynamic> payment;
@@ -265,13 +506,13 @@ class _LastPaymentLine extends StatelessWidget {
     return Row(
       children: [
         const Icon(LucideIcons.banknote,
-            size: 13, color: AppColors.brand),
+            size: 12, color: AppColors.brand),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             '$actionLabel • $timeLabel${amount != 0 ? ' • ${formatIQD(amount.abs())} د.ع' : ''}',
             style: AppType.muted(color: AppColors.brand)
-                .copyWith(fontSize: 11),
+                .copyWith(fontSize: 10),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -295,9 +536,7 @@ class _LastPaymentLine extends StatelessWidget {
     return 'قبل ${d.inDays} أيام';
   }
 
-  /// Mirrors v1's subscriber_card._movementLabel(): everything that
-  /// isn't an explicit SUBSCRIBER_ACTIVATE is labelled 'تسديد دين'.
-  /// The activate case differentiates partial-cash for clarity.
+  /// Mirrors v1's subscriber_card._movementLabel.
   static String _humanAction(String action, {String? paymentType}) {
     if (action.toUpperCase() == 'SUBSCRIBER_ACTIVATE') {
       return (paymentType ?? '').contains('جزئي')
@@ -305,58 +544,5 @@ class _LastPaymentLine extends StatelessWidget {
           : 'تفعيل نقدي';
     }
     return 'تسديد دين';
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.color, required this.icon});
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(icon, color: color, size: 18),
-    );
-  }
-}
-
-class _ExpiryPill extends StatelessWidget {
-  const _ExpiryPill({required this.remaining, required this.disabled});
-  final int? remaining;
-  final bool disabled;
-
-  @override
-  Widget build(BuildContext context) {
-    if (disabled) return _pill('معطّل', const Color(0xFF6D4C41));
-    final d = remaining;
-    if (d == null) return _pill('—', AppColors.textLow);
-    if (d < 0) return _pill('منتهي', AppColors.error);
-    if (d == 0) return _pill('اليوم', AppColors.error);
-    if (d <= 3) return _pill('$d يوم', const Color(0xFFE08F2D));
-    if (d <= 7) return _pill('$d يوم', const Color(0xFFCD8B00));
-    return _pill('$d يوم', AppColors.brand);
-  }
-
-  Widget _pill(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        text,
-        style: AppType.muted(color: color)
-            .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-      ),
-    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -39,6 +40,19 @@ class _SplashScreenState extends State<SplashScreen> {
     ]);
   }
 
+  /// Calls /api/auth/refresh-token if the stored expiry is missing OR
+  /// within 2 minutes of now. Failures fall through silently — the
+  /// auth interceptor will catch the resulting 401 on the next request.
+  Future<void> _refreshIfExpired() async {
+    final expiryStr = await AuthStorage.readTokenExpiry();
+    final expiry = expiryStr == null ? null : DateTime.tryParse(expiryStr);
+    final now = DateTime.now().toUtc();
+    final shouldRefresh = expiry == null ||
+        !expiry.toUtc().isAfter(now.add(const Duration(minutes: 2)));
+    if (!shouldRefresh) return;
+    await AuthApi.refreshToken();
+  }
+
   Future<void> _route() async {
     final token = await AuthStorage.readToken();
     final autoLogin = await AuthStorage.isAutoLoginEnabled();
@@ -48,8 +62,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
     final Widget next;
     if (token != null && token.isNotEmpty && autoLogin) {
-      // Trusted session: skip everything to home. The token will be
-      // refreshed/validated in the background by API calls when needed.
+      // Trusted session: refresh proactively if the stored token is
+      // expired or close to expiring. v1 does the same in
+      // SessionRefreshService.ensureValidSession — without it, the very
+      // first dashboard call would fail and the auth interceptor would
+      // catch the 401, which works but causes a visible loading flash.
+      await _refreshIfExpired();
       next = const MainShell();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered. Send
