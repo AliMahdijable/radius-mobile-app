@@ -43,6 +43,7 @@ class SubscriberDetailScreen extends StatefulWidget {
 class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   late Subscriber sub = widget.sub;
   bool _disconnecting = false;
+  bool _toggling = false;
 
   @override
   void initState() {
@@ -130,6 +131,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     onDisconnect: sub.isOnline && sub.idx != null
                         ? _confirmDisconnect
                         : null,
+                    toggling: _toggling,
+                    onToggleEnabled:
+                        sub.idx != null ? _confirmToggleEnabled : null,
                   ),
                 ],
               ),
@@ -186,6 +190,77 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       SnackBar(
         content: Text(success ? 'تم فصل المستخدم' : 'تعذّر الفصل'),
         backgroundColor: success ? AppColors.brand : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _confirmToggleEnabled() async {
+    final wantEnable = sub.isDisabled;
+    final action = wantEnable ? 'تفعيل حساب' : 'تعطيل';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          'تأكيد $action',
+          style: AppType.label(color: AppColors.textHi)
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          wantEnable
+              ? 'هل تريد تفعيل حساب "${sub.fullName}"؟'
+              : 'سيُمنع "${sub.fullName}" من الاتصال، وإن كان متصلاً '
+                  'الآن سيُفصل فوراً. يبقى الحساب في النظام.\n\nهل تريد المتابعة؟',
+          style: AppType.subtitle(color: AppColors.textMid),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor:
+                  wantEnable ? AppColors.brand : const Color(0xFFCD8B00),
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _runToggleEnabled(wantEnable);
+  }
+
+  Future<void> _runToggleEnabled(bool wantEnable) async {
+    final id = sub.idx;
+    if (id == null) return;
+    setState(() => _toggling = true);
+    final success = await SubscribersApi.toggle(id, enable: wantEnable);
+    if (!mounted) return;
+    // The backend disconnects any live session on disable (matches v1 —
+    // see /api/v2/subscribers/:idx/toggle-enabled in server.js). Reflect
+    // that locally so the live session card disappears immediately
+    // without waiting for the dataChanged refresh.
+    setState(() {
+      _toggling = false;
+      if (success && !wantEnable && sub.isOnline) {
+        sub = sub.copyWithOnline(online: false);
+      }
+    });
+    if (success) SubscriberEvents.notifyChange();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? (wantEnable ? 'تم تفعيل الحساب' : 'تم تعطيل الحساب')
+              : (wantEnable ? 'تعذّر التفعيل' : 'تعذّر التعطيل'),
+        ),
+        backgroundColor: success
+            ? (wantEnable ? AppColors.brand : const Color(0xFFCD8B00))
+            : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -596,11 +671,21 @@ class _OperationsCard extends StatelessWidget {
     required this.sub,
     required this.disconnecting,
     required this.onDisconnect,
+    required this.toggling,
+    required this.onToggleEnabled,
   });
 
   final Subscriber sub;
   final bool disconnecting;
   final VoidCallback? onDisconnect;
+  /// True while the toggle (تعطيل/تفعيل) round-trip is in flight —
+  /// the tile label flips to 'جاري...' so the admin sees activity.
+  final bool toggling;
+  /// null when sub.idx is missing — the chip stays in the grid but
+  /// taps no-op. Otherwise shows the confirm dialog + runs the
+  /// toggle through SubscribersApi (backend also kicks any live
+  /// session on disable, see toggle-enabled endpoint).
+  final VoidCallback? onToggleEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -633,10 +718,11 @@ class _OperationsCard extends StatelessWidget {
           () => _todo(context, 'إرسال المعلومات — قيد التطوير')),
       _Op(
         sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
-        sub.isDisabled ? 'تفعيل حساب' : 'تعطيل',
+        toggling
+            ? 'جاري...'
+            : (sub.isDisabled ? 'تفعيل حساب' : 'تعطيل'),
         sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
-        () => _todo(context,
-            '${sub.isDisabled ? 'تفعيل' : 'تعطيل'} — قيد التطوير'),
+        onToggleEnabled ?? () {},
       ),
       _Op(LucideIcons.trash2, 'حذف', AppColors.error,
           () => _todo(context, 'حذف — قيد التطوير (مرحلة 4)')),

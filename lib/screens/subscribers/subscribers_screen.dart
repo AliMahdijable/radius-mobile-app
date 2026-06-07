@@ -350,6 +350,65 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
       _filteredSubscribersForBulk().where((s) => !s.isDisabled).length;
   int get _disabledInSelection =>
       _filteredSubscribersForBulk().where((s) => s.isDisabled).length;
+  /// Rows currently online — the disconnect button affects only
+  /// these. Subscribers who aren't connected have no session to
+  /// kick, so we skip them in the loop AND hide the count when zero.
+  int get _onlineInSelection =>
+      _filteredSubscribersForBulk().where((s) => s.isOnline).length;
+
+  Future<void> _openBulkDisconnect() async {
+    final online = _filteredSubscribersForBulk()
+        .where((s) => s.isOnline && s.idx != null)
+        .toList();
+    if (online.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('فصل المستخدمين'),
+        content: Text(
+          'سيتم قطع جلسة ${online.length} مشترك الآن. سيحتاجون إلى '
+          'إعادة الاتصال يدوياً.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style:
+                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('فصل'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    _showProgress('فصل المستخدمين');
+    var ok = 0, fail = 0;
+    for (final s in online) {
+      final success = await SubscribersApi.disconnect(s.idx!);
+      success ? ok++ : fail++;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(); // close progress
+    _exitSelection();
+    // Disconnect doesn't change DB state (just kicks the live
+    // session), but the online overlay should refresh so the rows
+    // stop showing the connected badge. notifyChange triggers the
+    // shared dataChanged → screens re-fetch.
+    if (ok > 0) SubscriberEvents.notifyChange();
+    await _refresh();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم فصل $ok ${fail > 0 ? '— فشل: $fail' : ''}'),
+        backgroundColor: fail == 0 ? AppColors.brand : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   /// Resolve the selected idx set back to the live Subscriber objects
   /// the bulk sheets need (debt, name, balance). The full list comes
@@ -623,8 +682,11 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
               debtorCount: _selectedDebtorCount,
               enabledCount: _enabledInSelection,
               disabledCount: _disabledInSelection,
+              onlineCount: _onlineInSelection,
               onRenew: _openBulkActivate,
               onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
+              onDisconnect:
+                  _onlineInSelection > 0 ? _openBulkDisconnect : null,
               onDisable: () => _bulk(_BulkAction.disable),
               onEnable: () => _bulk(_BulkAction.enable),
               onDelete: () => _bulk(_BulkAction.delete),
@@ -906,8 +968,10 @@ class _BulkActionBar extends StatelessWidget {
     required this.debtorCount,
     required this.enabledCount,
     required this.disabledCount,
+    required this.onlineCount,
     required this.onRenew,
     required this.onPayDebt,
+    required this.onDisconnect,
     required this.onDisable,
     required this.onEnable,
     required this.onDelete,
@@ -920,10 +984,17 @@ class _BulkActionBar extends StatelessWidget {
   /// mixes states (مطلب 2026-06-07).
   final int enabledCount;
   final int disabledCount;
+  /// Rows currently online — the disconnect button only affects
+  /// these. Hidden when zero so the bar doesn't show an empty action.
+  final int onlineCount;
   final VoidCallback onRenew;
   /// null = no debtors in selection → button disabled. Non-null →
   /// opens the bulk pay-debt sheet against the debtor subset.
   final VoidCallback? onPayDebt;
+  /// null = no online rows in selection → button hidden entirely
+  /// (no greyed-out state — disconnect is a hot action and the row
+  /// is otherwise reserved for the toggle/delete trio).
+  final VoidCallback? onDisconnect;
   final VoidCallback onDisable;
   final VoidCallback onEnable;
   final VoidCallback onDelete;
@@ -981,6 +1052,31 @@ class _BulkActionBar extends StatelessWidget {
                   icon: const Icon(LucideIcons.banknote, size: 16),
                   label: Text(
                     'تسديد دين ($debtorCount)',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
+            // Bulk disconnect — kicks online sessions off the network
+            // without touching the enabled flag. Hidden when nobody in
+            // the selection is online (no point showing 'فصل (0)').
+            if (onlineCount > 0) ...[
+              const SizedBox(height: Sp.sm),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(R.md),
+                    ),
+                  ),
+                  onPressed: onDisconnect,
+                  icon: const Icon(LucideIcons.power, size: 16),
+                  label: Text(
+                    'فصل المتصلين ($onlineCount)',
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 13),
                   ),
