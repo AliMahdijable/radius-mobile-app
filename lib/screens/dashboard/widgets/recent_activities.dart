@@ -51,11 +51,13 @@ class _Row extends StatelessWidget {
     Color color,
     String title,
     String? subLabel,
+    String? detail,
     int amount,
     String timeLabel,
   }) _normalize() {
     final m = item;
     final action = (m['action'] ?? m['action_type'] ?? '').toString();
+    final descr = (m['action_description'] ?? m['description'] ?? '').toString();
     final visual = _visualForAction(action);
     // Backend enriches each row with user_firstname / user_lastname /
     // user_username via SAS4's user directory (see
@@ -78,10 +80,7 @@ class _Row extends StatelessWidget {
     final title = fullName.isNotEmpty
         ? (username.isNotEmpty ? '$fullName ($username)' : fullName)
         : (username.isNotEmpty ? username : action);
-    // Short action label below the name so the row still tells the
-    // admin WHAT happened without dragging in the whole verbose
-    // backend description ('تفعيل المشترك … | الباقة: … | السعر: …').
-    final subLabel = _shortActionLabel(action);
+    final details = _actionDetails(action, descr);
     final amount = _readAmount(m);
     final created = m['created_at']?.toString();
     final timeLabel = _humanCreatedAt(created);
@@ -89,33 +88,103 @@ class _Row extends StatelessWidget {
       icon: visual.$1,
       color: visual.$2,
       title: title,
-      subLabel: subLabel,
+      subLabel: details.label,
+      detail: details.detail,
       amount: amount,
       timeLabel: timeLabel,
     );
   }
 
-  /// Maps backend action_type → short Arabic action label. Returns
-  /// null when the action is unrecognized so the row just shows the
-  /// time + amount.
-  static String? _shortActionLabel(String action) {
+  /// Compact action summary for the row's sub-line.
+  ///   label  — short, colored: 'تفعيل نقدي' / 'تفعيل أجل' /
+  ///            'تفعيل جزئي' / 'تمديد' / 'تسديد دين' / 'إضافة دين' /
+  ///            'إيراد'. Encodes both the operation AND, for
+  ///            activations, the payment variant — admin sees the
+  ///            cash vs. credit split at a glance without scanning
+  ///            descriptions.
+  ///   detail — neutral, additional context: package price for
+  ///            activations (parsed from action_description), or null
+  ///            when there's nothing extra to show.
+  static ({String? label, String? detail}) _actionDetails(
+    String action,
+    String description,
+  ) {
     final lower = action.toLowerCase();
-    if (lower.contains('extend')) return 'تمديد';
-    // Order matters — 'subscriber_activate_cash' contains both
-    // 'activate' and 'cash', and 'debt_pay' contains 'debt' before
-    // 'pay'. We pick the most specific match first.
+    // Activations: parse payment variant + price out of the verbose
+    // description. The description shape is:
+    //   'تفعيل نقدي - المستخدم: ahmed@x | السعر: 35,000 د.ع'
+    //   'تفعيل نقدي جزئي - ... | السعر: 35,000 د.ع | المدفوع: 10,000 د.ع | الدين: 25,000 د.ع'
+    //   'تفعيل غير نقدي - ... | السعر: 35,000 د.ع | الدين: 35,000 د.ع'
+    final isActivation =
+        lower.contains('activ') ||
+            (description.contains('تفعيل') &&
+                !description.contains('تسديد دين'));
+    if (isActivation) {
+      final isPartial = description.contains('جزئي');
+      final isNonCash = !isPartial && description.contains('غير نقدي');
+      final isCash =
+          !isPartial && !isNonCash && description.contains('نقدي');
+      final variant = isPartial
+          ? 'جزئي'
+          : isNonCash
+              ? 'أجل'
+              : isCash
+                  ? 'نقدي'
+                  : null;
+      final label = variant != null ? 'تفعيل $variant' : 'تفعيل';
+      final price = _extractAmount(description, RegExp(r'السعر\s*:?\s*([\d,]+)'));
+      final paid =
+          _extractAmount(description, RegExp(r'المدفوع\s*:?\s*([\d,]+)'));
+      // For partial we want both السعر + المدفوع because the cash
+      // flow is the latter; for others just the price.
+      String? detail;
+      if (price != null) {
+        detail = '${_formatIntCompact(price)} د.ع';
+        if (isPartial && paid != null && paid != price) {
+          detail = '$detail · دُفع ${_formatIntCompact(paid)}';
+        }
+      }
+      return (label: label, detail: detail);
+    }
+    if (lower.contains('extend')) {
+      final price = _extractAmount(description, RegExp(r'السعر\s*:?\s*([\d,]+)'));
+      return (
+        label: 'تمديد',
+        detail: price != null ? '${_formatIntCompact(price)} د.ع' : null,
+      );
+    }
+    // Order matters — 'debt_pay' contains 'debt' before 'pay', and
+    // 'balance_deduct' contains neither. Check the specific labels
+    // before falling through.
     if (lower.contains('debt_pay') ||
         lower.contains('balance_deduct') ||
         lower.contains('deduct_balance') ||
         lower.contains('pay_debt')) {
-      return 'تسديد دين';
+      return (label: 'تسديد دين', detail: null);
     }
     if (lower.contains('balance_add') || lower.contains('add_debt')) {
-      return 'إضافة دين';
+      return (label: 'إضافة دين', detail: null);
     }
-    if (lower.contains('payment_add')) return 'إيراد';
-    if (lower.contains('activ')) return 'تفعيل';
-    return null;
+    if (lower.contains('payment_add')) return (label: 'إيراد', detail: null);
+    return (label: null, detail: null);
+  }
+
+  static int? _extractAmount(String s, RegExp re) {
+    final m = re.firstMatch(s);
+    if (m == null) return null;
+    return int.tryParse(m.group(1)!.replaceAll(',', ''));
+  }
+
+  /// 35000 → "35,000". Local mini-formatter — the project-wide
+  /// formatIQD is already imported but takes num; this is direct int.
+  static String _formatIntCompact(int v) {
+    final s = v.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 
   @override
@@ -172,6 +241,30 @@ class _Row extends StatelessWidget {
                             style: AppType.muted(color: n.color).copyWith(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 3,
+                            height: 3,
+                            decoration: const BoxDecoration(
+                              color: AppColors.textLow,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        if (n.detail != null) ...[
+                          Flexible(
+                            child: Text(
+                              n.detail!,
+                              style: AppType.muted(color: AppColors.textMid)
+                                  .copyWith(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 6),

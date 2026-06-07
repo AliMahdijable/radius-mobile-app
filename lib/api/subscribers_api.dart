@@ -527,22 +527,25 @@ class SubscribersApi {
     }
   }
 
-  /// POST /api/subscribers/{id}/toggle — disable or enable.
+  /// POST /api/v2/subscribers/:idx/toggle-enabled — enable or disable
+  /// the subscriber's SAS4 account. On disable the backend ALSO sends
+  /// a RADIUS disconnect for any live session (so the user gets
+  /// kicked off the network immediately, not just blocked from the
+  /// next reconnect). The legacy /api/subscribers/{id}/toggle path
+  /// used here previously doesn't exist on this backend; the call
+  /// silently failed which is why bulk/single disable did nothing.
   static Future<bool> toggle(String id, {required bool enable}) async {
-    final token = await AuthStorage.readToken();
-    if (token == null) return false;
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
-        '/api/subscribers/$id/toggle',
-        data: {'enabled': enable ? 1 : 0},
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+        '/api/v2/subscribers/$id/toggle-enabled',
+        data: {'enabled': enable},
       );
       return r.data?['success'] == true;
     } on DioException catch (e) {
-      _log('subscribers/$id/toggle', e);
+      _log('v2/subscribers/$id/toggle-enabled', e);
       return false;
     } catch (e) {
-      _log('subscribers/$id/toggle', e);
+      _log('v2/subscribers/$id/toggle-enabled', e);
       return false;
     }
   }
