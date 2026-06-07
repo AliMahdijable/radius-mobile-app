@@ -11,6 +11,7 @@ import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'sheets/bulk_pay_debt_sheet.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
@@ -332,6 +333,35 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     });
   }
 
+  /// How many selected rows currently carry debt. Powers the bulk
+  /// pay-debt button — hidden when zero so the bar doesn't offer an
+  /// action that would open an empty sheet.
+  int get _selectedDebtorCount =>
+      _filteredSubscribersForBulk().where((s) => s.hasDebt).length;
+
+  /// Resolve the selected idx set back to the live Subscriber objects
+  /// the bulk sheets need (debt, name, balance). The full list comes
+  /// from the same _subs we render — we just filter by idx membership.
+  List<Subscriber> _filteredSubscribersForBulk() {
+    if (_selected.isEmpty) return const [];
+    return _all
+        .where((s) => s.idx != null && _selected.contains(s.idx!))
+        .toList();
+  }
+
+  Future<void> _openBulkPayDebt() async {
+    final debtors = _filteredSubscribersForBulk()
+        .where((s) => s.hasDebt)
+        .toList();
+    if (debtors.isEmpty) return;
+    await showBulkPayDebtSheet(context, subs: debtors);
+    if (!mounted) return;
+    _exitSelection();
+    // The sheet itself fires SubscriberEvents.notifyChange on any
+    // success, which triggers _onDataChanged → _refresh. We still
+    // exit selection mode here so the bulk bar collapses regardless.
+  }
+
   Future<void> _bulk(_BulkAction action) async {
     final ids = _selected.toList();
     if (ids.isEmpty) return;
@@ -558,7 +588,9 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
       bottomNavigationBar: _selectionMode
           ? _BulkActionBar(
               selectedCount: _selected.length,
+              debtorCount: _selectedDebtorCount,
               onRenew: () => _showSnack('تجديد جماعي — قيد التطوير (مرحلة 5)'),
+              onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
               onDisable: () => _bulk(_BulkAction.disable),
               onEnable: () => _bulk(_BulkAction.enable),
               onDelete: () => _bulk(_BulkAction.delete),
@@ -837,13 +869,19 @@ class _ArrowBtn extends StatelessWidget {
 class _BulkActionBar extends StatelessWidget {
   const _BulkActionBar({
     required this.selectedCount,
+    required this.debtorCount,
     required this.onRenew,
+    required this.onPayDebt,
     required this.onDisable,
     required this.onEnable,
     required this.onDelete,
   });
   final int selectedCount;
+  final int debtorCount;
   final VoidCallback onRenew;
+  /// null = no debtors in selection → button disabled. Non-null →
+  /// opens the bulk pay-debt sheet against the debtor subset.
+  final VoidCallback? onPayDebt;
   final VoidCallback onDisable;
   final VoidCallback onEnable;
   final VoidCallback onDelete;
@@ -882,6 +920,31 @@ class _BulkActionBar extends StatelessWidget {
                 ),
               ),
             ),
+            // Bulk pay-debt — shows only when the selection contains at
+            // least one subscriber with debt. Counter in the label tells
+            // the admin exactly how many rows will participate.
+            if (debtorCount > 0) ...[
+              const SizedBox(height: Sp.sm),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF14B8A6),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(R.md),
+                    ),
+                  ),
+                  onPressed: onPayDebt,
+                  icon: const Icon(LucideIcons.banknote, size: 16),
+                  label: Text(
+                    'تسديد دين ($debtorCount)',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: Sp.sm),
             Row(
               children: [
