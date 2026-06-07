@@ -156,16 +156,46 @@ class _Row extends StatelessWidget {
     // Order matters — 'debt_pay' contains 'debt' before 'pay', and
     // 'balance_deduct' contains neither. Check the specific labels
     // before falling through.
+    //
+    // Backend descriptions for these have the amount right after the
+    // Arabic label, e.g. 'تسديد دين 5,000 د.ع للمشترك ahmed@x' or
+    // 'إضافة دين 10,000 د.ع للمشترك …'. Parse it out and surface as
+    // the detail chip so admins see the cash value in the row
+    // without needing the trailing +/- chip.
     if (lower.contains('debt_pay') ||
         lower.contains('balance_deduct') ||
         lower.contains('deduct_balance') ||
         lower.contains('pay_debt')) {
-      return (label: 'تسديد دين', detail: null);
+      final amt = _extractAmount(
+        description,
+        RegExp(r'تسديد\s+دين\s+([\d,]+)'),
+      );
+      return (
+        label: 'تسديد دين',
+        detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
+      );
     }
     if (lower.contains('balance_add') || lower.contains('add_debt')) {
-      return (label: 'إضافة دين', detail: null);
+      final amt = _extractAmount(
+        description,
+        RegExp(r'إضافة\s+دين\s+([\d,]+)'),
+      );
+      return (
+        label: 'إضافة دين',
+        detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
+      );
     }
-    if (lower.contains('payment_add')) return (label: 'إيراد', detail: null);
+    if (lower.contains('payment_add')) {
+      // Generic amount fallback for manual payment-add — the
+      // description shape varies, but a leading numeric chunk is
+      // common ('PAYMENT_ADD 5,000 …').
+      final amt =
+          _extractAmount(description, RegExp(r'([\d,]+)\s*د\.ع'));
+      return (
+        label: 'إيراد',
+        detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
+      );
+    }
     return (label: null, detail: null);
   }
 
