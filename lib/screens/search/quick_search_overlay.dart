@@ -46,6 +46,13 @@ class QuickSearchOverlay extends StatefulWidget {
   State<QuickSearchOverlay> createState() => _QuickSearchOverlayState();
 }
 
+/// Marker thrown internally when locales() returns nothing — caught
+/// in [_QuickSearchOverlayState._probeArLocale] to drop into the
+/// 'no Arabic available' branch instead of crashing on firstWhere.
+class _NoLocales implements Exception {
+  const _NoLocales();
+}
+
 class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   final _ctrl = TextEditingController();
   final _focus = FocusNode();
@@ -53,6 +60,13 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   bool _listening = false;
   bool _speechReady = false;
   String _q = '';
+  /// Arabic localeId picked from whatever the device actually exposes
+  /// (ar-IQ → ar-SA → first 'ar*' → null fallback). Probed once on
+  /// init so a tap on the mic doesn't have to await locales() and risk
+  /// the user double-tapping. null = no Arabic locale available; we
+  /// surface a snackbar instead of starting a session that will fail
+  /// with error_unknown.
+  String? _arLocale;
 
   @override
   void initState() {
@@ -66,6 +80,10 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     try {
       final ok = await _speech.initialize(
         onStatus: (s) {
+          if (kDebugMode) debugPrint('🎙️ status: $s');
+          // notListening + done + listening — all three fire; only
+          // the first two should clear our spinner. The 'listening'
+          // status is just confirmation we're recording, no UI flip.
           if (s == 'done' || s == 'notListening') {
             if (mounted) setState(() => _listening = false);
           }
@@ -73,9 +91,11 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         onError: (err) {
           if (kDebugMode) debugPrint('🎙️ error: ${err.errorMsg}');
           if (!mounted) return;
+          // Always reset the button state so it can't get stuck. Some
+          // error codes (error_unknown 300, error_no_match) come back
+          // WITHOUT a matching status='done', leaving _listening=true
+          // and the mic icon as 'stop' forever — user reported this.
           setState(() => _listening = false);
-          // 'language-not-supported' = the Arabic locale isn't installed
-          // on the device's recognizer. Tell the user where to get it.
           if (err.errorMsg.contains('language-not-supported') ||
               err.errorMsg.contains('error_language_not_supported')) {
             _showSnack(
@@ -85,8 +105,62 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           }
         },
       );
-      if (mounted) setState(() => _speechReady = ok);
+      if (!mounted) return;
+      setState(() => _speechReady = ok);
+      if (ok) await _probeArLocale();
     } catch (_) {/* speech unavailable — mic button stays disabled */}
+  }
+
+  /// Picks the best Arabic localeId the device actually advertises.
+  /// Hardcoding 'ar' (language-only) sometimes works on Android but
+  /// breaks on devices where the recognizer only lists full BCP-47
+  /// tags (e.g. ar-SA) — those raise error_unknown (300) when asked
+  /// for 'ar' (user's TECNO log). Priority order:
+  ///   1. ar-IQ (Iraqi — closest to subscriber names)
+  ///   2. ar-SA (Saudi — most common Arabic locale Google ships)
+  ///   3. any 'ar*' the device exposes
+  ///   4. null → fall back to device default at listen() time so at
+  ///      least SOMETHING works
+  Future<void> _probeArLocale() async {
+    try {
+      final locales = await _speech.locales();
+      if (kDebugMode) {
+        final ids = locales.map((l) => l.localeId).join(', ');
+        debugPrint('🎙️ available locales: [$ids]');
+      }
+      String? pick;
+      for (final l in locales) {
+        if (l.localeId.toLowerCase() == 'ar-iq') {
+          pick = l.localeId;
+          break;
+        }
+      }
+      pick ??= locales
+          .firstWhere(
+            (l) => l.localeId.toLowerCase() == 'ar-sa',
+            orElse: () => locales.firstWhere(
+              (l) => l.localeId.toLowerCase().startsWith('ar'),
+              orElse: () => locales.isEmpty
+                  ? throw _NoLocales()
+                  : locales.first,
+            ),
+          )
+          .localeId;
+      // If the firstWhere fell to "first" (no 'ar*' match) we DO NOT
+      // want to use it — that would mean dictating Spanish for an
+      // Iraqi subscriber. Filter back out.
+      if (pick.toLowerCase().startsWith('ar')) {
+        _arLocale = pick;
+      } else {
+        _arLocale = null;
+      }
+      if (kDebugMode) debugPrint('🎙️ picked ar locale: $_arLocale');
+    } on _NoLocales {
+      _arLocale = null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('🎙️ locale probe failed: $e');
+      _arLocale = null;
+    }
   }
 
   @override
@@ -108,37 +182,36 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       _showSnack('التعرّف على الصوت غير متاح على هذا الجهاز');
       return;
     }
-    // Force Arabic — Android's SpeechRecognizer accepts BCP-47 tags
-    // even when locales() doesn't list them, and the device-default
-    // fallback (English on most TECNO/MediaTek units) is exactly what
-    // we DON'T want. We pass 'ar' (the language-only tag) because that
-    // matches whichever Arabic dialect is installed without requiring
-    // an exact country code. If Arabic truly isn't available, the
-    // recognizer raises an error which our onError clears _listening.
-    final locales = await _speech.locales();
-    if (kDebugMode) {
-      final ids = locales.map((l) => l.localeId).join(', ');
-      debugPrint('🎙️ available locales: [$ids]');
+    if (_arLocale == null) {
+      _showSnack(
+        'العربية غير منزّلة. ادخل: Settings → Apps → Google →\n'
+        'Voice → Offline speech recognition → نزّل العربية',
+      );
+      return;
     }
-    const localeId = 'ar';
     setState(() => _listening = true);
-    await _speech.listen(
-      onResult: (r) {
-        if (!mounted) return;
-        setState(() {
-          _ctrl.text = r.recognizedWords;
-          _ctrl.selection = TextSelection.collapsed(
-            offset: _ctrl.text.length,
-          );
-        });
-      },
-      localeId: localeId,
-      listenOptions: SpeechListenOptions(
-        partialResults: true,
-        cancelOnError: true,
-        listenMode: ListenMode.search,
-      ),
-    );
+    try {
+      await _speech.listen(
+        onResult: (r) {
+          if (!mounted) return;
+          setState(() {
+            _ctrl.text = r.recognizedWords;
+            _ctrl.selection = TextSelection.collapsed(
+              offset: _ctrl.text.length,
+            );
+          });
+        },
+        localeId: _arLocale,
+        listenOptions: SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: true,
+          listenMode: ListenMode.search,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('🎙️ listen() threw: $e');
+      if (mounted) setState(() => _listening = false);
+    }
   }
 
   void _showSnack(String msg) {
