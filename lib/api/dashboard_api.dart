@@ -94,9 +94,18 @@ class DashboardApi {
       return null;
     }
     try {
+      // include_payments=1 → backend also returns DEBT_PAY /
+      // BALANCE_DEDUCT / PAYMENT_ADD / BALANCE_ADD rows alongside the
+      // activations/extensions. Without this flag the web's "تفعيلات
+      // اليوم" report stays activations-only as before; the mobile
+      // dashboard wants the broader revenue stream so the recent
+      // activity feed shows debt payments too (مطلب 2026-06-07).
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities/daily-activations',
-        queryParameters: {'admin_id': adminId},
+        queryParameters: {
+          'admin_id': adminId,
+          'include_payments': '1',
+        },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
