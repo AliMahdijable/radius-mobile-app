@@ -574,7 +574,13 @@ class _PartialAmountField extends StatelessWidget {
   /// amount (v1 behaviour — tap 25k twice → 50k).
   final ValueChanged<int> onChipTap;
 
-  static const _chips = [5000, 10000, 15000, 25000, 35000, 50000];
+  // Dense up to 50k so the admin can dial in any common partial-cash
+  // amount in one tap. Each chip is filtered out when ≥ effective
+  // price (no point offering 25k on a 20k package). Chips ACCUMULATE
+  // — tap 10k twice → 20k — so even denser sets stay short to render.
+  static const _chips = [
+    5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000,
+  ];
 
   @override
   Widget build(BuildContext context) {

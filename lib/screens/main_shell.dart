@@ -88,13 +88,16 @@ class _MainShellState extends State<MainShell> {
         children: [
           IndexedStack(index: _tab, children: tabs),
           // Standalone search pill floats above the bar on the right.
-          // bottom = bar height (64) + bar bottom padding (Sp.sm) +
-          // safe-area inset + a gap so it doesn't touch the bar.
-          Positioned(
-            right: Sp.lg,
-            bottom: 64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 16,
-            child: _SearchPill(onTap: () => showQuickSearch(context)),
-          ),
+          // Home-only: the Subscribers tab has its own inline search
+          // field, Reports/Settings don't need a global search — and
+          // showing it everywhere clutters the floating-bar area.
+          if (_tab == 0)
+            Positioned(
+              right: Sp.lg,
+              bottom:
+                  64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 16,
+              child: _SearchPill(onTap: () => showQuickSearch(context)),
+            ),
         ],
       ),
       bottomNavigationBar: SafeArea(

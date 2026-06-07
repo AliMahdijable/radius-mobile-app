@@ -45,6 +45,59 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   bool _disconnecting = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Keep the open detail screen in sync with backend state. Any
+    // mutation done from the operations grid (activate / extend /
+    // pay-debt / add-debt / discount / disconnect / toggle / …)
+    // fires SubscriberEvents.notifyChange, which we use here to
+    // re-locate this subscriber in the refreshed cache and rebuild
+    // with the new debt / discount / expiry / online flags. Without
+    // this, the screen sits on its widget.sub copy and shows stale
+    // numbers until the admin closes and re-opens it.
+    SubscriberEvents.dataChanged.addListener(_onDataChanged);
+  }
+
+  @override
+  void dispose() {
+    SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    super.dispose();
+  }
+
+  Future<void> _onDataChanged() async {
+    if (!mounted) return;
+    final list = await SubscribersApi.loadAll();
+    if (!mounted || list == null) return;
+    // Match by idx first (canonical, survives username renames),
+    // then fall back to username for any rows where idx didn't land.
+    Subscriber? fresh;
+    for (final s in list) {
+      if (s.idx != null && s.idx == sub.idx) {
+        fresh = s;
+        break;
+      }
+    }
+    fresh ??= list.cast<Subscriber?>().firstWhere(
+          (s) => s?.username == sub.username,
+          orElse: () => null,
+        );
+    if (fresh == null) return;
+    // Preserve the live online overlay (IP / DL/UL / session time)
+    // — the refreshed row comes from /api/v2/subscribers and doesn't
+    // carry online state. Without this, an open detail screen of a
+    // currently-connected subscriber would lose its session card.
+    setState(() {
+      sub = fresh!.copyWithOnline(
+        online: sub.isOnline,
+        ip: sub.ipAddress,
+        session: sub.sessionTime,
+        dl: sub.downloadBytes,
+        ul: sub.uploadBytes,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -368,6 +421,25 @@ class _SubscriptionCard extends StatelessWidget {
             value: '${formatIQD(sub.price!.round())} د.ع',
             valueColor: const Color(0xFFE08F2D),
           ),
+        // Show the active discount as its own row so it reads cleanly
+        // alongside السعر — admin sees: السعر (X), الخصم (-Y), السعر
+        // بعد الخصم (X-Y). Renders only when a discount is set;
+        // refreshes live via the dataChanged listener above.
+        if ((sub.discount ?? 0) > 0) ...[
+          _InfoRow(
+            icon: LucideIcons.percent,
+            label: 'الخصم',
+            value: '-${formatIQD(sub.discount!.round())} د.ع',
+            valueColor: const Color(0xFF14B8A6),
+          ),
+          if (sub.price != null)
+            _InfoRow(
+              icon: LucideIcons.banknote,
+              label: 'السعر بعد الخصم',
+              value: '${formatIQD((sub.price! - sub.discount!).round())} د.ع',
+              valueColor: AppColors.brand,
+            ),
+        ],
         _InfoRow(
           icon: LucideIcons.calendar,
           label: 'تاريخ الانتهاء',

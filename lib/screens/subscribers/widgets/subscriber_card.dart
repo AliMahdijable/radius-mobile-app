@@ -204,6 +204,7 @@ class SubscriberCardV2 extends StatelessWidget {
                     ? sub.profileName!
                     : 'بدون باقة',
                 price: sub.price,
+                discount: sub.discount,
               ),
             ),
             if (sub.displayPhone.isNotEmpty) ...[
@@ -471,13 +472,23 @@ class _ExpiryBadge extends StatelessWidget {
 /// v1 subscriber_card.dart's two-chip pattern — package chip in brand
 /// teal, price chip in warning amber — just in v2's tighter inline form.
 class _PackageWithPrice extends StatelessWidget {
-  const _PackageWithPrice({required this.name, required this.price});
+  const _PackageWithPrice({
+    required this.name,
+    required this.price,
+    this.discount,
+  });
 
   final String name;
   final num? price;
+  /// Active discount on the subscriber's package (set via the quick
+  /// discount sheet). When >0 we render a small teal '-Xk' chip next
+  /// to the amber price chip so the admin sees at-a-glance that the
+  /// row has a discount applied without opening the detail screen.
+  final double? discount;
 
   @override
   Widget build(BuildContext context) {
+    final hasDiscount = (discount ?? 0) > 0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -508,6 +519,32 @@ class _PackageWithPrice extends StatelessWidget {
                 Text(
                   formatIQD(price!.round()),
                   style: AppType.muted(color: const Color(0xFFE08F2D))
+                      .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (hasDiscount) ...[
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: const Color(0xFF14B8A6).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(R.sm),
+              border: Border.all(
+                color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.percent,
+                    size: 9, color: Color(0xFF14B8A6)),
+                const SizedBox(width: 2),
+                Text(
+                  '-${formatIQD(discount!.round())}',
+                  style: AppType.muted(color: const Color(0xFF14B8A6))
                       .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
                 ),
               ],
