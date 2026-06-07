@@ -611,6 +611,11 @@ class _MethodPicker extends StatelessWidget {
   }
 }
 
+/// Transparent card-style picker — same visual language as the
+/// operations grid on the detail screen (white surface + border +
+/// soft shadow + tinted icon-box on top + colored label). Selected
+/// state tints the surface and thickens the border; disabled state
+/// drops opacity so the option still reads but signals it's locked.
 class _MethodBtn extends StatelessWidget {
   const _MethodBtn({
     required this.label,
@@ -629,53 +634,62 @@ class _MethodBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = !enabled
-        ? AppColors.border.withValues(alpha: 0.3)
-        : selected
-            ? color
-            : color.withValues(alpha: 0.08);
-    final fg = !enabled
-        ? AppColors.textLow
-        : selected
-            ? Colors.white
-            : color;
-    return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(R.sm),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap == null
-              ? null
-              : () {
-                  HapticFeedback.selectionClick();
-                  onTap!();
-                },
-          borderRadius: BorderRadius.circular(R.sm),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.sm),
-              border: Border.all(
-                color: selected
-                    ? color
-                    : color.withValues(alpha: 0.2),
+    final tile = Material(
+      color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(
+              color: selected
+                  ? color.withValues(alpha: 0.5)
+                  : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-            ),
-            child: Column(
-              children: [
-                Icon(icon, color: fg, size: 16),
-                const SizedBox(height: 3),
-                Text(label,
-                    style: AppType.label(color: fg).copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w800)),
-              ],
-            ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: selected ? 0.15 : 0.1),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                style: AppType.label(color: color).copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+    if (enabled) return tile;
+    return Opacity(opacity: 0.45, child: tile);
   }
 }
 

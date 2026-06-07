@@ -11,7 +11,10 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/activate_sheet.dart';
+import 'sheets/add_debt_sheet.dart';
 import 'sheets/extend_sheet.dart';
+import 'sheets/pay_debt_sheet.dart';
+import 'sheets/quick_discount_sheet.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -538,12 +541,12 @@ class _OperationsCard extends StatelessWidget {
       _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
           () => showExtendSheet(context, sub)),
       _Op(LucideIcons.plus, 'إضافة دين', const Color(0xFFE08F2D),
-          () => _todo(context, 'إضافة دين — قيد التطوير (مرحلة 3)')),
+          () => showAddDebtSheet(context, sub)),
       if (sub.hasDebt)
-        _Op(LucideIcons.banknote, 'تسديد دين', Colors.green,
-            () => _todo(context, 'تسديد دين — قيد التطوير (مرحلة 3)')),
+        _Op(LucideIcons.banknote, 'تسديد دين', const Color(0xFF14B8A6),
+            () => showPayDebtSheet(context, sub)),
       _Op(LucideIcons.tag, 'خصم سريع', const Color(0xFF14B8A6),
-          () => _todo(context, 'خصم سريع — قيد التطوير (مرحلة 3)')),
+          () => showQuickDiscountSheet(context, sub)),
       _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
           () => _todo(context, 'سجل الحركات — قيد التطوير')),
       if (sub.hasDebt)

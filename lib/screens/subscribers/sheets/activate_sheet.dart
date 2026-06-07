@@ -486,6 +486,11 @@ class _PayPicker extends StatelessWidget {
   }
 }
 
+/// Transparent card-style picker — same visual language as the
+/// operations grid on the detail screen (white surface + border +
+/// soft shadow + tinted icon-box on top + colored label). When
+/// selected, the surface gets a soft tint of the op's color and the
+/// border thickens — selection reads as a glow, not a filled chip.
 class _PayBtn extends StatelessWidget {
   const _PayBtn({
     required this.label,
@@ -502,33 +507,52 @@ class _PayBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? color : color.withValues(alpha: 0.08);
-    final fg = selected ? Colors.white : color;
     return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(R.sm),
+      color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           HapticFeedback.selectionClick();
           onTap();
         },
-        borderRadius: BorderRadius.circular(R.sm),
+        borderRadius: BorderRadius.circular(R.md),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.sm),
+            borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-                color: selected ? color : color.withValues(alpha: 0.2)),
+              color: selected
+                  ? color.withValues(alpha: 0.5)
+                  : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: fg, size: 16),
-              const SizedBox(height: 3),
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: selected ? 0.15 : 0.1),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(height: 5),
               Text(
                 label,
-                style: AppType.label(color: fg).copyWith(
-                    fontSize: 12, fontWeight: FontWeight.w800),
+                style: AppType.label(color: color).copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),

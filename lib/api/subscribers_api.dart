@@ -442,6 +442,91 @@ class SubscribersApi {
     }
   }
 
+  /// POST /api/v2/subscribers/:idx/pay-debt — apply a payment against
+  /// the subscriber's debt. `comment` is optional and appears in the
+  /// activity log + receipt. Mirrors v1's payDebt provider.
+  static Future<({bool ok, String? message})> payDebt({
+    required String idx,
+    required double amount,
+    String? comment,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/pay-debt',
+        data: {
+          'amount': amount,
+          if (comment != null && comment.isNotEmpty) 'comment': comment,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('pay-debt/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر التسديد');
+    } catch (e) {
+      _log('pay-debt/$idx', e);
+      return (ok: false, message: 'تعذّر التسديد');
+    }
+  }
+
+  /// POST /api/v2/subscribers/:idx/add-debt — push the subscriber's
+  /// balance further into negative. Mirrors v1's addDebt provider.
+  static Future<({bool ok, String? message})> addDebt({
+    required String idx,
+    required double amount,
+    String? comment,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/add-debt',
+        data: {
+          'amount': amount,
+          if (comment != null && comment.isNotEmpty) 'comment': comment,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('add-debt/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر إضافة الدين');
+    } catch (e) {
+      _log('add-debt/$idx', e);
+      return (ok: false, message: 'تعذّر إضافة الدين');
+    }
+  }
+
+  /// POST /api/v2/subscribers/:idx/discount — set or remove the
+  /// subscriber's package discount. amount=0 removes the current
+  /// discount. Returns the same success envelope as pay/add debt.
+  static Future<({bool ok, String? message})> setDiscount({
+    required String idx,
+    required double amount,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/discount',
+        data: {'amount': amount},
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('discount/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر حفظ الخصم');
+    } catch (e) {
+      _log('discount/$idx', e);
+      return (ok: false, message: 'تعذّر حفظ الخصم');
+    }
+  }
+
   /// POST /api/subscribers/{id}/toggle — disable or enable.
   static Future<bool> toggle(String id, {required bool enable}) async {
     final token = await AuthStorage.readToken();
