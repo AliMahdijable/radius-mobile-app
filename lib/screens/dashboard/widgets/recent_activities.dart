@@ -46,20 +46,42 @@ class _Row extends StatelessWidget {
   const _Row({required this.item});
   final Map<String, dynamic> item;
 
-  ({IconData icon, Color color, String title, int amount, String timeLabel})
-      _normalize() {
+  ({
+    IconData icon,
+    Color color,
+    String title,
+    String? subLabel,
+    int amount,
+    String timeLabel,
+  }) _normalize() {
     final m = item;
     final action = (m['action'] ?? m['action_type'] ?? '').toString();
     final visual = _visualForAction(action);
-    final username = (m['target_name'] ??
+    // Backend enriches each row with user_firstname / user_lastname /
+    // user_username via SAS4's user directory (see
+    // /api/activities/daily-activations row enrichment). The Arabic
+    // full name reads at-a-glance; the username goes in parentheses
+    // as a secondary identifier so admins still see "the same
+    // ahmed@x" they're used to from the v1 web. Falls back to
+    // username alone when no name is in SAS4.
+    final firstname = (m['user_firstname'] ?? '').toString().trim();
+    final lastname = (m['user_lastname'] ?? '').toString().trim();
+    final username = (m['user_username'] ??
+            m['target_name'] ??
             m['subscriber_username'] ??
             m['username'] ??
             '')
-        .toString();
-    final descr = (m['action_description'] ?? m['description'] ?? '').toString();
-    final title = descr.isNotEmpty
-        ? descr
-        : (username.isNotEmpty ? '$action: $username' : action);
+        .toString()
+        .trim();
+    final fullName =
+        [firstname, lastname].where((s) => s.isNotEmpty).join(' ').trim();
+    final title = fullName.isNotEmpty
+        ? (username.isNotEmpty ? '$fullName ($username)' : fullName)
+        : (username.isNotEmpty ? username : action);
+    // Short action label below the name so the row still tells the
+    // admin WHAT happened without dragging in the whole verbose
+    // backend description ('تفعيل المشترك … | الباقة: … | السعر: …').
+    final subLabel = _shortActionLabel(action);
     final amount = _readAmount(m);
     final created = m['created_at']?.toString();
     final timeLabel = _humanCreatedAt(created);
@@ -67,9 +89,33 @@ class _Row extends StatelessWidget {
       icon: visual.$1,
       color: visual.$2,
       title: title,
+      subLabel: subLabel,
       amount: amount,
       timeLabel: timeLabel,
     );
+  }
+
+  /// Maps backend action_type → short Arabic action label. Returns
+  /// null when the action is unrecognized so the row just shows the
+  /// time + amount.
+  static String? _shortActionLabel(String action) {
+    final lower = action.toLowerCase();
+    if (lower.contains('extend')) return 'تمديد';
+    // Order matters — 'subscriber_activate_cash' contains both
+    // 'activate' and 'cash', and 'debt_pay' contains 'debt' before
+    // 'pay'. We pick the most specific match first.
+    if (lower.contains('debt_pay') ||
+        lower.contains('balance_deduct') ||
+        lower.contains('deduct_balance') ||
+        lower.contains('pay_debt')) {
+      return 'تسديد دين';
+    }
+    if (lower.contains('balance_add') || lower.contains('add_debt')) {
+      return 'إضافة دين';
+    }
+    if (lower.contains('payment_add')) return 'إيراد';
+    if (lower.contains('activ')) return 'تفعيل';
+    return null;
   }
 
   @override
@@ -101,24 +147,44 @@ class _Row extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title can wrap to two lines — the v1 activity rows
-                    // include the full action description (e.g.
-                    // 'تفعيل المشترك ahmed@x | الباقة: B-Economy | السعر:
-                    // 35,000 IQD | نقدي') which would clip to '...' on
-                    // a single line.
+                    // Primary line: subscriber name (username) — admin
+                    // sees the readable Arabic name first and the
+                    // technical username in parentheses for fast cross-
+                    // reference with v1's flow. Single line keeps the
+                    // row compact; the action type is conveyed by the
+                    // tinted icon + the short label below.
                     Text(
                       n.title,
                       style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Row(
                       children: [
+                        if (n.subLabel != null) ...[
+                          Text(
+                            n.subLabel!,
+                            style: AppType.muted(color: n.color).copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 3,
+                            height: 3,
+                            decoration: const BoxDecoration(
+                              color: AppColors.textLow,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
                         Text(
                           n.timeLabel,
                           style: AppType.muted(color: AppColors.textLow)
