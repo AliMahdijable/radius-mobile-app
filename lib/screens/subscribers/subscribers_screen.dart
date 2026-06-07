@@ -340,6 +340,17 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   int get _selectedDebtorCount =>
       _filteredSubscribersForBulk().where((s) => s.hasDebt).length;
 
+  /// Per-action counts for the bulk bar. The disable button only
+  /// affects rows currently enabled; the enable button only affects
+  /// rows currently disabled. Showing the count next to each button
+  /// (مطلب 2026-06-07) lets the admin see e.g. "تعطيل (1)" + "تفعيل (2)"
+  /// when the selection mixes states, so they pick the right action
+  /// without unstacking the selection.
+  int get _enabledInSelection =>
+      _filteredSubscribersForBulk().where((s) => !s.isDisabled).length;
+  int get _disabledInSelection =>
+      _filteredSubscribersForBulk().where((s) => s.isDisabled).length;
+
   /// Resolve the selected idx set back to the live Subscriber objects
   /// the bulk sheets need (debt, name, balance). The full list comes
   /// from the same _subs we render — we just filter by idx membership.
@@ -372,7 +383,19 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   }
 
   Future<void> _bulk(_BulkAction action) async {
-    final ids = _selected.toList();
+    // For toggle actions filter the selection to rows that actually
+    // need the flip — disabling an already-disabled row is a no-op
+    // that wastes a network call AND inflates the failure count when
+    // the backend rejects it. Delete affects the whole selection.
+    final selectedSubs = _filteredSubscribersForBulk();
+    final eligible = switch (action) {
+      _BulkAction.disable =>
+        selectedSubs.where((s) => !s.isDisabled).toList(),
+      _BulkAction.enable =>
+        selectedSubs.where((s) => s.isDisabled).toList(),
+      _BulkAction.delete => selectedSubs,
+    };
+    final ids = eligible.map((s) => s.idx).whereType<String>().toList();
     if (ids.isEmpty) return;
     final confirm = await _confirmBulk(action, ids.length);
     if (!confirm || !mounted) return;
@@ -598,6 +621,8 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
           ? _BulkActionBar(
               selectedCount: _selected.length,
               debtorCount: _selectedDebtorCount,
+              enabledCount: _enabledInSelection,
+              disabledCount: _disabledInSelection,
               onRenew: _openBulkActivate,
               onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
               onDisable: () => _bulk(_BulkAction.disable),
@@ -879,6 +904,8 @@ class _BulkActionBar extends StatelessWidget {
   const _BulkActionBar({
     required this.selectedCount,
     required this.debtorCount,
+    required this.enabledCount,
+    required this.disabledCount,
     required this.onRenew,
     required this.onPayDebt,
     required this.onDisable,
@@ -887,6 +914,12 @@ class _BulkActionBar extends StatelessWidget {
   });
   final int selectedCount;
   final int debtorCount;
+  /// Selected rows currently enabled — these are the ones a tap on
+  /// 'تعطيل' will actually affect. Shown as '(N)' next to the label
+  /// so the admin sees how many will flip even when the selection
+  /// mixes states (مطلب 2026-06-07).
+  final int enabledCount;
+  final int disabledCount;
   final VoidCallback onRenew;
   /// null = no debtors in selection → button disabled. Non-null →
   /// opens the bulk pay-debt sheet against the debtor subset.
@@ -960,8 +993,11 @@ class _BulkActionBar extends StatelessWidget {
                 Expanded(
                   child: _SecondaryBtn(
                     icon: LucideIcons.ban,
-                    label: 'تعطيل',
+                    label: enabledCount > 0
+                        ? 'تعطيل ($enabledCount)'
+                        : 'تعطيل',
                     color: const Color(0xFFCD8B00),
+                    enabled: enabledCount > 0,
                     onTap: onDisable,
                   ),
                 ),
@@ -969,8 +1005,11 @@ class _BulkActionBar extends StatelessWidget {
                 Expanded(
                   child: _SecondaryBtn(
                     icon: LucideIcons.circleCheck,
-                    label: 'تفعيل',
+                    label: disabledCount > 0
+                        ? 'تفعيل ($disabledCount)'
+                        : 'تفعيل',
                     color: AppColors.brand,
+                    enabled: disabledCount > 0,
                     onTap: onEnable,
                   ),
                 ),
@@ -998,11 +1037,17 @@ class _SecondaryBtn extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
+  /// When false the button greys out — used by the bulk bar to signal
+  /// that no rows in the current selection are eligible for this
+  /// action (e.g. all rows already disabled → 'تعطيل' has nothing
+  /// to do).
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1015,7 +1060,7 @@ class _SecondaryBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(R.md),
         ),
       ),
-      onPressed: onTap,
+      onPressed: enabled ? onTap : null,
       icon: Icon(icon, size: 14),
       label: Text(label,
           style:
