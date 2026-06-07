@@ -490,24 +490,43 @@ class _Results extends StatelessWidget {
   /// matches so 'ahmed' finds 'ahmed@x' before 'mohammed@x'.
   static List<Subscriber> _filter(List<Subscriber> all, String raw) {
     final q = raw.toLowerCase().trim();
-    final qDigits = raw.replaceAll(RegExp(r'\D'), '');
+    final qPhone = _normalizeIraqPhone(raw);
     final scored = <(int, Subscriber)>[];
     for (final s in all) {
-      final score = _scoreOne(s, q, qDigits);
+      final score = _scoreOne(s, q, qPhone);
       if (score > 0) scored.add((score, s));
     }
     scored.sort((a, b) => b.$1.compareTo(a.$1));
     return scored.map((e) => e.$2).toList();
   }
 
-  static int _scoreOne(Subscriber s, String q, String qDigits) {
+  /// Normalize Iraqi phone numbers to a canonical core so the same
+  /// subscriber matches regardless of whether the number is stored as
+  /// '+9647712345678' / '009647712345678' / '07712345678' /
+  /// '7712345678'. Admin typing '77', '077', '964...', '+964...' all
+  /// reduce to the same digits and contains-match against the same
+  /// canonical store value (مطلب 2026-06-07).
+  ///
+  /// Stripping rules (applied in order on the digits-only form):
+  ///   1. drop leading '00' (international dial-out prefix)
+  ///   2. drop leading '964' (Iraqi country code)
+  ///   3. drop a single leading '0' (Iraqi national trunk)
+  /// What remains is the bare 10-digit mobile (7xxxxxxxxx) or
+  /// shorter prefix the admin typed.
+  static String _normalizeIraqPhone(String raw) {
+    var d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.startsWith('00')) d = d.substring(2);
+    if (d.startsWith('964')) d = d.substring(3);
+    if (d.startsWith('0')) d = d.substring(1);
+    return d;
+  }
+
+  static int _scoreOne(Subscriber s, String q, String qPhone) {
     var score = 0;
     final username = s.username.toLowerCase();
     final fname = s.firstname.trim();
     final lname = s.lastname.trim();
     final full = '$fname $lname'.trim();
-    // Username: prefix > contains. Username is usually short so we
-    // weight prefix heavily — the admin typing 'ahm' wants ahmed@x.
     if (q.isNotEmpty) {
       if (username == q) {
         score += 100;
@@ -516,17 +535,26 @@ class _Results extends StatelessWidget {
       } else if (username.contains(q)) {
         score += 30;
       }
-      // Arabic name: contains on either name part.
       if (fname.contains(q) || lname.contains(q)) score += 40;
       if (full.contains(q)) score += 20;
     }
-    // Phone: digits-only match against phone OR mobile.
-    if (qDigits.isNotEmpty && qDigits.length >= 3) {
-      final phoneDigits = (s.phone ?? '').replaceAll(RegExp(r'\D'), '');
-      final mobileDigits = (s.mobile ?? '').replaceAll(RegExp(r'\D'), '');
-      if (phoneDigits.contains(qDigits) ||
-          mobileDigits.contains(qDigits)) {
-        score += 45;
+    // Phone: normalize the stored value with the same Iraqi rules
+    // as the query so '07712345678' (stored), '+9647712345678'
+    // (stored), and '7712345678' (typed) all collapse to the same
+    // core for contains-match. >= 2 digits is enough to start
+    // filtering — admin types '77' and sees their 077 numbers.
+    if (qPhone.length >= 2) {
+      final phoneCore = _normalizeIraqPhone(s.phone ?? '');
+      final mobileCore = _normalizeIraqPhone(s.mobile ?? '');
+      if (phoneCore.contains(qPhone) || mobileCore.contains(qPhone)) {
+        // Prefix > middle match — 077 typed should rank 07712xxx
+        // above 0xxxx77yyy.
+        if (phoneCore.startsWith(qPhone) ||
+            mobileCore.startsWith(qPhone)) {
+          score += 70;
+        } else {
+          score += 45;
+        }
       }
     }
     return score;
