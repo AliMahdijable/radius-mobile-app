@@ -11,6 +11,7 @@ import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/filter_chips_bar.dart';
@@ -362,6 +363,14 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     // exit selection mode here so the bulk bar collapses regardless.
   }
 
+  Future<void> _openBulkActivate() async {
+    final selected = _filteredSubscribersForBulk();
+    if (selected.isEmpty) return;
+    await showBulkActivateSheet(context, subs: selected);
+    if (!mounted) return;
+    _exitSelection();
+  }
+
   Future<void> _bulk(_BulkAction action) async {
     final ids = _selected.toList();
     if (ids.isEmpty) return;
@@ -589,7 +598,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
           ? _BulkActionBar(
               selectedCount: _selected.length,
               debtorCount: _selectedDebtorCount,
-              onRenew: () => _showSnack('تجديد جماعي — قيد التطوير (مرحلة 5)'),
+              onRenew: _openBulkActivate,
               onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
               onDisable: () => _bulk(_BulkAction.disable),
               onEnable: () => _bulk(_BulkAction.enable),

@@ -176,8 +176,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool get _canSubmit {
     if (_loading || _submitting || _data == null) return false;
     if (_pay == _PayType.partial) {
-      final price = _effectivePrice > 0 ? _effectivePrice : _userPrice;
-      if (_partialAmount <= 0 || _partialAmount >= price) return false;
+      // Partial only requires a positive amount. v1 lets the admin
+      // pay MORE than the package price and the excess lands as a
+      // credit on the subscriber's notes — مطلب المستخدم 2026-06-07.
+      // Don't gate on amount >= price.
+      if (_partialAmount <= 0) return false;
     }
     return true;
   }
