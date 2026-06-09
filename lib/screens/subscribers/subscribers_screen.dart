@@ -802,6 +802,9 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                     )
                   : _SearchHeader(
                       controller: _searchCtrl,
+                      allCollapsed: _allCollapsed,
+                      onToggleCollapse: () => setState(
+                          () => _allCollapsed = !_allCollapsed),
                       onSort: () async {
                         final r = await showSortSheet(
                           context,
@@ -879,15 +882,6 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    // مطلب 2026-06-11: زر تكويل عام — يخفي/يظهر قسم
-                    // الاتصال على كل البطاقات المعروضة. حالته تنتشر
-                    // عبر `collapsedAll` على SubscriberCardV2.
-                    _CollapseAllChip(
-                      allCollapsed: _allCollapsed,
-                      onTap: () => setState(
-                          () => _allCollapsed = !_allCollapsed),
-                    ),
-                    const SizedBox(width: 6),
                     // مطلب 2026-06-11: زر فحص الأجهزة اليدوي — يطلق
                     // wave على كل المتصلين مع force=true (يبطل الـcache).
                     // معطّل أثناء probing لكي ما يطلق wave فوق wave.
@@ -1092,9 +1086,18 @@ enum _BulkAction {
 }
 
 class _SearchHeader extends StatelessWidget {
-  const _SearchHeader({required this.controller, required this.onSort});
+  const _SearchHeader({
+    required this.controller,
+    required this.onSort,
+    required this.allCollapsed,
+    required this.onToggleCollapse,
+  });
   final TextEditingController controller;
   final VoidCallback onSort;
+  /// مطلب 2026-06-11: زر تكويل/توسيع للكل بصف الـsort. نفس
+  /// قالب الـ42×42 المستدير + InkWell كي يطابق visually زر الفرز.
+  final bool allCollapsed;
+  final VoidCallback onToggleCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -1135,6 +1138,40 @@ class _SearchHeader extends StatelessWidget {
                     onPressed: () => controller.clear(),
                   ),
               ],
+            ),
+          ),
+        ),
+        const SizedBox(width: Sp.sm),
+        // Toggle تكويل/توسيع للكل — مطابق visually لزر الفرز إلى
+        // جواره: 42×42 دائرة بحدود الـsurface + لون brand. الفرق
+        // الوحيد أن الـicon هنا يدور حسب الحالة (chevron up vs down).
+        Tooltip(
+          message:
+              allCollapsed ? 'توسيع كل المشتركين' : 'تكويل كل المشتركين',
+          child: Material(
+            color: AppColors.surface,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onToggleCollapse,
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border),
+                ),
+                alignment: Alignment.center,
+                child: AnimatedRotation(
+                  turns: allCollapsed ? 0 : 0.5,
+                  duration: const Duration(milliseconds: 220),
+                  child: const Icon(
+                    Icons.keyboard_arrow_up_rounded,
+                    color: AppColors.brand,
+                    size: 22,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -1819,56 +1856,5 @@ class _ScanAllChip extends StatelessWidget {
   }
 }
 
-/// Global collapse/expand toggle for ALL visible subscriber cards.
-/// Lives at the head of the device-sort bar so the user can compact
-/// the list quickly when scanning many rows at once.
-///
-/// مطلب 2026-06-11 (تحديث): التصميم مطابق chevron البطاقة —
-/// keyboard_arrow_up_rounded يدور 0.5 turn بين الحالتين بدلاً من
-/// أيقونتين Lucide مختلفتين، فالحركة موحّدة بصرياً مع الـchevron
-/// الفردي على كل بطاقة. الزر مكوّل = السهم لأعلى، موسّع = لأسفل.
-class _CollapseAllChip extends StatelessWidget {
-  const _CollapseAllChip({
-    required this.allCollapsed,
-    required this.onTap,
-  });
-  final bool allCollapsed;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const accent = Color(0xFF0EA5E9);
-    // مطلب 2026-06-11 (تحديث ثاني): chip أيقونة فقط بدون نص —
-    // مساحة أصغر، يندمج مع باقي chips الترتيب بسلاسة. الـtooltip
-    // يخبر المدير بالوظيفة عند ضغط طويل.
-    return Tooltip(
-      message: allCollapsed ? 'توسيع كل المشتركين' : 'تكويل كل المشتركين',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(R.md),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(R.md),
-              border: Border.all(color: accent.withValues(alpha: 0.4)),
-            ),
-            alignment: Alignment.center,
-            child: AnimatedRotation(
-              turns: allCollapsed ? 0 : 0.5,
-              duration: const Duration(milliseconds: 220),
-              child: const Icon(
-                Icons.keyboard_arrow_up_rounded,
-                size: 20,
-                color: accent,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// مطلب 2026-06-11 (تحديث ثالث): زر التكويل انتقل إلى _SearchHeader
+// بجانب زر الفرز فما عاد الـ_CollapseAllChip هنا له داعي.
