@@ -114,6 +114,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             _IdentityCard(name: _name, id: _id),
             const SizedBox(height: Sp.lg),
+            // مطلب 2026-06-10: شاشة الإعدادات تضم أقسام: واتساب +
+            // قوالبه، طباعة + قوالبها، المظهر، البصمة، الصلاحيات،
+            // الإشعارات، السكون. حالياً كل واحد stub يفتح snack
+            // 'قيد التطوير' حتى نبني كل قسم على حدة.
+            _SectionLabel('الواتساب'),
+            _Row(
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'حالة الواتساب',
+              onTap: () => _todo(context, 'حالة الواتساب — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.message_outlined,
+              label: 'قوالب الواتساب',
+              onTap: () => _todo(context, 'قوالب الواتساب — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.md),
+            _SectionLabel('الطباعة'),
+            _Row(
+              icon: Icons.print_outlined,
+              label: 'طابعة الوصولات',
+              onTap: () => _todo(context, 'الطباعة — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.receipt_long_outlined,
+              label: 'قوالب الطباعة',
+              onTap: () => _todo(context, 'قوالب الطباعة — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.md),
+            _SectionLabel('التطبيق'),
+            _Row(
+              icon: Icons.dark_mode_outlined,
+              label: 'المظهر',
+              trailing: 'نهاري',
+              onTap: () => _todo(context, 'تبديل المظهر — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.fingerprint_rounded,
+              label: 'البصمة / Face ID',
+              onTap: () => _todo(context, 'البصمة — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.shield_outlined,
+              label: 'الصلاحيات',
+              onTap: () => _todo(context, 'الصلاحيات — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.notifications_none_rounded,
+              label: 'الإشعارات',
+              onTap: () => _todo(context, 'الإشعارات — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.bedtime_outlined,
+              label: 'أوقات السكون',
+              onTap: () => _todo(context, 'أوقات السكون — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.md),
+            _SectionLabel('عن التطبيق'),
             _Row(
               icon: Icons.info_outline_rounded,
               label: 'الإصدار',
@@ -200,15 +263,54 @@ class _IdentityCard extends StatelessWidget {
   }
 }
 
-class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.label, this.trailing});
-  final IconData icon;
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
   final String label;
-  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, Sp.sm, 4, 6),
+      child: Text(
+        label,
+        style: AppType.muted(color: AppColors.textMid).copyWith(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+void _todo(BuildContext ctx, String msg) {
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    SnackBar(
+      content: Text(msg),
+      backgroundColor: AppColors.textHi,
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
+
+class _Row extends StatelessWidget {
+  const _Row({
+    required this.icon,
+    required this.label,
+    this.trailing,
+    this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String? trailing;
+  /// When non-null the row becomes an InkWell — section entries
+  /// (واتساب / طباعة / مظهر / إلخ) use this; the about-version row
+  /// leaves it null so it reads as a static info card.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
@@ -226,11 +328,27 @@ class _Row extends StatelessWidget {
             child: Text(label,
                 style: AppType.label(color: AppColors.textHi)),
           ),
-          if (trailing != null)
+          if (trailing != null) ...[
             Text(trailing!,
-                style:
-                    AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12)),
+                style: AppType.muted(color: AppColors.textLow)
+                    .copyWith(fontSize: 12)),
+            const SizedBox(width: 6),
+          ],
+          if (onTap != null)
+            const Icon(Icons.chevron_left_rounded,
+                color: AppColors.textLow, size: 20),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: card,
       ),
     );
   }
