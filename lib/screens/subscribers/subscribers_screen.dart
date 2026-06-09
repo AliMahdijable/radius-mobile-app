@@ -786,8 +786,12 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                                 sub: s,
                                 selected: isSelected,
                                 lastPayment: _lastPayments[s.username],
-                                showLiveSession:
-                                    _filter == SubscriberFilter.online,
+                                // مطلب 2026-06-11: عرض السطر الحي + chip
+                                // معلومات الجهاز لكل مشترك متصل بأي tab
+                                // (مطابق v1). داخلياً _LiveSessionRow يبقى
+                                // مشروطاً بـsub.isOnline فما يظهر على
+                                // غير المتصل حتى في tab 'الكل'.
+                                showLiveSession: true,
                                 onTap: () {
                                   if (_selectionMode) {
                                     _toggleSelect(s);
