@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
+import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -38,6 +39,35 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   void initState() {
     super.initState();
     _refresh(_period);
+    // Listen for subscriber mutations app-wide so revenue updates
+    // immediately after any activate / extend / pay-debt / etc.
+    // op succeeds. Without this the parent DashboardScreen
+    // refreshed its other cards on the event but the revenue card
+    // — owning its own state — kept the stale total visible until
+    // the user pulled to refresh or switched periods (user report
+    // 2026-06-09: "ما يتحدث بشكل حي مع الحركات").
+    SubscriberEvents.dataChanged.addListener(_onDataChanged);
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    // Drop cached values for all 3 periods so the strip doesn't
+    // briefly flash stale 'يومي/أسبوعي/شهري' totals when the user
+    // switches tabs right after an op. Only re-fetch the active
+    // period now — the others will re-fetch lazily when tapped.
+    setState(() {
+      _amounts[RevenuePeriod.day] = null;
+      _amounts[RevenuePeriod.week] = null;
+      _amounts[RevenuePeriod.month] = null;
+      _failed.clear();
+    });
+    _refresh(_period);
+  }
+
+  @override
+  void dispose() {
+    SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    super.dispose();
   }
 
   Future<void> _refresh(RevenuePeriod p) async {

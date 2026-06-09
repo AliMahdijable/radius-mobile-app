@@ -423,7 +423,11 @@ class _MovementTile extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
+      // Bottom padding generous (12) so Arabic descenders (ع، ج، ق)
+      // in the description text don't get clipped by the card border.
+      // The user reported lines 'المدفوع: 175,000 د.ع | الدين: 65,000'
+      // visibly cut at the bottom in the movements sheet.
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
@@ -497,7 +501,7 @@ class _MovementTile extends StatelessWidget {
                   Text(
                     desc,
                     style: AppType.subtitle(color: AppColors.textHi)
-                        .copyWith(fontSize: 12, height: 1.35),
+                        .copyWith(fontSize: 12, height: 1.55),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
