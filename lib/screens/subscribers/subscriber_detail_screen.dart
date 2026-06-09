@@ -693,7 +693,11 @@ class _OperationsCard extends StatelessWidget {
     final ops = <_Op>[
       _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
           () => _todo(context, 'تعديل — قيد التطوير (مرحلة 4)')),
-      _Op(LucideIcons.zap, 'تفعيل', const Color(0xFF14B8A6),
+      // 'تجديد اشتراك' — sheet renews the package (same as v1's
+      // _activateSubscriber). The label avoids collision with the
+      // separate 'تعطيل/تفعيل حساب' toggle below which manages the
+      // enabled flag.
+      _Op(LucideIcons.zap, 'تجديد اشتراك', const Color(0xFF14B8A6),
           () => showActivateSheet(context, sub)),
       _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
           () => showExtendSheet(context, sub)),

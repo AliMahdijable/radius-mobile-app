@@ -206,7 +206,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (result.ok) SubscriberEvents.notifyChange();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result.ok ? 'تم التفعيل بنجاح' : (result.message ?? 'فشل')),
+        content: Text(result.ok ? 'تم التجديد بنجاح' : (result.message ?? 'فشل')),
         backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -233,7 +233,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               _SheetHandle(),
               _SheetHeader(
                 icon: LucideIcons.zap,
-                title: 'تفعيل المشترك',
+                title: 'تجديد اشتراك',
                 subtitle: widget.sub.fullName,
                 color: AppColors.brand,
                 onClose: () => Navigator.of(context).pop(),
@@ -247,7 +247,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                 ),
               ),
               _SubmitBar(
-                label: _submitting ? 'جاري التفعيل...' : 'تفعيل الآن',
+                label: _submitting ? 'جاري التجديد...' : 'تجديد الآن',
                 color: AppColors.brand,
                 icon: LucideIcons.zap,
                 enabled: _canSubmit,
