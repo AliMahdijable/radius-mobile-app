@@ -442,6 +442,78 @@ class SubscribersApi {
     }
   }
 
+  /// POST /api/generate-user-link — issues a 1-hour token the
+  /// subscriber can open from WhatsApp to see their package /
+  /// expiration / debt /etc. without an account. The backend stores
+  /// the token in-memory and serves /v2/user-info/:token. Mirrors
+  /// v1's _generateInfoLink flow.
+  static Future<({bool ok, String? url, String? message})>
+      generateInfoLink({
+    required Subscriber sub,
+  }) async {
+    final token = await AuthStorage.readToken();
+    final adminId = await AuthStorage.readAdminId();
+    if (token == null) {
+      return (
+        ok: false,
+        url: null,
+        message: 'يجب تسجيل الدخول',
+      );
+    }
+    final idx = sub.idx;
+    if (idx == null || idx.isEmpty) {
+      return (
+        ok: false,
+        url: null,
+        message: 'معرف المشترك غير متوفر',
+      );
+    }
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/generate-user-link',
+        data: {
+          'userId': idx,
+          'username': sub.username,
+          'adminId': adminId ?? 'unknown',
+          'adminToken': token,
+          // v1 stuffs notes into price as a fallback when price is
+          // missing — the user-info page renders price strings, not
+          // numbers, so this lets ad-hoc text flow through. We
+          // replicate the priority so existing user-info pages
+          // render the same value.
+          'price': (sub.notes ?? sub.price?.toString() ?? '0'),
+          'notes': sub.notes ?? '',
+          'profileName': sub.profileName ?? '',
+          'profileId': (sub.profileId ?? '').toString(),
+        },
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true || body['token'] == null) {
+        return (
+          ok: false,
+          url: null,
+          message: body['message']?.toString() ?? 'فشل توليد الرابط',
+        );
+      }
+      final linkToken = body['token'].toString();
+      final url = '${ApiClient.baseUrl}/v2/user-info/$linkToken';
+      return (ok: true, url: url, message: null);
+    } on DioException catch (e) {
+      _log('generate-user-link', e);
+      final msg = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString()
+          : null;
+      return (
+        ok: false,
+        url: null,
+        message: msg ?? 'فشل توليد الرابط',
+      );
+    } catch (e) {
+      _log('generate-user-link', e);
+      return (ok: false, url: null, message: 'فشل توليد الرابط');
+    }
+  }
+
   /// GET /api/reports/account-statement — financial movements for a
   /// single subscriber. Mirrors v1's _SubscriberMovementsSheet load,
   /// hitting the same endpoint with a 5-year wide window so the sheet

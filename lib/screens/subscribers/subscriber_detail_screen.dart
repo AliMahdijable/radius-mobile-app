@@ -51,14 +51,23 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// (the operations grid has 3 template chips — debt reminder /
   /// expiry warning / subscriber info).
   String? _sendingTemplate;
+  /// True while the generate-info-link round-trip + WhatsApp send
+  /// are in flight. Same single-flight pattern as the toggle and
+  /// disconnect — the chip label flips and the busy guard locks
+  /// the rest of the grid.
+  bool _generatingLink = false;
 
-  /// Any operation (toggle / disconnect / template send) currently
-  /// awaiting a server response. Drives the operations card's
-  /// progress bar + chip-disable overlay so the admin can't fire a
-  /// second action while the first is mid-flight — مطلب المستخدم
-  /// 2026-06-09: لا شيء يدل على التحميل وكل الأزرار تبقى فعّالة.
+  /// Any operation (toggle / disconnect / template send / link gen)
+  /// currently awaiting a server response. Drives the operations
+  /// card's progress bar + chip-disable overlay so the admin can't
+  /// fire a second action while the first is mid-flight — مطلب
+  /// المستخدم 2026-06-09: لا شيء يدل على التحميل وكل الأزرار تبقى
+  /// فعّالة.
   bool get _isBusy =>
-      _disconnecting || _toggling || _sendingTemplate != null;
+      _disconnecting ||
+      _toggling ||
+      _sendingTemplate != null ||
+      _generatingLink;
 
   @override
   void initState() {
@@ -151,6 +160,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                         sub.idx != null ? _confirmToggleEnabled : null,
                     sendingTemplate: _sendingTemplate,
                     onSendTemplate: _sendTemplate,
+                    generatingLink: _generatingLink,
+                    onGenerateLink: _generateInfoLink,
                     busy: _isBusy,
                   ),
                 ],
@@ -249,6 +260,69 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     );
     if (ok != true) return;
     await _runToggleEnabled(wantEnable);
+  }
+
+  Future<void> _generateInfoLink() async {
+    if (_generatingLink) return;
+    // Phone required — the user-info URL is delivered through
+    // WhatsApp. Without a phone we can't deliver it anywhere.
+    if (sub.displayPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يوجد رقم هاتف للمشترك'),
+          backgroundColor: Color(0xFFE08F2D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    setState(() => _generatingLink = true);
+    final linkResult = await SubscribersApi.generateInfoLink(sub: sub);
+    if (!mounted) return;
+    if (!linkResult.ok || linkResult.url == null) {
+      setState(() => _generatingLink = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(linkResult.message ?? 'فشل توليد الرابط'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    // Build the message body locally — v1's text verbatim minus the
+    // greeting whitespace tweak. Falls back to username when the
+    // Arabic name is missing so admins with sparse name data still
+    // get a readable greeting.
+    final greetName =
+        sub.fullName.trim().isNotEmpty ? sub.fullName.trim() : sub.username;
+    final body =
+        'مرحباً $greetName 👋\n\n'
+        'يمكنك الاطلاع على معلومات اشتراكك من خلال الرابط التالي:\n\n'
+        '${linkResult.url}\n\n'
+        '⚠️ ملاحظة: هذا الرابط صالح لمدة ساعة واحدة فقط.\n'
+        'في حال تجديد الاشتراك أو تسديد الدين، يرجى طلب رابط جديد للبيانات المحدثة.\n\n'
+        'شكراً لك 🙏';
+    final sendResult = await WhatsAppApi.sendMessage(
+      to: sub.displayPhone,
+      message: body,
+      intent: 'subscriber_info',
+    );
+    if (!mounted) return;
+    setState(() => _generatingLink = false);
+    final ok = sendResult.ok;
+    final color = ok ? const Color(0xFF25D366) : AppColors.error;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'تم إرسال رابط معلومات المشترك'
+              : (sendResult.message ?? 'فشل إرسال الرابط'),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _sendTemplate(String templateType) async {
@@ -732,6 +806,8 @@ class _OperationsCard extends StatelessWidget {
     required this.onToggleEnabled,
     required this.sendingTemplate,
     required this.onSendTemplate,
+    required this.generatingLink,
+    required this.onGenerateLink,
     required this.busy,
   });
 
@@ -751,6 +827,10 @@ class _OperationsCard extends StatelessWidget {
   /// matching chip's 'جاري الإرسال…' label.
   final String? sendingTemplate;
   final ValueChanged<String> onSendTemplate;
+  /// True while the generate-info-link round-trip + WhatsApp send
+  /// are in flight. Flips the link chip's label to 'جاري التوليد…'.
+  final bool generatingLink;
+  final VoidCallback onGenerateLink;
   /// True when ANY async operation owned by this card is pending —
   /// togglesa, disconnect, or a template send. While busy the card
   /// shows a thin progress strip + dims every tile and intercepts
@@ -799,8 +879,12 @@ class _OperationsCard extends StatelessWidget {
           Colors.deepOrange,
           () => onSendTemplate('expiry_warning'),
         ),
-      _Op(LucideIcons.link, 'توليد رابط', Colors.indigo,
-          () => _todo(context, 'توليد رابط — قيد التطوير')),
+      _Op(
+        LucideIcons.link,
+        generatingLink ? 'جاري التوليد…' : 'توليد رابط',
+        Colors.indigo,
+        onGenerateLink,
+      ),
       _Op(
         LucideIcons.info,
         sendingTemplate == 'subscriber_info'
