@@ -563,6 +563,50 @@ class SubscribersApi {
     }
   }
 
+  /// GET /api/v2/managers — list of all sub-managers visible to the
+  /// logged-in admin. Used by the super-admin "تابع إلى" picker on
+  /// the add + edit subscriber sheets. Returns null on auth /
+  /// permission failure so the caller can hide the picker.
+  static Future<List<({int id, String username, String displayName})>?>
+      loadManagers() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/managers',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final list = (body['data'] as List?) ?? const [];
+      final out = <({int id, String username, String displayName})>[];
+      for (final row in list) {
+        if (row is! Map) continue;
+        final rawId = row['id'];
+        final id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+        if (id == null) continue;
+        final username = (row['username'] ?? '').toString();
+        final fname = (row['firstname'] ?? '').toString().trim();
+        final lname = (row['lastname'] ?? '').toString().trim();
+        final arabic = [fname, lname]
+            .where((s) => s.isNotEmpty)
+            .join(' ')
+            .trim();
+        final display = arabic.isNotEmpty
+            ? '$arabic ($username)'
+            : username;
+        out.add((id: id, username: username, displayName: display));
+      }
+      out.sort((a, b) => a.username.compareTo(b.username));
+      return out;
+    } on DioException catch (e) {
+      _log('v2/managers', e);
+      return null;
+    } catch (e) {
+      _log('v2/managers', e);
+      return null;
+    }
+  }
+
   /// POST /api/v2/subscribers — create a new subscriber. Backend
   /// wraps the SAS4 /user create endpoint so we don't have to deal
   /// with payload encryption client-side. `parent_id` is required;
@@ -622,6 +666,8 @@ class SubscribersApi {
     String? lastname,
     String? phone,
     int? profileId,
+    int? parentId,
+    String? expiration,
   }) async {
     final body = <String, dynamic>{};
     if (username != null) body['username'] = username;
@@ -632,6 +678,14 @@ class SubscribersApi {
     if (lastname != null) body['lastname'] = lastname;
     if (phone != null) body['phone'] = phone;
     if (profileId != null) body['profile_id'] = profileId;
+    // parent_id + expiration — super-admin only on the client side
+    // (UI gated by AuthStorage.readIsSuperAdmin). Backend doesn't
+    // care; if a non-super tries to send them and SAS4 rejects, the
+    // structured error message surfaces in the snackbar.
+    if (parentId != null) body['parent_id'] = parentId;
+    if (expiration != null && expiration.isNotEmpty) {
+      body['expiration'] = expiration;
+    }
     if (body.isEmpty) {
       return (ok: true, message: 'لا توجد تغييرات');
     }

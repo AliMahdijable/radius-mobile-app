@@ -67,24 +67,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Render with our own AppBar that shows a back arrow when this
+    // screen was pushed (i.e. not used as a bottom-tab anymore —
+    // since 2026-06-10 the gear opens this as a route, not a tab).
+    // Navigator.canPop returns true in that pushed context; we use
+    // it to switch between the in-page title (when there's no
+    // ancestor route) and a back-arrow AppBar (when there is).
+    final canPop = Navigator.of(context).canPop();
     return Scaffold(
       backgroundColor: AppColors.bg,
+      appBar: canPop
+          ? AppBar(
+              backgroundColor: AppColors.bg,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              foregroundColor: AppColors.textHi,
+              title: Text(
+                'الإعدادات',
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'رجوع',
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(
             Sp.lg,
-            Sp.lg,
+            canPop ? Sp.sm : Sp.lg,
             Sp.lg,
             Sp.huge * 2,
           ),
           children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: Sp.lg),
-              child: Text('الإعدادات',
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 22)),
-            ),
+            if (!canPop)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Sp.lg),
+                child: Text('الإعدادات',
+                    style: AppType.title(color: AppColors.textHi)
+                        .copyWith(fontSize: 22)),
+              ),
             _IdentityCard(name: _name, id: _id),
             const SizedBox(height: Sp.lg),
             _Row(

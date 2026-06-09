@@ -49,11 +49,37 @@ class _AddSheetState extends State<_AddSheet> {
   Map<String, PackageInfo>? _packages;
   bool _loadingPackages = true;
   bool _saving = false;
+  /// Super-admin only — drives the expiration + parent picker. Set
+  /// after AuthStorage.readIsSuperAdmin resolves. Non-super admins
+  /// never see those two fields (مطلب المستخدم 2026-06-10).
+  bool _isSuper = false;
+  DateTime? _expiration;
+  int? _parentId;
+  List<({int id, String username, String displayName})>? _managers;
+  bool _loadingManagers = false;
 
   @override
   void initState() {
     super.initState();
     _loadPackages();
+    _resolveSuperAdmin();
+  }
+
+  Future<void> _resolveSuperAdmin() async {
+    final isSuper = await AuthStorage.readIsSuperAdmin();
+    if (!mounted) return;
+    setState(() {
+      _isSuper = isSuper;
+      _loadingManagers = isSuper;
+    });
+    if (isSuper) {
+      final list = await SubscribersApi.loadManagers();
+      if (!mounted) return;
+      setState(() {
+        _managers = list;
+        _loadingManagers = false;
+      });
+    }
   }
 
   Future<void> _loadPackages() async {
@@ -96,7 +122,12 @@ class _AddSheetState extends State<_AddSheet> {
       return;
     }
     final adminId = await AuthStorage.readAdminId();
-    final parentId = int.tryParse(adminId ?? '');
+    // Super-admin override: if they picked a parent in the dropdown,
+    // use it; otherwise fall back to their own admin id (the
+    // default behaviour for regular admins).
+    final parentId = _isSuper && _parentId != null
+        ? _parentId
+        : int.tryParse(adminId ?? '');
     if (parentId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -108,14 +139,22 @@ class _AddSheetState extends State<_AddSheet> {
       return;
     }
     setState(() => _saving = true);
+    String? expirationStr;
+    if (_isSuper && _expiration != null) {
+      final d = _expiration!;
+      String two(int n) => n.toString().padLeft(2, '0');
+      expirationStr =
+          '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+    }
     final result = await SubscribersApi.createSubscriber(
       username: _username.text.trim(),
       password: _password.text,
       profileId: _profileId!,
-      parentId: parentId,
+      parentId: parentId!,
       firstname: _firstname.text.trim(),
       lastname: _lastname.text.trim(),
       phone: _phone.text.trim(),
+      expiration: expirationStr,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -233,6 +272,25 @@ class _AddSheetState extends State<_AddSheet> {
                       enabled: !_saving,
                       onSelect: (id) => setState(() => _profileId = id),
                     ),
+                    if (_isSuper) ...[
+                      const SizedBox(height: Sp.md),
+                      _Lbl('تاريخ الانتهاء (اختياري)'),
+                      _ExpirationPicker(
+                        value: _expiration,
+                        enabled: !_saving,
+                        onPick: (d) => setState(() => _expiration = d),
+                      ),
+                      const SizedBox(height: Sp.md),
+                      _Lbl('تابع إلى (المدير)'),
+                      _ManagerPicker(
+                        managers: _managers,
+                        loading: _loadingManagers,
+                        selectedId: _parentId,
+                        enabled: !_saving,
+                        onSelect: (id) =>
+                            setState(() => _parentId = id),
+                      ),
+                    ],
                     const SizedBox(height: Sp.md),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -440,6 +498,172 @@ class _PackagePicker extends StatelessWidget {
                       ),
                     ],
                   ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tap-to-pick expiration date — super-admin only.
+class _ExpirationPicker extends StatelessWidget {
+  const _ExpirationPicker({
+    required this.value,
+    required this.enabled,
+    required this.onPick,
+  });
+  final DateTime? value;
+  final bool enabled;
+  final ValueChanged<DateTime> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final label = value == null
+        ? 'افتراضي الباقة'
+        : '${value!.year}/${two(value!.month)}/${two(value!.day)}';
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.sm),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled
+            ? () async {
+                final now = DateTime.now();
+                final initial = value ?? now.add(const Duration(days: 30));
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: initial,
+                  firstDate: now.subtract(const Duration(days: 30)),
+                  lastDate: DateTime(now.year + 5),
+                  helpText: 'اختر تاريخ الانتهاء',
+                  cancelText: 'إلغاء',
+                  confirmText: 'تأكيد',
+                );
+                if (picked != null) {
+                  onPick(DateTime(
+                    picked.year,
+                    picked.month,
+                    picked.day,
+                    20, 59, 59,
+                  ));
+                }
+              }
+            : null,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.calendar,
+                  size: 16, color: AppColors.textMid),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppType.input(
+                    color: value == null
+                        ? AppColors.textLow
+                        : AppColors.textHi,
+                  ),
+                ),
+              ),
+              const Icon(LucideIcons.chevronDown,
+                  size: 14, color: AppColors.textLow),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ManagerPicker extends StatelessWidget {
+  const _ManagerPicker({
+    required this.managers,
+    required this.loading,
+    required this.selectedId,
+    required this.enabled,
+    required this.onSelect,
+  });
+  final List<({int id, String username, String displayName})>?
+      managers;
+  final bool loading;
+  final int? selectedId;
+  final bool enabled;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const SizedBox(
+        height: 38,
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brand,
+            ),
+          ),
+        ),
+      );
+    }
+    final list = managers;
+    if (list == null || list.isEmpty) {
+      return Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          'لا يوجد مدراء — يُسجَّل تحت حسابك',
+          style: AppType.subtitle(color: AppColors.textMid),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: list.any((m) => m.id == selectedId) ? selectedId : null,
+          hint: Text(
+            'افتراضي: حسابك',
+            style: AppType.input(color: AppColors.textLow),
+          ),
+          isExpanded: true,
+          icon: const Icon(LucideIcons.chevronDown,
+              size: 16, color: AppColors.textMid),
+          onChanged: enabled
+              ? (v) {
+                  if (v != null) onSelect(v);
+                }
+              : null,
+          items: [
+            for (final m in list)
+              DropdownMenuItem<int>(
+                value: m.id,
+                child: Text(
+                  m.displayName,
+                  style: AppType.input(color: AppColors.textHi),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],

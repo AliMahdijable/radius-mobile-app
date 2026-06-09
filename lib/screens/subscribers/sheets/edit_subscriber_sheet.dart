@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/auth_storage.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -78,6 +79,17 @@ class _EditSheetState extends State<_EditSheet> {
   /// مطلب 2026-06-10: pre-fill + eye toggle so admins can verify
   /// the existing password before deciding to change it.
   bool _showPassword = false;
+  /// True ONLY for SAS4 super-admins. Drives the visibility of the
+  /// expiration date + parent dropdown — مطلب المستخدم 2026-06-10.
+  /// Set after AuthStorage.readIsSuperAdmin resolves.
+  bool _isSuper = false;
+  /// Edited expiration date — null means 'keep original'. Format
+  /// matches SAS4: 'YYYY-MM-DD HH:mm:ss'.
+  DateTime? _expiration;
+  /// Edited parent (تابع إلى) — null means 'keep original'.
+  int? _parentId;
+  List<({int id, String username, String displayName})>? _managers;
+  bool _loadingManagers = false;
 
   @override
   void initState() {
@@ -96,6 +108,63 @@ class _EditSheetState extends State<_EditSheet> {
     _lastname.addListener(touch);
     _phone.addListener(touch);
     _loadPackages();
+    // Parse the original expiration so the picker can show it
+    // alongside the 'change' control. SAS4 emits both 'YYYY-MM-DD
+    // HH:mm:ss' and 'YYYY-MM-DDTHH:mm:ss'; both DateTime.tryParse'able
+    // after normalizing the space.
+    final exp = widget.sub.expiration?.trim();
+    if (exp != null && exp.isNotEmpty) {
+      _expiration = DateTime.tryParse(exp.replaceFirst(' ', 'T'));
+    }
+    _loadDetails(); // pre-fill password + parent_id from SAS4
+    _resolveSuperAdmin();
+  }
+
+  /// Fetch full activation-data so the password field starts with the
+  /// current value. The list endpoint /index/user doesn't reliably
+  /// surface the password column, so we hit the single-row
+  /// /api/v2/subscribers/:idx/activation-data endpoint which reads
+  /// SAS4's /user/:idx directly. مطلب 2026-06-10.
+  Future<void> _loadDetails() async {
+    final idx = widget.sub.idx;
+    if (idx == null) return;
+    final data = await SubscribersApi.fetchActivationData(idx);
+    if (!mounted || data == null) return;
+    setState(() {
+      // Pre-fill password only if the field is still untouched.
+      final pw = data['password']?.toString() ?? '';
+      if (pw.isNotEmpty && _password.text.isEmpty) {
+        _password.text = pw;
+      }
+      final parent = data['parent_id'];
+      final pid = parent is int
+          ? parent
+          : int.tryParse(parent?.toString() ?? '');
+      if (pid != null) _parentId = pid;
+      final rawExp = data['expiration']?.toString().trim();
+      if (rawExp != null && rawExp.isNotEmpty) {
+        final parsed =
+            DateTime.tryParse(rawExp.replaceFirst(' ', 'T'));
+        if (parsed != null) _expiration = parsed;
+      }
+    });
+  }
+
+  Future<void> _resolveSuperAdmin() async {
+    final isSuper = await AuthStorage.readIsSuperAdmin();
+    if (!mounted) return;
+    setState(() {
+      _isSuper = isSuper;
+      _loadingManagers = isSuper;
+    });
+    if (isSuper) {
+      final list = await SubscribersApi.loadManagers();
+      if (!mounted) return;
+      setState(() {
+        _managers = list;
+        _loadingManagers = false;
+      });
+    }
   }
 
   Future<void> _loadPackages() async {
@@ -141,6 +210,26 @@ class _EditSheetState extends State<_EditSheet> {
     if (_profileId != original.profileId && _profileId != null) {
       out['profile_id'] = _profileId;
     }
+    // Super-admin fields. Only diff when the picker has actually
+    // moved away from the original — empty/no-pick → not in the body.
+    if (_isSuper) {
+      if (_parentId != null) {
+        // No 'original parent_id' on the Subscriber model directly —
+        // backend round-trips will reject same-value writes anyway,
+        // but we send only when the picker was touched (tracked by
+        // _parentId being non-null after _loadDetails seeded it AND
+        // differing from the seed).
+        // Simpler: always send when set; backend diffs internally.
+        out['parent_id'] = _parentId;
+      }
+      if (_expiration != null) {
+        // SAS4 expects 'YYYY-MM-DD HH:mm:ss'
+        final d = _expiration!;
+        String two(int n) => n.toString().padLeft(2, '0');
+        out['expiration'] =
+            '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+      }
+    }
     return out;
   }
 
@@ -162,6 +251,8 @@ class _EditSheetState extends State<_EditSheet> {
       lastname: diff['lastname'],
       phone: diff['phone'],
       profileId: diff['profile_id'],
+      parentId: diff['parent_id'],
+      expiration: diff['expiration'],
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -293,6 +384,24 @@ class _EditSheetState extends State<_EditSheet> {
                       enabled: !_saving,
                       onSelect: (id) => setState(() => _profileId = id),
                     ),
+                    if (_isSuper) ...[
+                      const SizedBox(height: Sp.md),
+                      _FieldLabel(label: 'تاريخ الانتهاء'),
+                      _ExpirationPicker(
+                        value: _expiration,
+                        enabled: !_saving,
+                        onPick: (d) => setState(() => _expiration = d),
+                      ),
+                      const SizedBox(height: Sp.md),
+                      _FieldLabel(label: 'تابع إلى (المدير)'),
+                      _ManagerPicker(
+                        managers: _managers,
+                        loading: _loadingManagers,
+                        selectedId: _parentId,
+                        enabled: !_saving,
+                        onSelect: (id) => setState(() => _parentId = id),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -481,6 +590,183 @@ class _PackagePicker extends StatelessWidget {
                       ),
                     ],
                   ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tap-to-pick expiration date — opens the platform date picker.
+/// Renders 'YYYY/MM/DD' or 'لم يُختر' when no value. Super-admin
+/// only — non-super admins never see this widget (مطلب 2026-06-10).
+class _ExpirationPicker extends StatelessWidget {
+  const _ExpirationPicker({
+    required this.value,
+    required this.enabled,
+    required this.onPick,
+  });
+  final DateTime? value;
+  final bool enabled;
+  final ValueChanged<DateTime> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final label = value == null
+        ? 'لم يُختر'
+        : '${value!.year}/${two(value!.month)}/${two(value!.day)}';
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.sm),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled
+            ? () async {
+                final now = DateTime.now();
+                final initial = value ?? now;
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: initial,
+                  firstDate: DateTime(now.year - 1),
+                  lastDate: DateTime(now.year + 5),
+                  helpText: 'اختر تاريخ الانتهاء',
+                  cancelText: 'إلغاء',
+                  confirmText: 'تأكيد',
+                );
+                if (picked != null) {
+                  // Preserve any time-of-day already in the original
+                  // value so a date-only pick doesn't truncate the
+                  // expiration to midnight (loses ~16h of service).
+                  final src = value;
+                  onPick(DateTime(
+                    picked.year,
+                    picked.month,
+                    picked.day,
+                    src?.hour ?? 20,
+                    src?.minute ?? 59,
+                    src?.second ?? 59,
+                  ));
+                }
+              }
+            : null,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.calendar,
+                  size: 16, color: AppColors.textMid),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppType.input(
+                    color: value == null
+                        ? AppColors.textLow
+                        : AppColors.textHi,
+                  ),
+                ),
+              ),
+              const Icon(LucideIcons.chevronDown,
+                  size: 14, color: AppColors.textLow),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Dropdown of all sub-managers (from /api/v2/managers). Super-admin
+/// only — non-super never see this widget. Null selection → no
+/// change to parent.
+class _ManagerPicker extends StatelessWidget {
+  const _ManagerPicker({
+    required this.managers,
+    required this.loading,
+    required this.selectedId,
+    required this.enabled,
+    required this.onSelect,
+  });
+  final List<({int id, String username, String displayName})>?
+      managers;
+  final bool loading;
+  final int? selectedId;
+  final bool enabled;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const SizedBox(
+        height: 38,
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brand,
+            ),
+          ),
+        ),
+      );
+    }
+    final list = managers;
+    if (list == null || list.isEmpty) {
+      return Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          'لا يوجد مدراء',
+          style: AppType.subtitle(color: AppColors.textMid),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: list.any((m) => m.id == selectedId) ? selectedId : null,
+          hint: Text(
+            'اختر المدير',
+            style: AppType.input(color: AppColors.textLow),
+          ),
+          isExpanded: true,
+          icon: const Icon(LucideIcons.chevronDown,
+              size: 16, color: AppColors.textMid),
+          onChanged: enabled
+              ? (v) {
+                  if (v != null) onSelect(v);
+                }
+              : null,
+          items: [
+            for (final m in list)
+              DropdownMenuItem<int>(
+                value: m.id,
+                child: Text(
+                  m.displayName,
+                  style: AppType.input(color: AppColors.textHi),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],

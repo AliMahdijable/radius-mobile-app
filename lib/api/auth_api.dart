@@ -18,6 +18,7 @@ class LoginSuccess extends LoginResult {
     required this.displayName,
     this.expiresAt,
     this.requires2fa = false,
+    this.isSuperAdmin = false,
   });
 
   final String token;
@@ -28,6 +29,10 @@ class LoginSuccess extends LoginResult {
   /// AuthStorage so the interceptor can do proactive refresh.
   final String? expiresAt;
   final bool requires2fa;
+  /// True when the SAS4 user permissions resolve to super-admin.
+  /// Drives the edit/add subscriber sheets' permission-gated UI
+  /// (expiration date + parent picker).
+  final bool isSuperAdmin;
 }
 
 class LoginFailure extends LoginResult {
@@ -69,6 +74,13 @@ class AuthApi {
         return const LoginFailure('لم يصل رمز الجلسة من السيرفر.');
       }
 
+      // Backend sets user.role='super_admin' AND user.isSuperAdmin=true
+      // when SAS4 permissions resolve to super (server.js ~1640/1880).
+      // We accept either signal so a minor backend rename doesn't
+      // silently strip the flag client-side.
+      final isSuperAdmin = user['isSuperAdmin'] == true ||
+          user['is_super_admin'] == true ||
+          (user['role']?.toString() == 'super_admin');
       return LoginSuccess(
         token: token,
         adminId: (user['admin_id'] ?? user['id'] ?? '').toString(),
@@ -79,6 +91,7 @@ class AuthApi {
             .toString(),
         expiresAt: body['expiresAt']?.toString(),
         requires2fa: body['requires2fa'] == true,
+        isSuperAdmin: isSuperAdmin,
       );
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));
