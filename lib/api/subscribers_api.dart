@@ -442,6 +442,55 @@ class SubscribersApi {
     }
   }
 
+  /// GET /api/reports/account-statement — financial movements for a
+  /// single subscriber. Mirrors v1's _SubscriberMovementsSheet load,
+  /// hitting the same endpoint with a 5-year wide window so the sheet
+  /// can show full history without paging. Returns the raw transaction
+  /// rows for the sheet to group/render; null on auth or network
+  /// failure so the caller can branch to an error state.
+  ///
+  /// Each row carries: action_type / action_description (or description)
+  /// / action_data / target_name / admin_name / amount / created_at.
+  static Future<List<Map<String, dynamic>>?> loadMovements({
+    required String username,
+    String? idx,
+  }) async {
+    final token = await AuthStorage.readToken();
+    if (token == null) return null;
+    final now = DateTime.now();
+    final from = DateTime(now.year - 5, now.month, now.day);
+    String fmt(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/reports/account-statement',
+        queryParameters: {
+          'username': username,
+          if (idx != null) 'user_id': idx,
+          'date_from': '${fmt(from)} 00:00:00',
+          'date_to': '${fmt(now)} 23:59:59',
+        },
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        _log('account-statement', 'success!=true body=$body');
+        return null;
+      }
+      final data = body['data'] as Map?;
+      final txs = (data?['transactions'] as List?) ?? const [];
+      return txs.whereType<Map>().map(Map<String, dynamic>.from).toList();
+    } on DioException catch (e) {
+      _log('account-statement', e);
+      return null;
+    } catch (e) {
+      _log('account-statement', e);
+      return null;
+    }
+  }
+
   /// POST /api/v2/subscribers/:idx/pay-debt — apply a payment against
   /// the subscriber's debt. `comment` is optional and appears in the
   /// activity log + receipt. Mirrors v1's payDebt provider.

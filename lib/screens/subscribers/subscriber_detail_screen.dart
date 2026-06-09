@@ -14,6 +14,7 @@ import '../../theme/typography.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
 import 'sheets/extend_sheet.dart';
+import 'sheets/movements_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
 
@@ -779,7 +780,7 @@ class _OperationsCard extends StatelessWidget {
       _Op(LucideIcons.tag, 'خصم سريع', const Color(0xFF14B8A6),
           () => showQuickDiscountSheet(context, sub)),
       _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
-          () => _todo(context, 'سجل الحركات — قيد التطوير')),
+          () => showMovementsSheet(context, sub)),
       if (sub.hasDebt)
         _Op(
           LucideIcons.bellRing,
