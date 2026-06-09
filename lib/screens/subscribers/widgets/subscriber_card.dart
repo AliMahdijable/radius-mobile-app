@@ -7,6 +7,7 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import 'device_chip_micro.dart';
 
 /// Subscriber card v2 — banking-app style with a colored leading rail
 /// for status, an avatar with the first initial, a hero name + handle,
@@ -751,6 +752,11 @@ class _LiveSessionRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+        // مطلب 2026-06-11: chip معلومات الجهاز (RX/signal) من cache
+        // الـDeviceProbeApi. يظهر فقط لما الـwave يكمل الفحص لهذا
+        // المشترك؛ بدون probe من الـchip نفسه عشان ما يفجّر N login
+        // request متزامن من البطاقات المرئية.
+        DeviceChipMicro(ip: ip),
       ],
     );
   }

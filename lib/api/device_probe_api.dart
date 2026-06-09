@@ -73,6 +73,51 @@ class DeviceProbeApi {
   /// config so the next render re-probes with new credentials.
   static void invalidateIp(String ip) => _snapCache.remove(ip.trim());
 
+  /// Read-only peek into the cache. Used by list-view chips so they
+  /// can light up the moment a wave finishes without re-fetching.
+  /// Returns null if no entry OR the entry expired.
+  static DeviceHealthSnapshot? cached(String ip) {
+    final c = _snapCache[ip.trim()];
+    if (c == null) return null;
+    if (DateTime.now().difference(c.at) >= _ttl) return null;
+    return c.snap;
+  }
+
+  /// Batched probe wave for the visible subscriber list. v1 fans out 25
+  /// at a time so dead IPs (capped at 1.2s reachability + 6s probe cap)
+  /// don't stall the queue. Each individual sub goes through the same
+  /// `probe()` flow so the 5-min snapshot cache stays warm afterward.
+  ///
+  /// `onProgress(done, total)` fires after each batch so the screen can
+  /// surface "يفحص N/M" while running. Pass null to skip.
+  ///
+  /// `runId` lets the caller invalidate an in-flight wave when the list
+  /// changes — pass a fresh int per call, then check it equals the
+  /// caller's stored id before consuming results.
+  static Future<void> warmProbe(
+    List<({String username, String ip})> targets, {
+    int concurrency = 25,
+    void Function(int done, int total)? onProgress,
+    bool Function()? isCanceled,
+  }) async {
+    if (targets.isEmpty) {
+      onProgress?.call(0, 0);
+      return;
+    }
+    var done = 0;
+    for (var i = 0; i < targets.length; i += concurrency) {
+      if (isCanceled?.call() ?? false) return;
+      final batch = targets.skip(i).take(concurrency).toList();
+      await Future.wait(batch.map((t) async {
+        try {
+          await probe(fallbackIp: t.ip, subscriberUsername: t.username);
+        } catch (_) {}
+      }));
+      done += batch.length;
+      onProgress?.call(done, targets.length);
+    }
+  }
+
   /// Drop the admin-defaults cache — call after saving them so the
   /// next probe picks up the new values.
   static void invalidateAdminDefaults() {

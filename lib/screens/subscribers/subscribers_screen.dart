@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/subscriber.dart';
 import '../../services/subscriber_events.dart';
@@ -14,6 +15,7 @@ import '../../theme/typography.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'subscriber_detail_screen.dart';
+import 'widgets/device_chip_micro.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
 import 'widgets/subscriber_card.dart';
@@ -61,6 +63,14 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   Map<String, Map<String, dynamic>> _lastPayments = {};
   bool _loading = true;
   bool _refreshing = false;
+
+  // Probe wave state — set when a wave is running so the AppBar can
+  // surface a small spinner. Bumped each call to invalidate any
+  // in-flight wave whose list shape no longer matches.
+  int _probeRunId = 0;
+  bool _probing = false;
+  int _probeDone = 0;
+  int _probeTotal = 0;
 
   String _query = '';
   SubscriberFilter _filter = SubscriberFilter.all;
@@ -128,6 +138,51 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     await _fetchAndMerge();
     if (!mounted) return;
     setState(() => _loading = false);
+    _runProbeWave();
+  }
+
+  /// مطلب 2026-06-11: مسح batched (25 concurrent) لمعلومات أجهزة
+  /// كل المشتركين المتصلين فور تحميل القائمة. النتائج تنزل في cache
+  /// الـDeviceProbeApi والـDeviceChipMicro يقرأ منها مباشرة.
+  /// كل wave له runId — لو القائمة تغيّرت أو الشاشة ضاعت، الحلقة
+  /// تتوقف وما تنادي setState بعد.
+  void _runProbeWave() {
+    _probeRunId += 1;
+    final myRun = _probeRunId;
+    final targets = _all
+        .where((s) =>
+            s.isOnline && (s.ipAddress ?? '').trim().isNotEmpty)
+        .map((s) => (username: s.username, ip: s.ipAddress!.trim()))
+        .toList();
+    if (targets.isEmpty) {
+      setState(() {
+        _probing = false;
+        _probeDone = 0;
+        _probeTotal = 0;
+      });
+      return;
+    }
+    setState(() {
+      _probing = true;
+      _probeDone = 0;
+      _probeTotal = targets.length;
+    });
+    DeviceProbeApi.warmProbe(
+      targets,
+      onProgress: (done, total) {
+        if (!mounted || _probeRunId != myRun) return;
+        setState(() {
+          _probeDone = done;
+          _probeTotal = total;
+        });
+        // Wake every visible DeviceChipMicro to consult the cache anew.
+        DeviceProbeBus.bump();
+      },
+      isCanceled: () => !mounted || _probeRunId != myRun,
+    ).whenComplete(() {
+      if (!mounted || _probeRunId != myRun) return;
+      setState(() => _probing = false);
+    });
   }
 
   Future<void> _refresh() async {
@@ -138,6 +193,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     await _fetchAndMerge();
     if (!mounted) return;
     setState(() => _refreshing = false);
+    _runProbeWave();
   }
 
   /// Pulls the 3 sources in parallel (subscribers + online list + last
@@ -652,6 +708,30 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                 _page = 0;
               }),
             ),
+            // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
+            // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
+            // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.
+            if (_probing && _probeTotal > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'يفحص الأجهزة $_probeDone/$_probeTotal',
+                      style: AppType.muted().copyWith(fontSize: 10.5),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: Sp.sm),
             // Stats bar — keep the row tight; the page-size picker is a
             // plain text link.

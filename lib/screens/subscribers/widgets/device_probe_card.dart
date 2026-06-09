@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
@@ -32,6 +33,7 @@ class DeviceProbeCard extends StatefulWidget {
 class _DeviceProbeCardState extends State<DeviceProbeCard> {
   bool _loading = true;
   DeviceHealthSnapshot? _snap;
+  String? _notes;
 
   @override
   void initState() {
@@ -41,14 +43,22 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
 
   Future<void> _run({bool force = false}) async {
     setState(() => _loading = true);
-    final snap = await DeviceProbeApi.probe(
-      fallbackIp: widget.ip,
-      subscriberUsername: widget.username,
-      force: force,
-    );
+    // Probe + notes in parallel — both go through small caches so the
+    // total cost on a warm session is sub-100ms.
+    final results = await Future.wait([
+      DeviceProbeApi.probe(
+        fallbackIp: widget.ip,
+        subscriberUsername: widget.username,
+        force: force,
+      ),
+      DeviceConfigApi.fetchConfig(widget.username),
+    ]);
     if (!mounted) return;
+    final snap = results[0] as DeviceHealthSnapshot?;
+    final cfg = results[1] as DeviceConfig?;
     setState(() {
       _snap = snap;
+      _notes = cfg?.notes?.trim();
       _loading = false;
     });
   }
@@ -75,7 +85,42 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
       onRefresh: () => _run(force: true),
       onConfig: _openConfig,
       busy: _loading,
-      child: _body(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _body(),
+          // مطلب 2026-06-11: سطر ملاحظة المدير من DeviceConfig.notes.
+          // مخفي إذا فاضي حتى لا يضيف ارتفاع ع الكرت بدون فائدة.
+          if ((_notes ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE08F2D).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(
+                  color: const Color(0xFFE08F2D).withValues(alpha: 0.18),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(LucideIcons.fileText,
+                      size: 11, color: Color(0xFFE08F2D)),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      _notes!,
+                      style: AppType.muted(color: AppColors.textHi).copyWith(
+                          fontSize: 10.5, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -153,9 +198,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
         if (u.ccqPercent != null)
           _row('CCQ', '${u.ccqPercent}%', LucideIcons.gauge,
               color: _healthColor(u.ccqHealth)),
-        if (u.lanSpeedShort != null)
-          _row('LAN', u.lanSpeedShort!, LucideIcons.cable,
-              color: _healthColor(u.lanHealth)),
+        // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
+        // eth interface بسطر منفصل مع plugged/speed وحدوده الخاصة.
+        if (u.lanPorts.isNotEmpty) _lanPortsBlock(u.lanPorts),
         if ((u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0)
           _row(
             'الإرسال / الاستقبال',
@@ -176,6 +221,88 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
   static Color _rxColor(OntOpticalInfo o) {
     if (o.rxOk) return AppColors.brand;
     return AppColors.error;
+  }
+
+  /// Renders the LAN port grid for Ubiquiti devices — one chip per
+  /// eth interface. plugged ports show their speed colored by health
+  /// (1G good / 100M warn / 10M bad). unplugged ports use a grey
+  /// disabled style so the row still communicates port-presence.
+  Widget _lanPortsBlock(List<LanPort> ports) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.cable, size: 12, color: AppColors.textMid),
+              const SizedBox(width: 6),
+              Text(
+                'المنافذ',
+                style: AppType.muted().copyWith(fontSize: 10.5),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 5,
+            runSpacing: 5,
+            children: [for (final p in ports) _lanChip(p)],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lanChip(LanPort p) {
+    final unplugged = !p.plugged;
+    final speed = p.displaySpeed;
+    Color color;
+    if (unplugged) {
+      color = AppColors.textLow;
+    } else if (speed.contains('Gbps')) {
+      color = AppColors.brand;
+    } else {
+      final m = RegExp(r'(\d+)\s*Mbps').firstMatch(speed);
+      final mbps = m == null ? null : int.tryParse(m.group(1)!);
+      if (mbps == null) {
+        color = AppColors.textMid;
+      } else if (mbps >= 100) {
+        color = AppColors.brand;
+      } else {
+        color = const Color(0xFFE08F2D);
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            unplugged ? LucideIcons.unplug : LucideIcons.cable,
+            size: 9.5,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            p.label,
+            style: AppType.label(color: color)
+                .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            unplugged ? 'مفصول' : speed,
+            style: AppType.muted(color: color)
+                .copyWith(fontSize: 9.5, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
   }
 
   static Color _healthColor(String h) {
