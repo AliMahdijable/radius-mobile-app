@@ -214,44 +214,71 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                         'مثال: VLAN 102، تقسيم فايبر للطابق الثاني، إلخ'),
                   ),
                   const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _saving ? null : _reset,
-                          icon: const Icon(LucideIcons.trash2, size: 14),
-                          label: const Text('حذف الإعداد'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: BorderSide(
-                                color:
-                                    AppColors.error.withValues(alpha: 0.5)),
+                  // مطلب 2026-06-11: تنسيق الأزرار — 'حذف الإعداد' كان
+                  // يلتف على سطرين بسبب flex 1:2. صار الترتيب: زر
+                  // 'حفظ' كبير ممتد، وزر دائري صغير للحذف بجانبه —
+                  // يحرّر مساحة + يبيّن وضوحه بالأيقونة وحدها بدل
+                  // النص المضغوط.
+                  SizedBox(
+                    height: 50,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(LucideIcons.save, size: 16),
+                            label: const Text(
+                              'حفظ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.brand,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(R.md),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton.icon(
-                          onPressed: _saving ? null : _save,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(LucideIcons.save, size: 14),
-                          label: const Text('حفظ'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brand,
-                            foregroundColor: Colors.white,
+                        const SizedBox(width: 10),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _saving ? null : _reset,
+                            borderRadius: BorderRadius.circular(R.md),
+                            child: Container(
+                              width: 50,
+                              height: 50,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppColors.error.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(R.md),
+                                border: Border.all(
+                                  color: AppColors.error.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: const Icon(
+                                LucideIcons.trash2,
+                                size: 18,
+                                color: AppColors.error,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: Sp.lg),
                 ],

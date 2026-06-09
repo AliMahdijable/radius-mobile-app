@@ -245,6 +245,14 @@ class SubscriberCardV2 extends StatelessWidget {
         // mobile-app/lib/widgets/subscriber_card.dart:595-647.
         if (showLiveSession && sub.isOnline) ...[
           _LiveSessionRow(sub: sub),
+          // مطلب 2026-06-11: سطر معلومات الجهاز كامل تحت السطر الحي —
+          // RX+حرارة للـONT، إشارة+CCQ+LAN للـUBNT — + زر تحديث 36×36
+          // يحرك probe لهذا المشترك فقط. AnimatedSwitcher يضمن
+          // ظهوراً ناعماً لما الـwave يكمل الفحص.
+          DeviceChipMicro(
+            ip: sub.ipAddress,
+            username: sub.username,
+          ),
           if (sub.balanceAmount != 0 || lastPayment != null)
             const SizedBox(height: 4),
         ],
@@ -752,11 +760,6 @@ class _LiveSessionRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-        // مطلب 2026-06-11: chip معلومات الجهاز (RX/signal) من cache
-        // الـDeviceProbeApi. يظهر فقط لما الـwave يكمل الفحص لهذا
-        // المشترك؛ بدون probe من الـchip نفسه عشان ما يفجّر N login
-        // request متزامن من البطاقات المرئية.
-        DeviceChipMicro(ip: ip),
       ],
     );
   }
