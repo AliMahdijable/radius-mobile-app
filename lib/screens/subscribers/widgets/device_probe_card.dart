@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/device_probe_api.dart';
 import '../../../models/device_health.dart';
+import '../sheets/device_config_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -12,11 +13,17 @@ import '../../../theme/typography.dart';
 /// card: ONT shows RX/TX power + voltage + temp; Ubiquiti shows
 /// signal/CCQ/LAN + peer.
 ///
-/// Probes via DeviceProbeApi which caches per-IP for 5 minutes, so
-/// flipping between detail screens doesn't re-hit the router.
+/// Two-button header:
+///   • gear → opens DeviceConfigSheet (IP / kind / user / pass / notes)
+///   • refresh → forces a re-probe ignoring the 5-min cache.
 class DeviceProbeCard extends StatefulWidget {
-  const DeviceProbeCard({super.key, required this.ip});
+  const DeviceProbeCard({
+    super.key,
+    required this.ip,
+    required this.username,
+  });
   final String ip;
+  final String username;
 
   @override
   State<DeviceProbeCard> createState() => _DeviceProbeCardState();
@@ -34,12 +41,29 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
 
   Future<void> _run({bool force = false}) async {
     setState(() => _loading = true);
-    final snap = await DeviceProbeApi.probe(ip: widget.ip, force: force);
+    final snap = await DeviceProbeApi.probe(
+      fallbackIp: widget.ip,
+      subscriberUsername: widget.username,
+      force: force,
+    );
     if (!mounted) return;
     setState(() {
       _snap = snap;
       _loading = false;
     });
+  }
+
+  Future<void> _openConfig() async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DeviceConfigSheet(username: widget.username),
+    );
+    if (changed == true && mounted) {
+      // The sheet already invalidated per-IP cache when it saved.
+      _run(force: true);
+    }
   }
 
   @override
@@ -49,6 +73,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
       title: 'معلومات الجهاز',
       accent: const Color(0xFF7C3AED),
       onRefresh: () => _run(force: true),
+      onConfig: _openConfig,
       busy: _loading,
       child: _body(),
     );
@@ -203,6 +228,7 @@ class _Card extends StatelessWidget {
     required this.accent,
     required this.child,
     required this.onRefresh,
+    required this.onConfig,
     required this.busy,
   });
   final IconData icon;
@@ -210,6 +236,7 @@ class _Card extends StatelessWidget {
   final Color accent;
   final Widget child;
   final VoidCallback onRefresh;
+  final VoidCallback onConfig;
   final bool busy;
 
   @override
@@ -243,6 +270,16 @@ class _Card extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              InkWell(
+                onTap: onConfig,
+                borderRadius: BorderRadius.circular(R.sm),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(LucideIcons.settings,
+                      size: 12, color: AppColors.textMid),
+                ),
+              ),
+              const SizedBox(width: 2),
               InkWell(
                 onTap: busy ? null : onRefresh,
                 borderRadius: BorderRadius.circular(R.sm),

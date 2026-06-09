@@ -4,6 +4,7 @@ import '../services/auth_storage.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
@@ -129,6 +130,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.message_outlined,
               label: 'قوالب الواتساب',
               onTap: () => _todo(context, 'قوالب الواتساب — قيد التطوير'),
+            ),
+            const SizedBox(height: Sp.md),
+            _SectionLabel('الأجهزة'),
+            _Row(
+              icon: Icons.router_outlined,
+              label: 'اعتمادات ONU / Ubiquiti',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DeviceDefaultsScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.md),
             _SectionLabel('الطباعة'),

@@ -98,14 +98,31 @@ class AuthApi {
           permSet.contains('prm_managers_create');
       final canAccessPackages = isSuperAdmin ||
           permSet.contains('prm_profiles_create');
+      // مطلب 2026-06-11: لو الدخول كموظف، نعرض اسم الموظف لا اسم
+      // المدير الأب في الـgreeting. الـbackend يميّز هذي الحالة بحقل
+      // user.role='employee' + user.employee.{full_name, username}.
+      // الـdisplay name ياخذ الأولوية للموظف؛ فاضي = نسقط للـusername
+      // العادي وفي النهاية 'مستخدم'.
+      final isEmployee = user['role']?.toString() == 'employee';
+      final empBlock = user['employee'];
+      String displayName;
+      if (isEmployee && empBlock is Map) {
+        final empFull = (empBlock['full_name'] ?? '').toString().trim();
+        final empUser = (empBlock['username'] ?? '').toString().trim();
+        displayName = empFull.isNotEmpty
+            ? empFull
+            : (empUser.isNotEmpty ? empUser : 'موظف');
+      } else {
+        displayName = (user['display_name'] ??
+                user['username'] ??
+                'مستخدم')
+            .toString();
+      }
       return LoginSuccess(
         token: token,
         adminId: (user['admin_id'] ?? user['id'] ?? '').toString(),
         adminUsername: (user['username'] ?? '').toString(),
-        displayName: (user['display_name'] ??
-                user['username'] ??
-                'مستخدم')
-            .toString(),
+        displayName: displayName,
         expiresAt: body['expiresAt']?.toString(),
         requires2fa: body['requires2fa'] == true,
         isSuperAdmin: isSuperAdmin,

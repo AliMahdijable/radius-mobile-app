@@ -4,81 +4,150 @@ import '../core/net/huawei_ont_service.dart';
 import '../core/net/tcp_reachability.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../models/device_health.dart';
+import 'device_config_api.dart';
 
-/// One probe per subscriber IP. Tries ONT and Ubiquiti in parallel
-/// (when no kind hint is given), keeps the result warm for 5 minutes,
-/// caps the total probe time at 6s so the UI never sits forever.
+/// One probe per subscriber. v1's three-tier credential chain applies:
+///   1. per-subscriber override (DeviceConfig)
+///   2. admin-wide defaults (AdminDeviceDefaults)
+///   3. library hardcoded (telecomadmin/admintelecom, ubnt/ubnt)
 ///
-/// First iteration uses hard-coded credential defaults:
-///   ONT       → telecomadmin / admintelecom
-///   Ubiquiti  → ubnt / ubnt
-/// A later pass will add admin-wide defaults + per-subscriber override
-/// (see [[v2-dev-progress]]).
+/// Two caches:
+///   _snapCache  — IP → DeviceHealthSnapshot, 5-min TTL. The probe wave
+///                 on the list view shares this with the detail screen
+///                 so a card you scroll past doesn't re-hit the router.
+///   _adminDefaults — one fetch per session, used by every probe.
 class DeviceProbeApi {
-  static final _cache = <String, _Cached>{};
+  static final _snapCache = <String, _Cached>{};
+  static Future<AdminDeviceDefaults>? _adminFetch;
   static const _ttl = Duration(minutes: 5);
   static const _probeCap = Duration(seconds: 6);
 
-  /// Returns a cached snapshot if fresh, otherwise fires a new probe.
-  /// `force=true` ignores the cache (used by the manual refresh button).
-  /// Returns null for unreachable / wrong-creds / non-router IPs.
+  // Library defaults — last-resort. Matches v1.
+  static const _kOntUser = 'telecomadmin';
+  static const _kOntPass = 'admintelecom';
+  static const _kUbntUser = 'ubnt';
+  static const _kUbntPass = 'ubnt';
+
+  /// Resolves credentials + probes the device. `subscriberUsername`
+  /// is OPTIONAL — pass it to consult the per-subscriber override
+  /// (worth ~50ms extra on first read, cached after). Pass null for
+  /// list-view probes that want minimal latency.
+  ///
+  /// `fallbackIp` is the IP from SAS4 (sub.ipAddress); used when the
+  /// per-subscriber config doesn't pin a customIp.
+  ///
+  /// `force=true` bypasses the snapshot cache (manual refresh button).
   static Future<DeviceHealthSnapshot?> probe({
-    required String ip,
-    DeviceKind? kindHint,
+    required String fallbackIp,
+    String? subscriberUsername,
     bool force = false,
   }) async {
-    final clean = ip.trim();
-    if (clean.isEmpty) return null;
-    final now = DateTime.now();
+    final ip = fallbackIp.trim();
+    // We may overwrite `ip` with customIp from the per-sub config
+    // after we've fetched it. Cache key keys off the FINAL ip used.
+    DeviceConfig? cfg;
+    String effectiveIp = ip;
+
+    if (subscriberUsername != null) {
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
+      final custom = cfg?.customIp?.trim();
+      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+    }
+    if (effectiveIp.isEmpty) return null;
+
     if (!force) {
-      final cached = _cache[clean];
-      if (cached != null && now.difference(cached.at) < _ttl) {
+      final cached = _snapCache[effectiveIp];
+      if (cached != null && DateTime.now().difference(cached.at) < _ttl) {
         return cached.snap;
       }
     }
-    final snap = await _runProbe(clean, kindHint)
+
+    final defaults = await _loadAdminDefaults();
+    final snap = await _runProbe(effectiveIp, cfg, defaults)
         .timeout(_probeCap, onTimeout: () => null);
-    _cache[clean] = _Cached(snap, now);
+    _snapCache[effectiveIp] = _Cached(snap, DateTime.now());
     return snap;
   }
 
-  /// Drops the cached snapshot for one IP — call when a manual gear
-  /// edit changes credentials so the next render re-probes.
-  static void invalidate(String ip) => _cache.remove(ip.trim());
+  /// Drop one IP's cached snapshot — call after editing per-sub
+  /// config so the next render re-probes with new credentials.
+  static void invalidateIp(String ip) => _snapCache.remove(ip.trim());
+
+  /// Drop the admin-defaults cache — call after saving them so the
+  /// next probe picks up the new values.
+  static void invalidateAdminDefaults() {
+    _adminFetch = null;
+    // Cached snapshots used the old defaults; invalidate them too so
+    // the next probe re-runs against the fresh creds.
+    _snapCache.clear();
+  }
+
+  static Future<AdminDeviceDefaults> _loadAdminDefaults() {
+    return _adminFetch ??= AdminDeviceDefaultsApi.fetch();
+  }
 
   static Future<DeviceHealthSnapshot?> _runProbe(
-      String ip, DeviceKind? hint) async {
+    String ip,
+    DeviceConfig? cfg,
+    AdminDeviceDefaults defaults,
+  ) async {
     final reachable = await TcpReachability.isReachable(ip);
     if (!reachable) return null;
 
-    if (hint == DeviceKind.ont) return _probeOnt(ip);
-    if (hint == DeviceKind.ubiquiti) return _probeUbnt(ip);
+    // Per-tier creds. Subscriber override applies ONLY when the
+    // admin pinned that exact kind on this subscriber — otherwise we
+    // treat username/password as auxiliary, matching v1.
+    final overridesOnt = cfg?.deviceType == DeviceKind.ont;
+    final overridesUbnt = cfg?.deviceType == DeviceKind.ubiquiti;
 
-    // Auto mode — race both, take first non-null. _firstNonNull cancels
-    // the loser implicitly when the cap timeout fires.
-    final ont = _probeOnt(ip);
-    final ubnt = _probeUbnt(ip);
+    final ontUser = overridesOnt && (cfg?.username?.isNotEmpty ?? false)
+        ? cfg!.username!
+        : (defaults.ontUsername?.isNotEmpty == true
+            ? defaults.ontUsername!
+            : _kOntUser);
+    final ontPass = overridesOnt && (cfg?.password?.isNotEmpty ?? false)
+        ? cfg!.password!
+        : (defaults.ontPassword?.isNotEmpty == true
+            ? defaults.ontPassword!
+            : _kOntPass);
+    final ubntUser = overridesUbnt && (cfg?.username?.isNotEmpty ?? false)
+        ? cfg!.username!
+        : (defaults.ubntUsername?.isNotEmpty == true
+            ? defaults.ubntUsername!
+            : _kUbntUser);
+    final ubntPass = overridesUbnt && (cfg?.password?.isNotEmpty ?? false)
+        ? cfg!.password!
+        : (defaults.ubntPassword?.isNotEmpty == true
+            ? defaults.ubntPassword!
+            : _kUbntPass);
+
+    if (overridesOnt) return _probeOnt(ip, ontUser, ontPass);
+    if (overridesUbnt) return _probeUbnt(ip, ubntUser, ubntPass);
+
+    final ont = _probeOnt(ip, ontUser, ontPass);
+    final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
   }
 
-  static Future<DeviceHealthSnapshot?> _probeOnt(String ip) async {
-    final session = await HuaweiOntService.login(ip, 'telecomadmin', 'admintelecom');
+  static Future<DeviceHealthSnapshot?> _probeOnt(
+      String ip, String user, String pass) async {
+    final session = await HuaweiOntService.login(ip, user, pass);
     if (session == null) return null;
     final optical = await HuaweiOntService.fetchOptical(session);
     if (optical == null) return null;
     return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical);
   }
 
-  static Future<DeviceHealthSnapshot?> _probeUbnt(String ip) async {
-    final session = await UbiquitiService.login(ip, 'ubnt', 'ubnt');
+  static Future<DeviceHealthSnapshot?> _probeUbnt(
+      String ip, String user, String pass) async {
+    final session = await UbiquitiService.login(ip, user, pass);
     if (session == null) return null;
     final status = await UbiquitiService.fetchStatus(session);
     if (status == null) return null;
-    return DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
+    return DeviceHealthSnapshot(
+        kind: DeviceKind.ubiquiti, ip: ip, ubnt: status);
   }
 
-  /// Resolves to the first non-null result from a list of futures.
-  /// Resolves null only if EVERY future resolves null.
   static Future<T?> _firstNonNull<T>(List<Future<T?>> futures) {
     final completer = Completer<T?>();
     var pending = futures.length;

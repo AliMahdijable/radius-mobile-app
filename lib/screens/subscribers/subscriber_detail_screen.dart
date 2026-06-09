@@ -151,7 +151,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     // مثل v1 — تظهر بطاقة منفصلة تحت كرت الجلسة الحية
                     // مع بور/سيغنال/LAN حسب نوع الجهاز.
                     if ((sub.ipAddress ?? '').isNotEmpty) ...[
-                      DeviceProbeCard(ip: sub.ipAddress!),
+                      DeviceProbeCard(
+                        ip: sub.ipAddress!,
+                        username: sub.username,
+                      ),
                       const SizedBox(height: Sp.sm),
                     ],
                   ],
