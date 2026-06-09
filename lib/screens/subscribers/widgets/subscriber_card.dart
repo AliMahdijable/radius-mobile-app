@@ -883,8 +883,9 @@ class _LastPaymentLine extends StatelessWidget {
 }
 
 /// Small pill button used for inline row actions (consumption +
-/// disconnect on the online tab). 36dp height so the tap target
-/// is comfortable but the card stays compact.
+/// disconnect on the online tab). مطلب 2026-06-11: تقليص الحجم
+/// لأنه كان "مبالغ" — 36→28 height، 13→11 icon، 12→11 label،
+/// horizontal padding 8→7. ما زال tap area كافي (28dp × عرض البطاقة).
 class _ActionPill extends StatelessWidget {
   const _ActionPill({
     required this.icon,
@@ -903,25 +904,25 @@ class _ActionPill extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.sm),
         child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 7),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.09),
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: color.withValues(alpha: 0.28)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 13, color: color),
-              const SizedBox(width: 5),
+              Icon(icon, size: 11, color: color),
+              const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
               ),

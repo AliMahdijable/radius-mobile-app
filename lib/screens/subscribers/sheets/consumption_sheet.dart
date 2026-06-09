@@ -103,6 +103,41 @@ class _ConsumptionSheet extends StatelessWidget {
                   ),
                 ],
               ),
+              // مطلب 2026-06-11: إذا الـSAS4 ما رجّع بايتات بعد
+              // (شائع للجلسات الجديدة)، نبيّن للمدير وضوحاً أن
+              // المودل مفتوح وفيه بيانات بدل ما يحس فاضي.
+              if ((sub.downloadBytes ?? 0) == 0 &&
+                  (sub.uploadBytes ?? 0) == 0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color:
+                        const Color(0xFFE08F2D).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(R.md),
+                    border: Border.all(
+                      color: const Color(0xFFE08F2D)
+                          .withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.info,
+                          size: 13, color: Color(0xFFE08F2D)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'لا يوجد استهلاك مسجَّل بعد — الجلسة قد تكون '
+                          'حديثة أو لم يتم تحديث الـSAS بعد.',
+                          style: AppType.muted(color: AppColors.textHi)
+                              .copyWith(fontSize: 11.5, height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: Sp.md),
               Container(
                 decoration: BoxDecoration(
