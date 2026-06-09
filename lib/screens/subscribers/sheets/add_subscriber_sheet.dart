@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
+import '../../../core/util/contact_picker.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/auth_storage.dart';
 import '../../../services/subscriber_events.dart';
@@ -262,6 +263,21 @@ class _AddSheetState extends State<_AddSheet> {
                       enabled: !_saving,
                       icon: LucideIcons.phone,
                       keyboardType: TextInputType.phone,
+                      suffix: IconButton(
+                        icon: const Icon(LucideIcons.contact, size: 18),
+                        color: AppColors.brand,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'اختر من دليل الأسماء',
+                        onPressed: _saving
+                            ? null
+                            : () async {
+                                final picked =
+                                    await ContactPicker.pickPhone();
+                                if (picked != null && mounted) {
+                                  setState(() => _phone.text = picked);
+                                }
+                              },
+                      ),
                     ),
                     const SizedBox(height: Sp.md),
                     _Lbl('الباقة *'),
@@ -366,6 +382,7 @@ class _Field extends StatelessWidget {
     required this.icon,
     this.obscure = false,
     this.keyboardType,
+    this.suffix,
   });
   final TextEditingController controller;
   final String hint;
@@ -373,6 +390,9 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final bool obscure;
   final TextInputType? keyboardType;
+  /// Optional trailing widget — used by the phone field for the
+  /// contact-picker icon.
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -386,6 +406,7 @@ class _Field extends StatelessWidget {
         hintText: hint,
         hintStyle: AppType.input(color: AppColors.textLow),
         prefixIcon: Icon(icon, size: 16, color: AppColors.textMid),
+        suffixIcon: suffix,
         filled: true,
         fillColor: AppColors.surface,
         border: OutlineInputBorder(

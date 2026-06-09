@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
+import '../../../core/util/contact_picker.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/auth_storage.dart';
 import '../../../services/subscriber_events.dart';
@@ -120,32 +121,37 @@ class _EditSheetState extends State<_EditSheet> {
     _resolveSuperAdmin();
   }
 
-  /// Fetch full activation-data so the password field starts with the
-  /// current value. The list endpoint /index/user doesn't reliably
-  /// surface the password column, so we hit the single-row
-  /// /api/v2/subscribers/:idx/activation-data endpoint which reads
-  /// SAS4's /user/:idx directly. مطلب 2026-06-10.
+  /// Fire two parallel fetches:
+  ///   • /api/v2/subscribers/:idx/password → cleartext password
+  ///     (SAS4 hides it from /user/:idx; the dedicated endpoint
+  ///     reads /user/overview/:idx which exposes it). Matches the
+  ///     v2 web edit modal flow.
+  ///   • /api/v2/subscribers/:idx/activation-data → parent_id +
+  ///     expiration for the super-admin pickers.
   Future<void> _loadDetails() async {
     final idx = widget.sub.idx;
     if (idx == null) return;
-    final data = await SubscribersApi.fetchActivationData(idx);
-    if (!mounted || data == null) return;
+    final pwFuture = SubscribersApi.fetchPassword(idx);
+    final dataFuture = SubscribersApi.fetchActivationData(idx);
+    final pw = await pwFuture;
+    final data = await dataFuture;
+    if (!mounted) return;
     setState(() {
-      // Pre-fill password only if the field is still untouched.
-      final pw = data['password']?.toString() ?? '';
-      if (pw.isNotEmpty && _password.text.isEmpty) {
+      if (pw != null && pw.isNotEmpty && _password.text.isEmpty) {
         _password.text = pw;
       }
-      final parent = data['parent_id'];
-      final pid = parent is int
-          ? parent
-          : int.tryParse(parent?.toString() ?? '');
-      if (pid != null) _parentId = pid;
-      final rawExp = data['expiration']?.toString().trim();
-      if (rawExp != null && rawExp.isNotEmpty) {
-        final parsed =
-            DateTime.tryParse(rawExp.replaceFirst(' ', 'T'));
-        if (parsed != null) _expiration = parsed;
+      if (data != null) {
+        final parent = data['parent_id'];
+        final pid = parent is int
+            ? parent
+            : int.tryParse(parent?.toString() ?? '');
+        if (pid != null) _parentId = pid;
+        final rawExp = data['expiration']?.toString().trim();
+        if (rawExp != null && rawExp.isNotEmpty) {
+          final parsed =
+              DateTime.tryParse(rawExp.replaceFirst(' ', 'T'));
+          if (parsed != null) _expiration = parsed;
+        }
       }
     });
   }
@@ -374,6 +380,21 @@ class _EditSheetState extends State<_EditSheet> {
                       enabled: !_saving,
                       icon: LucideIcons.phone,
                       keyboardType: TextInputType.phone,
+                      suffix: IconButton(
+                        icon: const Icon(LucideIcons.contact, size: 18),
+                        color: AppColors.brand,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'اختر من دليل الأسماء',
+                        onPressed: _saving
+                            ? null
+                            : () async {
+                                final picked =
+                                    await ContactPicker.pickPhone();
+                                if (picked != null && mounted) {
+                                  setState(() => _phone.text = picked);
+                                }
+                              },
+                      ),
                     ),
                     const SizedBox(height: Sp.md),
                     _FieldLabel(label: 'الباقة'),

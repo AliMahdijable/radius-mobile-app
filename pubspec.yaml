@@ -53,6 +53,12 @@ dependencies:
   # call / WhatsApp action buttons.
   url_launcher: ^6.3.1
 
+  # System contact picker (مطلب 2026-06-10) — admin can tap the phone
+  # field's contact icon on the add/edit subscriber sheets to pull a
+  # number from the OS address book instead of re-typing. Supports
+  # both iOS (Contacts framework) and Android (ContactsContract).
+  flutter_contacts: ^1.1.9+2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+    <!-- flutter_contacts (مطلب 2026-06-10): pick a phone number from
+         the address book on the add/edit subscriber sheets. The
+         picker presents the OS contact UI so the prompt is system-
+         level — Android still requires the permission declaration
+         here to surface the contacts dialog. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <!-- App icon badge — required by flutter_app_badger for various OEM launchers -->
     <uses-permission android:name="com.sec.android.provider.badge.permission.READ"/>
     <uses-permission android:name="com.sec.android.provider.badge.permission.WRITE"/>

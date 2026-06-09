@@ -563,6 +563,33 @@ class SubscribersApi {
     }
   }
 
+  /// GET /api/v2/subscribers/:idx/password — fetches the cleartext
+  /// password from SAS4's /user/overview/:idx endpoint (the regular
+  /// /user/:idx response hides it). Matches what the v2 web edit
+  /// modal does. Backend requires subscribers.edit permission so
+  /// view-only admins won't accidentally see passwords.
+  ///
+  /// Returns null on permission failure / network issue — the edit
+  /// sheet then keeps the password field empty so the admin can
+  /// still set a new value.
+  static Future<String?> fetchPassword(String idx) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/password',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final data = body['data'] as Map?;
+      return data?['password']?.toString();
+    } on DioException catch (e) {
+      _log('v2/subscribers/$idx/password', e);
+      return null;
+    } catch (e) {
+      _log('v2/subscribers/$idx/password', e);
+      return null;
+    }
+  }
+
   /// GET /api/v2/managers — list of all sub-managers visible to the
   /// logged-in admin. Used by the super-admin "تابع إلى" picker on
   /// the add + edit subscriber sheets. Returns null on auth /
