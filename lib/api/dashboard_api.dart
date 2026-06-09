@@ -55,11 +55,25 @@ class DebtorsResult {
     required this.count,
     required this.total,
     required this.nearExpiry,
+    required this.online,
+    required this.offline,
+    required this.active,
+    required this.expired,
+    required this.totalSubs,
   });
   final int count;
   final int total;
   /// Subscribers whose remaining days fall in [0, 3] — soon-to-expire.
   final int nearExpiry;
+  /// مطلب 2026-06-11: حسابات حالة الاتصال من القائمة المحلية مثل v1
+  /// لأن SAS4 widget الـactive يرجّع رقم خاطئ على بعض الحسابات
+  /// (offline يحسب صفر مع وجود متصلين). نمشي بنفس predicate v1:
+  ///   isOnline / isOffline = !isOnline && !isExpired / isExpired
+  final int online;
+  final int offline;
+  final int active; // !isExpired && !isDisabled (or per model)
+  final int expired;
+  final int totalSubs;
 }
 
 enum RevenuePeriod { day, week, month }
@@ -152,17 +166,30 @@ class DashboardApi {
     var debtCount = 0;
     var debtTotal = 0;
     var nearExpiry = 0;
+    var online = 0;
+    var offline = 0;
+    var active = 0;
+    var expired = 0;
     for (final s in list) {
       if (s.hasDebt) {
         debtCount++;
         debtTotal += s.debtAbs.round();
       }
       if (s.isNearExpiry) nearExpiry++;
+      if (s.isOnline) online++;
+      if (s.isOffline) offline++; // !isOnline && !isExpired
+      if (s.isExpired) expired++;
+      if (s.isActive) active++; // matches isExpired==false
     }
     return DebtorsResult(
       count: debtCount,
       total: debtTotal,
       nearExpiry: nearExpiry,
+      online: online,
+      offline: offline,
+      active: active,
+      expired: expired,
+      totalSubs: list.length,
     );
   }
 

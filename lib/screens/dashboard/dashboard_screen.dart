@@ -133,24 +133,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   SubscribersStats? get _subscribersStats {
-    if (!_sas4Loaded || !_debtorsLoaded) return null;
-    if (_sas4Live == null) return null;
-    final total = _sas4Live!.total ?? 0;
-    final active = _sas4Live!.active ?? 0;
-    final online = _sas4Live!.online ?? 0;
-    final expired = _sas4Live!.expired ?? 0;
-    // Offline = active subscribers who aren't currently connected. Active
-    // already excludes expired, so this matches v1's
-    // (!isOnline && !isExpired) predicate without double-counting
-    // expired subs.
-    final offline = (active - online).clamp(0, total);
+    if (!_debtorsLoaded) return null;
+    if (_debtorsLive == null) return null;
+    // مطلب 2026-06-11: نستعمل أرقام محسوبة محلياً من قائمة المشتركين
+    // (مثل v1 sas4OfflineCount = enriched.where(isOffline).length). الـ
+    // SAS4 widget endpoints أحياناً ترجع active=online فيطلع offline=0
+    // حتى لو في عدد كبير من المشتركين غير المتصلين. الـloop المحلي
+    // يطابق predicate v1 (isOnline / isOffline / isExpired) بدقة.
+    final d = _debtorsLive!;
     return SubscribersStats(
-      total: total,
-      active: active,
-      online: online,
-      offline: offline,
-      expired: expired,
-      nearExpiry: _debtorsLive?.nearExpiry ?? 0,
+      total: _sas4Live?.total ?? d.totalSubs,
+      active: d.active,
+      online: d.online,
+      offline: d.offline,
+      expired: d.expired,
+      nearExpiry: d.nearExpiry,
     );
   }
 
