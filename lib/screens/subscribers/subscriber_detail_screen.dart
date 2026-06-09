@@ -18,6 +18,7 @@ import 'sheets/extend_sheet.dart';
 import 'sheets/movements_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
+import 'widgets/device_probe_card.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -146,6 +147,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   if (sub.isOnline) ...[
                     _LiveSessionCard(sub: sub),
                     const SizedBox(height: Sp.sm),
+                    // مطلب 2026-06-11: عرض معلومات الاتصال (ONT/UBNT)
+                    // مثل v1 — تظهر بطاقة منفصلة تحت كرت الجلسة الحية
+                    // مع بور/سيغنال/LAN حسب نوع الجهاز.
+                    if ((sub.ipAddress ?? '').isNotEmpty) ...[
+                      DeviceProbeCard(ip: sub.ipAddress!),
+                      const SizedBox(height: Sp.sm),
+                    ],
                   ],
                   _SubscriptionCard(sub: sub),
                   if (sub.balanceAmount != 0) ...[
