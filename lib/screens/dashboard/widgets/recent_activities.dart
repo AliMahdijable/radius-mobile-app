@@ -54,6 +54,8 @@ class _Row extends StatelessWidget {
     String? detail,
     int amount,
     String timeLabel,
+    String? actor,
+    bool actorIsEmployee,
   }) _normalize() {
     final m = item;
     final action = (m['action'] ?? m['action_type'] ?? '').toString();
@@ -84,6 +86,22 @@ class _Row extends StatelessWidget {
     final amount = _readAmount(m);
     final created = m['created_at']?.toString();
     final timeLabel = _humanCreatedAt(created);
+    // مطلب 2026-06-11: عرض منو سوة الحركة. v1 backend يرجّع
+    // acting_employee_* لما الموظف ينفّذها، وadmin_username للمدير
+    // (الأب) دائماً. الموظف أولوية لأنه الفاعل الفعلي حتى لو الـadmin_id
+    // هو الأب. لو الـemployee فارغ نرجع للـadmin_username (نص "أنت"
+    // ما يتطابق هنا لأن المدير ممكن يشوف نشاطات موظفه فيحتاج اسم محدد).
+    final empName = (m['acting_employee_full_name'] ?? '').toString().trim();
+    final empUser = (m['acting_employee_username'] ?? '').toString().trim();
+    final adminUser = (m['admin_username'] ?? '').toString().trim();
+    String? actor;
+    var isEmployee = false;
+    if (empName.isNotEmpty || empUser.isNotEmpty) {
+      actor = empName.isNotEmpty ? empName : empUser;
+      isEmployee = true;
+    } else if (adminUser.isNotEmpty) {
+      actor = adminUser;
+    }
     return (
       icon: visual.$1,
       color: visual.$2,
@@ -92,6 +110,8 @@ class _Row extends StatelessWidget {
       detail: details.detail,
       amount: amount,
       timeLabel: timeLabel,
+      actor: actor,
+      actorIsEmployee: isEmployee,
     );
   }
 
@@ -351,6 +371,38 @@ class _Row extends StatelessWidget {
                         ],
                       ],
                     ),
+                    // مطلب 2026-06-11: سطر ثالث رفيع 'بواسطة: <اسم>'
+                    // يعرض الموظف لو هو الفاعل، أو المدير. يخفى لو
+                    // الـbackend ما رجّع لا هذا ولا ذاك (لا يحدث عملياً).
+                    if (n.actor != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            n.actorIsEmployee ? Icons.badge : Icons.shield,
+                            size: 10,
+                            color: n.actorIsEmployee
+                                ? const Color(0xFF7C3AED)
+                                : AppColors.textMid,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              n.actorIsEmployee
+                                  ? 'الموظف: ${n.actor}'
+                                  : 'المدير: ${n.actor}',
+                              style: AppType.muted(color: AppColors.textMid)
+                                  .copyWith(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
