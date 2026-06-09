@@ -51,7 +51,12 @@ class _EditSheet extends StatefulWidget {
 class _EditSheetState extends State<_EditSheet> {
   late final TextEditingController _username =
       TextEditingController(text: widget.sub.username);
-  final TextEditingController _password = TextEditingController();
+  // Pre-fill with the SAS4-stored password so the admin can reveal
+  // it (eye toggle) to check / copy / decide whether to change.
+  // Falls back to '' when the backend hasn't surfaced the field yet
+  // (older client + new backend gap window).
+  late final TextEditingController _password =
+      TextEditingController(text: widget.sub.password ?? '');
   late final TextEditingController _firstname =
       TextEditingController(text: widget.sub.firstname);
   late final TextEditingController _lastname =
@@ -69,11 +74,27 @@ class _EditSheetState extends State<_EditSheet> {
   Map<String, PackageInfo>? _packages;
   bool _loadingPackages = true;
   bool _saving = false;
+  /// Whether the password field is revealed (eye icon toggled on).
+  /// مطلب 2026-06-10: pre-fill + eye toggle so admins can verify
+  /// the existing password before deciding to change it.
+  bool _showPassword = false;
 
   @override
   void initState() {
     super.initState();
     _profileId = widget.sub.profileId;
+    // Listen on every text controller so the 'حفظ التغييرات' button
+    // re-evaluates _hasChanges on each keystroke — without these the
+    // button was stuck disabled because nothing triggered a rebuild
+    // when the admin typed (مطلب 2026-06-10).
+    final touch = () {
+      if (mounted) setState(() {});
+    };
+    _username.addListener(touch);
+    _password.addListener(touch);
+    _firstname.addListener(touch);
+    _lastname.addListener(touch);
+    _phone.addListener(touch);
     _loadPackages();
   }
 
@@ -101,8 +122,13 @@ class _EditSheetState extends State<_EditSheet> {
     final out = <String, dynamic>{};
     final u = _username.text.trim();
     if (u != original.username) out['username'] = u;
+    // Diff vs ORIGINAL password — pre-filling with the current
+    // value means an untouched field shouldn't fire an update. Only
+    // a genuine change lands in the body.
     final pw = _password.text;
-    if (pw.isNotEmpty) out['password'] = pw;
+    if (pw.isNotEmpty && pw != (original.password ?? '')) {
+      out['password'] = pw;
+    }
     final fn = _firstname.text.trim();
     if (fn != original.firstname) out['firstname'] = fn;
     final ln = _lastname.text.trim();
@@ -193,13 +219,27 @@ class _EditSheetState extends State<_EditSheet> {
                       icon: LucideIcons.user,
                     ),
                     const SizedBox(height: Sp.md),
-                    _FieldLabel(label: 'كلمة السر (اتركها فارغة بدون تغيير)'),
+                    _FieldLabel(label: 'كلمة السر'),
                     _Field(
                       controller: _password,
                       hint: '••••••••',
                       enabled: !_saving,
                       icon: LucideIcons.lock,
-                      obscure: true,
+                      obscure: !_showPassword,
+                      suffix: IconButton(
+                        icon: Icon(
+                          _showPassword
+                              ? LucideIcons.eyeOff
+                              : LucideIcons.eye,
+                          size: 16,
+                        ),
+                        color: AppColors.textMid,
+                        visualDensity: VisualDensity.compact,
+                        tooltip:
+                            _showPassword ? 'إخفاء' : 'إظهار',
+                        onPressed: () => setState(
+                            () => _showPassword = !_showPassword),
+                      ),
                     ),
                     const SizedBox(height: Sp.md),
                     Row(
@@ -301,6 +341,7 @@ class _Field extends StatelessWidget {
     required this.icon,
     this.obscure = false,
     this.keyboardType,
+    this.suffix,
   });
   final TextEditingController controller;
   final String hint;
@@ -308,6 +349,9 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final bool obscure;
   final TextInputType? keyboardType;
+  /// Optional trailing widget — used by the password field for the
+  /// reveal/hide eye toggle.
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -321,6 +365,7 @@ class _Field extends StatelessWidget {
         hintText: hint,
         hintStyle: AppType.input(color: AppColors.textLow),
         prefixIcon: Icon(icon, size: 16, color: AppColors.textMid),
+        suffixIcon: suffix,
         filled: true,
         fillColor: AppColors.surface,
         border: OutlineInputBorder(

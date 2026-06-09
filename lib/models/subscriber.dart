@@ -17,6 +17,10 @@ class Subscriber {
   final String? profileName;
   final int? profileId;
   final String? parentUsername;
+  /// SAS4-stored password — used to pre-fill the edit sheet so the
+  /// admin can reveal/copy the current password before deciding to
+  /// change it. null when the backend response didn't include it.
+  final String? password;
   final bool isEnabled;
   final bool isOnlineFlag;
   final String? ipAddress;
@@ -49,6 +53,7 @@ class Subscriber {
     this.profileName,
     this.profileId,
     this.parentUsername,
+    this.password,
     this.isEnabled = true,
     this.isOnlineFlag = false,
     this.ipAddress,
@@ -185,6 +190,7 @@ class Subscriber {
       profileId: toInt(pdId ?? j['profile_id'] ?? j['profileId']),
       parentUsername: j['parent_username']?.toString() ??
           j['parentUsername']?.toString(),
+      password: j['password']?.toString(),
       isEnabled: toBool(j['enabled'] ?? j['isEnabled'], dflt: true),
       // Mirror v1's exact online-flag read (subscribers_provider.dart:455-458):
       //   isOnline = online_status==1 || is_online IN [true, 1, '1']
@@ -241,6 +247,7 @@ class Subscriber {
       profileName: newName,
       profileId: profileId,
       parentUsername: parentUsername,
+      password: password,
       isEnabled: isEnabled,
       isOnlineFlag: isOnlineFlag,
       ipAddress: ipAddress,
@@ -275,6 +282,7 @@ class Subscriber {
       profileName: profileName,
       profileId: profileId,
       parentUsername: parentUsername,
+      password: password,
       isEnabled: isEnabled,
       isOnlineFlag: online,
       ipAddress: ip ?? ipAddress,
