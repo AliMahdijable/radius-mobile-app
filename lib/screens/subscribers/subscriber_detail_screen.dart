@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/subscribers_api.dart';
+import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
 import '../../services/subscriber_events.dart';
@@ -44,6 +45,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   late Subscriber sub = widget.sub;
   bool _disconnecting = false;
   bool _toggling = false;
+  /// Currently in-flight template send, or null. Drives the tile
+  /// 'جاري...' label so the admin sees activity for the right chip
+  /// (the operations grid has 3 template chips — debt reminder /
+  /// expiry warning / subscriber info).
+  String? _sendingTemplate;
 
   @override
   void initState() {
@@ -134,6 +140,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     toggling: _toggling,
                     onToggleEnabled:
                         sub.idx != null ? _confirmToggleEnabled : null,
+                    sendingTemplate: _sendingTemplate,
+                    onSendTemplate: _sendTemplate,
                   ),
                 ],
               ),
@@ -231,6 +239,45 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     );
     if (ok != true) return;
     await _runToggleEnabled(wantEnable);
+  }
+
+  Future<void> _sendTemplate(String templateType) async {
+    if (_sendingTemplate != null) return; // single flight per screen
+    setState(() => _sendingTemplate = templateType);
+    final result = await WhatsAppApi.sendTemplateForSubscriber(
+      sub: sub,
+      templateType: templateType,
+    );
+    if (!mounted) return;
+    setState(() => _sendingTemplate = null);
+    // Map the structured result to a per-state snackbar — admins want
+    // to see why a send failed (missing template / inactive /
+    // disconnected) so they can fix it inline.
+    final ok = result.ok;
+    final color = ok
+        ? const Color(0xFF25D366)
+        : (result.reason == 'no_template' ||
+                result.reason == 'inactive' ||
+                result.reason == 'no_phone')
+            ? const Color(0xFFE08F2D) // warning, not error
+            : AppColors.error;
+    final defaultOkMsg = switch (templateType) {
+      'debt_reminder' => 'تم إرسال تذكير الدين',
+      'expiry_warning' => 'تم إرسال تذكير الانتهاء',
+      'subscriber_info' => 'تم إرسال معلومات المشترك',
+      _ => 'تم إرسال الرسالة',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? defaultOkMsg
+              : (result.message ?? 'تعذّر إرسال الرسالة'),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _runToggleEnabled(bool wantEnable) async {
@@ -673,6 +720,8 @@ class _OperationsCard extends StatelessWidget {
     required this.onDisconnect,
     required this.toggling,
     required this.onToggleEnabled,
+    required this.sendingTemplate,
+    required this.onSendTemplate,
   });
 
   final Subscriber sub;
@@ -686,6 +735,11 @@ class _OperationsCard extends StatelessWidget {
   /// toggle through SubscribersApi (backend also kicks any live
   /// session on disable, see toggle-enabled endpoint).
   final VoidCallback? onToggleEnabled;
+  /// Which template send is in flight ('debt_reminder' /
+  /// 'expiry_warning' / 'subscriber_info'), or null. Drives the
+  /// matching chip's 'جاري الإرسال…' label.
+  final String? sendingTemplate;
+  final ValueChanged<String> onSendTemplate;
 
   @override
   Widget build(BuildContext context) {
@@ -711,15 +765,33 @@ class _OperationsCard extends StatelessWidget {
       _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
           () => _todo(context, 'سجل الحركات — قيد التطوير')),
       if (sub.hasDebt)
-        _Op(LucideIcons.bellRing, 'تذكير دين', Colors.orange,
-            () => _todo(context, 'تذكير دين — قيد التطوير')),
+        _Op(
+          LucideIcons.bellRing,
+          sendingTemplate == 'debt_reminder'
+              ? 'جاري الإرسال…'
+              : 'تذكير دين',
+          Colors.orange,
+          () => onSendTemplate('debt_reminder'),
+        ),
       if (sub.isNearExpiry)
-        _Op(LucideIcons.alarmClock, 'تذكير انتهاء', Colors.deepOrange,
-            () => _todo(context, 'تذكير انتهاء — قيد التطوير')),
+        _Op(
+          LucideIcons.alarmClock,
+          sendingTemplate == 'expiry_warning'
+              ? 'جاري الإرسال…'
+              : 'تذكير انتهاء',
+          Colors.deepOrange,
+          () => onSendTemplate('expiry_warning'),
+        ),
       _Op(LucideIcons.link, 'توليد رابط', Colors.indigo,
           () => _todo(context, 'توليد رابط — قيد التطوير')),
-      _Op(LucideIcons.info, 'إرسال المعلومات', Colors.blueAccent,
-          () => _todo(context, 'إرسال المعلومات — قيد التطوير')),
+      _Op(
+        LucideIcons.info,
+        sendingTemplate == 'subscriber_info'
+            ? 'جاري الإرسال…'
+            : 'إرسال المعلومات',
+        Colors.blueAccent,
+        () => onSendTemplate('subscriber_info'),
+      ),
       _Op(
         sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
         toggling
