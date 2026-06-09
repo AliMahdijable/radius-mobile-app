@@ -8,7 +8,12 @@ import 'dashboard/dashboard_screen.dart';
 import 'more_modules_screen.dart';
 import 'reports_screen.dart';
 import 'search/quick_search_overlay.dart';
+import 'expenses/sheets/add_expense_sheet.dart';
+import 'subscribers/sheets/activate_sheet.dart';
+import 'subscribers/sheets/add_debt_sheet.dart';
 import 'subscribers/sheets/add_subscriber_sheet.dart';
+import 'subscribers/sheets/pay_debt_sheet.dart';
+import 'subscribers/sheets/subscriber_picker_sheet.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
 
@@ -372,6 +377,8 @@ class _QuickAddSheet extends StatelessWidget {
           const SizedBox(height: Sp.lg),
           // مطلب 2026-06-10: الترتيب = إضافة مشترك → تفعيل/تجديد →
           // تسديد دين → إضافة دين → إضافة صرفية.
+          // العمليات 2-4 تفتح subscriber picker أوّلاً ثم تروح للـsheet
+          // المخصّصة. تسديد دين تخصّص الـpicker لمن عليه دين فقط.
           _QuickItem(
             icon: Icons.person_add_rounded,
             color: const Color(0xFF3B82F6),
@@ -384,24 +391,53 @@ class _QuickAddSheet extends StatelessWidget {
             color: AppColors.brand,
             title: 'تفعيل / تجديد اشتراك',
             subtitle: 'تفعيل أو تجديد مشترك موجود',
+            onTap: () async {
+              final picked = await showSubscriberPickerSheet(
+                context,
+                title: 'تفعيل / تجديد اشتراك',
+              );
+              if (picked != null && context.mounted) {
+                await showActivateSheet(context, picked);
+              }
+            },
           ),
           _QuickItem(
             icon: Icons.payments_rounded,
             color: const Color(0xFF14B8A6),
             title: 'تسديد دين',
             subtitle: 'استلام دفعة من مشترك',
+            onTap: () async {
+              final picked = await showSubscriberPickerSheet(
+                context,
+                title: 'تسديد دين',
+                debtorsOnly: true,
+              );
+              if (picked != null && context.mounted) {
+                await showPayDebtSheet(context, picked);
+              }
+            },
           ),
           _QuickItem(
             icon: Icons.account_balance_wallet_rounded,
             color: const Color(0xFFE08F2D),
             title: 'إضافة دين',
             subtitle: 'إضافة دين على مشترك',
+            onTap: () async {
+              final picked = await showSubscriberPickerSheet(
+                context,
+                title: 'إضافة دين',
+              );
+              if (picked != null && context.mounted) {
+                await showAddDebtSheet(context, picked);
+              }
+            },
           ),
           _QuickItem(
             icon: Icons.receipt_long_rounded,
             color: const Color(0xFF8B5CF6),
             title: 'إضافة صرفية',
             subtitle: 'تسجيل مصروف جديد',
+            onTap: () => showAddExpenseSheet(context),
           ),
         ],
       ),
