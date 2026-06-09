@@ -152,7 +152,12 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   /// الـDeviceProbeApi والـDeviceChipMicro يقرأ منها مباشرة.
   /// كل wave له runId — لو القائمة تغيّرت أو الشاشة ضاعت، الحلقة
   /// تتوقف وما تنادي setState بعد.
-  void _runProbeWave() {
+  ///
+  /// `force=true` يبطل cache الـ5 دقائق فيجبر فحص جديد على كل صف —
+  /// يُستعمل من زر "فحص الأجهزة" اليدوي. عند الـboot الأول نخلّيه
+  /// false (لو في snapshots حديثة محفوظة في الـin-memory cache من
+  /// زيارة سابقة، نريد نقدّمها فوراً).
+  void _runProbeWave({bool force = false}) {
     _probeRunId += 1;
     final myRun = _probeRunId;
     final targets = _all
@@ -167,6 +172,14 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
         _probeTotal = 0;
       });
       return;
+    }
+    if (force) {
+      // الـadmin يطلب تحديث صريح — نسقط الـcache كاملاً لكل المشتركين
+      // المستهدفين بالـwave فالـwarmProbe يصير لهن جلسة probe جديدة.
+      for (final t in targets) {
+        DeviceProbeApi.invalidateIp(t.ip);
+      }
+      DeviceProbeBus.bump();
     }
     setState(() {
       _probing = true;
@@ -199,7 +212,9 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     await _fetchAndMerge();
     if (!mounted) return;
     setState(() => _refreshing = false);
-    _runProbeWave();
+    // مطلب 2026-06-11: السحب والتحديث ما يفجّر فحص كامل للأجهزة
+    // (يأخّر استجابة عرض المشتركين). الـcache الحالي للأجهزة يبقى
+    // والـadmin يضغط زر "فحص الأجهزة" يدوياً لتحديث الإشارات/RX.
   }
 
   /// Pulls the 3 sources in parallel (subscribers + online list + last
@@ -817,6 +832,14 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
+                    // مطلب 2026-06-11: زر فحص الأجهزة اليدوي — يطلق
+                    // wave على كل المتصلين مع force=true (يبطل الـcache).
+                    // معطّل أثناء probing لكي ما يطلق wave فوق wave.
+                    _ScanAllChip(
+                      busy: _probing,
+                      onTap: _probing ? null : () => _runProbeWave(force: true),
+                    ),
+                    const SizedBox(width: 8),
                     _DeviceSortChip(
                       metric: 'rx',
                       label: 'RX',
@@ -1662,6 +1685,58 @@ class _ClearSortChip extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.error,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Manual full-list device scan trigger. Lives at the head of the
+/// device sort bar. Renders a spinner while a wave is running so
+/// it's obvious why repeat taps don't fire.
+class _ScanAllChip extends StatelessWidget {
+  const _ScanAllChip({required this.busy, required this.onTap});
+  final bool busy;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF7C3AED);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: accent.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              busy
+                  ? const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: accent,
+                      ),
+                    )
+                  : const Icon(LucideIcons.refreshCw, size: 12, color: accent),
+              const SizedBox(width: 5),
+              const Text(
+                'فحص الأجهزة',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
                 ),
               ),
             ],
