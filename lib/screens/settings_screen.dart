@@ -98,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             Sp.lg,
             canPop ? Sp.sm : Sp.lg,
             Sp.lg,
