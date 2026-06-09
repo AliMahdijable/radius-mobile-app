@@ -232,20 +232,25 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
+      // Roomier header — top=Sp.sm (8 vs old 4) so the title sits
+      // clear of the handle, bigger icon-box (8 vs 6) so the brand
+      // emblem reads at a comfortable size, and an extra px on the
+      // subtitle line so the subscriber name has visible space
+      // under the title rather than touching it.
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.sm, Sp.md),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: AppColors.brand.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: const Icon(LucideIcons.history,
-                color: AppColors.brand, size: 16),
+                color: AppColors.brand, size: 18),
           ),
           const SizedBox(width: Sp.sm),
           Expanded(
@@ -256,16 +261,18 @@ class _Header extends StatelessWidget {
                 Text(
                   'سجل الحركات',
                   style: AppType.label(color: AppColors.textHi).copyWith(
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(height: 3),
                 Text(
                   sub.fullName,
                   style: AppType.muted(color: AppColors.textMid).copyWith(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
+                    height: 1.2,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -317,11 +324,16 @@ class _FilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Taller chip strip (48 vs the original 38) — Arabic chip labels
+    // need extra vertical breathing room because the descenders on
+    // letters like ع, ج clipped against the pill border before. Also
+    // gives the row enough whitespace under the header so the sheet
+    // doesn't read as a wall of controls.
     return SizedBox(
-      height: 38,
+      height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 8),
         itemCount: _filters.length,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
@@ -335,7 +347,7 @@ class _FilterChips extends StatelessWidget {
             borderRadius: BorderRadius.circular(R.pill),
             child: Container(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: selected
                     ? AppColors.brand.withValues(alpha: 0.12)
@@ -354,6 +366,7 @@ class _FilterChips extends StatelessWidget {
                   color: selected ? AppColors.brand : AppColors.textMid,
                 ).copyWith(
                   fontSize: 12,
+                  height: 1.2,
                   fontWeight:
                       selected ? FontWeight.w800 : FontWeight.w600,
                 ),
