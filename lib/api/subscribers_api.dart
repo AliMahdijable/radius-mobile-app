@@ -563,6 +563,52 @@ class SubscribersApi {
     }
   }
 
+  /// POST /api/v2/subscribers — create a new subscriber. Backend
+  /// wraps the SAS4 /user create endpoint so we don't have to deal
+  /// with payload encryption client-side. `parent_id` is required;
+  /// admins typically pass their own adminId unless they're managing
+  /// a sub-admin's subscriber tree.
+  static Future<({bool ok, String? message})> createSubscriber({
+    required String username,
+    required String password,
+    required int profileId,
+    required int parentId,
+    String? firstname,
+    String? lastname,
+    String? phone,
+    String? expiration,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers',
+        data: {
+          'username': username,
+          'password': password,
+          'profile_id': profileId,
+          'parent_id': parentId,
+          if (firstname != null && firstname.isNotEmpty)
+            'firstname': firstname,
+          if (lastname != null && lastname.isNotEmpty)
+            'lastname': lastname,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
+          if (expiration != null && expiration.isNotEmpty)
+            'expiration': expiration,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('v2/subscribers (POST)', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر إضافة المشترك');
+    } catch (e) {
+      _log('v2/subscribers (POST)', e);
+      return (ok: false, message: 'تعذّر إضافة المشترك');
+    }
+  }
+
   /// PUT /api/v2/subscribers/:idx — partial update. Only fields
   /// present in the args land in the body so the backend only
   /// touches what actually changed (rename, package change, name,

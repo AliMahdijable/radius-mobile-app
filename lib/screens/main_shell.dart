@@ -8,6 +8,7 @@ import 'dashboard/dashboard_screen.dart';
 import 'reports_screen.dart';
 import 'search/quick_search_overlay.dart';
 import 'settings_screen.dart';
+import 'subscribers/sheets/add_subscriber_sheet.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
 
@@ -371,9 +372,10 @@ class _QuickAddSheet extends StatelessWidget {
           ),
           _QuickItem(
             icon: Icons.person_add_rounded,
-            color: Color(0xFF3B82F6),
+            color: const Color(0xFF3B82F6),
             title: 'مشترك جديد',
             subtitle: 'إضافة مشترك للنظام',
+            onTap: () => showAddSubscriberSheet(context),
           ),
           _QuickItem(
             icon: Icons.payments_rounded,
@@ -399,19 +401,26 @@ class _QuickItem extends StatelessWidget {
     required this.color,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
 
   final IconData icon;
   final Color color;
   final String title;
   final String subtitle;
+  /// Defaults to closing the sheet — items without a wired action
+  /// still let the admin dismiss the sheet by tapping.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => Navigator.of(context).pop(),
+        onTap: () {
+          Navigator.of(context).pop();
+          onTap?.call();
+        },
         borderRadius: BorderRadius.circular(R.md),
         child: Padding(
           padding: const EdgeInsets.symmetric(
