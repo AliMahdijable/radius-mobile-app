@@ -43,6 +43,12 @@ class _MainShellState extends State<MainShell> {
   final ValueNotifier<SubscriberFilter?> _subsFilterCmd =
       ValueNotifier<SubscriberFilter?>(null);
 
+  /// مطلب 2026-06-11: 'النقر ع زر الرجوع مرتين يلا يخرج البرنامج'.
+  /// First back press shows a snackbar; a second press within this
+  /// window actually exits. Standard Android double-back pattern.
+  DateTime? _lastBackPress;
+  static const _backExitWindow = Duration(seconds: 2);
+
   @override
   void dispose() {
     _subsFilterCmd.dispose();
@@ -85,6 +91,33 @@ class _MainShellState extends State<MainShell> {
     _subsFilterCmd.value = filter;
   }
 
+  /// Handler for Android system back. Returns true to let the pop
+  /// proceed (i.e. exit), false to swallow it. Two-stage flow:
+  ///   1. If not on Home tab → jump to Home, swallow.
+  ///   2. If on Home → first press: snackbar + remember timestamp,
+  ///      second press within 2s: let the pop proceed (exits app).
+  Future<bool> _onWillPop() async {
+    if (_tab != 0) {
+      setState(() => _tab = 0);
+      return false;
+    }
+    final now = DateTime.now();
+    if (_lastBackPress != null &&
+        now.difference(_lastBackPress!) < _backExitWindow) {
+      return true; // allow the pop → exits the app
+    }
+    _lastBackPress = now;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('اضغط مرة أخرى للخروج'),
+        backgroundColor: AppColors.textHi,
+        duration: _backExitWindow,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tabs = <Widget>[
@@ -97,6 +130,23 @@ class _MainShellState extends State<MainShell> {
       const MoreModulesScreen(),
     ];
 
+    return PopScope(
+      // canPop=false lets us intercept every system back press. We
+      // call SystemNavigator.pop() ourselves when the user confirms
+      // exit (two presses within the window).
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await _onWillPop();
+        if (shouldExit) {
+          await SystemNavigator.pop();
+        }
+      },
+      child: _buildScaffold(tabs),
+    );
+  }
+
+  Widget _buildScaffold(List<Widget> tabs) {
     return Scaffold(
       backgroundColor: AppColors.bg,
       extendBody: true, // body draws under the floating bar
