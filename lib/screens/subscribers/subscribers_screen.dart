@@ -1822,6 +1822,11 @@ class _ScanAllChip extends StatelessWidget {
 /// Global collapse/expand toggle for ALL visible subscriber cards.
 /// Lives at the head of the device-sort bar so the user can compact
 /// the list quickly when scanning many rows at once.
+///
+/// مطلب 2026-06-11 (تحديث): التصميم مطابق chevron البطاقة —
+/// keyboard_arrow_up_rounded يدور 0.5 turn بين الحالتين بدلاً من
+/// أيقونتين Lucide مختلفتين، فالحركة موحّدة بصرياً مع الـchevron
+/// الفردي على كل بطاقة. الزر مكوّل = السهم لأعلى، موسّع = لأسفل.
 class _CollapseAllChip extends StatelessWidget {
   const _CollapseAllChip({
     required this.allCollapsed,
@@ -1832,14 +1837,14 @@ class _CollapseAllChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF0EA5E9); // sky blue — visually distinct from probe purple
+    const accent = Color(0xFF0EA5E9);
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.md),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: accent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(R.md),
@@ -1847,14 +1852,18 @@ class _CollapseAllChip extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                allCollapsed
-                    ? LucideIcons.chevronsUpDown
-                    : LucideIcons.chevronsDownUp,
-                size: 12,
-                color: accent,
+              AnimatedRotation(
+                // 0 = chevron يشير لأعلى (تكويل — اضغط ليغلق "لفوق")
+                // 0.5 = يشير لأسفل (موسّع — السطور تظهر لتحت)
+                turns: allCollapsed ? 0 : 0.5,
+                duration: const Duration(milliseconds: 220),
+                child: const Icon(
+                  Icons.keyboard_arrow_up_rounded,
+                  size: 18,
+                  color: accent,
+                ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               Text(
                 allCollapsed ? 'توسيع' : 'تكويل',
                 style: const TextStyle(
