@@ -50,10 +50,14 @@ class _AddSheetState extends State<_AddSheet> {
   Map<String, PackageInfo>? _packages;
   bool _loadingPackages = true;
   bool _saving = false;
-  /// Super-admin only — drives the expiration + parent picker. Set
-  /// after AuthStorage.readIsSuperAdmin resolves. Non-super admins
-  /// never see those two fields (مطلب المستخدم 2026-06-10).
-  bool _isSuper = false;
+  /// Permission gates — mirror v1's add_subscriber_sheet:
+  ///   canPickParent     = canAccessManagers (super OR
+  ///                       prm_managers_create)
+  ///   canEditExpiration = canAccessManagers OR canAccessPackages
+  /// Hidden entirely for sub-managers who hold neither, so they
+  /// only fill the basic fields and the package picker.
+  bool _canPickParent = false;
+  bool _canEditExpiration = false;
   DateTime? _expiration;
   int? _parentId;
   List<({int id, String username, String displayName})>? _managers;
@@ -67,13 +71,15 @@ class _AddSheetState extends State<_AddSheet> {
   }
 
   Future<void> _resolveSuperAdmin() async {
-    final isSuper = await AuthStorage.readIsSuperAdmin();
+    final canManagers = await AuthStorage.readCanAccessManagers();
+    final canPackages = await AuthStorage.readCanAccessPackages();
     if (!mounted) return;
     setState(() {
-      _isSuper = isSuper;
-      _loadingManagers = isSuper;
+      _canPickParent = canManagers;
+      _canEditExpiration = canManagers || canPackages;
+      _loadingManagers = canManagers;
     });
-    if (isSuper) {
+    if (canManagers) {
       final list = await SubscribersApi.loadManagers();
       if (!mounted) return;
       setState(() {
@@ -123,10 +129,11 @@ class _AddSheetState extends State<_AddSheet> {
       return;
     }
     final adminId = await AuthStorage.readAdminId();
-    // Super-admin override: if they picked a parent in the dropdown,
-    // use it; otherwise fall back to their own admin id (the
-    // default behaviour for regular admins).
-    final parentId = _isSuper && _parentId != null
+    // Permission-aware parent: if the admin can pick parent AND
+    // chose one in the dropdown, use it; otherwise fall back to
+    // their own admin id (default for sub-managers without the
+    // canAccessManagers permission).
+    final parentId = _canPickParent && _parentId != null
         ? _parentId
         : int.tryParse(adminId ?? '');
     if (parentId == null) {
@@ -141,7 +148,7 @@ class _AddSheetState extends State<_AddSheet> {
     }
     setState(() => _saving = true);
     String? expirationStr;
-    if (_isSuper && _expiration != null) {
+    if (_canEditExpiration && _expiration != null) {
       final d = _expiration!;
       String two(int n) => n.toString().padLeft(2, '0');
       expirationStr =
@@ -288,7 +295,7 @@ class _AddSheetState extends State<_AddSheet> {
                       enabled: !_saving,
                       onSelect: (id) => setState(() => _profileId = id),
                     ),
-                    if (_isSuper) ...[
+                    if (_canEditExpiration) ...[
                       const SizedBox(height: Sp.md),
                       _Lbl('تاريخ الانتهاء (اختياري)'),
                       _ExpirationPicker(
@@ -296,6 +303,8 @@ class _AddSheetState extends State<_AddSheet> {
                         enabled: !_saving,
                         onPick: (d) => setState(() => _expiration = d),
                       ),
+                    ],
+                    if (_canPickParent) ...[
                       const SizedBox(height: Sp.md),
                       _Lbl('تابع إلى (المدير)'),
                       _ManagerPicker(

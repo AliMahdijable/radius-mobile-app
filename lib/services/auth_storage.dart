@@ -27,6 +27,13 @@ class AuthStorage {
   // super_admin. Edit/add subscriber sheets gate the expiration +
   // parent fields on this flag (مطلب 2026-06-10).
   static const _kIsSuperAdmin = 'auth.is_super_admin';
+  // Granular permission flags derived from the SAS4 prm_* list at
+  // login time (مطابق v1: canAccessManagers = prm_managers_create,
+  // canAccessPackages = prm_profiles_create). The edit/add subscriber
+  // sheets gate on these instead of isSuperAdmin alone — non-super
+  // admins who hold prm_managers_create still see the parent picker.
+  static const _kCanAccessManagers = 'auth.can_access_managers';
+  static const _kCanAccessPackages = 'auth.can_access_packages';
 
   static Future<void> saveSession({
     required String token,
@@ -36,6 +43,8 @@ class AuthStorage {
     required bool autoLogin,
     String? tokenExpiry,
     bool isSuperAdmin = false,
+    bool canAccessManagers = false,
+    bool canAccessPackages = false,
   }) async {
     await Future.wait([
       _storage.write(key: _kToken, value: token),
@@ -44,6 +53,10 @@ class AuthStorage {
       _storage.write(key: _kDisplayName, value: displayName),
       _storage.write(key: _kAutoLogin, value: autoLogin ? '1' : '0'),
       _storage.write(key: _kIsSuperAdmin, value: isSuperAdmin ? '1' : '0'),
+      _storage.write(
+          key: _kCanAccessManagers, value: canAccessManagers ? '1' : '0'),
+      _storage.write(
+          key: _kCanAccessPackages, value: canAccessPackages ? '1' : '0'),
       if (tokenExpiry != null)
         _storage.write(key: _kTokenExpiry, value: tokenExpiry),
     ]);
@@ -89,6 +102,21 @@ class AuthStorage {
   /// the add / edit subscriber sheets).
   static Future<bool> readIsSuperAdmin() async {
     final v = await _storage.read(key: _kIsSuperAdmin);
+    return v == '1';
+  }
+
+  /// True when the admin can create sub-managers ('prm_managers_create'
+  /// or super). Gates the parent picker on add/edit subscriber sheets.
+  static Future<bool> readCanAccessManagers() async {
+    final v = await _storage.read(key: _kCanAccessManagers);
+    return v == '1';
+  }
+
+  /// True when the admin can create packages ('prm_profiles_create'
+  /// or super). Combined with canAccessManagers to derive
+  /// canEditExpiration — the expiration date picker shows for either.
+  static Future<bool> readCanAccessPackages() async {
+    final v = await _storage.read(key: _kCanAccessPackages);
     return v == '1';
   }
 

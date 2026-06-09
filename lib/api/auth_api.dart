@@ -19,6 +19,8 @@ class LoginSuccess extends LoginResult {
     this.expiresAt,
     this.requires2fa = false,
     this.isSuperAdmin = false,
+    this.canAccessManagers = false,
+    this.canAccessPackages = false,
   });
 
   final String token;
@@ -30,9 +32,15 @@ class LoginSuccess extends LoginResult {
   final String? expiresAt;
   final bool requires2fa;
   /// True when the SAS4 user permissions resolve to super-admin.
-  /// Drives the edit/add subscriber sheets' permission-gated UI
-  /// (expiration date + parent picker).
   final bool isSuperAdmin;
+  /// True when the user can create sub-managers — درجة الـ
+  /// 'prm_managers_create' SAS4. Drives the parent picker visibility
+  /// on the add/edit subscriber sheets (مطابق v1 canAccessManagers).
+  final bool canAccessManagers;
+  /// True when the user can create/manage packages — درجة الـ
+  /// 'prm_profiles_create' SAS4. Combined with canAccessManagers to
+  /// gate the expiration date picker (canEditExpiration = either).
+  final bool canAccessPackages;
 }
 
 class LoginFailure extends LoginResult {
@@ -81,6 +89,15 @@ class AuthApi {
       final isSuperAdmin = user['isSuperAdmin'] == true ||
           user['is_super_admin'] == true ||
           (user['role']?.toString() == 'super_admin');
+      // canAccessManagers / canAccessPackages derived from the raw
+      // permissions array (same pattern as v1 mobile-app/lib/providers/
+      // auth_provider.dart:141-143). Super-admins get both implicitly.
+      final perms = (user['permissions'] ?? body['permissions']) as List?;
+      final permSet = perms?.map((e) => e.toString()).toSet() ?? const <String>{};
+      final canAccessManagers = isSuperAdmin ||
+          permSet.contains('prm_managers_create');
+      final canAccessPackages = isSuperAdmin ||
+          permSet.contains('prm_profiles_create');
       return LoginSuccess(
         token: token,
         adminId: (user['admin_id'] ?? user['id'] ?? '').toString(),
@@ -92,6 +109,8 @@ class AuthApi {
         expiresAt: body['expiresAt']?.toString(),
         requires2fa: body['requires2fa'] == true,
         isSuperAdmin: isSuperAdmin,
+        canAccessManagers: canAccessManagers,
+        canAccessPackages: canAccessPackages,
       );
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));

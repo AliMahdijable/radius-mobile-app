@@ -80,10 +80,14 @@ class _EditSheetState extends State<_EditSheet> {
   /// مطلب 2026-06-10: pre-fill + eye toggle so admins can verify
   /// the existing password before deciding to change it.
   bool _showPassword = false;
-  /// True ONLY for SAS4 super-admins. Drives the visibility of the
-  /// expiration date + parent dropdown — مطلب المستخدم 2026-06-10.
-  /// Set after AuthStorage.readIsSuperAdmin resolves.
-  bool _isSuper = false;
+  /// Whether the admin can change the parent ('تابع إلى'). Mirrors
+  /// v1's canPickParent = canAccessManagers — مدير بصلاحية إنشاء
+  /// المدراء الفرعيين يقدر يعيد إسناد المشترك لمدير آخر.
+  bool _canPickParent = false;
+  /// Whether the admin can edit the expiration date. Mirrors v1's
+  /// canEditExpiration = canAccessManagers OR canAccessPackages.
+  /// الأدمن الفرعي العادي ما يقدر يغيّر تاريخ الانتهاء.
+  bool _canEditExpiration = false;
   /// Edited expiration date — null means 'keep original'. Format
   /// matches SAS4: 'YYYY-MM-DD HH:mm:ss'.
   DateTime? _expiration;
@@ -157,13 +161,15 @@ class _EditSheetState extends State<_EditSheet> {
   }
 
   Future<void> _resolveSuperAdmin() async {
-    final isSuper = await AuthStorage.readIsSuperAdmin();
+    final canManagers = await AuthStorage.readCanAccessManagers();
+    final canPackages = await AuthStorage.readCanAccessPackages();
     if (!mounted) return;
     setState(() {
-      _isSuper = isSuper;
-      _loadingManagers = isSuper;
+      _canPickParent = canManagers;
+      _canEditExpiration = canManagers || canPackages;
+      _loadingManagers = canManagers;
     });
-    if (isSuper) {
+    if (canManagers) {
       final list = await SubscribersApi.loadManagers();
       if (!mounted) return;
       setState(() {
@@ -218,23 +224,17 @@ class _EditSheetState extends State<_EditSheet> {
     }
     // Super-admin fields. Only diff when the picker has actually
     // moved away from the original — empty/no-pick → not in the body.
-    if (_isSuper) {
-      if (_parentId != null) {
-        // No 'original parent_id' on the Subscriber model directly —
-        // backend round-trips will reject same-value writes anyway,
-        // but we send only when the picker was touched (tracked by
-        // _parentId being non-null after _loadDetails seeded it AND
-        // differing from the seed).
-        // Simpler: always send when set; backend diffs internally.
-        out['parent_id'] = _parentId;
-      }
-      if (_expiration != null) {
-        // SAS4 expects 'YYYY-MM-DD HH:mm:ss'
-        final d = _expiration!;
-        String two(int n) => n.toString().padLeft(2, '0');
-        out['expiration'] =
-            '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
-      }
+    // Permission-gated diffs: only include parent_id when the user
+    // can actually pick it, same for expiration. Sending them when
+    // the field isn't visible would be a silent bug.
+    if (_canPickParent && _parentId != null) {
+      out['parent_id'] = _parentId;
+    }
+    if (_canEditExpiration && _expiration != null) {
+      final d = _expiration!;
+      String two(int n) => n.toString().padLeft(2, '0');
+      out['expiration'] =
+          '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
     }
     return out;
   }
@@ -405,7 +405,7 @@ class _EditSheetState extends State<_EditSheet> {
                       enabled: !_saving,
                       onSelect: (id) => setState(() => _profileId = id),
                     ),
-                    if (_isSuper) ...[
+                    if (_canEditExpiration) ...[
                       const SizedBox(height: Sp.md),
                       _FieldLabel(label: 'تاريخ الانتهاء'),
                       _ExpirationPicker(
@@ -413,6 +413,8 @@ class _EditSheetState extends State<_EditSheet> {
                         enabled: !_saving,
                         onPick: (d) => setState(() => _expiration = d),
                       ),
+                    ],
+                    if (_canPickParent) ...[
                       const SizedBox(height: Sp.md),
                       _FieldLabel(label: 'تابع إلى (المدير)'),
                       _ManagerPicker(
