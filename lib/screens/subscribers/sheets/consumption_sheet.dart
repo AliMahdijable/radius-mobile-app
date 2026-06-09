@@ -242,22 +242,31 @@ class _ConsumptionSheet extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: AppColors.textMid),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 14, color: AppColors.textMid),
+          ),
           const SizedBox(width: 7),
           Text(
             label,
             style: AppType.muted(color: AppColors.textMid)
                 .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
           ),
-          const Spacer(),
-          Flexible(
+          const SizedBox(width: 8),
+          // مطلب 2026-06-11: اسم الجهاز الطويل (مثل
+          // 'Guangzhou V-SOLUTION') كان يتقطع. شيلنا maxLines=1
+          // وخلّينا التفاف طبيعي حتى 3 أسطر، WordWrap حتى لو
+          // النص بدون فراغات.
+          Expanded(
             child: Text(
               value,
               style: AppType.label(color: AppColors.textHi)
                   .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-              maxLines: 1,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
+              softWrap: true,
               textAlign: TextAlign.end,
             ),
           ),

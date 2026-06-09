@@ -259,32 +259,29 @@ class SubscriberCardV2 extends StatelessWidget {
             ip: sub.ipAddress,
             username: sub.username,
           ),
-          // مطلب 2026-06-11: زرا الاستهلاك السريع + فصل المستخدم.
-          // يظهران فقط لو الـcaller مرّر الـcallbacks (تاب 'متصل').
+          // مطلب 2026-06-11: زرّا الاستهلاك + فصل المستخدم بتصميم
+          // ناعم — نص صغير + أيقونة، شبه شفاف، لا حدود قوية ولا
+          // ملء ملفت. مرتب يمين السطر فما يحجب الـmetrics على شماله.
           if (onShowConsumption != null || onDisconnect != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 5),
             Row(
               children: [
                 if (onShowConsumption != null)
-                  Expanded(
-                    child: _ActionPill(
-                      icon: LucideIcons.activity,
-                      label: 'الاستهلاك',
-                      color: const Color(0xFF3B82F6),
-                      onTap: onShowConsumption!,
-                    ),
+                  _GhostAction(
+                    icon: LucideIcons.chartLine,
+                    label: 'الاستهلاك',
+                    color: const Color(0xFF3B82F6),
+                    onTap: onShowConsumption!,
                   ),
-                if (onShowConsumption != null && onDisconnect != null)
-                  const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 if (onDisconnect != null)
-                  Expanded(
-                    child: _ActionPill(
-                      icon: LucideIcons.powerOff,
-                      label: 'فصل',
-                      color: AppColors.error,
-                      onTap: onDisconnect!,
-                    ),
+                  _GhostAction(
+                    icon: LucideIcons.powerOff,
+                    label: 'فصل',
+                    color: AppColors.error,
+                    onTap: onDisconnect!,
                   ),
+                const Spacer(),
               ],
             ),
           ],
@@ -882,12 +879,12 @@ class _LastPaymentLine extends StatelessWidget {
   }
 }
 
-/// Small pill button used for inline row actions (consumption +
-/// disconnect on the online tab). مطلب 2026-06-11: تقليص الحجم
-/// لأنه كان "مبالغ" — 36→28 height، 13→11 icon، 12→11 label،
-/// horizontal padding 8→7. ما زال tap area كافي (28dp × عرض البطاقة).
-class _ActionPill extends StatelessWidget {
-  const _ActionPill({
+/// Ghost-style action button — text-link feel with a colored leading
+/// dot. Used للاستهلاك + فصل تحت بطاقة المتصل. مطلب 2026-06-11
+/// (تحديث ثاني): الـpills السابقة كانت "نشاز" بالتصميم. هذا أنحف،
+/// مدمج مع باقي السطور النصية لكن مع نقطة لون تميّز كل إجراء.
+class _GhostAction extends StatelessWidget {
+  const _GhostAction({
     required this.icon,
     required this.label,
     required this.color,
@@ -905,25 +902,20 @@ class _ActionPill extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.sm),
-        child: Container(
-          height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 7),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(color: color.withValues(alpha: 0.28)),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 11, color: color),
+              Icon(icon, size: 12, color: color),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 11,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.none,
                 ),
               ),
             ],

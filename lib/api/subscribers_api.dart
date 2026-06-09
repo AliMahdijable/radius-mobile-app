@@ -471,23 +471,26 @@ class SubscribersApi {
     }
   }
 
-  /// GET /user/disconnect/acctid/{idx} on SAS4 — forces the subscriber
-  /// off the network if they currently have an active session. Mirrors
-  /// v1's `disconnectUser`. SAS4 returns 200 on success; any non-200
-  /// is treated as failure.
-  static Future<bool> disconnect(String idx) async {
+  /// POST /api/v2/subscribers/:idx/disconnect — يفصل جلسة المشترك الحيّة.
+  /// الـbackend يلتقط acctsessionid عبر /index/online ثم يستدعي
+  /// /user/disconnect/acctid/{acctid} لأن SAS4 يحتاج acctid لا الـidx.
+  /// مطابق سلوك v1 toggle-enabled disconnect step (server.js:10256+).
+  static Future<({bool ok, String? message})> disconnect(String idx) async {
     try {
-      final r = await ApiClient.sas4.get('/user/disconnect/acctid/$idx');
-      if (!kReleaseMode) {
-        debugPrint('🟢 SAS4 disconnect $idx: status=${r.statusCode}');
-      }
-      return r.statusCode != null && r.statusCode! < 400;
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/disconnect',
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
     } on DioException catch (e) {
-      _log('SAS4 disconnect/$idx', e);
-      return false;
+      _log('v2 disconnect/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر الفصل');
     } catch (e) {
-      _log('SAS4 disconnect/$idx', e);
-      return false;
+      _log('v2 disconnect/$idx', e);
+      return (ok: false, message: 'تعذّر الفصل');
     }
   }
 

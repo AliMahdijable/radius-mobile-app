@@ -569,13 +569,15 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    final ok = await SubscribersApi.disconnect(s.idx!);
+    final result = await SubscribersApi.disconnect(s.idx!);
     if (!mounted) return;
-    if (ok) SubscriberEvents.notifyChange();
+    if (result.ok) SubscriberEvents.notifyChange();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok ? 'تم الفصل' : 'تعذّر الفصل'),
-        backgroundColor: ok ? AppColors.brand : AppColors.error,
+        content: Text(result.ok
+            ? 'تم الفصل'
+            : (result.message ?? 'تعذّر الفصل')),
+        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -613,8 +615,8 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     _showProgress('فصل المستخدمين');
     var ok = 0, fail = 0;
     for (final s in online) {
-      final success = await SubscribersApi.disconnect(s.idx!);
-      success ? ok++ : fail++;
+      final res = await SubscribersApi.disconnect(s.idx!);
+      res.ok ? ok++ : fail++;
     }
     if (!mounted) return;
     Navigator.of(context).pop(); // close progress

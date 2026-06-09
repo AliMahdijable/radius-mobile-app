@@ -225,7 +225,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     final id = sub.idx;
     if (id == null) return;
     setState(() => _disconnecting = true);
-    final success = await SubscribersApi.disconnect(id);
+    final result = await SubscribersApi.disconnect(id);
+    final success = result.ok;
     if (!mounted) return;
     setState(() {
       _disconnecting = false;
