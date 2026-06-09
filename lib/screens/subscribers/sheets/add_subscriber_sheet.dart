@@ -66,6 +66,11 @@ class _AddSheetState extends State<_AddSheet> {
   @override
   void initState() {
     super.initState();
+    // Seed the expiration with the current moment (date + time down
+    // to the second). مطلب 2026-06-10: 'خلي تاريخ اليوم وبنفس
+    // الدقيقه والثانيه' بدل ما يطلع 'افتراضي باقة'. The admin can
+    // still pick a different date — DatePicker preserves the time.
+    _expiration = DateTime.now();
     _loadPackages();
     _resolveSuperAdmin();
   }
@@ -552,8 +557,9 @@ class _ExpirationPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     String two(int n) => n.toString().padLeft(2, '0');
     final label = value == null
-        ? 'افتراضي الباقة'
-        : '${value!.year}/${two(value!.month)}/${two(value!.day)}';
+        ? '—'
+        : '${value!.year}/${two(value!.month)}/${two(value!.day)} '
+            '${two(value!.hour)}:${two(value!.minute)}:${two(value!.second)}';
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.sm),
@@ -573,11 +579,18 @@ class _ExpirationPicker extends StatelessWidget {
                   confirmText: 'تأكيد',
                 );
                 if (picked != null) {
+                  // Preserve the time-of-day so picking just a date
+                  // doesn't lose the minute/second the field was
+                  // seeded with (مطلب 2026-06-10 — defaults to
+                  // DateTime.now()).
+                  final src = value ?? DateTime.now();
                   onPick(DateTime(
                     picked.year,
                     picked.month,
                     picked.day,
-                    20, 59, 59,
+                    src.hour,
+                    src.minute,
+                    src.second,
                   ));
                 }
               }

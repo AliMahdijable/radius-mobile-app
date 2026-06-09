@@ -640,7 +640,8 @@ class _ExpirationPicker extends StatelessWidget {
     String two(int n) => n.toString().padLeft(2, '0');
     final label = value == null
         ? 'لم يُختر'
-        : '${value!.year}/${two(value!.month)}/${two(value!.day)}';
+        : '${value!.year}/${two(value!.month)}/${two(value!.day)} '
+            '${two(value!.hour)}:${two(value!.minute)}:${two(value!.second)}';
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.sm),
