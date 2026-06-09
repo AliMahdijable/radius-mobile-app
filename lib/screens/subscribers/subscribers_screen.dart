@@ -275,6 +275,17 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
         case SortField.expiration:
           return (a.expiration ?? '').compareTo(b.expiration ?? '');
         case SortField.remainingDays:
+          // مطلب 2026-06-11: SAS4 يدوّر remainingDays لصفر للمنتهي
+          // ولمن باقي عنده ساعات. الـcompareTo القديم يطلع المشترك
+          // اللي عنده ساعه قبل المنتهي (tie أو ترتيب عشوائي).
+          // الإصلاح: استعمل parsedExpiration timestamp كمصدر دقيق،
+          // فالمنتهيون فعلاً يقعدون أولاً عند ascending.
+          final aExp = a.parsedExpiration;
+          final bExp = b.parsedExpiration;
+          if (aExp != null && bExp != null) {
+            return aExp.compareTo(bExp);
+          }
+          // Fallback لـremainingDays فقط لو date فاضي (نادر).
           return (a.remainingDays ?? 99999)
               .compareTo(b.remainingDays ?? 99999);
         case SortField.notes:

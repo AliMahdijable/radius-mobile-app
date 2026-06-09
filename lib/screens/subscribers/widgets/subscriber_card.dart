@@ -365,16 +365,18 @@ class _ExpiryBadge extends StatelessWidget {
         icon: LucideIcons.clock,
       );
     } else if (remaining! < 0) {
+      // مطلب 2026-06-11: المنتهي يظهر 'منذ X يوم' بدل '0 منتهي'
+      // (المدير يحتاج يعرف كم صار له منتهي عشان يقرر يتابعه أو يحذفه).
       v = (
         color: AppColors.error,
-        big: '${remaining!.abs()}',
-        small: 'منتهي',
+        big: 'منذ',
+        small: '${remaining!.abs()} يوم',
         icon: LucideIcons.timerOff,
       );
     } else if (remaining! == 0) {
-      // Same-day expiry: split hours/minutes from the parsed timestamp.
-      // Falls back to a static 'اليوم' label when we don't have a
-      // parseable expiration (rare).
+      // Same-day expiry. Check expiration timestamp — if past, this is
+      // actually expired (SAS4 rounds to 0 for any value < 24h). Show
+      // 'منذ ساعة/دقيقة' so the admin distinguishes from 'باقي ساعة'.
       final hm = _hoursMinutesUntil(expiration);
       v = (
         color: AppColors.error,
@@ -406,17 +408,20 @@ class _ExpiryBadge extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      // مطلب 2026-06-11: الـbadge كان كبير جداً ع الكرت. خفّضنا
+      // الـpadding من 10×6 إلى 7×4 + الـicon من 14 إلى 11 +
+      // الفونت 14→11 / 9.5→8.5 فيتقلّص ~30% بدون فقدان قراءة.
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
         color: v.color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: v.color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(v.icon, color: v.color, size: 14),
-          const SizedBox(width: 5),
+          Icon(v.icon, color: v.color, size: 11),
+          const SizedBox(width: 4),
           Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -424,7 +429,7 @@ class _ExpiryBadge extends StatelessWidget {
               Text(
                 v.big,
                 style: AppType.title(color: v.color).copyWith(
-                  fontSize: 14, // Section title tier — primary urgency signal
+                  fontSize: 11,
                   fontWeight: FontWeight.w800,
                   height: 1,
                 ),
@@ -434,7 +439,7 @@ class _ExpiryBadge extends StatelessWidget {
                 Text(
                   v.small,
                   style: AppType.muted(color: v.color).copyWith(
-                    fontSize: 10, // Tiny label tier (was 9 — illegible)
+                    fontSize: 8.5,
                     fontWeight: FontWeight.w700,
                     height: 1,
                   ),
@@ -447,14 +452,23 @@ class _ExpiryBadge extends StatelessWidget {
     );
   }
 
-  /// Returns `(big, small)` strings for a same-day expiry.
-  ///  hours >= 1 → ('5س', '30د')
-  ///  hours == 0 → ('30', 'دقيقة') or ('1', 'دقيقة') / ('45', 'دقيقة')
-  ///  past expiry → ('0', 'منتهي')  (defensive — shouldn't hit here)
+  /// Returns `(big, small)` strings for a same-day case.
+  ///  past expiry (negative diff) → ('منذ', 'X ساعة / دقيقة')
+  ///  hours >= 1               → ('5س', '30د')
+  ///  hours == 0               → ('30', 'دقيقة')
   static (String, String) _hoursMinutesUntil(DateTime? exp) {
     if (exp == null) return ('0', 'اليوم');
-    final diff = exp.difference(DateTime.now());
-    if (diff.isNegative) return ('0', 'منتهي');
+    final now = DateTime.now();
+    final diff = exp.difference(now);
+    if (diff.isNegative) {
+      // Already expired same-day — surface 'منذ X ساعة' so it reads
+      // distinct from 'يبقى X ساعة' (مطلب 2026-06-11).
+      final past = now.difference(exp);
+      final ph = past.inHours;
+      if (ph >= 1) return ('منذ', '$ph ساعة');
+      final pm = past.inMinutes.clamp(1, 59);
+      return ('منذ', '$pm دقيقة');
+    }
     final h = diff.inHours;
     final mLeft = diff.inMinutes - h * 60;
     if (h >= 1) {
