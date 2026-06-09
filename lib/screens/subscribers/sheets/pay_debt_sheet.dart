@@ -390,9 +390,17 @@ class _AmountField extends StatelessWidget {
               hintStyle: AppType.input(color: AppColors.textLow),
               filled: true,
               fillColor: AppColors.surface,
+              // Softer border so the field doesn't read as a stark
+              // black frame against the white sheet (مطلب 2026-06-10).
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.border),
+                borderSide: BorderSide(
+                    color: AppColors.border.withValues(alpha: 0.5)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(
+                    color: AppColors.border.withValues(alpha: 0.5)),
               ),
               isDense: true,
               contentPadding:
@@ -475,7 +483,9 @@ class _PayAllToggle extends StatelessWidget {
               : AppColors.surface,
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
-            color: value ? teal.withValues(alpha: 0.3) : AppColors.border,
+            color: value
+                ? teal.withValues(alpha: 0.3)
+                : AppColors.border.withValues(alpha: 0.5),
           ),
         ),
         child: Row(
@@ -526,7 +536,13 @@ class _NotesField extends StatelessWidget {
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide: BorderSide(color: AppColors.border),
+          borderSide: BorderSide(
+              color: AppColors.border.withValues(alpha: 0.5)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(R.sm),
+          borderSide: BorderSide(
+              color: AppColors.border.withValues(alpha: 0.5)),
         ),
         isDense: true,
         contentPadding:
