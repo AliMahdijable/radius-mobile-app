@@ -1171,7 +1171,13 @@ class _OpCard extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
+/// مطلب 2026-06-11: كرت قابل للطي/التوسيع.
+///  • فونتات +1 درجة على القيم والعناوين والأيقونات (كانت صغيرة).
+///  • سهم chevron في الـheader يقلب الطيّ. تأثير AnimatedCrossFade
+///    ينعّم الانتقال بين الحالتين.
+///  • الـheader وحده قابل للنقر — التفاعل مع الصفوف بالداخل
+///    لا يقلب الطي بالخطأ.
+class _SectionCard extends StatefulWidget {
   const _SectionCard({
     required this.icon,
     required this.title,
@@ -1185,9 +1191,16 @@ class _SectionCard extends StatelessWidget {
   final List<Widget> children;
 
   @override
+  State<_SectionCard> createState() => _SectionCardState();
+}
+
+class _SectionCardState extends State<_SectionCard> {
+  bool _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
@@ -1196,28 +1209,60 @@ class _SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(icon, color: accent, size: 11),
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(R.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: widget.accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(R.sm),
+                    ),
+                    child: Icon(widget.icon, color: widget.accent, size: 13),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: AppType.label(color: AppColors.textHi).copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0 : -0.25,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textMid,
+                      size: 22,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 5),
-              Text(
-                title,
-                style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 3),
-          ...children,
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 220),
+            firstCurve: Curves.easeOut,
+            secondCurve: Curves.easeIn,
+            crossFadeState: _expanded
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: widget.children,
+              ),
+            ),
+            secondChild: const SizedBox(width: double.infinity),
+          ),
         ],
       ),
     );
@@ -1243,16 +1288,18 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // مطلب 2026-06-11: فونت/icon +1 على كل قيمة وعنوان في صفوف
+    // كروت التفاصيل — كان 11/12/13 ضعيف الوضوح، صار 12/13/14.
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.textMid, size: 13),
-          const SizedBox(width: 6),
+          Icon(icon, color: AppColors.textMid, size: 14),
+          const SizedBox(width: 7),
           Text(
             label,
             style: AppType.muted(color: AppColors.textMid)
-                .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
           Flexible(
@@ -1260,7 +1307,7 @@ class _InfoRow extends StatelessWidget {
               value,
               style: AppType.label(
                 color: valueColor ?? AppColors.textHi,
-              ).copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+              ).copyWith(fontSize: 13, fontWeight: FontWeight.w700),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,
@@ -1268,7 +1315,7 @@ class _InfoRow extends StatelessWidget {
           ),
           if (trailing != null) ...[
             const SizedBox(width: 4),
-            Icon(trailing, color: AppColors.textLow, size: 12),
+            Icon(trailing, color: AppColors.textLow, size: 13),
           ],
         ],
       ),
@@ -1298,7 +1345,7 @@ class _BytesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(R.sm),
@@ -1309,20 +1356,20 @@ class _BytesCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 11),
-              const SizedBox(width: 4),
+              Icon(icon, color: color, size: 13),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 3),
           Text(
             _formatBytes(bytes),
             style: AppType.title(color: color).copyWith(
-              fontSize: 13,
+              fontSize: 15,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
             ),
