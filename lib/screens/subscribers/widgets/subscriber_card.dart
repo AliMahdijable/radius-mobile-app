@@ -14,7 +14,7 @@ import 'device_chip_micro.dart';
 /// and a prominent days-remaining badge on the right. Below that, two
 /// metadata rows (package/phone, expiration) and an optional finance
 /// strip with a debt/credit chip + last-payment line.
-class SubscriberCardV2 extends StatelessWidget {
+class SubscriberCardV2 extends StatefulWidget {
   const SubscriberCardV2({
     super.key,
     required this.sub,
@@ -25,6 +25,7 @@ class SubscriberCardV2 extends StatelessWidget {
     required this.onLongPress,
     this.onShowConsumption,
     this.onDisconnect,
+    this.collapsedAll = false,
   });
 
   final Subscriber sub;
@@ -40,6 +41,43 @@ class SubscriberCardV2 extends StatelessWidget {
   /// "متصل". null = الزر يختفي (مستخدم في كل التابات الأخرى).
   final VoidCallback? onShowConsumption;
   final VoidCallback? onDisconnect;
+  /// مطلب 2026-06-11: زر تكويل عام في الـtoolbar فوق القائمة يطبّق
+  /// حالة "مكوّل" على كل البطاقات معاً. didUpdateWidget يعيد سنكروز
+  /// _expanded عند تغيّر القيمة فالكل ينطبق فوراً. الـchevron الفردي
+  /// يبقى يعمل كـoverride بعد ذلك.
+  final bool collapsedAll;
+
+  @override
+  State<SubscriberCardV2> createState() => _SubscriberCardV2State();
+}
+
+class _SubscriberCardV2State extends State<SubscriberCardV2> {
+  /// مطلب 2026-06-11: سهم تكويل يخفي قسم الاتصال (live session +
+  /// device chip + الأزرار + balance + last payment). الـheader
+  /// (الاسم + الحالة + الأيام) + الـmetadata (الباقة + الهاتف +
+  /// الانتهاء) يبقون مرئيين دائماً.
+  late bool _expanded = !widget.collapsedAll;
+
+  @override
+  void didUpdateWidget(SubscriberCardV2 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Global toggle changed → resync this card. الـuser لو ضغط chevron
+    // البطاقة بعد ذلك، يتجاوز الإعداد العام للبطاقة فقط.
+    if (oldWidget.collapsedAll != widget.collapsedAll) {
+      _expanded = !widget.collapsedAll;
+    }
+  }
+
+  // Getters عشان كود البناء يبقى يقرأ `sub`/`lastPayment` مباشرة
+  // (ما نحتاج نعدل كل reference لإضافة widget.).
+  Subscriber get sub => widget.sub;
+  bool get selected => widget.selected;
+  Map<String, dynamic>? get lastPayment => widget.lastPayment;
+  bool get showLiveSession => widget.showLiveSession;
+  VoidCallback get onTap => widget.onTap;
+  VoidCallback get onLongPress => widget.onLongPress;
+  VoidCallback? get onShowConsumption => widget.onShowConsumption;
+  VoidCallback? get onDisconnect => widget.onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -98,15 +136,30 @@ class SubscriberCardV2 extends StatelessWidget {
                           _buildHeader(statusColor, statusLabel, disabled),
                           const SizedBox(height: 10),
                           _buildMetadata(),
-                          if (_hasFinance) ...[
-                            const SizedBox(height: 10),
-                            const Divider(
-                              height: 1,
-                              color: AppColors.border,
-                            ),
-                            const SizedBox(height: 8),
-                            _buildFinance(),
-                          ],
+                          // مطلب 2026-06-11: قسم الاتصال (live session +
+                          // balance + last payment) يطوى عند الضغط على
+                          // chevron الـheader. AnimatedSize يتنعّم
+                          // الانتقال 220ms بدلاً من قفز فجائي.
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOut,
+                            alignment: Alignment.topCenter,
+                            child: (_expanded && _hasFinance)
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 10),
+                                      const Divider(
+                                        height: 1,
+                                        color: AppColors.border,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildFinance(),
+                                    ],
+                                  )
+                                : const SizedBox(width: double.infinity),
+                          ),
                         ],
                       ),
                     ),
@@ -192,6 +245,25 @@ class SubscriberCardV2 extends StatelessWidget {
           expiration: sub.parsedExpiration,
           disabled: disabled,
         ),
+        // مطلب 2026-06-11: سهم تكويل بعد الـExpiryBadge — يظهر
+        // فقط لو في فعلاً قسم اتصال يمكن طيّه (live/balance/lastPay)،
+        // غير ذلك ميمكن نطوي شي فيختفي.
+        if (_hasFinance) ...[
+          const SizedBox(width: 4),
+          InkResponse(
+            onTap: () => setState(() => _expanded = !_expanded),
+            radius: 18,
+            child: AnimatedRotation(
+              turns: _expanded ? 0 : 0.5,
+              duration: const Duration(milliseconds: 200),
+              child: const Icon(
+                Icons.keyboard_arrow_up_rounded,
+                color: AppColors.textMid,
+                size: 22,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -79,6 +79,11 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   /// asc/desc. Matches v1's _deviceSort string format.
   String? _deviceSort;
 
+  /// مطلب 2026-06-11: زر تكويل عام — true يخفي قسم الاتصال على
+  /// كل البطاقات المعروضة. الـSubscriberCardV2 يلتقط الـprop عبر
+  /// didUpdateWidget فيتزامن الكل لحظياً.
+  bool _allCollapsed = false;
+
   String _query = '';
   SubscriberFilter _filter = SubscriberFilter.all;
   SortField _sortField = SortField.remainingDays;
@@ -874,6 +879,15 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
+                    // مطلب 2026-06-11: زر تكويل عام — يخفي/يظهر قسم
+                    // الاتصال على كل البطاقات المعروضة. حالته تنتشر
+                    // عبر `collapsedAll` على SubscriberCardV2.
+                    _CollapseAllChip(
+                      allCollapsed: _allCollapsed,
+                      onTap: () => setState(
+                          () => _allCollapsed = !_allCollapsed),
+                    ),
+                    const SizedBox(width: 6),
                     // مطلب 2026-06-11: زر فحص الأجهزة اليدوي — يطلق
                     // wave على كل المتصلين مع force=true (يبطل الـcache).
                     // معطّل أثناء probing لكي ما يطلق wave فوق wave.
@@ -1005,6 +1019,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                                         s.idx != null
                                     ? () => _confirmDisconnect(s)
                                     : null,
+                                collapsedAll: _allCollapsed,
                               );
                             },
                           ),
@@ -1791,6 +1806,58 @@ class _ScanAllChip extends StatelessWidget {
               const Text(
                 'فحص الأجهزة',
                 style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Global collapse/expand toggle for ALL visible subscriber cards.
+/// Lives at the head of the device-sort bar so the user can compact
+/// the list quickly when scanning many rows at once.
+class _CollapseAllChip extends StatelessWidget {
+  const _CollapseAllChip({
+    required this.allCollapsed,
+    required this.onTap,
+  });
+  final bool allCollapsed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF0EA5E9); // sky blue — visually distinct from probe purple
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: accent.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                allCollapsed
+                    ? LucideIcons.chevronsUpDown
+                    : LucideIcons.chevronsDownUp,
+                size: 12,
+                color: accent,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                allCollapsed ? 'توسيع' : 'تكويل',
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: accent,
