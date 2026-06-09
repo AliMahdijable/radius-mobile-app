@@ -367,23 +367,19 @@ class _AmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'قيمة الدين المضاف',
-            style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+    // مطلب 2026-06-10: no tinted outer container — TextField's own
+    // OutlinedInputBorder is enough; the wrapping box was reading as
+    // a double frame.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'قيمة الدين المضاف',
+          style: AppType.label(color: AppColors.textHi).copyWith(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
           ),
+        ),
           const SizedBox(height: 4),
           TextField(
             controller: controller,
@@ -443,7 +439,6 @@ class _AmountField extends StatelessWidget {
             ],
           ),
         ],
-      ),
     );
   }
 }
