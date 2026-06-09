@@ -5,6 +5,55 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 
+/// Outcome of a backend-initiated WhatsApp send (post-activate /
+/// pay-debt / extend / add-subscriber). Surfaces in the returned
+/// API record so the caller can decide whether to show a follow-up
+/// snackbar after the main operation snackbar fires.
+class WhatsAppSendInfo {
+  const WhatsAppSendInfo({required this.sent, required this.reason});
+  final bool sent;
+  final String? reason;
+
+  /// Parses `body['wa']` — backend shape is `{ sent: bool, reason: string }`.
+  /// Returns null if the field is missing or malformed.
+  static WhatsAppSendInfo? fromMap(dynamic raw) {
+    if (raw is! Map) return null;
+    final sent = raw['sent'] == true;
+    final reason = raw['reason']?.toString();
+    return WhatsAppSendInfo(sent: sent, reason: reason);
+  }
+
+  /// True when the admin should see a "WhatsApp didn't send" notice.
+  /// مطلب المستخدم 2026-06-11: silence the cases the admin
+  /// intentionally configured (feature off / no template) — surface
+  /// only the technical failures they can act on.
+  bool get shouldShowFailure {
+    if (sent) return false;
+    final r = reason ?? '';
+    if (r.isEmpty) return false;
+    // intentional / configured silences:
+    if (r == 'notifications_disabled') return false;
+    if (r == 'no_template') return false;
+    if (r.startsWith('feature_off')) return false;
+    return true;
+  }
+
+  /// Arabic display for the technical failure reasons. Used by the
+  /// sheet snackbar when shouldShowFailure is true.
+  String get arabicReason {
+    switch (reason ?? '') {
+      case 'not_connected':
+        return 'الواتساب غير متصل';
+      case 'no_phone':
+        return 'لا يوجد رقم هاتف للمشترك';
+      case 'no_admin_id':
+        return 'حساب المدير غير محدد';
+      default:
+        return reason ?? 'سبب غير معروف';
+    }
+  }
+}
+
 /// Live session data for one currently-connected subscriber. Pulled
 /// from /api/v2/online-users so we can show DL/UL bytes + session time
 /// on the detail screen without per-row fetches.
@@ -738,7 +787,15 @@ class SubscribersApi {
   /// POST /api/v2/subscribers/:idx/pay-debt — apply a payment against
   /// the subscriber's debt. `comment` is optional and appears in the
   /// activity log + receipt. Mirrors v1's payDebt provider.
-  static Future<({bool ok, String? message})> payDebt({
+  ///
+  /// Response carries an extra `wa` field with the WhatsApp send
+  /// result ({sent, reason}) so the sheet can surface a secondary
+  /// snackbar if the admin's feature is on but the send failed
+  /// (e.g. واتساب غير متصل). reasons like 'feature_off' or
+  /// 'notifications_disabled' stay silent — admin intentionally
+  /// disabled them.
+  static Future<({bool ok, String? message, WhatsAppSendInfo? wa})>
+      payDebt({
     required String idx,
     required double amount,
     String? comment,
@@ -753,15 +810,23 @@ class SubscribersApi {
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;
-      return (ok: ok, message: body['message']?.toString());
+      return (
+        ok: ok,
+        message: body['message']?.toString(),
+        wa: WhatsAppSendInfo.fromMap(body['wa']),
+      );
     } on DioException catch (e) {
       _log('pay-debt/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التسديد');
+      return (
+        ok: false,
+        message: msg ?? 'تعذّر التسديد',
+        wa: null,
+      );
     } catch (e) {
       _log('pay-debt/$idx', e);
-      return (ok: false, message: 'تعذّر التسديد');
+      return (ok: false, message: 'تعذّر التسديد', wa: null);
     }
   }
 

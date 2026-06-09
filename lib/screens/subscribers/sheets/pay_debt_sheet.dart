@@ -155,7 +155,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
       SnackBar(
         content: Text(
           result.ok ? 'تم التسديد بنجاح' : (result.message ?? 'فشل التسديد'),
@@ -165,6 +166,18 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+    // مطلب 2026-06-11: لو الإرسال فشل لسبب فني (واتساب فاصل / لا
+    // رقم) أظهر السبب للمدير. الإسكات يحصل تلقائياً للأسباب اللي
+    // المدير يقصدها (feature_off / notifications_disabled / لا قالب).
+    if (result.ok && result.wa != null && result.wa!.shouldShowFailure) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('لم يُرسل واتساب: ${result.wa!.arabicReason}'),
+          backgroundColor: const Color(0xFFE08F2D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
     if (result.ok) Navigator.of(context).pop(true);
   }
 
