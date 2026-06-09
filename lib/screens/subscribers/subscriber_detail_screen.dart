@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
+import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
 import 'sheets/movements_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
@@ -936,7 +937,7 @@ class _OperationsCard extends StatelessWidget {
     final phone = sub.displayPhone;
     final ops = <_Op>[
       _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
-          () => _todo(context, 'تعديل — قيد التطوير (مرحلة 4)')),
+          () => showEditSubscriberSheet(context, sub)),
       // 'تجديد اشتراك' — sheet renews the package (same as v1's
       // _activateSubscriber). The label avoids collision with the
       // separate 'تعطيل/تفعيل حساب' toggle below which manages the

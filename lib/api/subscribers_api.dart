@@ -563,6 +563,51 @@ class SubscribersApi {
     }
   }
 
+  /// PUT /api/v2/subscribers/:idx — partial update. Only fields
+  /// present in the args land in the body so the backend only
+  /// touches what actually changed (rename, package change, name,
+  /// phone, password). Returns a structured result so the caller
+  /// can show the backend's specific rejection message.
+  static Future<({bool ok, String? message})> updateSubscriber({
+    required String idx,
+    String? username,
+    String? password,
+    String? firstname,
+    String? lastname,
+    String? phone,
+    int? profileId,
+  }) async {
+    final body = <String, dynamic>{};
+    if (username != null) body['username'] = username;
+    if (password != null && password.isNotEmpty) {
+      body['password'] = password;
+    }
+    if (firstname != null) body['firstname'] = firstname;
+    if (lastname != null) body['lastname'] = lastname;
+    if (phone != null) body['phone'] = phone;
+    if (profileId != null) body['profile_id'] = profileId;
+    if (body.isEmpty) {
+      return (ok: true, message: 'لا توجد تغييرات');
+    }
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx',
+        data: body,
+      );
+      final data = r.data ?? const {};
+      final ok = data['success'] == true;
+      return (ok: ok, message: data['message']?.toString());
+    } on DioException catch (e) {
+      _log('v2/subscribers/$idx (PUT)', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر التعديل');
+    } catch (e) {
+      _log('v2/subscribers/$idx (PUT)', e);
+      return (ok: false, message: 'تعذّر التعديل');
+    }
+  }
+
   /// POST /api/v2/subscribers/:idx/pay-debt — apply a payment against
   /// the subscriber's debt. `comment` is optional and appears in the
   /// activity log + receipt. Mirrors v1's payDebt provider.
