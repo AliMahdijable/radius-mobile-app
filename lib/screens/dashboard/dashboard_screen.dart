@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
+import '../settings_screen.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import 'widgets/section_header.dart';
@@ -405,7 +406,19 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
             onTap: () {},
           ),
           const SizedBox(width: Sp.sm),
-          _IconChip(icon: Icons.settings_outlined, onTap: () {}),
+          _IconChip(
+            icon: Icons.settings_outlined,
+            // مطلب 2026-06-10: زر الإعدادات بالشريط العلوي يفتح
+            // شاشة الإعدادات (الحساب / المظهر / واتساب / الطباعة /
+            // الصلاحيات / السكون). الزر السفلي السابق "الضبط" انتقل
+            // لاسم "قوائم اخرى" ويعرض المديولات الإضافية.
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const SettingsScreen(),
+                fullscreenDialog: true,
+              ),
+            ),
+          ),
         ],
       ),
     );

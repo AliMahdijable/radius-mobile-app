@@ -5,9 +5,9 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'dashboard/dashboard_screen.dart';
+import 'more_modules_screen.dart';
 import 'reports_screen.dart';
 import 'search/quick_search_overlay.dart';
-import 'settings_screen.dart';
 import 'subscribers/sheets/add_subscriber_sheet.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
@@ -79,7 +79,10 @@ class _MainShellState extends State<MainShell> {
       DashboardScreen(onOpenSubscribers: _openSubscribers),
       SubscribersScreen(filterCmd: _subsFilterCmd),
       const ReportsScreen(),
-      const SettingsScreen(),
+      // مطلب 2026-06-10: الـtab السفلي الأخير صار "قوائم أخرى" يعرض
+      // مديولات إضافية (صرفيات/مدراء/تسعير). شاشة الإعدادات الفعلية
+      // انتقلت لزر الـgear بالشريط العلوي على Home.
+      const MoreModulesScreen(),
     ];
 
     return Scaffold(
@@ -181,8 +184,11 @@ class _PillBar extends StatelessWidget {
                 onTap: () => _select(2),
               ),
               _TabSlot(
-                icon: Icons.settings_outlined,
-                label: 'الضبط',
+                // مطلب 2026-06-10: 'قوائم أخرى' بدل 'الضبط' لأن
+                // الـtab صار يعرض المديولات الإضافية لا الإعدادات.
+                // الإعدادات الفعلية انتقلت لزر الـgear بالشريط العلوي.
+                icon: Icons.apps_rounded,
+                label: 'قوائم أخرى',
                 slotWidth: slotWidth,
                 selected: current == 3,
                 onTap: () => _select(3),
