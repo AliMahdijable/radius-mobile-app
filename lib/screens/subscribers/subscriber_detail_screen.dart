@@ -51,6 +51,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// expiry warning / subscriber info).
   String? _sendingTemplate;
 
+  /// Any operation (toggle / disconnect / template send) currently
+  /// awaiting a server response. Drives the operations card's
+  /// progress bar + chip-disable overlay so the admin can't fire a
+  /// second action while the first is mid-flight — مطلب المستخدم
+  /// 2026-06-09: لا شيء يدل على التحميل وكل الأزرار تبقى فعّالة.
+  bool get _isBusy =>
+      _disconnecting || _toggling || _sendingTemplate != null;
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +150,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                         sub.idx != null ? _confirmToggleEnabled : null,
                     sendingTemplate: _sendingTemplate,
                     onSendTemplate: _sendTemplate,
+                    busy: _isBusy,
                   ),
                 ],
               ),
@@ -722,6 +731,7 @@ class _OperationsCard extends StatelessWidget {
     required this.onToggleEnabled,
     required this.sendingTemplate,
     required this.onSendTemplate,
+    required this.busy,
   });
 
   final Subscriber sub;
@@ -740,6 +750,12 @@ class _OperationsCard extends StatelessWidget {
   /// matching chip's 'جاري الإرسال…' label.
   final String? sendingTemplate;
   final ValueChanged<String> onSendTemplate;
+  /// True when ANY async operation owned by this card is pending —
+  /// togglesa, disconnect, or a template send. While busy the card
+  /// shows a thin progress strip + dims every tile and intercepts
+  /// taps so the admin can't queue a second action mid-flight (the
+  /// network round-trip is ~1-3s and v1 had the same lock-out).
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -823,21 +839,47 @@ class _OperationsCard extends StatelessWidget {
       title: 'العمليات',
       accent: AppColors.brand,
       children: [
+        // Thin progress strip while busy — gives the admin an
+        // immediate signal that the tap registered and a request is
+        // mid-flight, instead of the previous silent freeze.
+        if (busy) ...[
+          const SizedBox(height: 2),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(R.pill),
+            child: const LinearProgressIndicator(
+              minHeight: 2,
+              color: AppColors.brand,
+              backgroundColor: AppColors.border,
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
         // Card-style tiles — white surface, border + soft shadow, tinted
         // icon-box on top, label underneath. Same visual language as
         // the section cards above so the whole screen reads as one
         // family. 3-column grid keeps tiles tappable on mid-size phones.
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            mainAxisSpacing: 5,
-            crossAxisSpacing: 5,
-            childAspectRatio: 1.35,
+        //
+        // IgnorePointer + Opacity wrap so the whole grid blocks taps
+        // while busy without re-laying-out (children just dim, no
+        // shifting/repaint chains).
+        IgnorePointer(
+          ignoring: busy,
+          child: Opacity(
+            opacity: busy ? 0.55 : 1,
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisSpacing: 5,
+                crossAxisSpacing: 5,
+                childAspectRatio: 1.35,
+              ),
+              itemCount: ops.length,
+              itemBuilder: (_, i) => _OpCard(op: ops[i]),
+            ),
           ),
-          itemCount: ops.length,
-          itemBuilder: (_, i) => _OpCard(op: ops[i]),
         ),
       ],
     );
