@@ -116,55 +116,52 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                     ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Status accent rail (right edge in RTL = leading)
-                  Container(
-                    width: 4,
-                    color: statusColor,
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        Sp.md, Sp.md, Sp.md, Sp.md,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildHeader(statusColor, statusLabel, disabled),
-                          const SizedBox(height: 10),
-                          _buildMetadata(),
-                          // مطلب 2026-06-11: قسم الاتصال (live session +
-                          // balance + last payment) يطوى عند الضغط على
-                          // chevron الـheader. AnimatedSize يتنعّم
-                          // الانتقال 220ms بدلاً من قفز فجائي.
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOut,
-                            alignment: Alignment.topCenter,
-                            child: (_expanded && _hasFinance)
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 10),
-                                      const Divider(
-                                        height: 1,
-                                        color: AppColors.border,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      _buildFinance(),
-                                    ],
-                                  )
-                                : const SizedBox(width: double.infinity),
-                          ),
-                        ],
+            // مطلب 2026-06-11 (إصلاح): AnimatedSize كان داخل Column
+            // داخل IntrinsicHeight — IntrinsicHeight يحسب أعلى ارتفاع
+            // مهتد إذاً النظام يفترض الـcolumn طويلة بينما الـanimation
+            // تصغّرها فيحصل overflow. الحل: نلفّ IntrinsicHeight كله
+            // بـAnimatedSize، والـcolumn داخلها تبني condition بدون
+            // animation فالـIntrinsicHeight يقرأ snapshot ثابت، الخارجي
+            // ينعّم التبديل بين snapshot موسّع و snapshot مكوّل.
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              alignment: Alignment.topCenter,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Status accent rail (right edge in RTL = leading)
+                    Container(
+                      width: 4,
+                      color: statusColor,
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Sp.md, Sp.md, Sp.md, Sp.md,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeader(statusColor, statusLabel, disabled),
+                            const SizedBox(height: 10),
+                            _buildMetadata(),
+                            if (_expanded && _hasFinance) ...[
+                              const SizedBox(height: 10),
+                              const Divider(
+                                height: 1,
+                                color: AppColors.border,
+                              ),
+                              const SizedBox(height: 8),
+                              _buildFinance(),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -1838,41 +1838,34 @@ class _CollapseAllChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const accent = Color(0xFF0EA5E9);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: accent.withValues(alpha: 0.4)),
-          ),
-          child: Row(
-            children: [
-              AnimatedRotation(
-                // 0 = chevron يشير لأعلى (تكويل — اضغط ليغلق "لفوق")
-                // 0.5 = يشير لأسفل (موسّع — السطور تظهر لتحت)
-                turns: allCollapsed ? 0 : 0.5,
-                duration: const Duration(milliseconds: 220),
-                child: const Icon(
-                  Icons.keyboard_arrow_up_rounded,
-                  size: 18,
-                  color: accent,
-                ),
+    // مطلب 2026-06-11 (تحديث ثاني): chip أيقونة فقط بدون نص —
+    // مساحة أصغر، يندمج مع باقي chips الترتيب بسلاسة. الـtooltip
+    // يخبر المدير بالوظيفة عند ضغط طويل.
+    return Tooltip(
+      message: allCollapsed ? 'توسيع كل المشتركين' : 'تكويل كل المشتركين',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: accent.withValues(alpha: 0.4)),
+            ),
+            alignment: Alignment.center,
+            child: AnimatedRotation(
+              turns: allCollapsed ? 0 : 0.5,
+              duration: const Duration(milliseconds: 220),
+              child: const Icon(
+                Icons.keyboard_arrow_up_rounded,
+                size: 20,
+                color: accent,
               ),
-              const SizedBox(width: 4),
-              Text(
-                allCollapsed ? 'توسيع' : 'تكويل',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: accent,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
