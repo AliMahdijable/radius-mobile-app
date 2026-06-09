@@ -199,9 +199,35 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     });
   }
 
+  /// Manager filter — when set, the list is restricted to subscribers
+  /// whose parent_username matches. Drives _managerScoped which is the
+  /// pre-filter source for both _filteredAll AND _counts so the chip
+  /// counters on the bar reflect the manager subset (e.g. 'متصل (3)'
+  /// when looking at one manager, not the whole tenant).
+  String? _managerFilter;
+
+  /// Distinct parent_username values from the loaded list, sorted.
+  /// Empty when no subscriber has a parent (single-tenant admins).
+  List<String> get _availableManagers {
+    final set = <String>{};
+    for (final s in _all) {
+      final p = s.parentUsername;
+      if (p != null && p.isNotEmpty) set.add(p);
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  /// Pre-filter source — apply the manager filter first so chip counts
+  /// AND the main filter pipeline both work off the same subset.
+  List<Subscriber> get _managerScoped {
+    if (_managerFilter == null) return _all;
+    return _all.where((s) => s.parentUsername == _managerFilter).toList();
+  }
+
   // ───────── filtering / sorting (matches v1 predicates exactly) ─────────
   List<Subscriber> get _filteredAll {
-    Iterable<Subscriber> it = _all;
+    Iterable<Subscriber> it = _managerScoped;
     switch (_filter) {
       case SubscriberFilter.all:
         break;
@@ -272,15 +298,19 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   }
 
   Map<SubscriberFilter, int> _counts() {
+    // Manager-scoped so chip counters reflect the current sub-manager
+    // pick: 'متصل (3)' means 3 online subs UNDER that manager, not 3
+    // across the whole tenant. Matches v1 behaviour.
+    final src = _managerScoped;
     return {
-      SubscriberFilter.all: _all.length,
-      SubscriberFilter.active: _all.where((s) => s.isActive).length,
-      SubscriberFilter.online: _all.where((s) => s.isOnline).length,
-      SubscriberFilter.offline: _all.where((s) => s.isOffline).length,
-      SubscriberFilter.disabled: _all.where((s) => s.isDisabled).length,
-      SubscriberFilter.expired: _all.where((s) => s.isExpired).length,
-      SubscriberFilter.debtors: _all.where((s) => s.hasDebt).length,
-      SubscriberFilter.nearExpiry: _all.where((s) => s.isNearExpiry).length,
+      SubscriberFilter.all: src.length,
+      SubscriberFilter.active: src.where((s) => s.isActive).length,
+      SubscriberFilter.online: src.where((s) => s.isOnline).length,
+      SubscriberFilter.offline: src.where((s) => s.isOffline).length,
+      SubscriberFilter.disabled: src.where((s) => s.isDisabled).length,
+      SubscriberFilter.expired: src.where((s) => s.isExpired).length,
+      SubscriberFilter.debtors: src.where((s) => s.hasDebt).length,
+      SubscriberFilter.nearExpiry: src.where((s) => s.isNearExpiry).length,
     };
   }
 
@@ -580,6 +610,20 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                       },
                     ),
             ),
+            // Sub-manager (parent) filter — sits right under the
+            // search bar like v1's "كل المدراء" dropdown. Hidden when
+            // there are <2 managers (single-tenant admins have nothing
+            // to pick from). Selecting one narrows _managerScoped which
+            // feeds both the list AND the chip counters below.
+            if (!_selectionMode && _availableManagers.length > 1)
+              _ManagerFilterBar(
+                current: _managerFilter,
+                managers: _availableManagers,
+                onSelect: (m) => setState(() {
+                  _managerFilter = m;
+                  _page = 0;
+                }),
+              ),
             FilterChipsBar(
               current: _filter,
               counts: _counts(),
@@ -956,6 +1000,106 @@ class _ArrowBtn extends StatelessWidget {
           width: 36,
           height: 36,
           child: Icon(icon, color: color, size: 18),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sub-manager (parent) filter strip — horizontal chip row matching
+/// the FilterChipsBar visual language. Leading shield icon + 'كل
+/// المدراء' chip + one chip per parent_username found in the loaded
+/// list. Tap a chip to scope the whole screen to that sub-manager;
+/// tap الكل to clear. Mirrors v1's "كل المدراء" dropdown but the
+/// chip row reads at a glance instead of hiding the choices behind
+/// a tap (مطلب 2026-06-09).
+class _ManagerFilterBar extends StatelessWidget {
+  const _ManagerFilterBar({
+    required this.current,
+    required this.managers,
+    required this.onSelect,
+  });
+  final String? current;
+  final List<String> managers;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 4),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.shield,
+              size: 14, color: AppColors.textMid),
+          const SizedBox(width: 6),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _ManagerChip(
+                    label: 'كل المدراء',
+                    selected: current == null,
+                    onTap: () => onSelect(null),
+                  ),
+                  for (final m in managers) ...[
+                    const SizedBox(width: 6),
+                    _ManagerChip(
+                      label: m,
+                      selected: current == m,
+                      onTap: () => onSelect(m),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManagerChip extends StatelessWidget {
+  const _ManagerChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(R.pill),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.brand.withValues(alpha: 0.12)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(
+            color: selected
+                ? AppColors.brand.withValues(alpha: 0.4)
+                : AppColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppType.label(
+            color: selected ? AppColors.brand : AppColors.textMid,
+          ).copyWith(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            height: 1.2,
+          ),
         ),
       ),
     );
