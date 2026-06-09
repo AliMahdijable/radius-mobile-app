@@ -15,6 +15,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
+import 'sheets/consumption_sheet.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
 import 'widgets/filter_chips_bar.dart';
@@ -541,6 +542,45 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   int get _onlineInSelection =>
       _filteredSubscribersForBulk().where((s) => s.isOnline).length;
 
+  /// مطلب 2026-06-11: زر فصل المستخدم الفردي على بطاقة المتصل.
+  /// نفس مسار الـbulk-disconnect (SubscribersApi.disconnect + notifyChange
+  /// + _refresh) لكن لمشترك واحد. confirm dialog قبل الإجراء لأنه
+  /// مؤثّر على المستخدم النهائي.
+  Future<void> _confirmDisconnect(Subscriber s) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('فصل المستخدم'),
+        content: Text(
+          'سيتم قطع جلسة ${s.fullName.isNotEmpty ? s.fullName : s.username} الآن.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style:
+                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('فصل'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final ok = await SubscribersApi.disconnect(s.idx!);
+    if (!mounted) return;
+    if (ok) SubscriberEvents.notifyChange();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'تم الفصل' : 'تعذّر الفصل'),
+        backgroundColor: ok ? AppColors.brand : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _openBulkDisconnect() async {
     final online = _filteredSubscribersForBulk()
         .where((s) => s.isOnline && s.idx != null)
@@ -930,16 +970,17 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                               final s = page[i];
                               final isSelected = s.idx != null &&
                                   _selected.contains(s.idx);
+                              final onOnlineTab =
+                                  _filter == SubscriberFilter.online;
                               return SubscriberCardV2(
                                 sub: s,
                                 selected: isSelected,
                                 lastPayment: _lastPayments[s.username],
-                                // مطلب 2026-06-11: عرض السطر الحي + chip
-                                // معلومات الجهاز لكل مشترك متصل بأي tab
-                                // (مطابق v1). داخلياً _LiveSessionRow يبقى
-                                // مشروطاً بـsub.isOnline فما يظهر على
-                                // غير المتصل حتى في tab 'الكل'.
-                                showLiveSession: true,
+                                // مطلب 2026-06-11 (تحديث ثاني):
+                                // معلومات الـSAS (IP/تحميل/رفع/الجهاز)
+                                // تظهر فقط في تاب "متصل" — كانت
+                                // تظهر بكل التابات وتطغى على البطاقات.
+                                showLiveSession: onOnlineTab,
                                 onTap: () {
                                   if (_selectionMode) {
                                     _toggleSelect(s);
@@ -948,6 +989,20 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                                   }
                                 },
                                 onLongPress: () => _enterSelectionWith(s),
+                                // مطلب 2026-06-11: الـcallbacks تنزل
+                                // فقط في تاب "متصل" + المشترك فعلاً
+                                // online + ما إحنا في selection mode
+                                // (الـlong-press multi-select له أولوية).
+                                onShowConsumption:
+                                    onOnlineTab && s.isOnline && !_selectionMode
+                                        ? () => showConsumptionSheet(context, s)
+                                        : null,
+                                onDisconnect: onOnlineTab &&
+                                        s.isOnline &&
+                                        !_selectionMode &&
+                                        s.idx != null
+                                    ? () => _confirmDisconnect(s)
+                                    : null,
                               );
                             },
                           ),

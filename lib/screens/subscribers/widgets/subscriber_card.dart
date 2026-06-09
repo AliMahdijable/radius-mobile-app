@@ -23,6 +23,8 @@ class SubscriberCardV2 extends StatelessWidget {
     this.showLiveSession = false,
     required this.onTap,
     required this.onLongPress,
+    this.onShowConsumption,
+    this.onDisconnect,
   });
 
   final Subscriber sub;
@@ -34,6 +36,10 @@ class SubscriberCardV2 extends StatelessWidget {
   final bool showLiveSession;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  /// مطلب 2026-06-11: زرّا الاستهلاك والفصل أسفل كل صف في تاب
+  /// "متصل". null = الزر يختفي (مستخدم في كل التابات الأخرى).
+  final VoidCallback? onShowConsumption;
+  final VoidCallback? onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -253,6 +259,35 @@ class SubscriberCardV2 extends StatelessWidget {
             ip: sub.ipAddress,
             username: sub.username,
           ),
+          // مطلب 2026-06-11: زرا الاستهلاك السريع + فصل المستخدم.
+          // يظهران فقط لو الـcaller مرّر الـcallbacks (تاب 'متصل').
+          if (onShowConsumption != null || onDisconnect != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (onShowConsumption != null)
+                  Expanded(
+                    child: _ActionPill(
+                      icon: LucideIcons.activity,
+                      label: 'الاستهلاك',
+                      color: const Color(0xFF3B82F6),
+                      onTap: onShowConsumption!,
+                    ),
+                  ),
+                if (onShowConsumption != null && onDisconnect != null)
+                  const SizedBox(width: 6),
+                if (onDisconnect != null)
+                  Expanded(
+                    child: _ActionPill(
+                      icon: LucideIcons.powerOff,
+                      label: 'فصل',
+                      color: AppColors.error,
+                      onTap: onDisconnect!,
+                    ),
+                  ),
+              ],
+            ),
+          ],
           if (sub.balanceAmount != 0 || lastPayment != null)
             const SizedBox(height: 4),
         ],
@@ -844,5 +879,56 @@ class _LastPaymentLine extends StatelessWidget {
           : 'تفعيل نقدي';
     }
     return 'تسديد دين';
+  }
+}
+
+/// Small pill button used for inline row actions (consumption +
+/// disconnect on the online tab). 36dp height so the tap target
+/// is comfortable but the card stays compact.
+class _ActionPill extends StatelessWidget {
+  const _ActionPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.09),
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 13, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
