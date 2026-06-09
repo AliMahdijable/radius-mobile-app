@@ -370,28 +370,36 @@ class _QuickAddSheet extends StatelessWidget {
               style: AppType.title(color: AppColors.textHi)
                   .copyWith(fontSize: 18)),
           const SizedBox(height: Sp.lg),
-          _QuickItem(
-            icon: Icons.bolt_rounded,
-            color: AppColors.brand,
-            title: 'تفعيل سريع',
-            subtitle: 'تفعيل مشترك موجود',
-          ),
+          // مطلب 2026-06-10: الترتيب = إضافة مشترك → تفعيل/تجديد →
+          // تسديد دين → إضافة دين → إضافة صرفية.
           _QuickItem(
             icon: Icons.person_add_rounded,
             color: const Color(0xFF3B82F6),
-            title: 'مشترك جديد',
-            subtitle: 'إضافة مشترك للنظام',
+            title: 'إضافة مشترك',
+            subtitle: 'إنشاء مشترك جديد في النظام',
             onTap: () => showAddSubscriberSheet(context),
           ),
           _QuickItem(
+            icon: Icons.bolt_rounded,
+            color: AppColors.brand,
+            title: 'تفعيل / تجديد اشتراك',
+            subtitle: 'تفعيل أو تجديد مشترك موجود',
+          ),
+          _QuickItem(
             icon: Icons.payments_rounded,
-            color: Color(0xFF8B5CF6),
+            color: const Color(0xFF14B8A6),
             title: 'تسديد دين',
             subtitle: 'استلام دفعة من مشترك',
           ),
           _QuickItem(
+            icon: Icons.account_balance_wallet_rounded,
+            color: const Color(0xFFE08F2D),
+            title: 'إضافة دين',
+            subtitle: 'إضافة دين على مشترك',
+          ),
+          _QuickItem(
             icon: Icons.receipt_long_rounded,
-            color: Color(0xFFE08F2D),
+            color: const Color(0xFF8B5CF6),
             title: 'إضافة صرفية',
             subtitle: 'تسجيل مصروف جديد',
           ),
