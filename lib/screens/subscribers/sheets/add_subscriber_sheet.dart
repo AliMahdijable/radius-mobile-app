@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
+import '../../../models/subscriber.dart';
 import '../../../services/auth_storage.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
