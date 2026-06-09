@@ -617,11 +617,13 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                     ),
             ),
             // Sub-manager (parent) filter — sits right under the
-            // search bar like v1's "كل المدراء" dropdown. Hidden when
-            // there are <2 managers (single-tenant admins have nothing
-            // to pick from). Selecting one narrows _managerScoped which
-            // feeds both the list AND the chip counters below.
-            if (!_selectionMode && _availableManagers.length > 1)
+            // search bar like v1's "كل المدراء" dropdown. Shown
+            // whenever at least one subscriber has a parent_username
+            // set (مطلب 2026-06-10: discoverability — admins want
+            // to see the filter exists even with a single parent).
+            // Hidden only for tenants where NO subscriber has a
+            // parent (zero sub-managers, nothing to scope to).
+            if (!_selectionMode && _availableManagers.isNotEmpty)
               _ManagerFilterBar(
                 current: _managerFilter,
                 managers: _availableManagers,
