@@ -461,9 +461,12 @@ class _ExpiryBadge extends StatelessWidget {
     final now = DateTime.now();
     final diff = exp.difference(now);
     if (diff.isNegative) {
-      // Already expired same-day — surface 'منذ X ساعة' so it reads
-      // distinct from 'يبقى X ساعة' (مطلب 2026-06-11).
+      // Already expired. مطلب 2026-06-11: لما تكون المدة أكثر من
+      // 24 ساعة نحوّلها لأيام بدل 'منذ 7244 ساعة'. الـbadge ضيق
+      // ولا نريد رقم كبير يكسر التصميم.
       final past = now.difference(exp);
+      final pd = past.inDays;
+      if (pd >= 1) return ('منذ', '$pd يوم');
       final ph = past.inHours;
       if (ph >= 1) return ('منذ', '$ph ساعة');
       final pm = past.inMinutes.clamp(1, 59);
