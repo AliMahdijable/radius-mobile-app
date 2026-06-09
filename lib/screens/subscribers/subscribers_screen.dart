@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
+import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
@@ -71,6 +72,11 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   bool _probing = false;
   int _probeDone = 0;
   int _probeTotal = 0;
+
+  /// مطلب 2026-06-11: device-metric sort. null=off. Otherwise
+  /// '<metric>_<dir>' where metric is rx/sig/ccq/lan and dir is
+  /// asc/desc. Matches v1's _deviceSort string format.
+  String? _deviceSort;
 
   String _query = '';
   SubscriberFilter _filter = SubscriberFilter.all;
@@ -318,6 +324,25 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   }
 
   void _applySort(List<Subscriber> list) {
+    // مطلب 2026-06-11: device-metric sort له الأولوية فوق sort field
+    // العادي. مشتركون بلا snapshot (الـwave لم يصلهم بعد، أو الفحص
+    // فشل) يسقطون لأسفل القائمة بأي اتجاه — admin ما يريد سطور
+    // غامضة فوق السطور المفحوصة.
+    if (_deviceSort != null) {
+      final isAsc = _deviceSort!.endsWith('_asc');
+      final base = _deviceSort!.split('_').first;
+      list.sort((a, b) {
+        final ka = _deviceSortKey(
+            base, DeviceProbeApi.cached(a.ipAddress ?? ''));
+        final kb = _deviceSortKey(
+            base, DeviceProbeApi.cached(b.ipAddress ?? ''));
+        if (ka == null && kb == null) return 0;
+        if (ka == null) return 1; // unrated sinks
+        if (kb == null) return -1;
+        return isAsc ? ka.compareTo(kb) : kb.compareTo(ka);
+      });
+      return;
+    }
     int cmp(Subscriber a, Subscriber b) {
       switch (_sortField) {
         case SortField.username:
@@ -362,6 +387,54 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     list.sort(_sortDir == SortDirection.asc
         ? cmp
         : (a, b) => -cmp(a, b));
+  }
+
+  /// Maps a device-sort key to a single comparable number. Mirrors v1
+  /// at mobile-app/lib/screens/subscribers/subscribers_screen.dart:1818.
+  /// Sign conventions:
+  ///   • RX (optical) and signal (wireless) are negative — closer to 0
+  ///     = stronger. asc shows worst (more negative) first.
+  ///   • CCQ and LAN are positive — higher = better.
+  /// Unplugged Ubiquiti LAN reports -1 so it sinks below any 10Mbps
+  /// link in either direction (the admin almost always wants them
+  /// last).
+  double? _deviceSortKey(String key, DeviceHealthSnapshot? snap) {
+    if (snap == null) return null;
+    switch (key) {
+      case 'rx':
+        if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
+        return double.tryParse(snap.ont!.rxPower);
+      case 'sig':
+        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
+        return snap.ubnt!.signalDbm?.toDouble();
+      case 'ccq':
+        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
+        return snap.ubnt!.ccqPercent?.toDouble();
+      case 'lan':
+        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
+        final s = snap.ubnt!.primaryLan?.speed ?? '';
+        final m = RegExp(r'^(\d+)Mbps').firstMatch(s);
+        if (m == null) return snap.ubnt!.lanUp ? 0 : -1;
+        return double.tryParse(m.group(1)!);
+    }
+    return null;
+  }
+
+  /// Tap handler for a device-sort chip. Three-way toggle matching v1:
+  ///   off       → desc  (highest first)
+  ///   desc      → asc   (lowest first)
+  ///   asc       → off
+  void _toggleDeviceSort(String metric) {
+    setState(() {
+      if (_deviceSort == '${metric}_desc') {
+        _deviceSort = '${metric}_asc';
+      } else if (_deviceSort == '${metric}_asc') {
+        _deviceSort = null;
+      } else {
+        _deviceSort = '${metric}_desc';
+      }
+      _page = 0;
+    });
   }
 
   Map<SubscriberFilter, int> _counts() {
@@ -732,6 +805,58 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                   ],
                 ),
               ),
+            // مطلب 2026-06-11: شريط ترتيب حسب معلومات الجهاز —
+            // مثل v1 (subscribers_screen.dart:1268). 4 chips: RX
+            // (ONT) / إشارة + CCQ + LAN (UBNT). كل chip ثلاثي
+            // الحالة: off → desc → asc → off. مشتركون بلا snapshot
+            // يسقطون لأسفل في أي اتجاه.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 0),
+              child: SizedBox(
+                height: 32,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _DeviceSortChip(
+                      metric: 'rx',
+                      label: 'RX',
+                      icon: LucideIcons.signalHigh,
+                      current: _deviceSort,
+                      onTap: () => _toggleDeviceSort('rx'),
+                    ),
+                    const SizedBox(width: 6),
+                    _DeviceSortChip(
+                      metric: 'sig',
+                      label: 'إشارة',
+                      icon: LucideIcons.signal,
+                      current: _deviceSort,
+                      onTap: () => _toggleDeviceSort('sig'),
+                    ),
+                    const SizedBox(width: 6),
+                    _DeviceSortChip(
+                      metric: 'ccq',
+                      label: 'CCQ',
+                      icon: LucideIcons.gauge,
+                      current: _deviceSort,
+                      onTap: () => _toggleDeviceSort('ccq'),
+                    ),
+                    const SizedBox(width: 6),
+                    _DeviceSortChip(
+                      metric: 'lan',
+                      label: 'LAN',
+                      icon: LucideIcons.cable,
+                      current: _deviceSort,
+                      onTap: () => _toggleDeviceSort('lan'),
+                    ),
+                    if (_deviceSort != null) ...[
+                      const SizedBox(width: 6),
+                      _ClearSortChip(
+                          onTap: () => setState(() => _deviceSort = null)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: Sp.sm),
             // Stats bar — keep the row tight; the page-size picker is a
             // plain text link.
@@ -1437,6 +1562,112 @@ class _EmptyState extends StatelessWidget {
               .copyWith(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ],
+    );
+  }
+}
+
+/// Three-state chip for the device-sort bar above the subscriber
+/// list. Cycles off → desc → asc → off on tap. Active state shows
+/// the current direction arrow and a colored accent.
+class _DeviceSortChip extends StatelessWidget {
+  const _DeviceSortChip({
+    required this.metric,
+    required this.label,
+    required this.icon,
+    required this.current,
+    required this.onTap,
+  });
+  final String metric;
+  final String label;
+  final IconData icon;
+  final String? current;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = current != null && current!.startsWith('${metric}_');
+    final isAsc = current == '${metric}_asc';
+    final accent = const Color(0xFF7C3AED);
+    final fg = isActive ? accent : AppColors.textMid;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? accent.withValues(alpha: 0.1)
+                : AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(
+              color: isActive
+                  ? accent.withValues(alpha: 0.4)
+                  : AppColors.border,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 12, color: fg),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: AppType.label(color: fg).copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  isAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown,
+                  size: 11,
+                  color: accent,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClearSortChip extends StatelessWidget {
+  const _ClearSortChip({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.error.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+          ),
+          child: const Row(
+            children: [
+              Icon(LucideIcons.x, size: 12, color: AppColors.error),
+              SizedBox(width: 3),
+              Text(
+                'إيقاف',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.error,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

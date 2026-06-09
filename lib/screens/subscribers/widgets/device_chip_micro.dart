@@ -126,12 +126,14 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
           label: 'RX',
           value: '${o.rxPower} dBm',
           color: rxColor,
+          danger: !o.rxOk,
         ),
         _stat(
           icon: LucideIcons.thermometer,
           label: 'حرارة',
           value: '${o.temperature}°C',
           color: tempColor,
+          danger: !o.tempOk,
         ),
       ],
     );
@@ -152,6 +154,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
             label: 'إشارة',
             value: '${u.signalDbm} dBm',
             color: signalColor,
+            danger: u.signalHealth == 'bad',
           ),
         if (u.ccqPercent != null)
           _stat(
@@ -159,6 +162,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
             label: 'CCQ',
             value: '${u.ccqPercent}%',
             color: _healthColor(u.ccqHealth),
+            danger: u.ccqHealth == 'bad',
           ),
         if (u.lanSpeedShort != null)
           _stat(
@@ -166,6 +170,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
             label: 'LAN',
             value: u.lanSpeedShort!,
             color: _healthColor(u.lanHealth),
+            danger: u.lanHealth == 'bad',
           ),
       ],
     );
@@ -204,8 +209,9 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
     required String label,
     required String value,
     required Color color,
+    bool danger = false,
   }) {
-    return Row(
+    final body = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 10.5, color: color),
@@ -220,8 +226,32 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
           style: AppType.label(color: color)
               .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
         ),
+        // مطلب 2026-06-11: قيمة 'خطرة' لازم تنوّه — مثل v1.
+        // المثلث الأحمر يظهر بجنب أي قيمة خارج النطاق الصحي
+        // (rx/temp/signal/ccq/lan) فالأمر يلاحظها المدير ع الفور.
+        if (danger) ...[
+          const SizedBox(width: 3),
+          const Icon(
+            LucideIcons.triangleAlert,
+            size: 10,
+            color: AppColors.error,
+          ),
+        ],
       ],
     );
+    // Wrap dangerous values in a soft red pill so they pop visually
+    // even when scanning down a long list of green readings.
+    if (danger) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: AppColors.error.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(R.sm),
+        ),
+        child: body,
+      );
+    }
+    return body;
   }
 
   /// 36×36 tap target — meets Material's 36dp guidance for inline
