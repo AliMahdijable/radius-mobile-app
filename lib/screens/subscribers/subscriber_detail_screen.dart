@@ -56,6 +56,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// disconnect — the chip label flips and the busy guard locks
   /// the rest of the grid.
   bool _generatingLink = false;
+  /// True while the DELETE round-trip is in flight.
+  bool _deleting = false;
 
   /// Any operation (toggle / disconnect / template send / link gen)
   /// currently awaiting a server response. Drives the operations
@@ -67,7 +69,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       _disconnecting ||
       _toggling ||
       _sendingTemplate != null ||
-      _generatingLink;
+      _generatingLink ||
+      _deleting;
 
   @override
   void initState() {
@@ -162,6 +165,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     onSendTemplate: _sendTemplate,
                     generatingLink: _generatingLink,
                     onGenerateLink: _generateInfoLink,
+                    deleting: _deleting,
+                    onDelete: sub.idx != null ? _confirmDelete : null,
                     busy: _isBusy,
                   ),
                 ],
@@ -260,6 +265,85 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     );
     if (ok != true) return;
     await _runToggleEnabled(wantEnable);
+  }
+
+  Future<void> _confirmDelete() async {
+    if (_deleting) return;
+    // Front-line guard — backend rejects deletes for subs in debt
+    // with a specific message, but warning the admin BEFORE the
+    // round-trip is cheaper than waiting for the API to reject and
+    // matches v1's flow.
+    if (sub.hasDebt) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'لا يمكن حذف مشترك عليه دين: ${formatIQD(sub.debtAbs.round())} د.ع',
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          'تأكيد الحذف',
+          style: AppType.label(color: AppColors.textHi)
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'هل أنت متأكد من حذف المشترك "${sub.fullName}"؟\n'
+          'لا يمكن التراجع عن هذا الإجراء.',
+          style: AppType.subtitle(color: AppColors.textMid),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style:
+                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _runDelete();
+  }
+
+  Future<void> _runDelete() async {
+    final idx = sub.idx;
+    if (idx == null) return;
+    setState(() => _deleting = true);
+    final result = await SubscribersApi.delete(idx);
+    if (!mounted) return;
+    setState(() => _deleting = false);
+    if (result.ok) {
+      SubscriberEvents.notifyChange();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم حذف المشترك'),
+          backgroundColor: AppColors.brand,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      // Pop back to the list — the subscriber no longer exists and
+      // the underlying state will refresh from dataChanged.
+      Navigator.of(context).pop();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'تعذّر الحذف'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _generateInfoLink() async {
@@ -808,6 +892,8 @@ class _OperationsCard extends StatelessWidget {
     required this.onSendTemplate,
     required this.generatingLink,
     required this.onGenerateLink,
+    required this.deleting,
+    required this.onDelete,
     required this.busy,
   });
 
@@ -831,6 +917,13 @@ class _OperationsCard extends StatelessWidget {
   /// are in flight. Flips the link chip's label to 'جاري التوليد…'.
   final bool generatingLink;
   final VoidCallback onGenerateLink;
+  /// True while the DELETE round-trip is in flight. Flips the
+  /// chip to 'جاري الحذف…'.
+  final bool deleting;
+  /// null when sub.idx is missing — chip stays in the grid but
+  /// taps no-op. Otherwise opens the confirm dialog + runs the
+  /// delete. Front-line guard against deleting subs in debt.
+  final VoidCallback? onDelete;
   /// True when ANY async operation owned by this card is pending —
   /// togglesa, disconnect, or a template send. While busy the card
   /// shows a thin progress strip + dims every tile and intercepts
@@ -901,8 +994,12 @@ class _OperationsCard extends StatelessWidget {
         sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
         onToggleEnabled ?? () {},
       ),
-      _Op(LucideIcons.trash2, 'حذف', AppColors.error,
-          () => _todo(context, 'حذف — قيد التطوير (مرحلة 4)')),
+      _Op(
+        LucideIcons.trash2,
+        deleting ? 'جاري الحذف…' : 'حذف',
+        AppColors.error,
+        onDelete ?? () {},
+      ),
       if (phone.isNotEmpty)
         _Op(LucideIcons.phone, 'اتصال', const Color(0xFF14B8A6),
             () => _launchUri(context, Uri.parse('tel:$phone'))),

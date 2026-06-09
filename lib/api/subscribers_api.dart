@@ -671,22 +671,31 @@ class SubscribersApi {
     }
   }
 
-  /// DELETE /api/subscribers/{id}.
-  static Future<bool> delete(String id) async {
-    final token = await AuthStorage.readToken();
-    if (token == null) return false;
+  /// DELETE /api/v2/subscribers/:idx — removes the subscriber from
+  /// SAS4. Backend rejects with 400 when the subscriber still has
+  /// debt (notes < 0) so we surface that message directly. Returns
+  /// a structured result so the caller can show 'لا يمكن الحذف —
+  /// عليه دين 25,000' vs 'تعذّر الحذف' generically.
+  ///
+  /// The legacy /api/subscribers/{id} path used here previously
+  /// doesn't exist on this backend — the call silently failed which
+  /// is why bulk delete worked half the time at best.
+  static Future<({bool ok, String? message})> delete(String idx) async {
     try {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(
-        '/api/subscribers/$id',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+        '/api/v2/subscribers/$idx',
       );
-      return r.data?['success'] == true;
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
     } on DioException catch (e) {
-      _log('DELETE subscribers/$id', e);
-      return false;
+      _log('v2/subscribers/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر الحذف');
     } catch (e) {
-      _log('DELETE subscribers/$id', e);
-      return false;
+      _log('v2/subscribers/$idx', e);
+      return (ok: false, message: 'تعذّر الحذف');
     }
   }
 

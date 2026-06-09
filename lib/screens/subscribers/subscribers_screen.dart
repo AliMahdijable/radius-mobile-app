@@ -492,10 +492,16 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     _showProgress(action.label);
     var ok = 0, fail = 0;
     for (final id in ids) {
-      final success = switch (action) {
-        _BulkAction.disable => await SubscribersApi.toggle(id, enable: false),
-        _BulkAction.enable => await SubscribersApi.toggle(id, enable: true),
-        _BulkAction.delete => await SubscribersApi.delete(id),
+      final success = await switch (action) {
+        _BulkAction.disable =>
+          SubscribersApi.toggle(id, enable: false),
+        _BulkAction.enable => SubscribersApi.toggle(id, enable: true),
+        // delete now returns a structured result so we map to bool
+        // before tallying. The error message is already surfaced via
+        // the per-row tracking in the single-delete confirm flow;
+        // bulk just counts ok/fail and shows a summary snackbar.
+        _BulkAction.delete =>
+          SubscribersApi.delete(id).then((r) => r.ok),
       };
       success ? ok++ : fail++;
     }
