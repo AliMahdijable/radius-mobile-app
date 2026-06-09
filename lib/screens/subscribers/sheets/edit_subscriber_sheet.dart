@@ -61,7 +61,11 @@ class _EditSheetState extends State<_EditSheet> {
         ? widget.sub.phone!
         : (widget.sub.mobile ?? ''),
   );
-  int? _profileId = widget.sub.profileId;
+  // Set in initState — Dart forbids referencing `widget` at field-
+  // initializer level for non-`late` fields, and `late int?` reads
+  // awkwardly. Plain field + assignment in initState matches the
+  // pattern the other sheets use for nullable mutable state.
+  int? _profileId;
   Map<String, PackageInfo>? _packages;
   bool _loadingPackages = true;
   bool _saving = false;
@@ -69,6 +73,7 @@ class _EditSheetState extends State<_EditSheet> {
   @override
   void initState() {
     super.initState();
+    _profileId = widget.sub.profileId;
     _loadPackages();
   }
 
