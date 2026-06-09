@@ -153,6 +153,21 @@ class _Row extends StatelessWidget {
         detail: price != null ? '${_formatIntCompact(price)} د.ع' : null,
       );
     }
+    // مطلب 2026-06-10: add + edit + delete chips on dashboard feed.
+    // Order matters — subscriber_edit also contains 'edit'-ish
+    // substrings that other rules look for, so we test these specific
+    // labels first.
+    if (lower.contains('subscriber_add') || lower.contains('add_subscriber')) {
+      return (label: 'إضافة مشترك', detail: null);
+    }
+    if (lower.contains('subscriber_edit') ||
+        lower.contains('edit_subscriber')) {
+      return (label: 'تعديل مشترك', detail: null);
+    }
+    if (lower.contains('subscriber_delete') ||
+        lower.contains('delete_subscriber')) {
+      return (label: 'حذف مشترك', detail: null);
+    }
     // Order matters — 'debt_pay' contains 'debt' before 'pay', and
     // 'balance_deduct' contains neither. Check the specific labels
     // before falling through.
@@ -349,6 +364,19 @@ class _Row extends StatelessWidget {
   /// Maps backend action_type strings to (icon, color).
   static (IconData, Color) _visualForAction(String action) {
     final lower = action.toLowerCase();
+    // Order matters — subscriber_edit contains 'edit' (and 'subscrib')
+    // so check the specific labels before the generic 'activ' match.
+    if (lower.contains('subscriber_add') || lower.contains('add_subscriber')) {
+      return (Icons.person_add_rounded, const Color(0xFF8B5CF6));
+    }
+    if (lower.contains('subscriber_edit') ||
+        lower.contains('edit_subscriber')) {
+      return (Icons.edit_rounded, const Color(0xFF2D5F47));
+    }
+    if (lower.contains('subscriber_delete') ||
+        lower.contains('delete_subscriber')) {
+      return (Icons.delete_rounded, AppColors.error);
+    }
     if (lower.contains('activ')) return (Icons.bolt_rounded, AppColors.brand);
     if (lower.contains('extend')) {
       return (Icons.loop_rounded, const Color(0xFF3B82F6));
