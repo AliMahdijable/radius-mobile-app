@@ -51,6 +51,13 @@ class _MainShellState extends State<MainShell> {
 
   void _onFabTap() {
     HapticFeedback.selectionClick();
+    // Capture the MainShell context so the QuickAddSheet callbacks
+    // can route to new sheets even after the FAB sheet pops. Using
+    // the bottom-sheet's own context to push a follow-up sheet
+    // fails silently because that context's element unmounts on
+    // pop (user report 2026-06-10: 'ما يصير أي حدث عن النقر ع
+    // اليوزر').
+    final rootCtx = context;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -58,7 +65,7 @@ class _MainShellState extends State<MainShell> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
       ),
-      builder: (_) => const _QuickAddSheet(),
+      builder: (_) => _QuickAddSheet(rootContext: rootCtx),
     );
   }
 
@@ -361,7 +368,12 @@ class _SearchPill extends StatelessWidget {
 }
 
 class _QuickAddSheet extends StatelessWidget {
-  const _QuickAddSheet();
+  const _QuickAddSheet({required this.rootContext});
+
+  /// MainShell's context — stays alive after this sheet pops, so
+  /// callbacks that open follow-up sheets (picker → activate, etc.)
+  /// still have a mounted context to push from.
+  final BuildContext rootContext;
 
   @override
   Widget build(BuildContext context) {
@@ -375,29 +387,29 @@ class _QuickAddSheet extends StatelessWidget {
               style: AppType.title(color: AppColors.textHi)
                   .copyWith(fontSize: 18)),
           const SizedBox(height: Sp.lg),
-          // مطلب 2026-06-10: الترتيب = إضافة مشترك → تفعيل/تجديد →
-          // تسديد دين → إضافة دين → إضافة صرفية.
-          // العمليات 2-4 تفتح subscriber picker أوّلاً ثم تروح للـsheet
-          // المخصّصة. تسديد دين تخصّص الـpicker لمن عليه دين فقط.
+          // مطلب 2026-06-10: الترتيب = إضافة مشترك → تجديد اشتراك →
+          // تسديد دين → إضافة دين → إضافة صرفية. كل onTap يستعمل
+          // rootContext لا context الـsheet الحالي لأن الـFAB sheet
+          // تنهار قبل ما تنفتح الـsheet التالية.
           _QuickItem(
             icon: Icons.person_add_rounded,
             color: const Color(0xFF3B82F6),
             title: 'إضافة مشترك',
             subtitle: 'إنشاء مشترك جديد في النظام',
-            onTap: () => showAddSubscriberSheet(context),
+            onTap: () => showAddSubscriberSheet(rootContext),
           ),
           _QuickItem(
             icon: Icons.bolt_rounded,
             color: AppColors.brand,
-            title: 'تفعيل / تجديد اشتراك',
-            subtitle: 'تفعيل أو تجديد مشترك موجود',
+            title: 'تجديد اشتراك',
+            subtitle: 'تجديد اشتراك مشترك موجود',
             onTap: () async {
               final picked = await showSubscriberPickerSheet(
-                context,
-                title: 'تفعيل / تجديد اشتراك',
+                rootContext,
+                title: 'تجديد اشتراك',
               );
-              if (picked != null && context.mounted) {
-                await showActivateSheet(context, picked);
+              if (picked != null && rootContext.mounted) {
+                await showActivateSheet(rootContext, picked);
               }
             },
           ),
@@ -408,12 +420,12 @@ class _QuickAddSheet extends StatelessWidget {
             subtitle: 'استلام دفعة من مشترك',
             onTap: () async {
               final picked = await showSubscriberPickerSheet(
-                context,
+                rootContext,
                 title: 'تسديد دين',
                 debtorsOnly: true,
               );
-              if (picked != null && context.mounted) {
-                await showPayDebtSheet(context, picked);
+              if (picked != null && rootContext.mounted) {
+                await showPayDebtSheet(rootContext, picked);
               }
             },
           ),
@@ -424,11 +436,11 @@ class _QuickAddSheet extends StatelessWidget {
             subtitle: 'إضافة دين على مشترك',
             onTap: () async {
               final picked = await showSubscriberPickerSheet(
-                context,
+                rootContext,
                 title: 'إضافة دين',
               );
-              if (picked != null && context.mounted) {
-                await showAddDebtSheet(context, picked);
+              if (picked != null && rootContext.mounted) {
+                await showAddDebtSheet(rootContext, picked);
               }
             },
           ),
@@ -437,7 +449,7 @@ class _QuickAddSheet extends StatelessWidget {
             color: const Color(0xFF8B5CF6),
             title: 'إضافة صرفية',
             subtitle: 'تسجيل مصروف جديد',
-            onTap: () => showAddExpenseSheet(context),
+            onTap: () => showAddExpenseSheet(rootContext),
           ),
         ],
       ),
