@@ -401,6 +401,57 @@ class ManagersApi {
     }
   }
 
+  /// POST /api/fcm/send-manager-balance-update — sends in-app push +
+  /// updates the manager's notifications inbox. Mirrors v1 mobile-app
+  /// /lib/providers/managers_provider.dart:760. actionKind reflects
+  /// the operation that just succeeded so the backend renders a
+  /// readable title ('شحن رصيد' / 'سحب رصيد' / 'تسديد دين' / 'نقاط'
+  /// / 'إضافة دين' / 'تسديد دين خارجي'). Returns (ok, message) — ok
+  /// false includes cases like 'لا يوجد جهاز مسجّل للمدير' which the
+  /// admin should be aware of.
+  static Future<({bool ok, String? message})> sendBalanceUpdatePush({
+    required Manager manager,
+    required num amount,
+    required bool isLoan,
+    required num previousCredit,
+    required num previousDebt,
+    required num currentCredit,
+    required num currentDebt,
+    required String actionKind,
+    String? notes,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/fcm/send-manager-balance-update',
+        data: {
+          'targetAdminId': manager.id.toString(),
+          'amount': amount,
+          'isLoan': isLoan,
+          'previousCredit': previousCredit,
+          'previousDebt': previousDebt,
+          'currentCredit': currentCredit,
+          'currentDebt': currentDebt,
+          'actionKind': actionKind,
+          'notes': (notes ?? '').trim(),
+          'managerUsername': manager.username,
+        },
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('fcm/send-manager-balance-update', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر إرسال الإشعار');
+    } catch (e) {
+      _log('fcm/send-manager-balance-update', e);
+      return (ok: false, message: 'تعذّر إرسال الإشعار');
+    }
+  }
+
   static void _log(String endpoint, Object err) {
     if (kReleaseMode) return;
     if (err is DioException) {

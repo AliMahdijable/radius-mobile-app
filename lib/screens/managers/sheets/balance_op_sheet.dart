@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../services/manager_notice.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -71,6 +74,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   /// كـدين على المدير الفرعي بدل شحن نقدي. مطابق v1 isLoan.
   bool _isLoan = false;
 
+  /// مطلب 2026-06-12 (إشعارات): toggles إرسال واتساب + push للمدير
+  /// بعد العملية. الـwhatsapp يقفل تلقائياً لو المدير ما عنده رقم.
+  bool _sendWhatsApp = true;
+  bool _sendPush = true;
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +124,9 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     setState(() => _submitting = true);
     final id = widget.manager.id;
     final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
+    // التقاط الأرصدة قبل العملية ل passing them للإشعار
+    final previousCredit = widget.manager.balance ?? 0;
+    final previousDebt = widget.manager.debt ?? 0;
     late ({bool ok, String? message}) r;
     switch (_op) {
       case _BalanceOp.deposit:
@@ -127,18 +138,103 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
         r = await ManagersApi.addPoints(id: id, amount: _amount, note: note);
     }
     if (!mounted) return;
-    setState(() => _submitting = false);
+    if (!r.ok) {
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(r.message ?? 'فشلت العملية'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد
+    // نجاح العملية في الـsnackbar الأساسي.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok
-            ? 'تمت العملية'
-            : (r.message ?? 'فشلت العملية')),
-        backgroundColor:
-            r.ok ? AppColors.brand : AppColors.error,
+        content: const Text('تمت العملية'),
+        backgroundColor: AppColors.brand,
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) Navigator.of(context).pop(true);
+    // حساب أرصدة ما بعد العملية (تقديرية — السيرفر قد يدور بـSAS4
+    // قيم مختلفة قليلاً، لكن هذا كافٍ للقالب).
+    num currentCredit = previousCredit;
+    num currentDebt = previousDebt;
+    String actionKind = 'deposit_cash';
+    switch (_op) {
+      case _BalanceOp.deposit:
+        if (_isLoan) {
+          currentDebt = previousDebt + _amount;
+          actionKind = 'deposit_loan';
+        } else {
+          currentCredit = previousCredit + _amount;
+          actionKind = 'deposit_cash';
+        }
+      case _BalanceOp.withdraw:
+        currentCredit = (previousCredit - _amount).clamp(0, double.infinity);
+        actionKind = 'withdraw';
+      case _BalanceOp.addPoints:
+        // النقاط ما تأثر على الرصيد — نمرّر أنواعها للـpush.
+        actionKind = 'add_points';
+    }
+    // الإشعار يتم في الخلفية — ما نوقف الـclose للـsheet عليه.
+    unawaited(_dispatchNotice(
+      previousCredit: previousCredit,
+      previousDebt: previousDebt,
+      currentCredit: currentCredit,
+      currentDebt: currentDebt,
+      actionKind: actionKind,
+      notes: note,
+    ));
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _dispatchNotice({
+    required num previousCredit,
+    required num previousDebt,
+    required num currentCredit,
+    required num currentDebt,
+    required String actionKind,
+    String? notes,
+  }) async {
+    if (!_sendWhatsApp && !_sendPush) return;
+    final r = await ManagerNoticeService.notify(
+      manager: widget.manager,
+      amount: _amount,
+      isLoan: _isLoan && _op == _BalanceOp.deposit,
+      previousCredit: previousCredit,
+      previousDebt: previousDebt,
+      currentCredit: currentCredit,
+      currentDebt: currentDebt,
+      actionKind: actionKind,
+      notes: notes,
+      sendWhatsApp: _sendWhatsApp,
+      sendPush: _sendPush,
+    );
+    // التغذية الراجعة عن الإشعار تظهر فقط إذا أحدها فشل — نتجنب
+    // إغراق الـadmin بـ"تم إرسال الواتساب" snackbars متعدّدة.
+    if (!mounted) return;
+    final failures = <String>[];
+    if (_sendWhatsApp && !r.whatsAppOk) {
+      failures.add('واتساب: ${r.whatsAppMessage ?? "فشل"}');
+    }
+    if (_sendPush && !r.pushOk) {
+      failures.add('الإشعار: ${r.pushMessage ?? "فشل"}');
+    }
+    if (failures.isNotEmpty) {
+      // The sheet may be popped already; use the navigator's root
+      // messenger so the snackbar still renders.
+      final rootMessenger = ScaffoldMessenger.maybeOf(context);
+      rootMessenger?.showSnackBar(
+        SnackBar(
+          content: Text(failures.join(' · ')),
+          backgroundColor: const Color(0xFFE08F2D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -369,6 +465,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                       ],
                     ),
                     const SizedBox(height: Sp.md),
+                    // مطلب 2026-06-12: toggles إشعار للمدير. مطابق v1
+                    // _NotifyToggles. الـWA يقفل تلقائياً لو ما عنده
+                    // رقم. الـpush بيشتغل لو المدير عنده FCM token مسجّل.
+                    _notifyToggles(),
+                    const SizedBox(height: Sp.md),
                     _label('ملاحظة (اختياري)'),
                     TextField(
                       controller: _noteCtrl,
@@ -437,6 +538,69 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           ),
         );
       },
+    );
+  }
+
+  Widget _notifyToggles() {
+    final hasPhone = (widget.manager.mobile ?? '').trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInput,
+        borderRadius: BorderRadius.circular(R.sm),
+        border:
+            Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        children: [
+          CheckboxListTile.adaptive(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: hasPhone ? _sendWhatsApp : false,
+            onChanged: hasPhone
+                ? (v) => setState(() => _sendWhatsApp = v ?? false)
+                : null,
+            title: Row(
+              children: [
+                const Icon(LucideIcons.send,
+                    size: 14, color: Color(0xFF25D366)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    hasPhone
+                        ? 'إرسال رسالة واتساب للمدير'
+                        : 'إرسال واتساب — لا يوجد رقم',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          CheckboxListTile.adaptive(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: _sendPush,
+            onChanged: (v) => setState(() => _sendPush = v ?? false),
+            title: const Row(
+              children: [
+                Icon(LucideIcons.bell,
+                    size: 14, color: Color(0xFF3B82F6)),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'إشعار داخل تطبيق المدير',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
