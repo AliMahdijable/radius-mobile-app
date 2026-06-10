@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -49,11 +51,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _debtorsLoaded = false;
   bool _walletLoaded = false;
 
+  /// مطلب 2026-06-12: debounce — أي حركة في صفحة ثانية بتحفّز
+  /// notifyChange. لو الـadmin يضغط حفظ + إغلاق + يفتح dashboard،
+  /// أكثر من حدث في ثانية واحدة كان يطلق refreshLive كل واحد منهم.
+  /// نوقف الـtimer ونعيد جدولته فيتم تنفيذ refresh واحد فقط.
+  Timer? _refreshDebounce;
+
   @override
   void initState() {
     super.initState();
     _loadIdentity();
-    _refreshLive();
+    _refreshLive(silent: false);
     // Re-fetch dashboard KPIs whenever any subscriber operation
     // anywhere in the app succeeds (activate/extend/disconnect/bulk
     // toggle/delete). Matches v1's pattern of state-driven refresh.
@@ -62,11 +70,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onDataChanged() {
     if (!mounted) return;
-    _refreshLive();
+    // Debounce — اجمع موجة الأحداث في refresh واحد.
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 700), () {
+      if (!mounted) return;
+      // silent: true — نُبقي الكارت بالقيم القديمة بينما البيانات
+      // الجديدة تجيب. يمنع وميض القيم 0 → القيمة الحقيقية اللي كان
+      // يُعطي إحساس "ببقى يحمل" بعد كل انتقال بين الصفحات.
+      _refreshLive(silent: true);
+    });
   }
 
   @override
   void dispose() {
+    _refreshDebounce?.cancel();
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     super.dispose();
   }
@@ -77,14 +94,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _displayName = name ?? '');
   }
 
-  Future<void> _refreshLive() async {
-    setState(() {
-      _waLoaded = false;
-      _activationsLoaded = false;
-      _sas4Loaded = false;
-      _debtorsLoaded = false;
-      _walletLoaded = false;
-    });
+  Future<void> _refreshLive({bool silent = false}) async {
+    // silent=false (initial mount + pull-to-refresh): نُسقط الـloaded
+    //   flags فتظهر spinners حتى البيانات الجديدة.
+    // silent=true (event-driven refresh): نبقي القيم القديمة معروضة
+    //   حتى الـAPI يرد بالـlatest، يجنّب وميض 0 → القيمة الجديدة.
+    if (!silent) {
+      setState(() {
+        _waLoaded = false;
+        _activationsLoaded = false;
+        _sas4Loaded = false;
+        _debtorsLoaded = false;
+        _walletLoaded = false;
+      });
+    }
     // Independent fetches — each updates its loaded flag as soon as it
     // returns so cards can light up one by one instead of all-or-nothing.
     DashboardApi.fetchWhatsAppStatus().then((r) {
