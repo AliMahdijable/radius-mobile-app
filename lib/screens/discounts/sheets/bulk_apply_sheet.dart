@@ -9,6 +9,12 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
+/// Existing discount preview lookup map by username (lower-cased).
+/// Built once after loading discounts so the grid can show 'يوجد خصم'
+/// badge on subscribers who already have one (مطلب 2026-06-12 مطابق
+/// v1 _SubscriberSelectCard).
+typedef _ExistingMap = Map<String, num>;
+
 /// تطبيق خصم على عدة مشتركين دفعة واحدة. مطابق v1
 /// (mobile-app/lib/screens/discounts_screen.dart) مع تحسينات تصميم.
 /// الـbackend: POST /api/v2/discounts/bulk-apply.
@@ -37,6 +43,7 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
   bool _loadingSubs = true;
   bool _suppressFormat = false;
   List<Subscriber> _all = const [];
+  _ExistingMap _existing = const {};
   final Set<String> _selected = {};
   String _query = '';
 
@@ -60,10 +67,22 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
   }
 
   Future<void> _loadSubs() async {
-    final list = await SubscribersApi.loadAll();
+    // نحمّل المشتركين + الخصومات الحالية بالتوازي عشان نقدر نظهر
+    // 'يوجد خصم' badge على مَن يحمل خصماً سابقاً.
+    final results = await Future.wait([
+      SubscribersApi.loadAll(),
+      DiscountsApi.list(),
+    ]);
     if (!mounted) return;
+    final list = results[0] as List<Subscriber>?;
+    final discounts = results[1] as List<Discount>;
+    final map = <String, num>{};
+    for (final d in discounts) {
+      map[d.subscriberUsername.toLowerCase()] = d.discountAmount;
+    }
     setState(() {
       _all = list ?? const [];
+      _existing = map;
       _loadingSubs = false;
     });
   }
@@ -377,87 +396,30 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
                               ),
                             ),
                           )
-                        : ListView.builder(
+                        : GridView.builder(
                             controller: controller,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: Sp.lg),
+                            padding: const EdgeInsets.fromLTRB(
+                                Sp.lg, 0, Sp.lg, 0),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 2.4,
+                              crossAxisSpacing: 6,
+                              mainAxisSpacing: 6,
+                            ),
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
                               final s = filtered[i];
                               final selected =
                                   _selected.contains(s.username);
-                              return Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: () => _toggle(s.username),
-                                  borderRadius:
-                                      BorderRadius.circular(R.sm),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(
-                                        bottom: 6),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: selected
-                                          ? accent.withValues(alpha: 0.08)
-                                          : AppColors.surface,
-                                      borderRadius:
-                                          BorderRadius.circular(R.sm),
-                                      border: Border.all(
-                                        color: selected
-                                            ? accent
-                                            : AppColors.border
-                                                .withValues(alpha: 0.5),
-                                        width: selected ? 1.5 : 1,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          selected
-                                              ? LucideIcons.squareCheck
-                                              : LucideIcons.square,
-                                          size: 16,
-                                          color: selected
-                                              ? accent
-                                              : AppColors.textLow,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                s.fullName.isNotEmpty
-                                                    ? s.fullName
-                                                    : s.username,
-                                                style: AppType.label(
-                                                        color: AppColors
-                                                            .textHi)
-                                                    .copyWith(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight
-                                                                .w700),
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                              ),
-                                              if (s.fullName != s.username)
-                                                Text(
-                                                  s.username,
-                                                  style: AppType.muted()
-                                                      .copyWith(
-                                                          fontSize: 10.5),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                              final existingAmount =
+                                  _existing[s.username.toLowerCase()];
+                              return _SubscriberCard(
+                                sub: s,
+                                selected: selected,
+                                accent: accent,
+                                existingDiscount: existingAmount,
+                                onTap: () => _toggle(s.username),
                               );
                             },
                           ),
@@ -586,6 +548,127 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// مطلب 2026-06-12: card grid مطابق v1 _SubscriberSelectCard.
+/// يعرض اليوزر + الاسم العربي + الباقة + badge 'يوجد خصم' بقيمته
+/// لو المشترك عنده خصم سابق.
+class _SubscriberCard extends StatelessWidget {
+  const _SubscriberCard({
+    required this.sub,
+    required this.selected,
+    required this.accent,
+    required this.existingDiscount,
+    required this.onTap,
+  });
+  final Subscriber sub;
+  final bool selected;
+  final Color accent;
+  final num? existingDiscount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? accent.withValues(alpha: 0.08)
+                : AppColors.surface,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(
+              color: selected
+                  ? accent
+                  : AppColors.border.withValues(alpha: 0.5),
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    selected
+                        ? LucideIcons.squareCheck
+                        : LucideIcons.square,
+                    size: 12,
+                    color: selected ? accent : AppColors.textLow,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      sub.username,
+                      style: AppType.label(color: AppColors.textHi)
+                          .copyWith(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              if (sub.fullName != sub.username) ...[
+                const SizedBox(height: 2),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Text(
+                    sub.fullName,
+                    style: AppType.muted().copyWith(fontSize: 9.5),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              if ((sub.profileName ?? '').isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Text(
+                    sub.profileName!,
+                    style: AppType.label(color: const Color(0xFF14B8A6))
+                        .copyWith(
+                            fontSize: 9.5, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              if (existingDiscount != null && existingDiscount! > 0) ...[
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE08F2D).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(R.sm),
+                    border: Border.all(
+                        color: const Color(0xFFE08F2D)
+                            .withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '-${formatIQD(existingDiscount!)}',
+                    style: const TextStyle(
+                      color: Color(0xFFE08F2D),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

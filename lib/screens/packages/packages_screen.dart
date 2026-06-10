@@ -28,12 +28,14 @@ class _PackagesScreenState extends State<PackagesScreen> {
   bool _loading = true;
   bool _saving = false;
   int? _myManagerId;
+  String _myDisplayName = '…';
 
   /// مطلب 2026-06-12: السوبر/المدير الفرعي يقدر يعدّل تسعير
   /// أي مدير من قائمة منسدلة. null = الـadmin يعدّل تسعيره الخاص
-  /// (السلوك الأصلي).
+  /// (السلوك الأصلي). الـlabel يبدأ بـ"…" ويحدّث عند bootstrap باسم
+  /// الـadmin الحالي الفعلي (مطلب 2026-06-12: 'بدل تسعيري الخاص').
   int? _selectedManagerId;
-  String _selectedManagerLabel = 'تسعيري الخاص';
+  String _selectedManagerLabel = '…';
   List<({int id, String username, String displayName})>? _managers;
 
   @override
@@ -54,6 +56,15 @@ class _PackagesScreenState extends State<PackagesScreen> {
     final idStr = await AuthStorage.readAdminId();
     final id = int.tryParse(idStr ?? '');
     if (id != null) _myManagerId = id;
+    // اسم المدير الحالي — يظهر بـlabel الـpicker بدل "تسعيري الخاص"
+    // (مطلب 2026-06-12: 'يظهر اسم المدير بدل من تسعيري الخاص').
+    final displayName = await AuthStorage.readDisplayName();
+    if (mounted && displayName != null && displayName.isNotEmpty) {
+      setState(() {
+        _myDisplayName = displayName;
+        _selectedManagerLabel = displayName;
+      });
+    }
     // قائمة المدراء — اختيارية، تظهر بصف الـhero لو الـbackend رجّع
     // فرعيين. لو فاضية يبقى الـpicker مخفي.
     final mgrs = await ManagersApi.lite();
@@ -353,7 +364,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
                   ),
                   ListTile(
                     leading: Icon(LucideIcons.user, color: accent),
-                    title: const Text('تسعيري الخاص'),
+                    title: Text(_selectedManagerLabel == '…'
+                        ? 'تسعيري الخاص'
+                        : _selectedManagerLabel),
                     onTap: () => Navigator.of(context).pop(-1),
                     trailing: _selectedManagerId == null
                         ? Icon(LucideIcons.check, color: accent)
@@ -386,7 +399,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
           setState(() {
             if (picked == -1) {
               _selectedManagerId = null;
-              _selectedManagerLabel = 'تسعيري الخاص';
+              _selectedManagerLabel = _myDisplayName;
             } else {
               _selectedManagerId = picked;
               _selectedManagerLabel = managers

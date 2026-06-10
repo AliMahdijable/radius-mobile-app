@@ -15,7 +15,10 @@ class Manager {
     this.lastname,
     this.mobile,
     this.email,
+    this.company,
     this.balance,
+    this.debt,
+    this.rewardPoints,
     this.usersCount,
     this.parentId,
     this.parentUsername,
@@ -29,7 +32,14 @@ class Manager {
   final String? lastname;
   final String? mobile;
   final String? email;
+  final String? company;
+  /// `balance` SAS4 يرجّعه ك"credit" — رصيد إيجابي مالي.
   final num? balance;
+  /// `debt` SAS4 = الدين النقدي (لم يتم سداد كلفة الباقات). v1
+  /// مطلب: ظهور chip 'دين الساس' لو > 0.
+  final num? debt;
+  /// نقاط المكافأة — مطلب 2026-06-12 (v1 يعرضها كـchip بنفسجي).
+  final num? rewardPoints;
   final int? usersCount;
   final int? parentId;
   final String? parentUsername;
@@ -69,7 +79,10 @@ class Manager {
       lastname: j['lastname']?.toString(),
       mobile: j['mobile']?.toString(),
       email: j['email']?.toString(),
+      company: j['company']?.toString(),
       balance: toNum(j['balance']),
+      debt: toNum(j['debt']),
+      rewardPoints: toNum(j['reward_points'] ?? j['rewardPoints']),
       usersCount: toInt(j['users_count']),
       parentId: toInt(j['parent_id']),
       parentUsername: j['parent_username']?.toString(),

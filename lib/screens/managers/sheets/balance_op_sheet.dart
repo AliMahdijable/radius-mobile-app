@@ -7,16 +7,23 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
+/// نوع العملية الافتراضي (لو actions sheet مرّر نوعاً محدّداً).
+enum BalanceOpKind { deposit, withdraw, addPoints }
+
 /// عمليات الرصيد على المدير: شحن / سحب / إضافة نقاط. الـmodal يعرض
 /// 3 toggle بأعلى الـsheet، الـadmin يختار نوع العملية ثم يدخل
 /// المبلغ + ملاحظة اختيارية. كل عملية لها endpoint منفصل في الـbackend.
-Future<bool?> showBalanceOpSheet(BuildContext context, Manager m) {
+Future<bool?> showBalanceOpSheet(
+  BuildContext context,
+  Manager m, {
+  BalanceOpKind? preselected,
+}) {
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _BalanceOpSheet(manager: m),
+    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected),
   );
 }
 
@@ -29,18 +36,32 @@ enum _BalanceOp {
   final String label;
   final Color color;
   final IconData icon;
+
+  static _BalanceOp fromKind(BalanceOpKind? k) {
+    switch (k) {
+      case BalanceOpKind.deposit:
+        return _BalanceOp.deposit;
+      case BalanceOpKind.withdraw:
+        return _BalanceOp.withdraw;
+      case BalanceOpKind.addPoints:
+        return _BalanceOp.addPoints;
+      case null:
+        return _BalanceOp.deposit;
+    }
+  }
 }
 
 class _BalanceOpSheet extends StatefulWidget {
-  const _BalanceOpSheet({required this.manager});
+  const _BalanceOpSheet({required this.manager, this.preselected});
   final Manager manager;
+  final BalanceOpKind? preselected;
 
   @override
   State<_BalanceOpSheet> createState() => _BalanceOpSheetState();
 }
 
 class _BalanceOpSheetState extends State<_BalanceOpSheet> {
-  _BalanceOp _op = _BalanceOp.deposit;
+  late _BalanceOp _op = _BalanceOp.fromKind(widget.preselected);
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   int _amount = 0;
@@ -334,11 +355,15 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
+                        // مطلب 2026-06-12: chips مطابق v1 — 6 مبالغ
+                        // إضافية للوصول السريع، تتراكم على المجموع.
                         for (final v in const [
                           10000,
                           25000,
                           50000,
-                          100000
+                          100000,
+                          250000,
+                          500000
                         ])
                           _quickChip(v),
                       ],
