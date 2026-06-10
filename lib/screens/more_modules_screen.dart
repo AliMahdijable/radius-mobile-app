@@ -5,8 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'discounts/discounts_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
+import 'packages/packages_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -70,7 +72,11 @@ class MoreModulesScreen extends StatelessWidget {
               color: const Color(0xFF8B5CF6),
               title: 'تسعير الباقات',
               subtitle: 'تعديل أسعار البيع لكل باقة',
-              onTap: () => _todo(context, 'تسعير الباقات — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PackagesScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.sm),
             _ModuleCard(
@@ -78,7 +84,11 @@ class MoreModulesScreen extends StatelessWidget {
               color: const Color(0xFF14B8A6),
               title: 'الخصومات',
               subtitle: 'إدارة الخصومات لكل مشترك',
-              onTap: () => _todo(context, 'الخصومات — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DiscountsScreen(),
+                ),
+              ),
             ),
           ],
         ),
