@@ -6,6 +6,8 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
+import 'whatsapp/whatsapp_status_screen.dart';
+import 'whatsapp/whatsapp_templates_screen.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
 class SettingsScreen extends StatefulWidget {
@@ -123,13 +125,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.chat_bubble_outline_rounded,
               label: 'حالة الواتساب',
-              onTap: () => _todo(context, 'حالة الواتساب — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const WhatsAppStatusScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.message_outlined,
               label: 'قوالب الواتساب',
-              onTap: () => _todo(context, 'قوالب الواتساب — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const WhatsAppTemplatesScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.md),
             _SectionLabel('الأجهزة'),

@@ -24,6 +24,96 @@ class WhatsTemplate {
   final String messageContent;
 }
 
+/// حالة اتصال واتساب الـadmin الحالية.
+class WhatsConnectionStatus {
+  const WhatsConnectionStatus({
+    required this.connected,
+    this.stabilizing = false,
+    this.phone,
+    this.pushname,
+    this.platform,
+  });
+  const WhatsConnectionStatus.disconnected()
+      : connected = false,
+        stabilizing = false,
+        phone = null,
+        pushname = null,
+        platform = null;
+  final bool connected;
+  final bool stabilizing;
+  final String? phone;
+  final String? pushname;
+  final String? platform;
+}
+
+/// 7 toggles لكل المسارات التلقائية في واتساب. مطابق صفّ
+/// whatsapp_features في الـDB.
+class WhatsFeatures {
+  const WhatsFeatures({
+    this.notificationsEnabled = true,
+    this.sendOnActivation = false,
+    this.expiryReminder = false,
+    this.debtReminder = false,
+    this.serviceEndNotification = false,
+    this.welcomeMessage = false,
+    this.sendOnExtension = false,
+  });
+  /// Master switch — لو معطل، كل الإشعارات تتوقف بغض النظر عن بقية toggles.
+  final bool notificationsEnabled;
+  final bool sendOnActivation;
+  final bool expiryReminder;
+  final bool debtReminder;
+  final bool serviceEndNotification;
+  final bool welcomeMessage;
+  final bool sendOnExtension;
+
+  WhatsFeatures copyWith({
+    bool? notificationsEnabled,
+    bool? sendOnActivation,
+    bool? expiryReminder,
+    bool? debtReminder,
+    bool? serviceEndNotification,
+    bool? welcomeMessage,
+    bool? sendOnExtension,
+  }) {
+    return WhatsFeatures(
+      notificationsEnabled:
+          notificationsEnabled ?? this.notificationsEnabled,
+      sendOnActivation: sendOnActivation ?? this.sendOnActivation,
+      expiryReminder: expiryReminder ?? this.expiryReminder,
+      debtReminder: debtReminder ?? this.debtReminder,
+      serviceEndNotification:
+          serviceEndNotification ?? this.serviceEndNotification,
+      welcomeMessage: welcomeMessage ?? this.welcomeMessage,
+      sendOnExtension: sendOnExtension ?? this.sendOnExtension,
+    );
+  }
+
+  static WhatsFeatures fromJson(Map<String, dynamic> j) {
+    bool b(dynamic v) =>
+        v is bool ? v : (v is num ? v != 0 : v?.toString() == 'true');
+    return WhatsFeatures(
+      notificationsEnabled: b(j['notificationsEnabled'] ?? true),
+      sendOnActivation: b(j['sendOnActivation']),
+      expiryReminder: b(j['expiryReminder']),
+      debtReminder: b(j['debtReminder']),
+      serviceEndNotification: b(j['serviceEndNotification']),
+      welcomeMessage: b(j['welcomeMessage']),
+      sendOnExtension: b(j['sendOnExtension']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'notificationsEnabled': notificationsEnabled,
+        'sendOnActivation': sendOnActivation,
+        'expiryReminder': expiryReminder,
+        'debtReminder': debtReminder,
+        'serviceEndNotification': serviceEndNotification,
+        'welcomeMessage': welcomeMessage,
+        'sendOnExtension': sendOnExtension,
+      };
+}
+
 /// Result of a template-send round-trip — feeds the snackbar.
 class WhatsSendResult {
   const WhatsSendResult({required this.ok, this.message, this.reason});
@@ -109,6 +199,261 @@ class WhatsAppApi {
     } catch (e) {
       _log('templates', e);
       return null;
+    }
+  }
+
+  /// GET /api/whatsapp/connection-status/:adminId — حالة الاتصال
+  /// الحيّة. يدعم `live=true` لإعادة ربط تلقائي عند فتح الصفحة.
+  static Future<WhatsConnectionStatus?> connectionStatus({
+    bool live = false,
+  }) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return null;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/whatsapp/connection-status/$adminId',
+        queryParameters: live ? {'live': 'true'} : null,
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return const WhatsConnectionStatus.disconnected();
+      return WhatsConnectionStatus(
+        connected: body['connected'] == true,
+        stabilizing: body['stabilizing'] == true,
+        phone: body['phone']?.toString(),
+        pushname: body['pushname']?.toString(),
+        platform: body['platform']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('whatsapp/connection-status', e);
+      return null;
+    } catch (e) {
+      _log('whatsapp/connection-status', e);
+      return null;
+    }
+  }
+
+  /// POST /api/whatsapp/start-session — يطلق session جديد ينتج QR.
+  /// الـQR يُجلب لاحقاً عبر pending-qr / get-qr.
+  static Future<({bool ok, String? message})> startSession() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) {
+      return (ok: false, message: 'لا توجد جلسة دخول');
+    }
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/start-session',
+        data: {'adminId': adminId},
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('whatsapp/start-session', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر بدء الجلسة');
+    } catch (e) {
+      _log('whatsapp/start-session', e);
+      return (ok: false, message: 'تعذّر بدء الجلسة');
+    }
+  }
+
+  /// POST /api/whatsapp/start-session-code — يطلق pair code (8 أرقام)
+  /// بدل QR. ينتج رمز يكتبه المستخدم في واتساب الويب على الجهاز.
+  static Future<({bool ok, String? code, String? message})> startSessionCode({
+    required String phone,
+  }) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, code: null, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/start-session-code',
+        data: {'adminId': adminId, 'phone': phone},
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        code: body['code']?.toString() ?? body['pairCode']?.toString(),
+        message: body['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('whatsapp/start-session-code', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, code: null, message: msg ?? 'تعذّر إنشاء الرمز');
+    } catch (e) {
+      _log('whatsapp/start-session-code', e);
+      return (ok: false, code: null, message: 'تعذّر إنشاء الرمز');
+    }
+  }
+
+  /// GET /api/whatsapp/get-qr/:adminId — يجلب الـQR الحالي (data URL).
+  static Future<String?> getQr() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return null;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/whatsapp/get-qr/$adminId',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      return body['qr']?.toString() ?? body['qrCode']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// POST /api/whatsapp/reconnect
+  static Future<({bool ok, String? message})> reconnect() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/reconnect',
+        data: {'adminId': adminId},
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } catch (e) {
+      _log('whatsapp/reconnect', e);
+      return (ok: false, message: 'فشل إعادة الاتصال');
+    }
+  }
+
+  /// POST /api/whatsapp/disconnect — يقطع الجلسة لكن يبقي بيانات الـauth.
+  static Future<({bool ok, String? message})> disconnect() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/disconnect',
+        data: {'adminId': adminId},
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } catch (e) {
+      _log('whatsapp/disconnect', e);
+      return (ok: false, message: 'فشل قطع الاتصال');
+    }
+  }
+
+  /// POST /api/whatsapp/soft-reset — يمسح الـauth ويبدأ جلسة جديدة
+  /// (يجبر إعادة QR). يُستعمل لما الجلسة عالقة.
+  static Future<({bool ok, String? message})> softReset() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/soft-reset',
+        data: {'adminId': adminId},
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } catch (e) {
+      _log('whatsapp/soft-reset', e);
+      return (ok: false, message: 'فشل إعادة التهيئة');
+    }
+  }
+
+  /// GET /api/whatsapp/get-features/:adminId
+  static Future<WhatsFeatures?> getFeatures() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return null;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/whatsapp/get-features/$adminId',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final f = body['features'];
+      if (f is! Map) return null;
+      return WhatsFeatures.fromJson(Map<String, dynamic>.from(f));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// POST /api/whatsapp/save-features
+  static Future<({bool ok, String? message})> saveFeatures(
+      WhatsFeatures features) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/save-features',
+        data: {
+          'adminId': adminId,
+          ...features.toJson(),
+        },
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } catch (e) {
+      _log('whatsapp/save-features', e);
+      return (ok: false, message: 'تعذّر الحفظ');
+    }
+  }
+
+  /// POST /api/whatsapp/save-template — جديد أو تعديل قالب.
+  static Future<({bool ok, String? message})> saveTemplate({
+    required String templateType,
+    required String messageContent,
+    required bool isActive,
+  }) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/save-template',
+        data: {
+          'adminId': adminId,
+          'templateType': templateType,
+          'messageContent': messageContent,
+          'isActive': isActive,
+        },
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } catch (e) {
+      _log('whatsapp/save-template', e);
+      return (ok: false, message: 'تعذّر الحفظ');
+    }
+  }
+
+  /// DELETE /api/whatsapp/template/:adminId/:templateType
+  static Future<({bool ok, String? message})> deleteTemplate(
+      String templateType) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.delete<Map<String, dynamic>>(
+        '/api/whatsapp/template/$adminId/$templateType',
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } catch (e) {
+      _log('whatsapp/template DELETE', e);
+      return (ok: false, message: 'تعذّر الحذف');
     }
   }
 
