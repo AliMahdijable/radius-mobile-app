@@ -114,7 +114,8 @@ class PackagesApi {
   /// POST /api/v2/price-list — save updated prices for a manager.
   /// payload is a list of (profile_id, profile_name, price, cost,
   /// user_price). The screen builds it from the current Package list
-  /// and the user's edits.
+  /// and the user's edits — مطلب 2026-06-12 يحرّر `price` (سعر شراء
+  /// المدير من الأب) إضافة إلى `user_price` (سعر البيع للمشترك).
   static Future<({bool ok, String? message})> savePrices({
     required int managerId,
     required List<Map<String, dynamic>> priceList,

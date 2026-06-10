@@ -134,7 +134,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _Header(sub: sub, onClose: () => Navigator.of(context).pop()),
+            // مطلب 2026-06-12: AppBar نظيف بالاسم العربي (مطابق screenshot v1)
+            _SimpleAppBar(
+              title: sub.fullName,
+              onClose: () => Navigator.of(context).pop(),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -144,6 +148,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   Sp.huge,
                 ),
                 children: [
+                  // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
+                  _SubscriberHero(sub: sub),
+                  const SizedBox(height: Sp.md),
                   if (sub.isOnline) ...[
                     _LiveSessionCard(sub: sub),
                     const SizedBox(height: Sp.sm),
@@ -1067,9 +1074,9 @@ class _OperationsCard extends StatelessWidget {
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
-                mainAxisSpacing: 5,
-                crossAxisSpacing: 5,
-                childAspectRatio: 1.35,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 8,
+                childAspectRatio: 0.78,
               ),
               itemCount: ops.length,
               itemBuilder: (_, i) => _OpCard(op: ops[i]),
@@ -1113,60 +1120,59 @@ class _Op {
   final VoidCallback onTap;
 }
 
-/// Card-shaped op tile — same visual language as the section cards
-/// (white surface + border + soft shadow). Tinted icon-box on top,
-/// label underneath in the op's color.
+/// مطلب 2026-06-12 (screenshots reference): زر دائري ملوّن مع
+/// أيقونة بيضاء + label تحت الزر بلون نصّ عادي. مطابق v1
+/// (operations grid screenshot). الـcircle 56dp، الـicon white 22dp،
+/// ظل ناعم بلون الزر يعطي توهّج خفيف.
 class _OpCard extends StatelessWidget {
   const _OpCard({required this.op});
   final _Op op;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          op.onTap();
-        },
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(op.icon, color: op.color, size: 16),
-              const SizedBox(height: 2),
-              Flexible(
-                child: Text(
-                  op.label,
-                  style: AppType.label(color: op.color).copyWith(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    height: 1.05,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
+    return InkResponse(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        op.onTap();
+      },
+      radius: 36,
+      highlightShape: BoxShape.circle,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: op.color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: op.color.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-            ],
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(op.icon, color: Colors.white, size: 22),
           ),
-        ),
+          const SizedBox(height: 7),
+          Flexible(
+            child: Text(
+              op.label,
+              style: AppType.label(color: AppColors.textHi).copyWith(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1390,5 +1396,213 @@ class _BytesCard extends StatelessWidget {
       i++;
     }
     return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
+  }
+}
+
+/// مطلب 2026-06-12: AppBar نظيف مطابق screenshot v1 — الاسم العربي
+/// مركزي + سهم رجوع يميني (RTL يعكس). بدون ظل.
+class _SimpleAppBar extends StatelessWidget {
+  const _SimpleAppBar({required this.title, required this.onClose});
+  final String title;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      color: AppColors.bg,
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(LucideIcons.chevronRight, size: 22),
+            color: AppColors.textHi,
+            onPressed: onClose,
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                title,
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 17, letterSpacing: -0.3),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          const SizedBox(width: 48),
+        ],
+      ),
+    );
+  }
+}
+
+/// مطلب 2026-06-12 (screenshot v1): كرت هيرو teal كبير في أعلى
+/// صفحة المشترك. يعرض: أيقونة دائرة بيضاء كبيرة مع حرف/رقم الباقة
+/// + الاسم الكامل + username + 3 إحصاءات بالأسفل (الدين / الباقة
+/// / الأيام المتبقية).
+class _SubscriberHero extends StatelessWidget {
+  const _SubscriberHero({required this.sub});
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = AppColors.brand;
+    final pkgLetter = (sub.profileName ?? sub.username).isNotEmpty
+        ? (sub.profileName ?? sub.username).characters.first
+        : '?';
+    final remaining = sub.remainingDays;
+    String remainingTop = '—';
+    String remainingSub = 'الأيام المتبقية';
+    if (remaining != null && remaining > 0) {
+      remainingTop = '$remaining';
+      final exp = sub.parsedExpiration;
+      if (exp != null) {
+        final diff = exp.difference(DateTime.now());
+        final h = diff.inHours.remainder(24);
+        final m = diff.inMinutes.remainder(60);
+        if (h > 0 || m > 0) {
+          remainingSub = '${h}س ${m}د';
+        }
+      }
+    } else if (remaining != null && remaining <= 0) {
+      remainingTop = '—';
+      remainingSub = 'منتهي';
+    }
+    final hasDebt = sub.balanceAmount < 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [accent, accent.withValues(alpha: 0.78)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.25),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              pkgLetter,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -1,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            sub.fullName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            sub.username,
+            style: const TextStyle(
+              color: Color(0xFFCBE4D7),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _heroStat(
+                  big: hasDebt ? formatIQD(sub.balanceAmount.abs()) : 'لا يوجد',
+                  small: 'الدين',
+                ),
+              ),
+              _heroDivider(),
+              Expanded(
+                child: _heroStat(
+                  big: (sub.profileName ?? '—'),
+                  small: 'الباقة',
+                  bigSize: 13,
+                ),
+              ),
+              _heroDivider(),
+              Expanded(
+                child: _heroStat(
+                  big: remainingTop,
+                  small: remainingSub,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroStat({
+    required String big,
+    required String small,
+    double bigSize = 18,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          big,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: bigSize,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.3,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 3),
+        Text(
+          small,
+          style: const TextStyle(
+            color: Color(0xFFCBE4D7),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _heroDivider() {
+    return Container(
+      width: 1,
+      height: 36,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      color: Colors.white.withValues(alpha: 0.25),
+    );
   }
 }

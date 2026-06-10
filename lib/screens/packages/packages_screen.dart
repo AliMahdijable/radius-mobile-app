@@ -21,10 +21,14 @@ class PackagesScreen extends StatefulWidget {
 
 class _PackagesScreenState extends State<PackagesScreen> {
   List<Package> _packages = const [];
-  /// Map<profileId, edited userPrice>. أيّ index غير موجود = ما اتعدّل.
-  final Map<int, int> _edits = {};
-  /// Controllers per package id لتجنّب إعادة إنشاءها في كل rebuild.
-  final Map<int, TextEditingController> _controllers = {};
+  /// مطلب 2026-06-12: عمودان قابلان للتحرير (مطابق screenshots v1).
+  /// `_userPriceEdits` = سعر البيع للمشترك (user_price).
+  /// `_priceEdits` = السعر (price) — سعر شراء المدير من الأب.
+  /// `cost` = الكلفة (cost) — للقراءة فقط، تعرض كـreference.
+  final Map<int, int> _userPriceEdits = {};
+  final Map<int, int> _priceEdits = {};
+  final Map<int, TextEditingController> _userPriceCtrl = {};
+  final Map<int, TextEditingController> _priceCtrl = {};
   bool _loading = true;
   bool _saving = false;
   int? _myManagerId;
@@ -46,7 +50,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
 
   @override
   void dispose() {
-    for (final c in _controllers.values) {
+    for (final c in _userPriceCtrl.values) {
+      c.dispose();
+    }
+    for (final c in _priceCtrl.values) {
       c.dispose();
     }
     super.dispose();
@@ -95,14 +102,17 @@ class _PackagesScreenState extends State<PackagesScreen> {
     if (!mounted) return;
     setState(() {
       _packages = pkgs;
-      _edits.clear();
+      _userPriceEdits.clear();
+      _priceEdits.clear();
       for (final p in pkgs) {
-        final initial = (p.userPrice ?? 0).toInt();
-        final ctrl = _controllers.putIfAbsent(
-          p.id,
-          () => TextEditingController(),
-        );
-        ctrl.text = initial > 0 ? _fmt(initial) : '';
+        final initialUser = (p.userPrice ?? 0).toInt();
+        final initialPrice = (p.basePrice ?? 0).toInt();
+        _userPriceCtrl
+            .putIfAbsent(p.id, () => TextEditingController())
+            .text = initialUser > 0 ? _fmt(initialUser) : '';
+        _priceCtrl
+            .putIfAbsent(p.id, () => TextEditingController())
+            .text = initialPrice > 0 ? _fmt(initialPrice) : '';
       }
       _loading = false;
     });
@@ -119,16 +129,28 @@ class _PackagesScreenState extends State<PackagesScreen> {
     return buf.toString();
   }
 
-  bool get _hasChanges => _edits.values.any((v) => _hasDelta(v));
+  bool get _hasChanges {
+    for (final p in _packages) {
+      final originalUser = (p.userPrice ?? 0).toInt();
+      final originalPrice = (p.basePrice ?? 0).toInt();
+      if ((_userPriceEdits[p.id] ?? originalUser) != originalUser) return true;
+      if ((_priceEdits[p.id] ?? originalPrice) != originalPrice) return true;
+    }
+    return false;
+  }
 
-  bool _hasDelta(int newValue) {
-    final originals = {
-      for (final p in _packages) p.id: (p.userPrice ?? 0).toInt(),
-    };
-    return _edits.entries.any((e) {
-      final original = originals[e.key] ?? 0;
-      return e.value != original;
-    });
+  int _changedCount() {
+    var c = 0;
+    for (final p in _packages) {
+      final originalUser = (p.userPrice ?? 0).toInt();
+      final originalPrice = (p.basePrice ?? 0).toInt();
+      final userChanged =
+          (_userPriceEdits[p.id] ?? originalUser) != originalUser;
+      final priceChanged =
+          (_priceEdits[p.id] ?? originalPrice) != originalPrice;
+      if (userChanged || priceChanged) c++;
+    }
+    return c;
   }
 
   Future<void> _save() async {
@@ -138,14 +160,15 @@ class _PackagesScreenState extends State<PackagesScreen> {
     setState(() => _saving = true);
     final payload = <Map<String, dynamic>>[];
     for (final p in _packages) {
-      final edited = _edits[p.id];
-      final original = (p.userPrice ?? 0).toInt();
-      final value = edited ?? original;
+      final userEdit = _userPriceEdits[p.id];
+      final priceEdit = _priceEdits[p.id];
+      final userPrice = userEdit ?? (p.userPrice ?? 0).toInt();
+      final price = priceEdit ?? (p.basePrice ?? 0).toInt();
       payload.add({
         'profile_id': p.id,
         'profile_name': p.name,
-        'user_price': value,
-        'price': (p.basePrice ?? value).toInt(),
+        'user_price': userPrice,
+        'price': price,
         'cost': (p.cost ?? 0).toInt(),
       });
     }
@@ -168,15 +191,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
   @override
   Widget build(BuildContext context) {
     const accent = Color(0xFF8B5CF6);
-    final changedCount = _edits.entries.where((e) {
-      final original = _packages
-              .firstWhere((p) => p.id == e.key,
-                  orElse: () => const Package(id: -1, name: ''))
-              .userPrice
-              ?.toInt() ??
-          0;
-      return e.value != original;
-    }).length;
+    final changedCount = _changedCount();
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -255,25 +270,12 @@ class _PackagesScreenState extends State<PackagesScreen> {
                     for (final p in _packages) ...[
                       _PackageTile(
                         package: p,
-                        controller: _controllers[p.id]!,
-                        onChanged: (v) {
-                          final digits =
-                              v.replaceAll(RegExp(r'[^0-9]'), '');
-                          final parsed = int.tryParse(digits) ?? 0;
-                          setState(() {
-                            _edits[p.id] = parsed;
-                          });
-                          // re-format with thousands separator
-                          final formatted = _fmt(parsed);
-                          final ctrl = _controllers[p.id]!;
-                          if (formatted != ctrl.text) {
-                            ctrl.value = TextEditingValue(
-                              text: formatted,
-                              selection: TextSelection.collapsed(
-                                  offset: formatted.length),
-                            );
-                          }
-                        },
+                        userPriceCtrl: _userPriceCtrl[p.id]!,
+                        priceCtrl: _priceCtrl[p.id]!,
+                        onUserPriceChanged: (v) =>
+                            _handleEdit(p.id, v, _userPriceEdits, _userPriceCtrl[p.id]!),
+                        onPriceChanged: (v) => _handleEdit(
+                            p.id, v, _priceEdits, _priceCtrl[p.id]!),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -284,6 +286,24 @@ class _PackagesScreenState extends State<PackagesScreen> {
         ),
       ),
     );
+  }
+
+  void _handleEdit(
+    int packageId,
+    String value,
+    Map<int, int> editsMap,
+    TextEditingController ctrl,
+  ) {
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final parsed = int.tryParse(digits) ?? 0;
+    setState(() => editsMap[packageId] = parsed);
+    final formatted = _fmt(parsed);
+    if (formatted != ctrl.text) {
+      ctrl.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+    }
   }
 
   Widget _hero(Color accent, int count) {
@@ -423,7 +443,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
                               ))
                       .displayName;
             }
-            _edits.clear();
+            _userPriceEdits.clear();
+            _priceEdits.clear();
           });
           _load();
         },
@@ -485,89 +506,189 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 }
 
+/// مطلب 2026-06-12 (screenshot v1): كل باقة كرت كامل بـheader اسم
+/// الباقة + أيقونة wifi، تحته 3 أعمدة (سعر البيع | السعر | الكلفة).
+/// `سعر البيع` و`السعر` قابلان للتحرير، `الكلفة` للقراءة فقط.
 class _PackageTile extends StatelessWidget {
   const _PackageTile({
     required this.package,
-    required this.controller,
-    required this.onChanged,
+    required this.userPriceCtrl,
+    required this.priceCtrl,
+    required this.onUserPriceChanged,
+    required this.onPriceChanged,
   });
   final Package package;
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
+  final TextEditingController userPriceCtrl;
+  final TextEditingController priceCtrl;
+  final ValueChanged<String> onUserPriceChanged;
+  final ValueChanged<String> onPriceChanged;
 
   @override
   Widget build(BuildContext context) {
+    final cost = package.cost ?? 0;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.md),
-            ),
-            alignment: Alignment.center,
-            child: const Icon(LucideIcons.package,
-                size: 16, color: Color(0xFF8B5CF6)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          // Header: اسم الباقة + icon
+          Row(
+            children: [
+              Expanded(
+                child: Text(
                   package.name,
                   style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 14),
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w800),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
                 ),
-                if ((package.cost ?? 0) > 0) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'الكلفة ${formatIQD(package.cost!)} د.ع',
-                    style: AppType.muted().copyWith(fontSize: 10.5),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 110,
-            child: TextField(
-              controller: controller,
-              onChanged: onChanged,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 13, fontWeight: FontWeight.w800),
-              decoration: InputDecoration(
-                hintText: '0',
-                hintStyle: AppType.input(color: AppColors.textLow),
-                filled: true,
-                fillColor: AppColors.surfaceInput,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(R.sm),
-                  borderSide: BorderSide(color: AppColors.border),
-                ),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 8),
-                suffixText: 'د.ع',
-                suffixStyle: AppType.muted().copyWith(fontSize: 10),
               ),
-            ),
+              const SizedBox(width: 8),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(R.md),
+                ),
+                alignment: Alignment.center,
+                child: Icon(LucideIcons.wifi,
+                    size: 16, color: AppColors.brand),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // 3 cols
+          Row(
+            children: [
+              Expanded(
+                child: _priceField(
+                  label: 'سعر البيع',
+                  ctrl: userPriceCtrl,
+                  onChanged: onUserPriceChanged,
+                  highlight: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _priceField(
+                  label: 'السعر',
+                  ctrl: priceCtrl,
+                  onChanged: onPriceChanged,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _readOnly(
+                  label: 'الكلفة',
+                  value: cost > 0 ? cost.toInt().toString() : '—',
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _priceField({
+    required String label,
+    required TextEditingController ctrl,
+    required ValueChanged<String> onChanged,
+    bool highlight = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 2, bottom: 4),
+          child: Text(
+            label,
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
+          ),
+        ),
+        TextField(
+          controller: ctrl,
+          onChanged: onChanged,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          style: AppType.label(
+                  color: highlight ? AppColors.brand : AppColors.textHi)
+              .copyWith(fontSize: 14, fontWeight: FontWeight.w800),
+          decoration: InputDecoration(
+            hintText: '0',
+            hintStyle: AppType.input(color: AppColors.textLow),
+            filled: true,
+            fillColor: AppColors.surfaceInput,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+              borderSide: BorderSide(
+                color: highlight
+                    ? AppColors.brand.withValues(alpha: 0.4)
+                    : AppColors.border.withValues(alpha: 0.5),
+                width: highlight ? 1.5 : 1,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+              borderSide: BorderSide(
+                color: highlight
+                    ? AppColors.brand.withValues(alpha: 0.4)
+                    : AppColors.border.withValues(alpha: 0.5),
+                width: highlight ? 1.5 : 1,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+              borderSide: const BorderSide(
+                  color: AppColors.brand, width: 1.8),
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _readOnly({required String label, required String value}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 2, bottom: 4),
+          child: Text(
+            label,
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.5)),
+          ),
+          child: Text(
+            value,
+            style: AppType.label(color: AppColors.textMid)
+                .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
