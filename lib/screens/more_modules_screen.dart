@@ -6,6 +6,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'expenses/expenses_screen.dart';
+import 'managers/managers_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -57,7 +58,11 @@ class MoreModulesScreen extends StatelessWidget {
               color: const Color(0xFF3B82F6),
               title: 'المدراء',
               subtitle: 'إدارة المدراء الفرعيين',
-              onTap: () => _todo(context, 'المدراء — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ManagersScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.sm),
             _ModuleCard(
