@@ -571,19 +571,9 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                     ),
                     const SizedBox(height: Sp.md),
                     if (widget.def.placeholders.isNotEmpty) ...[
-                      Text(
-                        'متغيرات متاحة (اضغط للإدراج):',
-                        style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final ph in widget.def.placeholders)
-                            _phChip(ph),
-                        ],
+                      _VariablePickerButton(
+                        placeholders: widget.def.placeholders,
+                        onPick: _insertPlaceholder,
                       ),
                       const SizedBox(height: Sp.md),
                     ],
@@ -704,50 +694,160 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     );
   }
 
-  Widget _phChip(String ph) {
-    final arabicLabel = _kVariableLabels[ph];
-    return Tooltip(
-      message: arabicLabel ?? ph,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _insertPlaceholder(ph),
-          borderRadius: BorderRadius.circular(R.sm),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFF25D366).withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(R.sm),
-              border: Border.all(
-                  color: const Color(0xFF25D366).withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (arabicLabel != null) ...[
-                  Text(
-                    arabicLabel,
-                    style: const TextStyle(
-                      color: Color(0xFF0F6A2D),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+}
+
+/// مطلب 2026-06-12: زر موحّد لاختيار متغير بدلاً من Wrap كبير.
+/// النقر يفتح dropdown sheet يعرض القائمة مع label عربي لكل
+/// متغير. اختيار → إدراج عند الـcursor + إغلاق.
+class _VariablePickerButton extends StatelessWidget {
+  const _VariablePickerButton({
+    required this.placeholders,
+    required this.onPick,
+  });
+  final List<String> placeholders;
+  final ValueChanged<String> onPick;
+
+  Future<void> _open(BuildContext context) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.code,
+                        size: 16, color: Color(0xFF25D366)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'اختر متغير للإدراج',
+                      style: AppType.title(color: AppColors.textHi)
+                          .copyWith(fontSize: 14),
                     ),
-                  ),
-                  const SizedBox(height: 1),
-                ],
-                Text(
-                  ph,
-                  style: const TextStyle(
+                    const Spacer(),
+                    Text(
+                      '${placeholders.length} متغير',
+                      style: AppType.muted().copyWith(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: placeholders.length,
+                  separatorBuilder: (_, __) =>
+                      const Divider(height: 1, color: AppColors.border),
+                  itemBuilder: (_, i) {
+                    final ph = placeholders[i];
+                    final label = _kVariableLabels[ph];
+                    return ListTile(
+                      dense: true,
+                      title: Text(
+                        label ?? ph,
+                        style: AppType.label(color: AppColors.textHi)
+                            .copyWith(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        ph,
+                        style: const TextStyle(
+                          color: Color(0xFF25D366),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      trailing: const Icon(
+                        LucideIcons.plus,
+                        size: 16,
+                        color: Color(0xFF25D366),
+                      ),
+                      onTap: () => Navigator.of(context).pop(ph),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked != null) onPick(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _open(context),
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF25D366).withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(
+                color: const Color(0xFF25D366).withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.code,
+                  size: 15, color: Color(0xFF25D366)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'إضافة متغير',
+                  style: TextStyle(
                     color: Color(0xFF25D366),
-                    fontSize: 10.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'monospace',
                   ),
                 ),
-              ],
-            ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF25D366).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Text(
+                  '${placeholders.length}',
+                  style: const TextStyle(
+                    color: Color(0xFF25D366),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(LucideIcons.chevronDown,
+                  size: 14, color: Color(0xFF25D366)),
+            ],
           ),
         ),
       ),
