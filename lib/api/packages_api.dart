@@ -59,7 +59,9 @@ class Package {
 class PackagesApi {
   PackagesApi._();
 
-  /// GET /api/v2/packages — list all packages with prices.
+  /// GET /api/v2/packages — list all packages with prices for the
+  /// CURRENT admin (تسعيري الخاص). Returns enriched rows with downrate
+  /// / uprate / users_count / type when SAS4 provides them.
   static Future<List<Package>> list() async {
     try {
       final r = await ApiClient.dio
@@ -78,6 +80,33 @@ class PackagesApi {
       return const [];
     } catch (e) {
       _log('v2/packages (GET)', e);
+      return const [];
+    }
+  }
+
+  /// GET /api/v2/price-list/:managerId — list prices for a SPECIFIC
+  /// sub-manager. Used by the super-admin/parent to view/edit a
+  /// sub-manager's price list. Returns minimal Package rows (id, name,
+  /// userPrice, cost, basePrice) — no SAS4 metadata.
+  static Future<List<Package>> listForManager(int managerId) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/price-list/$managerId',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) return const [];
+      final list = body['data'];
+      if (list is! List) return const [];
+      return list
+          .whereType<Map>()
+          .map((m) => Package.fromJson(Map<String, dynamic>.from(m)))
+          .whereType<Package>()
+          .toList();
+    } on DioException catch (e) {
+      _log('v2/price-list/$managerId (GET)', e);
+      return const [];
+    } catch (e) {
+      _log('v2/price-list/$managerId (GET)', e);
       return const [];
     }
   }

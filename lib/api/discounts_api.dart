@@ -142,6 +142,59 @@ class DiscountsApi {
     }
   }
 
+  /// POST /api/v2/discounts/bulk-apply — apply ONE amount to MANY
+  /// subscribers. Backend upserts: returns count of new + updated +
+  /// failed usernames so the UI can show a precise snackbar.
+  static Future<({bool ok, int applied, int updated, int failed, String? message})>
+      bulkApply({
+    required List<String> usernames,
+    required num discountAmount,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/discounts/bulk-apply',
+        data: {
+          'usernames': usernames,
+          'discount_amount': discountAmount,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      int toInt(dynamic v) =>
+          v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
+      final failedList = body['failed'];
+      final failedCount =
+          failedList is List ? failedList.length : toInt(failedList);
+      return (
+        ok: ok,
+        applied: toInt(body['applied']),
+        updated: toInt(body['updated']),
+        failed: failedCount,
+        message: body['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('v2/discounts/bulk-apply', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (
+        ok: false,
+        applied: 0,
+        updated: 0,
+        failed: 0,
+        message: msg ?? 'تعذّر التطبيق',
+      );
+    } catch (e) {
+      _log('v2/discounts/bulk-apply', e);
+      return (
+        ok: false,
+        applied: 0,
+        updated: 0,
+        failed: 0,
+        message: 'تعذّر التطبيق',
+      );
+    }
+  }
+
   /// DELETE /api/discounts/:id
   static Future<({bool ok, String? message})> delete(int id) async {
     try {

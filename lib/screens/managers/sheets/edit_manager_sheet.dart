@@ -35,6 +35,7 @@ class _EditManagerSheet extends StatelessWidget {
         mobile: manager.mobile,
         email: manager.email,
         aclGroupId: manager.aclGroupId,
+        parentId: manager.parentId,
         enabled: manager.enabled,
       ),
       onSubmit: (data) async {

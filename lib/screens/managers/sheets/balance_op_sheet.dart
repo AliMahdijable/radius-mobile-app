@@ -46,6 +46,9 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   int _amount = 0;
   bool _submitting = false;
   bool _suppressFormat = false;
+  /// مطلب 2026-06-12: عند الشحن، إذا فعّل المدير "آجل" يصير الإيداع
+  /// كـدين على المدير الفرعي بدل شحن نقدي. مطابق v1 isLoan.
+  bool _isLoan = false;
 
   @override
   void initState() {
@@ -95,7 +98,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     late ({bool ok, String? message}) r;
     switch (_op) {
       case _BalanceOp.deposit:
-        r = await ManagersApi.deposit(id: id, amount: _amount, note: note);
+        r = await ManagersApi.deposit(
+            id: id, amount: _amount, note: note, isLoan: _isLoan);
       case _BalanceOp.withdraw:
         r = await ManagersApi.withdraw(id: id, amount: _amount, note: note);
       case _BalanceOp.addPoints:
@@ -235,6 +239,73 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                         ],
                       ],
                     ),
+                    // مطلب 2026-06-12: toggle "آجل" يظهر فقط في وضع
+                    // الشحن — يحوّل الإيداع لـدين على المدير الفرعي
+                    // (مطابق v1 loan deposit).
+                    if (_op == _BalanceOp.deposit) ...[
+                      const SizedBox(height: Sp.md),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _isLoan
+                              ? const Color(0xFFE08F2D)
+                                  .withValues(alpha: 0.08)
+                              : AppColors.surfaceInput,
+                          borderRadius: BorderRadius.circular(R.sm),
+                          border: Border.all(
+                              color: _isLoan
+                                  ? const Color(0xFFE08F2D)
+                                      .withValues(alpha: 0.4)
+                                  : AppColors.border
+                                      .withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isLoan
+                                  ? LucideIcons.handCoins
+                                  : LucideIcons.banknote,
+                              size: 14,
+                              color: _isLoan
+                                  ? const Color(0xFFE08F2D)
+                                  : AppColors.textMid,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _isLoan ? 'إيداع آجل' : 'شحن نقدي',
+                                    style: AppType.label(
+                                            color: AppColors.textHi)
+                                        .copyWith(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800),
+                                  ),
+                                  Text(
+                                    _isLoan
+                                        ? 'دين على المدير الفرعي'
+                                        : 'استلام كاش الآن',
+                                    style: AppType.muted().copyWith(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: _isLoan,
+                              activeColor: const Color(0xFFE08F2D),
+                              onChanged: (v) =>
+                                  setState(() => _isLoan = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: Sp.md),
                     _label('المبلغ *'),
                     TextField(

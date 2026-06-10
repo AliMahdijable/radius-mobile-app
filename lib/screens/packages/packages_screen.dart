@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/managers_api.dart';
 import '../../api/packages_api.dart';
 import '../../core/util/format.dart';
 import '../../services/auth_storage.dart';
@@ -28,6 +29,13 @@ class _PackagesScreenState extends State<PackagesScreen> {
   bool _saving = false;
   int? _myManagerId;
 
+  /// مطلب 2026-06-12: السوبر/المدير الفرعي يقدر يعدّل تسعير
+  /// أي مدير من قائمة منسدلة. null = الـadmin يعدّل تسعيره الخاص
+  /// (السلوك الأصلي).
+  int? _selectedManagerId;
+  String _selectedManagerLabel = 'تسعيري الخاص';
+  List<({int id, String username, String displayName})>? _managers;
+
   @override
   void initState() {
     super.initState();
@@ -46,12 +54,21 @@ class _PackagesScreenState extends State<PackagesScreen> {
     final idStr = await AuthStorage.readAdminId();
     final id = int.tryParse(idStr ?? '');
     if (id != null) _myManagerId = id;
+    // قائمة المدراء — اختيارية، تظهر بصف الـhero لو الـbackend رجّع
+    // فرعيين. لو فاضية يبقى الـpicker مخفي.
+    final mgrs = await ManagersApi.lite();
+    if (!mounted) return;
+    setState(() => _managers = mgrs ?? const []);
     await _load();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final pkgs = await PackagesApi.list();
+    // عرض تسعير مدير محدّد لما الـpicker مختار،
+    // وإلا عرض تسعير الـadmin الحالي.
+    final pkgs = _selectedManagerId != null
+        ? await PackagesApi.listForManager(_selectedManagerId!)
+        : await PackagesApi.list();
     if (!mounted) return;
     setState(() {
       _packages = pkgs;
@@ -92,7 +109,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 
   Future<void> _save() async {
-    if (_saving || _myManagerId == null) return;
+    if (_saving) return;
+    final targetManagerId = _selectedManagerId ?? _myManagerId;
+    if (targetManagerId == null) return;
     setState(() => _saving = true);
     final payload = <Map<String, dynamic>>[];
     for (final p in _packages) {
@@ -108,7 +127,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       });
     }
     final r = await PackagesApi.savePrices(
-      managerId: _myManagerId!,
+      managerId: targetManagerId,
       priceList: payload,
     );
     if (!mounted) return;
@@ -195,7 +214,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
               _hero(accent, _packages.length),
-              const SizedBox(height: Sp.md),
+              const SizedBox(height: Sp.sm),
+              if ((_managers ?? []).isNotEmpty) ...[
+                _managerPicker(accent),
+                const SizedBox(height: Sp.sm),
+              ],
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
@@ -283,6 +306,132 @@ class _PackagesScreenState extends State<PackagesScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _managerPicker(Color accent) {
+    final managers = _managers ?? const [];
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          final picked = await showModalBottomSheet<int?>(
+            context: context,
+            backgroundColor: AppColors.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            builder: (_) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.userCog,
+                            size: 16, color: AppColors.textMid),
+                        const SizedBox(width: 6),
+                        Text(
+                          'اختر تسعير من؟',
+                          style: AppType.title(color: AppColors.textHi)
+                              .copyWith(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(LucideIcons.user, color: accent),
+                    title: const Text('تسعيري الخاص'),
+                    onTap: () => Navigator.of(context).pop(-1),
+                    trailing: _selectedManagerId == null
+                        ? Icon(LucideIcons.check, color: accent)
+                        : null,
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: managers.length,
+                      itemBuilder: (_, i) {
+                        final m = managers[i];
+                        final selected = _selectedManagerId == m.id;
+                        return ListTile(
+                          leading: const Icon(LucideIcons.userCog),
+                          title: Text(m.displayName),
+                          onTap: () => Navigator.of(context).pop(m.id),
+                          trailing: selected
+                              ? Icon(LucideIcons.check, color: accent)
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          if (picked == null) return;
+          setState(() {
+            if (picked == -1) {
+              _selectedManagerId = null;
+              _selectedManagerLabel = 'تسعيري الخاص';
+            } else {
+              _selectedManagerId = picked;
+              _selectedManagerLabel = managers
+                      .firstWhere((m) => m.id == picked,
+                          orElse: () => (
+                                id: picked,
+                                username: '',
+                                displayName: '#$picked'
+                              ))
+                      .displayName;
+            }
+            _edits.clear();
+          });
+          _load();
+        },
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: accent.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.userCog, size: 14, color: accent),
+              const SizedBox(width: 7),
+              Text(
+                'مدير: ',
+                style: AppType.muted().copyWith(fontSize: 11),
+              ),
+              Expanded(
+                child: Text(
+                  _selectedManagerLabel,
+                  style: AppType.label(color: accent)
+                      .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(LucideIcons.chevronDown,
+                  size: 14, color: AppColors.textMid),
+            ],
+          ),
+        ),
       ),
     );
   }

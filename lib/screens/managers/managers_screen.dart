@@ -26,6 +26,10 @@ class _ManagersScreenState extends State<ManagersScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
+  /// مطلب 2026-06-12: sort UI مطابق v1 — 5 خيارات + اتجاه.
+  _ManagerSort _sort = _ManagerSort.username;
+  bool _sortAsc = true;
+
   @override
   void initState() {
     super.initState();
@@ -55,13 +59,32 @@ class _ManagersScreenState extends State<ManagersScreen> {
   }
 
   List<Manager> get _filtered {
-    if (_query.isEmpty) return _rows;
-    final q = _query.toLowerCase();
-    return _rows.where((m) {
-      return m.username.toLowerCase().contains(q) ||
-          m.fullName.toLowerCase().contains(q) ||
-          (m.mobile ?? '').contains(q);
-    }).toList();
+    Iterable<Manager> it = _rows;
+    if (_query.isNotEmpty) {
+      final q = _query.toLowerCase();
+      it = it.where((m) {
+        return m.username.toLowerCase().contains(q) ||
+            m.fullName.toLowerCase().contains(q) ||
+            (m.mobile ?? '').contains(q);
+      });
+    }
+    final list = it.toList();
+    int cmp(Manager a, Manager b) {
+      switch (_sort) {
+        case _ManagerSort.username:
+          return a.username.compareTo(b.username);
+        case _ManagerSort.firstname:
+          return (a.firstname ?? '').compareTo(b.firstname ?? '');
+        case _ManagerSort.lastname:
+          return (a.lastname ?? '').compareTo(b.lastname ?? '');
+        case _ManagerSort.balance:
+          return (a.balance ?? 0).compareTo(b.balance ?? 0);
+        case _ManagerSort.usersCount:
+          return (a.usersCount ?? 0).compareTo(b.usersCount ?? 0);
+      }
+    }
+    list.sort(_sortAsc ? cmp : (a, b) => -cmp(a, b));
+    return list;
   }
 
   num get _totalBalance =>
@@ -156,6 +179,8 @@ class _ManagersScreenState extends State<ManagersScreen> {
               _hero(accent),
               const SizedBox(height: Sp.md),
               _searchField(),
+              const SizedBox(height: Sp.sm),
+              _sortBar(accent),
               const SizedBox(height: Sp.md),
               if (_loading)
                 const Padding(
@@ -270,6 +295,81 @@ class _ManagersScreenState extends State<ManagersScreen> {
               },
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _sortBar(Color accent) {
+    return SizedBox(
+      height: 30,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final s in _ManagerSort.values) ...[
+            _sortChip(s, accent),
+            const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sortChip(_ManagerSort s, Color accent) {
+    final active = _sort == s;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (_sort == s) {
+              _sortAsc = !_sortAsc;
+            } else {
+              _sort = s;
+              _sortAsc = true;
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? accent.withValues(alpha: 0.1)
+                : AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(
+                color: active
+                    ? accent.withValues(alpha: 0.4)
+                    : AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Icon(s.icon,
+                  size: 12,
+                  color: active ? accent : AppColors.textMid),
+              const SizedBox(width: 4),
+              Text(
+                s.label,
+                style: TextStyle(
+                  color: active ? accent : AppColors.textMid,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (active) ...[
+                const SizedBox(width: 3),
+                Icon(
+                  _sortAsc
+                      ? LucideIcons.arrowUp
+                      : LucideIcons.arrowDown,
+                  size: 10,
+                  color: accent,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -537,4 +637,18 @@ class _ManagerTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// خيارات الترتيب — مطابق v1 (username, firstname, lastname, balance,
+/// users_count).
+enum _ManagerSort {
+  username('اليوزر', LucideIcons.atSign),
+  firstname('الاسم', LucideIcons.user),
+  lastname('الكنية', LucideIcons.userCheck),
+  balance('الرصيد', LucideIcons.wallet),
+  usersCount('المشتركون', LucideIcons.users);
+
+  const _ManagerSort(this.label, this.icon);
+  final String label;
+  final IconData icon;
 }

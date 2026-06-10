@@ -162,6 +162,44 @@ class ManagersApi {
     }
   }
 
+  /// GET /api/v2/managers — قائمة خفيفة (id + username + name) للـ
+  /// parent picker. يرجّع null لو الـauth ما يسمح بعرض المدراء.
+  static Future<List<({int id, String username, String displayName})>?>
+      lite() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/managers');
+      final body = r.data ?? const {};
+      if (body['success'] != true) return null;
+      final list = (body['data'] as List?) ?? const [];
+      final out = <({int id, String username, String displayName})>[];
+      for (final row in list) {
+        if (row is! Map) continue;
+        final rawId = row['id'];
+        final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+        if (id == null) continue;
+        final username = (row['username'] ?? '').toString();
+        if (username.isEmpty) continue;
+        final fname = (row['firstname'] ?? '').toString().trim();
+        final lname = (row['lastname'] ?? '').toString().trim();
+        final arabic = [fname, lname].where((s) => s.isNotEmpty).join(' ');
+        out.add((
+          id: id,
+          username: username,
+          displayName:
+              arabic.isNotEmpty ? '$arabic ($username)' : username,
+        ));
+      }
+      out.sort((a, b) => a.username.compareTo(b.username));
+      return out;
+    } on DioException catch (e) {
+      _log('v2/managers lite (GET)', e);
+      return null;
+    } catch (e) {
+      _log('v2/managers lite (GET)', e);
+      return null;
+    }
+  }
+
   /// POST /api/v2/managers — create a new sub-manager. Required:
   /// username, password, aclGroupId. Optional: firstname, lastname,
   /// mobile, email, parentId (defaults to current admin), enabled.
@@ -265,18 +303,34 @@ class ManagersApi {
     }
   }
 
-  /// POST /api/v2/managers/:id/deposit — شحن رصيد
+  /// POST /api/v2/managers/:id/deposit — شحن رصيد. `isLoan=true`
+  /// يحفظ كـدين على المدير الفرعي (إيداع آجل) بدل شحن نقدي عادي.
   static Future<({bool ok, String? message})> deposit({
     required int id,
     required num amount,
     String? note,
+    bool isLoan = false,
   }) async {
-    return _balanceOp(
-      endpoint: 'deposit',
-      id: id,
-      amount: amount,
-      note: note,
-    );
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/managers/$id/deposit',
+        data: {
+          'amount': amount,
+          if (note != null && note.isNotEmpty) 'comment': note,
+          'isLoan': isLoan,
+        },
+      );
+      final body = r.data ?? const {};
+      return (ok: body['success'] == true, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('v2/managers/$id/deposit', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'فشلت العملية');
+    } catch (e) {
+      _log('v2/managers/$id/deposit', e);
+      return (ok: false, message: 'فشلت العملية');
+    }
   }
 
   /// POST /api/v2/managers/:id/withdraw — سحب رصيد

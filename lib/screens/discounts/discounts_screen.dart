@@ -6,6 +6,7 @@ import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'sheets/bulk_apply_sheet.dart';
 import 'sheets/edit_discount_sheet.dart';
 
 /// مديول الخصومات. شاشة قراءة + edit/delete. الـadd الفردي يحصل من
@@ -120,6 +121,16 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               .copyWith(fontSize: 16),
         ),
         iconTheme: const IconThemeData(color: AppColors.textHi),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: accent,
+        foregroundColor: Colors.white,
+        onPressed: () async {
+          final r = await showBulkApplyDiscountSheet(context);
+          if (r == true) _load();
+        },
+        icon: const Icon(LucideIcons.plus, size: 16),
+        label: const Text('تطبيق دفعة'),
       ),
       body: SafeArea(
         child: RefreshIndicator(

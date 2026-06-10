@@ -16,6 +16,7 @@ class ManagerFormInitial {
     this.mobile,
     this.email,
     this.aclGroupId,
+    this.parentId,
     this.enabled = true,
   });
   final String? username;
@@ -24,6 +25,7 @@ class ManagerFormInitial {
   final String? mobile;
   final String? email;
   final int? aclGroupId;
+  final int? parentId;
   final bool enabled;
 }
 
@@ -36,6 +38,7 @@ typedef ManagerFormData = ({
   String mobile,
   String email,
   int? aclGroupId,
+  int? parentId,
   bool enabled,
 });
 
@@ -79,7 +82,11 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
   late final TextEditingController _email;
   late bool _enabled;
   int? _aclGroupId;
+  int? _parentId;
   List<AclGroup> _aclGroups = const [];
+  /// قائمة المدراء الفرعيين للـparent picker (مطلب 2026-06-12 مطابق v1).
+  /// null = لم تُحمَّل بعد، [] = الـbackend ما رجّع أحد فنخفي الـpicker.
+  List<({int id, String username, String displayName})>? _parents;
   bool _loadingAcl = true;
   bool _submitting = false;
   bool _obscurePass = true;
@@ -96,7 +103,9 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
     _email = TextEditingController(text: i?.email ?? '');
     _enabled = i?.enabled ?? true;
     _aclGroupId = i?.aclGroupId;
+    _parentId = i?.parentId;
     _loadAcl();
+    _loadParents();
   }
 
   Future<void> _loadAcl() async {
@@ -106,6 +115,12 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
       _aclGroups = groups;
       _loadingAcl = false;
     });
+  }
+
+  Future<void> _loadParents() async {
+    final parents = await ManagersApi.lite();
+    if (!mounted) return;
+    setState(() => _parents = parents ?? const []);
   }
 
   @override
@@ -140,6 +155,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
       mobile: _trim(_mobile),
       email: _trim(_email),
       aclGroupId: _aclGroupId,
+      parentId: _parentId,
       enabled: _enabled,
     );
     final r = await widget.onSubmit(data);
@@ -287,6 +303,16 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                     const SizedBox(height: Sp.md),
                     _label('مجموعة الصلاحيات *'),
                     _aclPicker(),
+                    // مطلب 2026-06-12: parent picker مطابق v1 — يظهر
+                    // فقط لما الـbackend يرجّع قائمة مدراء (السوبر أو
+                    // المدير اللي عنده فرعيين). لو فاضي = مدير عادي بدون
+                    // tree، يخفى الـpicker (السيرفر يفترض الـadmin
+                    // الحالي parent تلقائياً).
+                    if ((_parents ?? []).isNotEmpty) ...[
+                      const SizedBox(height: Sp.md),
+                      _label('تابع إلى'),
+                      _parentPicker(),
+                    ],
                     const SizedBox(height: Sp.md),
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
@@ -390,6 +416,42 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
             const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         suffixIcon: suffix,
       ),
+    );
+  }
+
+  Widget _parentPicker() {
+    final parents = _parents ?? const [];
+    return DropdownButtonFormField<int?>(
+      value: _parentId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AppColors.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(R.sm),
+          borderSide:
+              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(R.sm),
+          borderSide:
+              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+        ),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      ),
+      hint: const Text('افتراضي — أنا',
+          style: TextStyle(color: AppColors.textLow)),
+      items: [
+        const DropdownMenuItem<int?>(
+          value: null,
+          child: Text('— أنا (افتراضي) —'),
+        ),
+        for (final p in parents)
+          DropdownMenuItem<int?>(value: p.id, child: Text(p.displayName)),
+      ],
+      onChanged: (v) => setState(() => _parentId = v),
     );
   }
 

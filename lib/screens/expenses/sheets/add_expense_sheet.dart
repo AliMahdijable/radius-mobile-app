@@ -206,7 +206,8 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                               horizontal: 10, vertical: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(R.sm),
-                            border: Border.all(color: AppColors.border),
+                            border: Border.all(
+                              color: AppColors.border.withValues(alpha: 0.5)),
                           ),
                           child: Row(
                             children: [
@@ -249,7 +250,13 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(color: AppColors.border),
+                          borderSide: BorderSide(
+                              color: AppColors.border.withValues(alpha: 0.5)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(R.sm),
+                          borderSide: BorderSide(
+                              color: AppColors.border.withValues(alpha: 0.5)),
                         ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
@@ -335,7 +342,13 @@ class _AmountField extends StatelessWidget {
               fillColor: AppColors.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.border),
+                borderSide: BorderSide(
+                    color: AppColors.border.withValues(alpha: 0.5)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(
+                    color: AppColors.border.withValues(alpha: 0.5)),
               ),
               isDense: true,
               contentPadding:

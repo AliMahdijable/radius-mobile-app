@@ -43,6 +43,7 @@ class _AddManagerSheet extends StatelessWidget {
           lastname: data.lastname,
           mobile: data.mobile,
           email: data.email,
+          parentId: data.parentId,
           enabled: data.enabled,
         );
         return (ok: r.ok, message: r.message);
