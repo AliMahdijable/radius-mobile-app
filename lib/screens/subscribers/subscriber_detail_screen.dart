@@ -1506,15 +1506,29 @@ class _SubscriberHero extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 3),
-          Text(
-            sub.username,
-            style: const TextStyle(
-              color: Color(0xFFCBE4D7),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+          // مطلب 2026-06-12: اليوزر نيم قابل للنسخ — نلفّه في Row
+          // مع _CopyChip بنفس النمط المستعمل في rows المعلومات.
+          Builder(
+            builder: (ctx) => Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    sub.username,
+                    style: const TextStyle(
+                      color: Color(0xFFCBE4D7),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _CopyChip(value: sub.username, context: ctx),
+              ],
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 14),
           // 3-stat strip (الدين / الباقة / الأيام)
