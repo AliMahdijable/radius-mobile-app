@@ -270,9 +270,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
               const SizedBox(height: 6),
               _managerPicker(accent),
               const SizedBox(height: Sp.md),
-              // Warning banner عند عرض الـroot (سعر المدير مقفل).
-              if (_selectedManagerId == null) _rootWarningBanner(),
-              if (_selectedManagerId == null) const SizedBox(height: Sp.md),
+              // مطلب 2026-06-12: شيل بانر التنبيه. سعر المدير المقفل
+              // واضح من الحقل نفسه (لون رمادي + لا يقبل النقر)، فما
+              // يحتاج بانر تنبيه فوقي.
               // قسم الباقات
               _sectionHeader(
                 icon: LucideIcons.package,
@@ -362,35 +362,6 @@ class _PackagesScreenState extends State<PackagesScreen> {
             title,
             style: AppType.title(color: AppColors.textHi).copyWith(
                 fontSize: 14, fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _rootWarningBanner() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE08F2D).withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(
-            color: const Color(0xFFE08F2D).withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(LucideIcons.info,
-              size: 16, color: Color(0xFFE08F2D)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'تنبيه: أنت تعدّل أسعارك الخاصة. سعر المدير مفروض من '
-              'المدير الأعلى ولا يمكنك تعديله — تقدر تعدّل فقط سعر '
-              'المستخدم (السعر النهائي للمشترك عندك).',
-              style: AppType.muted(color: AppColors.textHi)
-                  .copyWith(fontSize: 11.5, height: 1.55),
-            ),
           ),
         ],
       ),
