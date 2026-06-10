@@ -295,11 +295,14 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         package: p,
                         userPriceCtrl: _userPriceCtrl[p.id]!,
                         priceCtrl: _priceCtrl[p.id]!,
-                        // مطلب 2026-06-12 (مطابق v1 web):
-                        // عرض الـroot = سعر المدير مقفل، فقط سعر
-                        // المستخدم قابل للتحرير. عرض مدير فرعي = كلاهما
-                        // قابل للتحرير.
-                        isViewingRoot: _selectedManagerId == null,
+                        // مطلب 2026-06-12 (إصلاح): "viewing root" = أي
+                        // وقت الـadmin ينظر على تسعير نفسه. هذا يحصل في
+                        // حالتين: لما الـpicker null (افتراضياً) أو لما
+                        // الـadmin يختار يوزره من القائمة (=  _myManagerId).
+                        // المنطق السابق كان يقفل فقط الحالة الأولى فيتم
+                        // فتح التحرير لما المدير يختار نفسه — خطأ.
+                        isViewingRoot: _selectedManagerId == null ||
+                            _selectedManagerId == _myManagerId,
                         onUserPriceChanged: (v) => _handleEdit(p.id, v,
                             _userPriceEdits, _userPriceCtrl[p.id]!),
                         onPriceChanged: (v) => _handleEdit(

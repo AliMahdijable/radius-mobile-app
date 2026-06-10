@@ -6,6 +6,38 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
+/// Label عربي لكل متغير قالب — يظهر بـtooltip + كـsubtitle داخل
+/// الـchip في الـEditTemplateSheet. مطابق v1
+/// mobile-app/lib/models/template_model.dart:90-117.
+const Map<String, String> _kVariableLabels = {
+  // Subscriber
+  '{firstname}': 'الاسم الأول',
+  '{subscriber_name}': 'اسم المشترك',
+  '{username}': 'اسم المستخدم',
+  '{phone}': 'رقم الهاتف',
+  '{package_name}': 'اسم الباقة',
+  '{package_price}': 'سعر الباقة',
+  '{days_remaining}': 'الأيام المتبقية',
+  '{expiry_date}': 'تاريخ الانتهاء',
+  '{debt_amount}': 'مبلغ الدين',
+  '{credit_amount}': 'الرصيد',
+  '{paid_amount}': 'المبلغ المدفوع',
+  '{payment_date}': 'تاريخ التسديد',
+  '{discount_amount}': 'قيمة الخصم',
+  '{discounted_price}': 'السعر بعد الخصم',
+  // Manager
+  '{manager_name}': 'اسم المدير',
+  '{manager_username}': 'معرّف المدير',
+  '{amount}': 'المبلغ',
+  '{action_type}': 'نوع الحركة',
+  '{previous_credit}': 'الرصيد السابق',
+  '{current_credit}': 'الرصيد الحالي',
+  '{sas_debts}': 'ديون الساس',
+  '{other_debts}': 'ديون أخرى',
+  '{total_debts}': 'مجموع الديون',
+  '{movement_description}': 'وصف الحركة',
+};
+
 /// قائمة قوالب الواتساب القابلة للتحرير. كل قالب له:
 ///   • templateType (مفتاح ثابت — welcome_message, activation_notice, …)
 ///   • isActive — لو معطّل، الـbackend ما يستخدم القالب حتى لو
@@ -25,104 +57,94 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
 
   /// الـ7 أنواع المعروفة + الـlabel العربي + الـplaceholders. لو
   /// الـbackend رجّع قالب بنوع غير معروف، نضيفه ديناميكياً للقائمة.
+  /// مطلب 2026-06-12 (مطابق v1 mobile-app/lib/models/template_model.dart:73-117):
+  /// متغيرات المشترك المعتمدة من template helper الـbackend. كل
+  /// متغير له label عربي يظهر بـtooltip عند الضغط.
+  static const _subscriberVariables = <String>[
+    '{firstname}',
+    '{subscriber_name}',
+    '{username}',
+    '{phone}',
+    '{package_name}',
+    '{package_price}',
+    '{days_remaining}',
+    '{expiry_date}',
+    '{debt_amount}',
+    '{credit_amount}',
+    '{paid_amount}',
+    '{payment_date}',
+    '{discount_amount}',
+    '{discounted_price}',
+  ];
+
+  /// متغيرات قالب المدير الفرعي (manager_agent).
+  static const _managerVariables = <String>[
+    '{manager_name}',
+    '{manager_username}',
+    '{amount}',
+    '{action_type}',
+    '{previous_credit}',
+    '{current_credit}',
+    '{sas_debts}',
+    '{other_debts}',
+    '{total_debts}',
+    '{movement_description}',
+  ];
+
   static const _knownTypes = <_TemplateDef>[
     _TemplateDef(
       type: 'welcome_message',
       label: 'رسالة الترحيب',
       icon: LucideIcons.handshake,
-      placeholders: ['{name}', '{username}', '{password}', '{package}'],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'activation_notice',
       label: 'إشعار التفعيل',
       icon: LucideIcons.zap,
-      placeholders: [
-        '{name}',
-        '{username}',
-        '{package}',
-        '{price}',
-        '{expiration}',
-        '{paid}'
-      ],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
-      type: 'extension_notice',
+      type: 'renewal',
       label: 'إشعار التمديد',
       icon: LucideIcons.calendarPlus,
-      placeholders: [
-        '{name}',
-        '{username}',
-        '{package}',
-        '{price}',
-        '{expiration}'
-      ],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'payment_confirmation',
       label: 'تأكيد التسديد',
       icon: LucideIcons.banknote,
-      placeholders: [
-        '{name}',
-        '{username}',
-        '{paid_amount}',
-        '{package_price}',
-        '{package_name}'
-      ],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'debt_reminder',
       label: 'تذكير الدين',
       icon: LucideIcons.alertCircle,
-      placeholders: [
-        '{name}',
-        '{username}',
-        '{debt_amount}',
-        '{package}'
-      ],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'expiry_warning',
       label: 'تذكير قرب الانتهاء',
       icon: LucideIcons.clock,
-      placeholders: [
-        '{name}',
-        '{username}',
-        '{days_left}',
-        '{expiration}'
-      ],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'service_end',
       label: 'إشعار الانتهاء',
       icon: LucideIcons.timerOff,
-      placeholders: ['{name}', '{username}', '{expiration}'],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'subscriber_info',
       label: 'معلومات المشترك',
       icon: LucideIcons.info,
-      placeholders: [
-        '{name}',
-        '{username}',
-        '{package}',
-        '{expiration}',
-        '{balance}'
-      ],
+      placeholders: _subscriberVariables,
     ),
     _TemplateDef(
       type: 'manager_agent',
       label: 'إشعار مدير فرعي',
       icon: LucideIcons.shield,
-      placeholders: [
-        '{manager_name}',
-        '{manager_username}',
-        '{amount}',
-        '{previous_credit}',
-        '{current_credit}',
-        '{current_debt}',
-        '{action_label}',
-        '{notes}'
-      ],
+      placeholders: _managerVariables,
     ),
   ];
 
@@ -450,13 +472,21 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   @override
   Widget build(BuildContext context) {
     const accent = Color(0xFF25D366);
+    // مطلب 2026-06-12 (iPhone): على iOS ما يوجد زر "خلف" يخفي
+    // الكيبورد فيستحيل على المدير يطلع من حقل التعديل. GestureDetector
+    // بـHitTestBehavior.translucent يلتقط أي نقر فاضي ويخفي الكيبورد
+    // (FocusScope.unfocus). الـTextField الداخلية تتلقى نقراتها أولاً
+    // فما يتأثر تعديلها.
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       expand: false,
       builder: (_, controller) {
-        return Container(
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Container(
           decoration: const BoxDecoration(
             color: AppColors.surface,
             borderRadius:
@@ -668,32 +698,55 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               ),
             ],
           ),
+          ),
         );
       },
     );
   }
 
   Widget _phChip(String ph) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _insertPlaceholder(ph),
-        borderRadius: BorderRadius.circular(R.sm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF25D366).withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(
-                color: const Color(0xFF25D366).withValues(alpha: 0.3)),
-          ),
-          child: Text(
-            ph,
-            style: const TextStyle(
-              color: Color(0xFF25D366),
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'monospace',
+    final arabicLabel = _kVariableLabels[ph];
+    return Tooltip(
+      message: arabicLabel ?? ph,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _insertPlaceholder(ph),
+          borderRadius: BorderRadius.circular(R.sm),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF25D366).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(R.sm),
+              border: Border.all(
+                  color: const Color(0xFF25D366).withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (arabicLabel != null) ...[
+                  Text(
+                    arabicLabel,
+                    style: const TextStyle(
+                      color: Color(0xFF0F6A2D),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                ],
+                Text(
+                  ph,
+                  style: const TextStyle(
+                    color: Color(0xFF25D366),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
             ),
           ),
         ),
