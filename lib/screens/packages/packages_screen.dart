@@ -198,10 +198,20 @@ class _PackagesScreenState extends State<PackagesScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text(
-          'تسعير الباقات',
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'الباقات',
+              style: AppType.title(color: AppColors.textHi)
+                  .copyWith(fontSize: 16),
+            ),
+            Text(
+              'تعديل أسعار الباقات لكل مدير فرعي',
+              style: AppType.muted().copyWith(fontSize: 11),
+            ),
+          ],
         ),
         iconTheme: const IconThemeData(color: AppColors.textHi),
       ),
@@ -251,12 +261,25 @@ class _PackagesScreenState extends State<PackagesScreen> {
             padding: const EdgeInsets.fromLTRB(
                 Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
-              _hero(accent, _packages.length),
-              const SizedBox(height: Sp.sm),
-              if ((_managers ?? []).isNotEmpty) ...[
-                _managerPicker(accent),
-                const SizedBox(height: Sp.sm),
-              ],
+              // قسم المدير الفرعي — section بعنوان (مطابق screenshot v1 web)
+              _sectionHeader(
+                icon: LucideIcons.users,
+                title: 'المدير الفرعي',
+                accent: accent,
+              ),
+              const SizedBox(height: 6),
+              _managerPicker(accent),
+              const SizedBox(height: Sp.md),
+              // Warning banner عند عرض الـroot (سعر المدير مقفل).
+              if (_selectedManagerId == null) _rootWarningBanner(),
+              if (_selectedManagerId == null) const SizedBox(height: Sp.md),
+              // قسم الباقات
+              _sectionHeader(
+                icon: LucideIcons.package,
+                title: 'الباقات والأسعار',
+                accent: accent,
+              ),
+              const SizedBox(height: 6),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
@@ -272,15 +295,13 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         package: p,
                         userPriceCtrl: _userPriceCtrl[p.id]!,
                         priceCtrl: _priceCtrl[p.id]!,
-                        // مطلب 2026-06-12 (مطابق v1 packages_screen.dart:517):
-                        // عرض المدير "الجذر" (الـadmin الحالي على نفسه)
-                        // = `price` و`cost` للقراءة فقط (سعر البيع لنفسه
-                        // فقط هو القابل للتحرير).
-                        // عرض مدير فرعي = `price` قابل للتحرير (هذا هو
-                        // الكلفة اللي الـparent يحدّدها لـsub-manager).
+                        // مطلب 2026-06-12 (مطابق v1 web):
+                        // عرض الـroot = سعر المدير مقفل، فقط سعر
+                        // المستخدم قابل للتحرير. عرض مدير فرعي = كلاهما
+                        // قابل للتحرير.
                         isViewingRoot: _selectedManagerId == null,
-                        onUserPriceChanged: (v) =>
-                            _handleEdit(p.id, v, _userPriceEdits, _userPriceCtrl[p.id]!),
+                        onUserPriceChanged: (v) => _handleEdit(p.id, v,
+                            _userPriceEdits, _userPriceCtrl[p.id]!),
                         onPriceChanged: (v) => _handleEdit(
                             p.id, v, _priceEdits, _priceCtrl[p.id]!),
                       ),
@@ -288,6 +309,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
                     ],
                   ],
                 ),
+              if (!_loading && _packages.isNotEmpty) ...[
+                const SizedBox(height: Sp.md),
+                _fieldExplainer(),
+              ],
             ],
           ),
         ),
@@ -313,46 +338,118 @@ class _PackagesScreenState extends State<PackagesScreen> {
     }
   }
 
-  Widget _hero(Color accent, int count) {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            accent.withValues(alpha: 0.18),
-            accent.withValues(alpha: 0.05),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-      ),
+  Widget _sectionHeader({
+    required IconData icon,
+    required String title,
+    required Color accent,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(R.md),
+              color: accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
-            child: Icon(LucideIcons.package, color: accent, size: 18),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 14, color: accent),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: AppType.title(color: AppColors.textHi).copyWith(
+                fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rootWarningBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE08F2D).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(
+            color: const Color(0xFFE08F2D).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(LucideIcons.info,
+              size: 16, color: Color(0xFFE08F2D)),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$count باقة',
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 20, letterSpacing: -0.4),
-                ),
-                Text(
-                  'سعر البيع للمشترك يطبع على الوصل',
-                  style: AppType.muted().copyWith(fontSize: 11),
-                ),
-              ],
+            child: Text(
+              'تنبيه: أنت تعدّل أسعارك الخاصة. سعر المدير مفروض من '
+              'المدير الأعلى ولا يمكنك تعديله — تقدر تعدّل فقط سعر '
+              'المستخدم (السعر النهائي للمشترك عندك).',
+              style: AppType.muted(color: AppColors.textHi)
+                  .copyWith(fontSize: 11.5, height: 1.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fieldExplainer() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.bookOpen,
+                  size: 14, color: AppColors.textMid),
+              const SizedBox(width: 6),
+              Text(
+                'شرح الحقول:',
+                style: AppType.label(color: AppColors.textHi).copyWith(
+                    fontSize: 12, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _bullet('سعر المدير: سعر السوق المرجعي'),
+          const SizedBox(height: 4),
+          _bullet('سعر المستخدم: ما يدفعه المشترك النهائي'),
+        ],
+      ),
+    );
+  }
+
+  Widget _bullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 4,
+            height: 4,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: const BoxDecoration(
+              color: AppColors.textMid,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              text,
+              style: AppType.muted(color: AppColors.textMid)
+                  .copyWith(fontSize: 11.5, height: 1.5),
             ),
           ),
         ],
@@ -513,18 +610,15 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 }
 
-/// مطلب 2026-06-12 (مطابق v1 packages_screen.dart:495-538): كرت
-/// لكل باقة بـheader + 3 أعمدة (سعر البيع | السعر | الكلفة).
+/// مطلب 2026-06-12 (مطابق v1 web screenshot): كل صف باقة عمودان
+/// فقط: سعر المدير | سعر المستخدم.
 ///
-/// **منطق التحرير حسب نوع العرض**:
-/// - **عرض الجذر** (`isViewingRoot=true`) = المدير ينظر على تسعيره الخاص.
-///   - سعر البيع → قابل للتحرير (يحدّد كم يبيع للمشترك).
-///   - السعر → للقراءة فقط ('—'، لا يوجد parent يحدّد له cost).
-///   - الكلفة → للقراءة فقط ('—').
-/// - **عرض مدير فرعي** = الـadmin يعدّل تسعير سَوب تابع له.
-///   - سعر البيع → قابل للتحرير (سعر الفرعي للمشترك).
-///   - السعر → قابل للتحرير (الكلفة اللي الـadmin يحدّدها للفرعي).
-///   - الكلفة → للقراءة فقط (سعر شراء الـadmin من الـparent، إن وجد).
+/// **منطق التحرير**:
+/// - **عرض الـroot** (popq على نفسه): سعر المدير **مقفل** (لا
+///   يوجد مدير أعلى يحدّده)، سعر المستخدم قابل للتحرير.
+/// - **عرض مدير فرعي**: كلاهما قابل للتحرير — الـadmin يحدّد
+///   سعر المدير (الكلفة على الفرعي) + سعر المستخدم (سعر بيع
+///   الفرعي للمشتركين).
 class _PackageTile extends StatelessWidget {
   const _PackageTile({
     required this.package,
@@ -543,8 +637,6 @@ class _PackageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cost = package.cost ?? 0;
-    final priceReadable = isViewingRoot;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
@@ -577,40 +669,39 @@ class _PackageTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(R.md),
                 ),
                 alignment: Alignment.center,
-                child: Icon(LucideIcons.wifi,
+                child: const Icon(LucideIcons.wifi,
                     size: 16, color: AppColors.brand),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          // 3 cols
+          // 2 cols — مطابق v1 web exactly
           Row(
             children: [
+              // سعر المدير: مقفل في عرض الـroot، قابل للتحرير في
+              // عرض مدير فرعي.
               Expanded(
-                child: _priceField(
-                  label: 'سعر البيع',
-                  ctrl: userPriceCtrl,
-                  onChanged: onUserPriceChanged,
-                  highlight: true,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: priceReadable
-                    ? _readOnly(label: 'السعر', value: '—')
+                child: isViewingRoot
+                    ? _readOnly(
+                        label: 'سعر المدير (مقفل)',
+                        value: priceCtrl.text.isNotEmpty
+                            ? priceCtrl.text
+                            : '—',
+                      )
                     : _priceField(
-                        label: 'السعر',
+                        label: 'سعر المدير',
                         ctrl: priceCtrl,
                         onChanged: onPriceChanged,
                       ),
               ),
               const SizedBox(width: 8),
+              // سعر المستخدم: قابل للتحرير دائماً.
               Expanded(
-                child: _readOnly(
-                  label: 'الكلفة',
-                  value: (!isViewingRoot && cost > 0)
-                      ? cost.toInt().toString()
-                      : '—',
+                child: _priceField(
+                  label: 'سعر المستخدم',
+                  ctrl: userPriceCtrl,
+                  onChanged: onUserPriceChanged,
+                  highlight: true,
                 ),
               ),
             ],
