@@ -192,15 +192,11 @@ class ManagersApi {
         if (id == null) continue;
         final username = (row['username'] ?? '').toString();
         if (username.isEmpty) continue;
-        final fname = (row['firstname'] ?? '').toString().trim();
-        final lname = (row['lastname'] ?? '').toString().trim();
-        final arabic = [fname, lname].where((s) => s.isNotEmpty).join(' ');
-        out.add((
-          id: id,
-          username: username,
-          displayName:
-              arabic.isNotEmpty ? '$arabic ($username)' : username,
-        ));
+        // مطلب 2026-06-12: شاشات الباقات + تسعير لا تحتاج الاسم العربي
+        // في الـpicker — يكفي username فقط (admin@xxx) عشان السطر
+        // يبقى نظيفاً. الـscreens الثانية (مثل forms المدراء) تجلب
+        // الاسم الكامل مباشرة من بياناتها لو احتاجته.
+        out.add((id: id, username: username, displayName: username));
       }
       out.sort((a, b) => a.username.compareTo(b.username));
       return out;
@@ -358,6 +354,42 @@ class ManagersApi {
       amount: amount,
       note: note,
     );
+  }
+
+  /// POST /api/v2/managers/:id/sas-pay-debt — تسديد دين SAS4
+  /// (debt الذي يخصم من رصيد الـSAS4). مطابق v1
+  /// managers_provider.dart:620 (payDebt).
+  static Future<({bool ok, String? message})> sasPayDebt({
+    required int id,
+    required num amount,
+    String? note,
+    num? debtForMe,
+    num? totalDebt,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/managers/$id/sas-pay-debt',
+        data: {
+          'amount': amount,
+          if (note != null && note.isNotEmpty) 'comment': note,
+          if (debtForMe != null) 'debtForMe': debtForMe,
+          if (totalDebt != null) 'totalDebt': totalDebt,
+        },
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('v2/managers/$id/sas-pay-debt', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'فشل تسديد الدين');
+    } catch (e) {
+      _log('v2/managers/$id/sas-pay-debt', e);
+      return (ok: false, message: 'فشل تسديد الدين');
+    }
   }
 
   /// POST /api/v2/managers/:id/add-points — إضافة نقاط

@@ -56,20 +56,32 @@ class _PackagesScreenState extends State<PackagesScreen> {
     final idStr = await AuthStorage.readAdminId();
     final id = int.tryParse(idStr ?? '');
     if (id != null) _myManagerId = id;
-    // اسم المدير الحالي — يظهر بـlabel الـpicker بدل "تسعيري الخاص"
-    // (مطلب 2026-06-12: 'يظهر اسم المدير بدل من تسعيري الخاص').
+    // اسم المدير الحالي — username فقط (admin@xxx) مطابق طلب 2026-06-12.
+    final username = await AuthStorage.readAdminUsername();
     final displayName = await AuthStorage.readDisplayName();
-    if (mounted && displayName != null && displayName.isNotEmpty) {
+    final myLabel = (username != null && username.isNotEmpty)
+        ? username
+        : (displayName ?? '…');
+    if (mounted) {
       setState(() {
-        _myDisplayName = displayName;
-        _selectedManagerLabel = displayName;
+        _myDisplayName = myLabel;
+        _selectedManagerLabel = myLabel;
       });
     }
-    // قائمة المدراء — اختيارية، تظهر بصف الـhero لو الـbackend رجّع
-    // فرعيين. لو فاضية يبقى الـpicker مخفي.
+    // قائمة المدراء الفرعيين — لو موجودة، السوبر افتراضياً يفتح
+    // الشاشة على تسعير أول مدير فرعي (مطلب 2026-06-12: 'تظهر فارغه
+    // الا ابدل بين المدراء'). تسعير المدير الأب نفسه نادراً ما يكون
+    // مضبوطاً — لذا نختار فرعي بدلاً من ترك كل الحقول صفر.
     final mgrs = await ManagersApi.lite();
     if (!mounted) return;
     setState(() => _managers = mgrs ?? const []);
+    if ((mgrs ?? const []).isNotEmpty) {
+      final first = mgrs!.first;
+      setState(() {
+        _selectedManagerId = first.id;
+        _selectedManagerLabel = first.username;
+      });
+    }
     await _load();
   }
 

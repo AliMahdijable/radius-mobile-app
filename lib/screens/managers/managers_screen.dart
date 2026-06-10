@@ -6,10 +6,14 @@ import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'custom_debts_screen.dart';
+import 'movements_screen.dart';
 import 'sheets/add_manager_sheet.dart';
 import 'sheets/balance_op_sheet.dart';
 import 'sheets/edit_manager_sheet.dart';
 import 'sheets/manager_actions_sheet.dart';
+import 'sheets/sas_pay_debt_sheet.dart';
+import 'sheets/send_info_sheet.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
 /// رصيد (شحن/سحب/نقاط). v1 web parity.
@@ -121,19 +125,23 @@ class _ManagersScreenState extends State<ManagersScreen> {
       case ManagerAction.addPoints:
         await _openBalanceOp(m, preselected: BalanceOpKind.addPoints);
       case ManagerAction.payDebt:
+        final ok = await showSasPayDebtSheet(context, m);
+        if (ok == true) _load();
       case ManagerAction.otherDebts:
-      case ManagerAction.movements:
-      case ManagerAction.sendInfo:
-        // مطلب 2026-06-12 (مرحلة لاحقة): هذي الـ4 عمليات تحتاج
-        // sheets/screens منفصلة (custom debts module + WA notify).
-        // مؤقتاً نظهر snackbar 'قريباً' حتى نبنيها.
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${action.label} — قريباً'),
-            backgroundColor: action.color,
-            behavior: SnackBarBehavior.floating,
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ManagerCustomDebtsScreen(manager: m),
           ),
         );
+        _load();
+      case ManagerAction.movements:
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ManagerMovementsScreen(manager: m),
+          ),
+        );
+      case ManagerAction.sendInfo:
+        await showSendInfoSheet(context, m);
       case ManagerAction.delete:
         await _confirmDelete(m);
     }

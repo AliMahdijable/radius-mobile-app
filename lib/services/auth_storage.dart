@@ -79,6 +79,8 @@ class AuthStorage {
   static Future<String?> readTokenExpiry() =>
       _storage.read(key: _kTokenExpiry);
   static Future<String?> readAdminId() => _storage.read(key: _kAdminId);
+  static Future<String?> readAdminUsername() =>
+      _storage.read(key: _kAdminUsername);
   static Future<String?> readDisplayName() => _storage.read(key: _kDisplayName);
 
   /// Whether the splash should auto-route to home. Default `false` — if
