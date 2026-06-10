@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
@@ -146,7 +147,10 @@ class _ActionsSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: Sp.md),
-            // Actions grid — 4 cols
+            // Actions grid — 4 cols. مطلب 2026-06-12: نفس تنسيق
+            // عمليات المشتركين (subscriber_detail_screen _OpCard) —
+            // خلفية بيضاء + حدود رفيعة + ظل ناعم، بدون tinted box
+            // للأيقونة.
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   Sp.lg, 0, Sp.lg, Sp.md),
@@ -196,36 +200,45 @@ class _ActionsSheet extends StatelessWidget {
 
   Widget _actionTile(BuildContext context, ManagerAction action) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => Navigator.of(context).pop(action),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          Navigator.of(context).pop(action);
+        },
         borderRadius: BorderRadius.circular(R.md),
         child: Container(
           decoration: BoxDecoration(
-            color: action.color.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: action.color.withValues(alpha: 0.25)),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: action.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                alignment: Alignment.center,
-                child: Icon(action.icon, size: 16, color: action.color),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                action.label,
-                style: TextStyle(
-                  color: action.color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
+              Icon(action.icon, color: action.color, size: 18),
+              const SizedBox(height: 4),
+              Flexible(
+                child: Text(
+                  action.label,
+                  style: AppType.label(color: action.color).copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    height: 1.05,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
