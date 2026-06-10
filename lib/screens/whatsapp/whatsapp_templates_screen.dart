@@ -591,7 +591,10 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                       // مطلب 2026-06-12: scroll أفقي قابل للسحب يمين/يسار،
                       // الـchips تظهر مرتّبة في صف واحد بدون انتشار عمودي.
                       SizedBox(
-                        height: 42,
+                        // 52dp يضمن استيعاب 2 سطر نص + padding بلا
+                        // overflow على iPhone (الـtext rendering يأخذ
+                        // ~1dp إضافي بسبب الـArabic glyphs).
+                        height: 52,
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: widget.def.placeholders.length,

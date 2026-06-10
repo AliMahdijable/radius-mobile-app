@@ -439,11 +439,17 @@ class _PackagesScreenState extends State<PackagesScreen> {
         onTap: () async {
           final picked = await showModalBottomSheet<int?>(
             context: context,
-            backgroundColor: AppColors.surface,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            builder: (_) => SafeArea(
+            backgroundColor: Colors.transparent,
+            // مطلب 2026-06-12 (إصلاح): الـListTile داخل sheet مع
+            // background DecoratedBox يخفي ink splashes. نلفّ بـMaterial
+            // ونعطي اللون فيه ليتعامل مع الـink طبيعياً.
+            builder: (_) => Material(
+              color: AppColors.surface,
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20)),
+              clipBehavior: Clip.antiAlias,
+              child: SafeArea(
+              top: false,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -504,6 +510,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 ],
               ),
             ),
+          ),
           );
           if (picked == null) return;
           setState(() {
