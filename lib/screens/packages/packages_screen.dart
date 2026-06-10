@@ -272,6 +272,13 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         package: p,
                         userPriceCtrl: _userPriceCtrl[p.id]!,
                         priceCtrl: _priceCtrl[p.id]!,
+                        // مطلب 2026-06-12 (مطابق v1 packages_screen.dart:517):
+                        // عرض المدير "الجذر" (الـadmin الحالي على نفسه)
+                        // = `price` و`cost` للقراءة فقط (سعر البيع لنفسه
+                        // فقط هو القابل للتحرير).
+                        // عرض مدير فرعي = `price` قابل للتحرير (هذا هو
+                        // الكلفة اللي الـparent يحدّدها لـsub-manager).
+                        isViewingRoot: _selectedManagerId == null,
                         onUserPriceChanged: (v) =>
                             _handleEdit(p.id, v, _userPriceEdits, _userPriceCtrl[p.id]!),
                         onPriceChanged: (v) => _handleEdit(
@@ -506,26 +513,38 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 }
 
-/// مطلب 2026-06-12 (screenshot v1): كل باقة كرت كامل بـheader اسم
-/// الباقة + أيقونة wifi، تحته 3 أعمدة (سعر البيع | السعر | الكلفة).
-/// `سعر البيع` و`السعر` قابلان للتحرير، `الكلفة` للقراءة فقط.
+/// مطلب 2026-06-12 (مطابق v1 packages_screen.dart:495-538): كرت
+/// لكل باقة بـheader + 3 أعمدة (سعر البيع | السعر | الكلفة).
+///
+/// **منطق التحرير حسب نوع العرض**:
+/// - **عرض الجذر** (`isViewingRoot=true`) = المدير ينظر على تسعيره الخاص.
+///   - سعر البيع → قابل للتحرير (يحدّد كم يبيع للمشترك).
+///   - السعر → للقراءة فقط ('—'، لا يوجد parent يحدّد له cost).
+///   - الكلفة → للقراءة فقط ('—').
+/// - **عرض مدير فرعي** = الـadmin يعدّل تسعير سَوب تابع له.
+///   - سعر البيع → قابل للتحرير (سعر الفرعي للمشترك).
+///   - السعر → قابل للتحرير (الكلفة اللي الـadmin يحدّدها للفرعي).
+///   - الكلفة → للقراءة فقط (سعر شراء الـadmin من الـparent، إن وجد).
 class _PackageTile extends StatelessWidget {
   const _PackageTile({
     required this.package,
     required this.userPriceCtrl,
     required this.priceCtrl,
+    required this.isViewingRoot,
     required this.onUserPriceChanged,
     required this.onPriceChanged,
   });
   final Package package;
   final TextEditingController userPriceCtrl;
   final TextEditingController priceCtrl;
+  final bool isViewingRoot;
   final ValueChanged<String> onUserPriceChanged;
   final ValueChanged<String> onPriceChanged;
 
   @override
   Widget build(BuildContext context) {
     final cost = package.cost ?? 0;
+    final priceReadable = isViewingRoot;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
@@ -577,17 +596,21 @@ class _PackageTile extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _priceField(
-                  label: 'السعر',
-                  ctrl: priceCtrl,
-                  onChanged: onPriceChanged,
-                ),
+                child: priceReadable
+                    ? _readOnly(label: 'السعر', value: '—')
+                    : _priceField(
+                        label: 'السعر',
+                        ctrl: priceCtrl,
+                        onChanged: onPriceChanged,
+                      ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _readOnly(
                   label: 'الكلفة',
-                  value: cost > 0 ? cost.toInt().toString() : '—',
+                  value: (!isViewingRoot && cost > 0)
+                      ? cost.toInt().toString()
+                      : '—',
                 ),
               ),
             ],
