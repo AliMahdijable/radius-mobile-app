@@ -1551,6 +1551,9 @@ class _SubscriberHero extends StatelessWidget {
             color: Colors.white.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 10),
+          // مطلب 2026-06-12: عرض الـrows بعرض ثابت للـlabel + value
+          // يلتزم بحاشية مستقيمة. الـicon والـlabel في عمود واحد
+          // عرضه 105dp فالقيم كلها تبدأ من نفس النقطة.
           if ((sub.price ?? 0) > 0)
             _infoRow(
               icon: LucideIcons.dollarSign,
@@ -1574,6 +1577,8 @@ class _SubscriberHero extends StatelessWidget {
               icon: LucideIcons.phone,
               label: 'رقم الهاتف',
               value: sub.displayPhone,
+              copyable: true,
+              context: context,
             ),
         ],
       ),
@@ -1636,36 +1641,123 @@ class _SubscriberHero extends StatelessWidget {
     required IconData icon,
     required String label,
     required String value,
+    bool copyable = false,
+    BuildContext? context,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFFCBE4D7), size: 14),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFFCBE4D7),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          // label column (fixed width = 110dp) — icon + label محاذيان
+          // على اليمين، فالقيم كلها تبدأ بعدها بحاشية ثابتة.
+          SizedBox(
+            width: 110,
+            child: Row(
+              children: [
+                Icon(icon, color: const Color(0xFFCBE4D7), size: 14),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFFCBE4D7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
+          // value column — يأخذ بقية العرض، نص نهاية ثم زر النسخ
+          // (إن وجد) ملتصق به.
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+                if (copyable && context != null) ...[
+                  const SizedBox(width: 6),
+                  _CopyChip(value: value, context: context),
+                ],
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// زر نسخ صغير دائري — يستعمل ضمن الـhero لأي قيمة قابلة للنسخ
+/// (الهاتف / IP / username). يعرض ✓ لحظياً بعد النسخ.
+class _CopyChip extends StatefulWidget {
+  const _CopyChip({required this.value, required this.context});
+  final String value;
+  // ignore: avoid_field_initializers_in_const_classes
+  final BuildContext context;
+
+  @override
+  State<_CopyChip> createState() => _CopyChipState();
+}
+
+class _CopyChipState extends State<_CopyChip> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.value));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    ScaffoldMessenger.of(widget.context).showSnackBar(
+      SnackBar(
+        content: Text('تم نسخ ${widget.value}'),
+        backgroundColor: AppColors.brand,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkResponse(
+        onTap: _copy,
+        radius: 16,
+        child: Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3), width: 1),
+          ),
+          child: Icon(
+            _copied ? LucideIcons.check : LucideIcons.copy,
+            size: 12,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }
