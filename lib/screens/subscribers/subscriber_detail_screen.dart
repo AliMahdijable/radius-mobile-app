@@ -165,7 +165,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       const SizedBox(height: Sp.sm),
                     ],
                   ],
-                  _SubscriptionCard(sub: sub),
+                  // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
+                  // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
+                  // صارت داخل _SubscriberHero. كرت الرصيد لا يزال يظهر
+                  // مستقلاً لما الـbalance != 0.
                   if (sub.balanceAmount != 0) ...[
                     const SizedBox(height: Sp.sm),
                     _BalanceCard(sub: sub),
@@ -1447,9 +1450,6 @@ class _SubscriberHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const accent = AppColors.brand;
-    final pkgLetter = (sub.profileName ?? sub.username).isNotEmpty
-        ? (sub.profileName ?? sub.username).characters.first
-        : '?';
     final remaining = sub.remainingDays;
     String remainingTop = '—';
     String remainingSub = 'الأيام المتبقية';
@@ -1469,6 +1469,10 @@ class _SubscriberHero extends StatelessWidget {
       remainingSub = 'منتهي';
     }
     final hasDebt = sub.balanceAmount < 0;
+    // مطلب 2026-06-12: شيلنا الـicon الرقمي اللي كان جوه الهيرو.
+    // الاسم والـusername يظهرون مباشرة بأعلى الهيرو. كل معلومات
+    // الاشتراك (الباقة/السعر/الانتهاء/التابع/الهاتف) منقولة لأسفل
+    // الـhero بـ rows صغيرة بدل _SubscriptionCard المنفصل.
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
       decoration: BoxDecoration(
@@ -1489,38 +1493,19 @@ class _SubscriberHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 76,
-            height: 76,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              pkgLetter,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 36,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
+          // العنوان: اسم عربي كبير + username تحته
           Text(
             sub.fullName,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 22,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 3),
           Text(
             sub.username,
             style: const TextStyle(
@@ -1532,6 +1517,7 @@ class _SubscriberHero extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 14),
+          // 3-stat strip (الدين / الباقة / الأيام)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1558,9 +1544,49 @@ class _SubscriberHero extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          // فاصل أبيض شفاف ثم rows تفصيلية
+          Container(
+            height: 1,
+            color: Colors.white.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 10),
+          if ((sub.price ?? 0) > 0)
+            _infoRow(
+              icon: LucideIcons.dollarSign,
+              label: 'السعر',
+              value: '${formatIQD(sub.price!)} د.ع',
+            ),
+          if ((sub.expiration ?? '').isNotEmpty)
+            _infoRow(
+              icon: LucideIcons.calendar,
+              label: 'تاريخ الانتهاء',
+              value: _formatExpiration(sub.expiration),
+            ),
+          if ((sub.parentUsername ?? '').isNotEmpty)
+            _infoRow(
+              icon: LucideIcons.shield,
+              label: 'تابع إلى',
+              value: sub.parentUsername!,
+            ),
+          if (sub.displayPhone.isNotEmpty)
+            _infoRow(
+              icon: LucideIcons.phone,
+              label: 'رقم الهاتف',
+              value: sub.displayPhone,
+            ),
         ],
       ),
     );
+  }
+
+  String _formatExpiration(String? raw) {
+    if (raw == null || raw.isEmpty) return '—';
+    final dt = DateTime.tryParse(raw);
+    if (dt == null) return raw;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}/${two(dt.month)}/${two(dt.day)} '
+        '${two(dt.hour)}:${two(dt.minute)}';
   }
 
   Widget _heroStat({
@@ -1603,6 +1629,44 @@ class _SubscriberHero extends StatelessWidget {
       height: 36,
       margin: const EdgeInsets.symmetric(horizontal: 4),
       color: Colors.white.withValues(alpha: 0.25),
+    );
+  }
+
+  Widget _infoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFFCBE4D7), size: 14),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFCBE4D7),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
