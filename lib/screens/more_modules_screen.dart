@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'expenses/expenses_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -44,7 +45,11 @@ class MoreModulesScreen extends StatelessWidget {
               color: const Color(0xFFE08F2D),
               title: 'الصرفيات',
               subtitle: 'تسجيل ومتابعة المصاريف',
-              onTap: () => _todo(context, 'الصرفيات — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ExpensesScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.sm),
             _ModuleCard(
