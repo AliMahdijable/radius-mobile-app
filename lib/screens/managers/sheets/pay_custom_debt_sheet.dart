@@ -460,12 +460,11 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800),
                       ),
-                      if (true)
-                        Text(
-                          _fmtIsoDate(p.paymentDate),
-                          style:
-                              AppType.muted().copyWith(fontSize: 10.5),
-                        ),
+                      Text(
+                        _fmtIsoDate(p.paymentDate),
+                        style:
+                            AppType.muted().copyWith(fontSize: 10.5),
+                      ),
                       if ((p.note ?? '').isNotEmpty)
                         Text(
                           p.note!,

@@ -342,11 +342,10 @@ class _DebtTile extends StatelessWidget {
                           style: AppType.title(color: AppColors.textHi)
                               .copyWith(fontSize: 14),
                         ),
-                        if (true)
-                          Text(
-                            _fmtIsoDate(debt.debtDate),
-                            style: AppType.muted().copyWith(fontSize: 11),
-                          ),
+                        Text(
+                          _fmtIsoDate(debt.debtDate),
+                          style: AppType.muted().copyWith(fontSize: 11),
+                        ),
                       ],
                     ),
                   ),
@@ -371,7 +370,7 @@ class _DebtTile extends StatelessWidget {
                     )
                   else
                     Text(
-                      'تبقى ${formatIQD(debt.remaining)}',
+                      'تبقى ${formatIQD(debt.remainingAmount)}',
                       style: AppType.label(color: AppColors.error)
                           .copyWith(
                               fontSize: 12, fontWeight: FontWeight.w800),
