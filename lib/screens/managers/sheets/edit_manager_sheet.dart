@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
 import '_manager_form.dart';
+import '../../../services/subscriber_events.dart';
 
 /// تعديل مدير قائم. كلمة السر اختيارية (تترك فاضية = لا تغيير).
 Future<bool?> showEditManagerSheet(BuildContext context, Manager m) {

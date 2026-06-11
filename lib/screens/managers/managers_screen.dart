@@ -14,6 +14,7 @@ import 'sheets/edit_manager_sheet.dart';
 import 'sheets/manager_actions_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/send_info_sheet.dart';
+import '../../services/subscriber_events.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
 /// رصيد (شحن/سحب/نقاط). v1 web parity.
@@ -183,7 +184,10 @@ class _ManagersScreenState extends State<ManagersScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (result.ok) _load();
+    if (result.ok) {
+      SubscriberEvents.notifyChange();
+      _load();
+    }
   }
 
   @override

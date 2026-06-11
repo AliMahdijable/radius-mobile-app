@@ -9,6 +9,7 @@ import '../../../services/manager_notice.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/subscriber_events.dart';
 
 /// نوع العملية الافتراضي (لو actions sheet مرّر نوعاً محدّداً).
 enum BalanceOpKind { deposit, withdraw, addPoints }
@@ -179,6 +180,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
         // النقاط ما تأثر على الرصيد — نمرّر أنواعها للـpush.
         actionKind = 'add_points';
     }
+    SubscriberEvents.notifyChange();
     // الإشعار يتم في الخلفية — ما نوقف الـclose للـsheet عليه.
     unawaited(_dispatchNotice(
       previousCredit: previousCredit,

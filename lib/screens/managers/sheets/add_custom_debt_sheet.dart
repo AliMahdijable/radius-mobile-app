@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/subscriber_events.dart';
 
 /// إضافة دين خارجي على مدير فرعي. مطابق v1 add-debt sheet
 /// (managers_screen.dart:3007). الـbackend يقوم بإرسال إشعار
@@ -101,7 +102,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) Navigator.of(context).pop(true);
+    if (r.ok) { SubscriberEvents.notifyChange(); Navigator.of(context).pop(true); }
   }
 
   @override

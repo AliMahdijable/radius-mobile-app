@@ -189,11 +189,39 @@ class _Row extends StatelessWidget {
         lower.contains('delete_subscriber')) {
       return (label: 'حذف مشترك', detail: null);
     }
-    // مطلب 2026-06-11: شحن/سحب الرصيد للمدير الفرعي كان يتسجّل
-    // بـBALANCE_ADD/BALANCE_DEDUCT ويسقط على قاعدة "إضافة دين" /
-    // "تسديد دين" المصممة للمشترك. افحص الوصف أولاً — لو يحوي
-    // "للمدير" / "من المدير" أعطه label مدير منفصل.
-    if (description.contains('للمدير') || description.contains('من المدير')) {
+    // مطلب 2026-06-11: حركات المدراء (شحن/سحب/تسديد/نقاط) كانت
+    // تسقط على قواعد المشترك العامة ("إضافة دين" / "تسديد دين") لأن
+    // الـaction_type نفسه (BALANCE_ADD / BALANCE_DEDUCT / DEBT_PAY)
+    // مشترك. نفحص الوصف أولاً — لو يحوي أي إشارة للمدير، أعطه label
+    // منفصل + استخرج المبلغ من الشكل العام "X د.ع".
+    final isManagerOp = description.contains('للمدير') ||
+        description.contains('من المدير') ||
+        description.contains('دين المدير');
+    if (isManagerOp) {
+      // مطلب 2026-06-11: تسديد دين المدير. الوصف من الباك:
+      //   "تسديد X د.ع من دين المدير Y"
+      if (description.contains('تسديد') && description.contains('دين المدير')) {
+        final amt = _extractAmount(
+          description,
+          RegExp(r'تسديد\s+([\d,]+)\s*د\.?ع'),
+        );
+        return (
+          label: 'تسديد دين مدير',
+          detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
+        );
+      }
+      // مطلب 2026-06-11: نقاط مكافأة. الوصف من الباك:
+      //   "إضافة N نقطة للمدير Y"
+      if (description.contains('نقطة للمدير') || lower.contains('points')) {
+        final amt = _extractAmount(
+          description,
+          RegExp(r'إضافة\s+([\d,]+)\s+نقطة'),
+        );
+        return (
+          label: 'نقاط مدير',
+          detail: amt != null ? '${_formatIntCompact(amt)} نقطة' : null,
+        );
+      }
       final isWithdraw = description.contains('سحب') ||
           lower.contains('balance_deduct') ||
           lower.contains('balance_withdraw');

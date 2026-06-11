@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
+import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -168,7 +169,10 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) Navigator.of(context).pop(true);
+    if (r.ok) {
+      SubscriberEvents.notifyChange();
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override

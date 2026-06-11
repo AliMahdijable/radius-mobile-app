@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/subscriber_events.dart';
 
 /// تسديد جزئي/كلي لدين خارجي + عرض الدفعات السابقة. مطابق v1
 /// _PayDebtUnifiedSheet (لمصدر custom debt).
@@ -138,6 +139,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       ),
     );
     if (r.ok) {
+      SubscriberEvents.notifyChange();
       _changed = true;
       _amountCtrl.clear();
       _noteCtrl.clear();

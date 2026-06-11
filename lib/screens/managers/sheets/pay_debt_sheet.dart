@@ -11,6 +11,7 @@ import '../../../services/manager_notice.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../services/subscriber_events.dart';
 
 /// Unified pay-debt sheet — mirrors v1
 /// _PayDebtUnifiedSheet (mobile-app/lib/screens/managers_screen.dart:
@@ -227,6 +228,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       notes: note,
     ));
 
+    SubscriberEvents.notifyChange();
     Navigator.of(context).pop(true);
   }
 
