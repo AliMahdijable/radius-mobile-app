@@ -214,6 +214,35 @@ class DiscountsApi {
     }
   }
 
+  /// DELETE /api/discounts — حذف كل خصومات الـadmin. مطابق v1
+  /// mobile-app/lib/screens/discounts_screen.dart:177 (_confirmDeleteAll).
+  /// الـbackend يرجع عدد الخصومات المحذوفة كي نطبع رسالة دقيقة.
+  static Future<({bool ok, String? message, int deleted})> deleteAll() async {
+    try {
+      final r = await ApiClient.dio.delete<Map<String, dynamic>>(
+        '/api/discounts',
+      );
+      final body = r.data ?? const {};
+      final rawDel = body['deleted'];
+      final del = rawDel is int
+          ? rawDel
+          : int.tryParse(rawDel?.toString() ?? '') ?? 0;
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString(),
+        deleted: del,
+      );
+    } on DioException catch (e) {
+      _log('discounts deleteAll', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر الحذف', deleted: 0);
+    } catch (e) {
+      _log('discounts deleteAll', e);
+      return (ok: false, message: 'تعذّر الحذف', deleted: 0);
+    }
+  }
+
   static void _log(String endpoint, Object err) {
     if (kReleaseMode) return;
     if (err is DioException) {

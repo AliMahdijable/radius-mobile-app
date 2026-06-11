@@ -69,6 +69,49 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     if (changed == true) _load();
   }
 
+  Future<void> _confirmDeleteAll() async {
+    if (_rows.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          'حذف جميع الخصومات',
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        ),
+        content: Text(
+          'سيتم حذف ${_rows.length} خصم بإجمالي '
+          '${formatIQD(_totalDiscount)} د.ع. لا يمكن التراجع.',
+          style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('حذف الكل'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final r = await DiscountsApi.deleteAll();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(r.ok
+            ? 'تم حذف ${r.deleted} خصم'
+            : (r.message ?? 'تعذّر الحذف')),
+        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (r.ok) _load();
+  }
+
   Future<void> _confirmDelete(Discount d) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -123,16 +166,6 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: accent,
-        foregroundColor: Colors.white,
-        onPressed: () async {
-          final r = await showBulkApplyDiscountSheet(context);
-          if (r == true) _load();
-        },
-        icon: const Icon(LucideIcons.plus, size: 16),
-        label: const Text('تطبيق دفعة'),
-      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
@@ -143,6 +176,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             children: [
               _hero(accent),
               const SizedBox(height: Sp.md),
+              _actionButtons(accent),
+              const SizedBox(height: Sp.lg),
+              _sectionHeader(filtered.length),
+              const SizedBox(height: Sp.sm),
               _searchField(),
               const SizedBox(height: Sp.md),
               if (_loading)
@@ -169,6 +206,73 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// مطلب 2026-06-11: زرّان كبيرة فوق القائمة بدل الـFAB الواحد.
+  /// أكثر اكتشافاً + يفتحان عمليتين متمايزتين بصرياً (تطبيق جماعي
+  /// أزرق primary، حذف الكل أحمر danger). الـ"حذف الكل" يتعطّل
+  /// عند عدم وجود خصومات.
+  Widget _actionButtons(Color accent) {
+    final hasRows = _rows.isNotEmpty;
+    return Row(
+      children: [
+        Expanded(
+          child: _ActionCard(
+            icon: LucideIcons.users,
+            label: 'تطبيق خصم جماعي',
+            sub: 'لمجموعة مشتركين',
+            color: accent,
+            onTap: () async {
+              final r = await showBulkApplyDiscountSheet(context);
+              if (r == true) _load();
+            },
+          ),
+        ),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: _ActionCard(
+            icon: LucideIcons.trash2,
+            label: 'حذف الكل',
+            sub: hasRows ? 'إزالة كل الخصومات' : 'لا توجد خصومات',
+            color: AppColors.error,
+            onTap: hasRows ? _confirmDeleteAll : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionHeader(int shownCount) {
+    return Row(
+      children: [
+        Icon(LucideIcons.list, size: 14, color: AppColors.textMid),
+        const SizedBox(width: 6),
+        Text(
+          'الخصومات النشطة',
+          style: AppType.label(color: AppColors.textHi)
+              .copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(R.pill),
+          ),
+          child: Text(
+            // لو في فلتر بحث يفرّق بين الظاهر والإجمالي. غير
+            // ذلك يكفي عدد واحد.
+            _query.isEmpty
+                ? '${_rows.length}'
+                : '$shownCount / ${_rows.length}',
+            style: AppType.muted(color: AppColors.textMid).copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -469,5 +573,85 @@ class _DiscountTile extends StatelessWidget {
     if (dt == null) return iso;
     String two(int n) => n.toString().padLeft(2, '0');
     return '${dt.year}/${two(dt.month)}/${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+  }
+}
+
+/// زر إجراء كبير على شاشة الخصومات — كارت بأيقونة دائرية ملوّنة
+/// + label + sub. يتعطّل عند `onTap == null` (لون باهت + لا تفاعل).
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.icon,
+    required this.label,
+    required this.sub,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String sub;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final disabled = onTap == null;
+    final fg = disabled ? AppColors.textLow : AppColors.textHi;
+    final iconBg =
+        disabled ? AppColors.surfaceInput : color.withValues(alpha: 0.14);
+    final iconFg = disabled ? AppColors.textLow : color;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: Sp.md, vertical: Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(R.md),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: iconFg, size: 18),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: AppType.label(color: fg)
+                          .copyWith(fontWeight: FontWeight.w800, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      sub,
+                      style: AppType.muted(color: AppColors.textMid)
+                          .copyWith(fontSize: 10.5),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
