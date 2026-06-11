@@ -374,13 +374,19 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.whatsApp,
     required this.waLoaded,
     required this.topInset,
-  });
+  }) : isDark = AppColors.isDark;
 
   final String displayName;
   final String greeting;
   final WhatsAppStatus? whatsApp;
   final bool waLoaded;
   final double topInset;
+  // Snapshot of the global dark-mode flag at delegate-creation time.
+  // shouldRebuild compares this so a theme switch (with everything
+  // else unchanged) still triggers a repaint — without it the pinned
+  // header stays in the old palette while the rest of the scaffold
+  // flips. مطلب 2026-06-11.
+  final bool isDark;
 
   // Tightened from 108 → 86 so there's no dead space between the
   // WhatsApp chip and the subscribers card below the header.
@@ -393,6 +399,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    Theme.of(context); // theme-dep (dark-mode) — delegate.build skipped by injector
     return Container(
       color: AppColors.bg,
       padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, 2),
@@ -454,7 +461,8 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.greeting != greeting ||
       old.waLoaded != waLoaded ||
       old.whatsApp?.connected != whatsApp?.connected ||
-      old.whatsApp?.phone != whatsApp?.phone;
+      old.whatsApp?.phone != whatsApp?.phone ||
+      old.isDark != isDark;
 }
 
 class _WAStatusChip extends StatelessWidget {
