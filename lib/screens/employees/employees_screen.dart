@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/employees_api.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -120,7 +121,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 .copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      floatingActionButton: _catalog == null
+      floatingActionButton: (_catalog == null ||
+              !Perms.has('employees.manage'))
           ? null
           : FloatingActionButton.extended(
               backgroundColor: accent,
@@ -148,8 +150,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                             for (final e in _rows) ...[
                               _EmployeeTile(
                                 emp: e,
-                                onTap: () => _openEditor(employee: e),
-                                onDelete: () => _confirmDelete(e),
+                                onTap: Perms.has('employees.manage')
+                                    ? () => _openEditor(employee: e)
+                                    : () {/* read-only */},
+                                onDelete: Perms.has('employees.manage')
+                                    ? () => _confirmDelete(e)
+                                    : null,
                               ),
                               const SizedBox(height: 8),
                             ],
@@ -267,11 +273,13 @@ class _EmployeeTile extends StatelessWidget {
   const _EmployeeTile({
     required this.emp,
     required this.onTap,
-    required this.onDelete,
+    this.onDelete,
   });
   final Employee emp;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  /// null لو الـactor ما عنده صلاحية الحذف — يخفي زر الحذف بدل
+  /// تعطيله.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -351,16 +359,17 @@ class _EmployeeTile extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                icon: Icon(LucideIcons.trash2,
-                    color: AppColors.error, size: 16),
-                onPressed: onDelete,
-                tooltip: 'حذف',
-                splashRadius: 18,
-                padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
+              if (onDelete != null)
+                IconButton(
+                  icon: Icon(LucideIcons.trash2,
+                      color: AppColors.error, size: 16),
+                  onPressed: onDelete,
+                  tooltip: 'حذف',
+                  splashRadius: 18,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
             ],
           ),
         ),

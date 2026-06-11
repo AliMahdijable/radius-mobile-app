@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
 import '../services/auth_storage.dart';
+import '../services/permissions_service.dart';
 import '../services/theme_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -71,6 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // لتسريب الأرقام بين الجلستين).
     SubscribersApi.clearAllCaches();
     DeviceProbeApi.clearAllCaches();
+    await PermissionsService.clear();
     await AuthStorage.clear();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(

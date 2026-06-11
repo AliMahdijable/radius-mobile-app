@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
+import 'services/permissions_service.dart';
 import 'services/theme_service.dart';
 import 'theme/colors.dart';
 
@@ -19,6 +20,9 @@ void main() async {
   // notifier is read synchronously below; this `await` guarantees it
   // already holds the persisted value by the time runApp fires.
   await ThemeService.load();
+  // Permissions service يعيد تحميل الـcache المخزّن من الجلسة السابقة
+  // قبل أول frame عشان الـgating يشتغل صح.
+  await PermissionsService.init();
 
   // Bring up Firebase with options baked into firebase_options.dart —
   // same approach as v1. This bypasses the GoogleService-Info.plist /

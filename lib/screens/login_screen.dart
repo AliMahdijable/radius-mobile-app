@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,6 +7,7 @@ import 'package:local_auth/local_auth.dart';
 
 import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
+import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -104,6 +107,10 @@ class _LoginScreenState extends State<LoginScreen> {
           // TODO[2fa-screen]: route to 2FA when that screen exists.
           return;
         }
+        // مطلب 2026-06-11: نجلب صلاحيات الـactor الحالي من backend
+        // (admin → null = full access؛ employee → permissions map).
+        // الـnavigation ما ينتظرها — تجري بالخلفية ضمن fire-and-forget.
+        unawaited(PermissionsService.refreshFromBackend());
         // مطلب 2026-06-11: نُلغي صفحة طلب الإشعارات في البداية —
         // الـadmin يفعّلها لاحقاً من الإعدادات → صلاحيات التطبيق.
         Navigator.of(context).pushReplacement(

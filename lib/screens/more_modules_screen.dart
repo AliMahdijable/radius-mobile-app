@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -25,26 +26,14 @@ class MoreModulesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
-          children: [
-            Text(
-              'قوائم أخرى',
-              style: AppType.title(color: AppColors.textHi).copyWith(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'المديولات الإضافية للنظام',
-              style: AppType.subtitle(color: AppColors.textMid),
-            ),
-            const SizedBox(height: Sp.lg),
+    // مطلب 2026-06-11: الكروت تختفي حسب صلاحيات الموظف الحالي.
+    // لو ما عنده ولا صلاحية يظهر empty state بدل قائمة فارغة بدون
+    // سياق. الـadmin (مو موظف) يشوف كل الكروت دائماً.
+    return ValueListenableBuilder<int>(
+      valueListenable: PermissionsService.changes,
+      builder: (context, _, __) {
+        final cards = <Widget>[
+          if (Perms.has('expenses.view'))
             _ModuleCard(
               icon: LucideIcons.receipt,
               color: const Color(0xFFE08F2D),
@@ -56,7 +45,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: Sp.sm),
+          if (Perms.has('managers.view'))
             _ModuleCard(
               icon: LucideIcons.userCog,
               color: const Color(0xFF3B82F6),
@@ -68,7 +57,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: Sp.sm),
+          if (Perms.hasAny(['profiles.view', 'profiles.edit']))
             _ModuleCard(
               icon: LucideIcons.package,
               color: const Color(0xFF8B5CF6),
@@ -80,7 +69,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: Sp.sm),
+          if (Perms.has('discounts.view'))
             _ModuleCard(
               icon: LucideIcons.percent,
               color: const Color(0xFF14B8A6),
@@ -92,7 +81,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: Sp.sm),
+          if (Perms.has('employees.view'))
             _ModuleCard(
               icon: LucideIcons.users,
               color: const Color(0xFF8B5CF6),
@@ -104,9 +93,61 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          ],
-        ),
-      ),
+        ];
+
+        return Scaffold(
+          backgroundColor: AppColors.bg,
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+              children: [
+                Text(
+                  'قوائم أخرى',
+                  style: AppType.title(color: AppColors.textHi).copyWith(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'المديولات الإضافية للنظام',
+                  style: AppType.subtitle(color: AppColors.textMid),
+                ),
+                const SizedBox(height: Sp.lg),
+                if (cards.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Sp.huge),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(LucideIcons.lock,
+                              size: 36, color: AppColors.textLow),
+                          const SizedBox(height: 10),
+                          Text(
+                            'ليس لديك صلاحيات لأي قسم هنا',
+                            style: AppType.label(color: AppColors.textMid),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'اتصل بالمدير العام لمنحك صلاحيات',
+                            style: AppType.muted().copyWith(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  for (int i = 0; i < cards.length; i++) ...[
+                    if (i > 0) const SizedBox(height: Sp.sm),
+                    cards[i],
+                  ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
