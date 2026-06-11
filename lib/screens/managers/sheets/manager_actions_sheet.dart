@@ -147,11 +147,11 @@ class _ActionsSheet extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: Sp.md),
-            // Actions grid — 4 cols. مطلب 2026-06-12: نفس تنسيق
-            // عمليات المشتركين (subscriber_detail_screen _OpCard) —
-            // خلفية بيضاء + حدود رفيعة + ظل ناعم، بدون tinted box
-            // للأيقونة.
+            const SizedBox(height: Sp.lg),
+            // Actions grid — 4 cols. مطلب 2026-06-11: نفس تنسيق
+            // عمليات المشتركين الجديد (subscriber_detail_screen
+            // _OpCard) — دائرة ملوّنة 52dp + أيقونة بيضاء + ظل ناعم
+            // بلون الدائرة + label تحت الزر بلون النص العادي.
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   Sp.lg, 0, Sp.lg, Sp.md),
@@ -159,9 +159,9 @@ class _ActionsSheet extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: 4,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 0.92,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 14,
+                childAspectRatio: 0.82,
                 children: [
                   for (final a in actions) _actionTile(context, a),
                 ],
@@ -200,51 +200,51 @@ class _ActionsSheet extends StatelessWidget {
   }
 
   Widget _actionTile(BuildContext context, ManagerAction action) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          Navigator.of(context).pop(action);
-        },
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(action.icon, color: action.color, size: 18),
-              const SizedBox(height: 4),
-              Flexible(
-                child: Text(
-                  action.label,
-                  style: AppType.label(color: action.color).copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    height: 1.05,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
+    // مطابق subscriber_detail_screen _OpCard:
+    //   دائرة ملوّنة 52dp + أيقونة بيضاء 22 + label تحتها بـtextHi.
+    return InkResponse(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        Navigator.of(context).pop(action);
+      },
+      radius: 36,
+      highlightShape: BoxShape.circle,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: action.color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: action.color.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-            ],
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(action.icon, color: Colors.white, size: 22),
           ),
-        ),
+          const SizedBox(height: 7),
+          Flexible(
+            child: Text(
+              action.label,
+              style: AppType.label(color: AppColors.textHi).copyWith(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }
