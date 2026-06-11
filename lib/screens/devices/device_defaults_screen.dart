@@ -98,7 +98,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
           'اعتمادات ONU / Ubiquiti',
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

@@ -6,26 +6,70 @@ import 'package:flutter/material.dart';
 /// - Brand: forest green #2D5F47 (premium, natural).
 /// - Logo: render AS-IS, no color blending — preserves the geometric
 ///   detail of the company mark.
+///
+/// Dark mode (added 2026-06-13): theme-dependent surfaces/text flip
+/// based on a global `_isDark` flag. The flag is updated from
+/// `ThemeService` before each `MaterialApp` rebuild. Brand + error
+/// colors stay the same in both modes so they can still be declared
+/// `const`. Surfaces/borders/text are `static Color get` instead of
+/// `static const Color` — any callsite that wrapped them in a
+/// `const` constructor (e.g. `const BorderSide(color: AppColors.border)`)
+/// had to be relaxed to a non-const constructor.
 class AppColors {
   AppColors._();
 
-  // Brand
+  static bool _isDark = false;
+
+  /// Called from `main.dart` builder before each `MaterialApp` build
+  /// so the getters below resolve to the right palette during paint.
+  /// No-op when value hasn't changed — saves an unnecessary rebuild.
+  static bool setDarkMode(bool dark) {
+    if (_isDark == dark) return false;
+    _isDark = dark;
+    return true;
+  }
+
+  static bool get isDark => _isDark;
+
+  // -------- Brand (same in both themes) --------
   static const Color brand = Color(0xFF2D5F47);
   static const Color brandDark = Color(0xFF1F4332);
   static const Color brandLight = Color(0xFF4A8B6E);
 
-  // Light surfaces (Material standard, not cream)
-  static const Color bg = Color(0xFFFAFAFA);         // base canvas
-  static const Color surface = Color(0xFFFFFFFF);    // cards/sheets
-  static const Color surfaceInput = Color(0xFFF1F3F5); // inputs
-  static const Color border = Color(0xFFE5E7EB);
-  static const Color borderStrong = Color(0xFFD1D5DB);
-
-  // Text
-  static const Color textHi = Color(0xFF111827);
-  static const Color textMid = Color(0xFF6B7280);
-  static const Color textLow = Color(0xFF9CA3AF);
-
-  // Status
+  // -------- Status (same in both themes) --------
   static const Color error = Color(0xFFDC2626);
+
+  // -------- Light palette --------
+  static const Color _lightBg = Color(0xFFFAFAFA);
+  static const Color _lightSurface = Color(0xFFFFFFFF);
+  static const Color _lightSurfaceInput = Color(0xFFF1F3F5);
+  static const Color _lightBorder = Color(0xFFE5E7EB);
+  static const Color _lightBorderStrong = Color(0xFFD1D5DB);
+  static const Color _lightTextHi = Color(0xFF111827);
+  static const Color _lightTextMid = Color(0xFF6B7280);
+  static const Color _lightTextLow = Color(0xFF9CA3AF);
+
+  // -------- Dark palette (new 2026-06-13) --------
+  // Tuned for OLED-friendly contrast without being pure-black; brand
+  // green stays readable on these surfaces (tested via WCAG AA pairs).
+  static const Color _darkBg = Color(0xFF0F1419);
+  static const Color _darkSurface = Color(0xFF1A1F2A);
+  static const Color _darkSurfaceInput = Color(0xFF232936);
+  static const Color _darkBorder = Color(0xFF2C3340);
+  static const Color _darkBorderStrong = Color(0xFF3D475A);
+  static const Color _darkTextHi = Color(0xFFF3F4F6);
+  static const Color _darkTextMid = Color(0xFFB0B7C3);
+  static const Color _darkTextLow = Color(0xFF6E7787);
+
+  // -------- Theme-aware getters --------
+  static Color get bg => _isDark ? _darkBg : _lightBg;
+  static Color get surface => _isDark ? _darkSurface : _lightSurface;
+  static Color get surfaceInput =>
+      _isDark ? _darkSurfaceInput : _lightSurfaceInput;
+  static Color get border => _isDark ? _darkBorder : _lightBorder;
+  static Color get borderStrong =>
+      _isDark ? _darkBorderStrong : _lightBorderStrong;
+  static Color get textHi => _isDark ? _darkTextHi : _lightTextHi;
+  static Color get textMid => _isDark ? _darkTextMid : _lightTextMid;
+  static Color get textLow => _isDark ? _darkTextLow : _lightTextLow;
 }

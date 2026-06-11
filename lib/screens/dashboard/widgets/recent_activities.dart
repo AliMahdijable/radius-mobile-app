@@ -29,7 +29,7 @@ class RecentActivities extends StatelessWidget {
           for (int i = 0; i < items.length; i++) ...[
             _Row(item: items[i]),
             if (i < items.length - 1)
-              const Divider(
+              Divider(
                 height: 1,
                 indent: Sp.huge + Sp.sm,
                 endIndent: Sp.lg,
@@ -312,7 +312,7 @@ class _Row extends StatelessWidget {
                           Container(
                             width: 3,
                             height: 3,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: AppColors.textLow,
                               shape: BoxShape.circle,
                             ),
@@ -336,7 +336,7 @@ class _Row extends StatelessWidget {
                           Container(
                             width: 3,
                             height: 3,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: AppColors.textLow,
                               shape: BoxShape.circle,
                             ),
@@ -354,7 +354,7 @@ class _Row extends StatelessWidget {
                           Container(
                             width: 3,
                             height: 3,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: AppColors.textLow,
                               shape: BoxShape.circle,
                             ),

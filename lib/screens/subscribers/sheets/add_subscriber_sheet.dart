@@ -195,7 +195,7 @@ class _AddSheetState extends State<_AddSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -499,7 +499,7 @@ class _PackagePicker extends StatelessWidget {
             style: AppType.input(color: AppColors.textLow),
           ),
           isExpanded: true,
-          icon: const Icon(LucideIcons.chevronDown,
+          icon: Icon(LucideIcons.chevronDown,
               size: 16, color: AppColors.textMid),
           onChanged: enabled
               ? (v) {
@@ -605,7 +605,7 @@ class _ExpirationPicker extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(LucideIcons.calendar,
+              Icon(LucideIcons.calendar,
                   size: 16, color: AppColors.textMid),
               const SizedBox(width: 8),
               Expanded(
@@ -618,7 +618,7 @@ class _ExpirationPicker extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(LucideIcons.chevronDown,
+              Icon(LucideIcons.chevronDown,
                   size: 14, color: AppColors.textLow),
             ],
           ),
@@ -691,7 +691,7 @@ class _ManagerPicker extends StatelessWidget {
             style: AppType.input(color: AppColors.textLow),
           ),
           isExpanded: true,
-          icon: const Icon(LucideIcons.chevronDown,
+          icon: Icon(LucideIcons.chevronDown,
               size: 16, color: AppColors.textMid),
           onChanged: enabled
               ? (v) {

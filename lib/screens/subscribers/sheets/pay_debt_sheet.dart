@@ -191,7 +191,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -560,7 +560,7 @@ class _NotesField extends StatelessWidget {
         isDense: true,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        prefixIcon: const Padding(
+        prefixIcon: Padding(
           padding: EdgeInsets.only(left: 8, right: 4, bottom: 16),
           child:
               Icon(LucideIcons.fileText, size: 16, color: AppColors.textMid),

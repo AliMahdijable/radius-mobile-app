@@ -143,7 +143,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            const Icon(LucideIcons.signalLow, size: 14, color: AppColors.textLow),
+            Icon(LucideIcons.signalLow, size: 14, color: AppColors.textLow),
             const SizedBox(width: 6),
             Text(
               'لم يُتمكّن من الوصول للجهاز',
@@ -235,7 +235,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
         children: [
           Row(
             children: [
-              const Icon(LucideIcons.cable, size: 12, color: AppColors.textMid),
+              Icon(LucideIcons.cable, size: 12, color: AppColors.textMid),
               const SizedBox(width: 6),
               Text(
                 'المنافذ',
@@ -400,7 +400,7 @@ class _Card extends StatelessWidget {
               InkWell(
                 onTap: onConfig,
                 borderRadius: BorderRadius.circular(R.sm),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(4),
                   child: Icon(LucideIcons.settings,
                       size: 12, color: AppColors.textMid),
@@ -418,7 +418,7 @@ class _Card extends StatelessWidget {
                           height: 12,
                           child: CircularProgressIndicator(strokeWidth: 1.5),
                         )
-                      : const Icon(LucideIcons.refreshCw,
+                      : Icon(LucideIcons.refreshCw,
                           size: 12, color: AppColors.textMid),
                 ),
               ),

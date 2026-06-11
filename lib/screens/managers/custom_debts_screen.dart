@@ -111,7 +111,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,
@@ -256,7 +256,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.receiptText,
+          Icon(LucideIcons.receiptText,
               size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(

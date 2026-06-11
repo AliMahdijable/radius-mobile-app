@@ -200,7 +200,7 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -329,7 +329,7 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
                           horizontal: Sp.md),
                       child: Row(
                         children: [
-                          const Icon(LucideIcons.search,
+                          Icon(LucideIcons.search,
                               size: 16, color: AppColors.textMid),
                           const SizedBox(width: Sp.sm),
                           Expanded(

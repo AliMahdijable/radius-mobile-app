@@ -1051,7 +1051,7 @@ class _OperationsCard extends StatelessWidget {
           const SizedBox(height: 2),
           ClipRRect(
             borderRadius: BorderRadius.circular(R.pill),
-            child: const LinearProgressIndicator(
+            child: LinearProgressIndicator(
               minHeight: 2,
               color: AppColors.brand,
               backgroundColor: AppColors.border,
@@ -1247,7 +1247,7 @@ class _SectionCardState extends State<_SectionCard> {
                   AnimatedRotation(
                     turns: _expanded ? 0 : -0.25,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(
+                    child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       color: AppColors.textMid,
                       size: 22,

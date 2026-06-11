@@ -120,7 +120,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,
@@ -228,7 +228,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Row(
         children: [
-          const Icon(LucideIcons.search,
+          Icon(LucideIcons.search,
               color: AppColors.textMid, size: 18),
           const SizedBox(width: Sp.sm),
           Expanded(
@@ -270,7 +270,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.percent,
+          Icon(LucideIcons.percent,
               size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
@@ -386,7 +386,7 @@ class _DiscountTile extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(LucideIcons.clock,
+                    Icon(LucideIcons.clock,
                         size: 10, color: AppColors.textLow),
                     const SizedBox(width: 4),
                     Text(

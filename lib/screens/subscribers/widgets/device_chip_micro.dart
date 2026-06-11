@@ -282,7 +282,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
                     color: Color(0xFF7C3AED),
                   ),
                 )
-              : const Icon(LucideIcons.refreshCw,
+              : Icon(LucideIcons.refreshCw,
                   size: 14, color: AppColors.textMid),
         ),
       ),

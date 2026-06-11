@@ -89,7 +89,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -114,7 +114,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Icon(LucideIcons.activity,
+                      Icon(LucideIcons.activity,
                           size: 36, color: AppColors.textLow),
                       const SizedBox(height: 10),
                       Text(

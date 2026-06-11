@@ -173,7 +173,7 @@ class _ModuleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevronLeft,
+              Icon(LucideIcons.chevronLeft,
                   color: AppColors.textLow, size: 18),
             ],
           ),

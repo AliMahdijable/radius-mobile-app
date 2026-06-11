@@ -120,7 +120,7 @@ class _PickerSheetState extends State<_PickerSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -147,7 +147,7 @@ class _PickerSheetState extends State<_PickerSheet> {
                   decoration: InputDecoration(
                     hintText: 'ابحث بالاسم أو اليوزر أو الهاتف…',
                     hintStyle: AppType.input(color: AppColors.textLow),
-                    prefixIcon: const Icon(LucideIcons.search,
+                    prefixIcon: Icon(LucideIcons.search,
                         size: 16, color: AppColors.textMid),
                     suffixIcon: _query.isNotEmpty
                         ? IconButton(
@@ -169,7 +169,7 @@ class _PickerSheetState extends State<_PickerSheet> {
                   ),
                 ),
               ),
-              const Divider(height: 1, color: AppColors.border),
+              Divider(height: 1, color: AppColors.border),
               Expanded(child: _buildBody(controller)),
             ],
           ),
@@ -217,7 +217,7 @@ class _PickerSheetState extends State<_PickerSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(LucideIcons.searchX,
+              Icon(LucideIcons.searchX,
                   size: 36, color: AppColors.textLow),
               const SizedBox(height: Sp.sm),
               Text(
@@ -378,7 +378,7 @@ class _Row extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevronLeft,
+              Icon(LucideIcons.chevronLeft,
                   size: 16, color: AppColors.textLow),
             ],
           ),

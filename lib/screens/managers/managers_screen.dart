@@ -201,7 +201,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,
@@ -307,7 +307,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Row(
         children: [
-          const Icon(LucideIcons.search,
+          Icon(LucideIcons.search,
               color: AppColors.textMid, size: 18),
           const SizedBox(width: Sp.sm),
           Expanded(
@@ -424,7 +424,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.userX,
+          Icon(LucideIcons.userX,
               size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
@@ -537,7 +537,7 @@ class _ManagerTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Icon(LucideIcons.chevronLeft,
+                  Icon(LucideIcons.chevronLeft,
                       size: 16, color: AppColors.textLow),
                 ],
               ),

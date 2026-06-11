@@ -90,7 +90,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -108,7 +108,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
                 current: _typeFilter,
                 onChange: (v) => setState(() => _typeFilter = v),
               ),
-              const Divider(height: 1, color: AppColors.border),
+              Divider(height: 1, color: AppColors.border),
               Expanded(child: _buildBody(controller)),
             ],
           ),
@@ -157,7 +157,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(LucideIcons.inbox,
+              Icon(LucideIcons.inbox,
                   size: 40, color: AppColors.textLow),
               const SizedBox(height: Sp.sm),
               Text(
@@ -523,7 +523,7 @@ class _MovementTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(LucideIcons.user,
+                      Icon(LucideIcons.user,
                           size: 10, color: AppColors.textLow),
                       const SizedBox(width: 4),
                       Text(

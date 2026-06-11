@@ -118,7 +118,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -237,7 +237,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(LucideIcons.calendar,
+                              Icon(LucideIcons.calendar,
                                   size: 16, color: AppColors.textMid),
                               const SizedBox(width: 8),
                               Expanded(
@@ -247,7 +247,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                                       color: AppColors.textHi),
                                 ),
                               ),
-                              const Icon(LucideIcons.chevronDown,
+                              Icon(LucideIcons.chevronDown,
                                   size: 14, color: AppColors.textLow),
                             ],
                           ),

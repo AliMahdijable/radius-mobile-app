@@ -25,7 +25,7 @@ class _ConsumptionSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -182,7 +182,7 @@ class _ConsumptionSheet extends StatelessWidget {
                   label: const Text('إغلاق'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.textMid,
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide(color: AppColors.border),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(R.md),
                     ),

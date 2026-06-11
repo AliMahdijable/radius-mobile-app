@@ -385,11 +385,11 @@ class _FormCard extends StatelessWidget {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(R.md),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(R.md),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(R.md),

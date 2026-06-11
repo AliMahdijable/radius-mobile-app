@@ -246,7 +246,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -327,7 +327,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(LucideIcons.wallet,
+                          Icon(LucideIcons.wallet,
                               size: 16, color: AppColors.textMid),
                           const SizedBox(width: 8),
                           Text(

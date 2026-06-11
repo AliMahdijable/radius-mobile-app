@@ -345,7 +345,7 @@ class _NoActivitiesYet extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.inbox, color: AppColors.textLow, size: 32),
+          Icon(LucideIcons.inbox, color: AppColors.textLow, size: 32),
           const SizedBox(height: Sp.sm),
           Text('لا توجد نشاطات اليوم',
               style: AppType.label(color: AppColors.textMid)

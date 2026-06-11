@@ -1113,7 +1113,7 @@ class _SearchHeader extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: Sp.md),
             child: Row(
               children: [
-                const Icon(LucideIcons.search,
+                Icon(LucideIcons.search,
                     color: AppColors.textMid, size: 18),
                 const SizedBox(width: Sp.sm),
                 Expanded(
@@ -1278,7 +1278,7 @@ class _PageSizePicker extends StatelessWidget {
               style: AppType.muted(color: AppColors.textLow)
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
           const SizedBox(width: 2),
-          const Icon(LucideIcons.chevronDown,
+          Icon(LucideIcons.chevronDown,
               size: 11, color: AppColors.textLow),
         ],
       ),
@@ -1389,7 +1389,7 @@ class _ManagerFilterBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 4),
       child: Row(
         children: [
-          const Icon(LucideIcons.shield,
+          Icon(LucideIcons.shield,
               size: 14, color: AppColors.textMid),
           const SizedBox(width: 6),
           Expanded(
@@ -1684,7 +1684,7 @@ class _EmptyState extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
-        const Icon(LucideIcons.inbox,
+        Icon(LucideIcons.inbox,
             size: 40, color: AppColors.textLow),
         const SizedBox(height: Sp.sm),
         Text(

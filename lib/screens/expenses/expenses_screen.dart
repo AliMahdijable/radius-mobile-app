@@ -140,7 +140,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,
@@ -259,7 +259,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.calendar,
+                  Icon(LucideIcons.calendar,
                       size: 14, color: AppColors.textMid),
                   const SizedBox(width: 8),
                   Expanded(
@@ -272,7 +272,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                     ),
                   ),
-                  const Icon(LucideIcons.chevronDown,
+                  Icon(LucideIcons.chevronDown,
                       size: 14, color: AppColors.textMid),
                 ],
               ),
@@ -293,7 +293,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.receiptText,
+          Icon(LucideIcons.receiptText,
               size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
@@ -365,7 +365,7 @@ class _ExpenseTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        const Icon(LucideIcons.calendar,
+                        Icon(LucideIcons.calendar,
                             size: 11, color: AppColors.textLow),
                         const SizedBox(width: 3),
                         Text(

@@ -125,6 +125,23 @@ class AuthStorage {
   static Future<void> markPermissionsShown() =>
       _storage.write(key: _kPermsShown, value: '1');
 
-  /// Full logout — wipes everything including the auto-login preference.
-  static Future<void> clear() => _storage.deleteAll();
+  /// Full logout — wipes only the `auth.*` namespace. Preferences that
+  /// belong to other modules (theme mode, FCM toggles, etc.) live under
+  /// their own keys and must survive logout/login cycles. Using
+  /// `deleteAll()` here would reset the user's dark-mode choice every
+  /// time they signed out.
+  static Future<void> clear() async {
+    await Future.wait([
+      _storage.delete(key: _kToken),
+      _storage.delete(key: _kTokenExpiry),
+      _storage.delete(key: _kAdminId),
+      _storage.delete(key: _kAdminUsername),
+      _storage.delete(key: _kDisplayName),
+      _storage.delete(key: _kAutoLogin),
+      _storage.delete(key: _kPermsShown),
+      _storage.delete(key: _kIsSuperAdmin),
+      _storage.delete(key: _kCanAccessManagers),
+      _storage.delete(key: _kCanAccessPackages),
+    ]);
+  }
 }

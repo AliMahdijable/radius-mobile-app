@@ -214,7 +214,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -628,7 +628,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevronLeft,
+              Icon(LucideIcons.chevronLeft,
                   size: 16, color: AppColors.textLow),
             ],
           ),

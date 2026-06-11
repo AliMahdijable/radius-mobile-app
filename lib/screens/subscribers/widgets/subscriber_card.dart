@@ -149,7 +149,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                             _buildMetadata(),
                             if (_expanded && _hasFinance) ...[
                               const SizedBox(height: 10),
-                              const Divider(
+                              Divider(
                                 height: 1,
                                 color: AppColors.border,
                               ),
@@ -253,7 +253,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
             child: AnimatedRotation(
               turns: _expanded ? 0 : 0.5,
               duration: const Duration(milliseconds: 200),
-              child: const Icon(
+              child: Icon(
                 Icons.keyboard_arrow_up_rounded,
                 color: AppColors.textMid,
                 size: 22,
@@ -809,7 +809,7 @@ class _LiveSessionRow extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.timer,
+              Icon(LucideIcons.timer,
                   size: 12, color: AppColors.textMid),
               const SizedBox(width: 3),
               Text(

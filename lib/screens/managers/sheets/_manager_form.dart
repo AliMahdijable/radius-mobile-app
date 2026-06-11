@@ -180,7 +180,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -441,7 +441,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       ),
-      hint: const Text('افتراضي — أنا',
+      hint: Text('افتراضي — أنا',
           style: TextStyle(color: AppColors.textLow)),
       items: [
         const DropdownMenuItem<int?>(
@@ -501,7 +501,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       ),
-      hint: const Text('اختر مجموعة',
+      hint: Text('اختر مجموعة',
           style: TextStyle(color: AppColors.textLow)),
       items: [
         for (final g in _aclGroups)

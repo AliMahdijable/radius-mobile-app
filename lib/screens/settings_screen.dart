@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_storage.dart';
+import '../services/theme_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -167,11 +168,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: Sp.md),
             _SectionLabel('التطبيق'),
-            _Row(
-              icon: Icons.dark_mode_outlined,
-              label: 'المظهر',
-              trailing: 'نهاري',
-              onTap: () => _todo(context, 'تبديل المظهر — قيد التطوير'),
+            ValueListenableBuilder<ThemeMode>(
+              valueListenable: ThemeService.notifier,
+              builder: (_, mode, __) => _Row(
+                icon: mode == ThemeMode.dark
+                    ? Icons.dark_mode_rounded
+                    : mode == ThemeMode.light
+                        ? Icons.light_mode_rounded
+                        : Icons.brightness_auto_rounded,
+                label: 'المظهر',
+                trailing: ThemeService.labelFor(mode),
+                onTap: () => _openThemePicker(context),
+              ),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
@@ -315,6 +323,192 @@ void _todo(BuildContext ctx, String msg) {
   );
 }
 
+void _openThemePicker(BuildContext ctx) {
+  showModalBottomSheet<void>(
+    context: ctx,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: false,
+    builder: (_) => const _ThemePickerSheet(),
+  );
+}
+
+class _ThemePickerSheet extends StatelessWidget {
+  const _ThemePickerSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius:
+          const BorderRadius.vertical(top: Radius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+              Text(
+                'المظهر',
+                textAlign: TextAlign.center,
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'يحدد ألوان التطبيق — التلقائي يتبع إعدادات النظام.',
+                textAlign: TextAlign.center,
+                style: AppType.subtitle(color: AppColors.textMid)
+                    .copyWith(fontSize: 12, height: 1.5),
+              ),
+              const SizedBox(height: Sp.lg),
+              ValueListenableBuilder<ThemeMode>(
+                valueListenable: ThemeService.notifier,
+                builder: (_, current, __) => Column(
+                  children: [
+                    _ThemeOptionTile(
+                      icon: Icons.brightness_auto_rounded,
+                      label: 'تلقائي',
+                      subtitle: 'يتبع إعدادات النظام',
+                      selected: current == ThemeMode.system,
+                      onTap: () async {
+                        await ThemeService.setMode(ThemeMode.system);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                    ),
+                    const SizedBox(height: Sp.xs),
+                    _ThemeOptionTile(
+                      icon: Icons.light_mode_rounded,
+                      label: 'فاتح',
+                      subtitle: 'خلفية بيضاء + ألوان نهارية',
+                      selected: current == ThemeMode.light,
+                      onTap: () async {
+                        await ThemeService.setMode(ThemeMode.light);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                    ),
+                    const SizedBox(height: Sp.xs),
+                    _ThemeOptionTile(
+                      icon: Icons.dark_mode_rounded,
+                      label: 'داكن',
+                      subtitle: 'خلفية داكنة — مريح للعين ليلاً',
+                      selected: current == ThemeMode.dark,
+                      onTap: () async {
+                        await ThemeService.setMode(ThemeMode.dark);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeOptionTile extends StatelessWidget {
+  const _ThemeOptionTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? AppColors.brand.withValues(alpha: 0.10)
+          : AppColors.surfaceInput,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Sp.lg,
+            vertical: Sp.md,
+          ),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? AppColors.brand : Colors.transparent,
+              width: 1.4,
+            ),
+            borderRadius: BorderRadius.circular(R.md),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: (selected ? AppColors.brand : AppColors.textMid)
+                      .withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: selected ? AppColors.brand : AppColors.textMid,
+                ),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: AppType.label(color: AppColors.textHi)
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: AppType.muted(color: AppColors.textMid)
+                          .copyWith(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? AppColors.brand : AppColors.textLow,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Row extends StatelessWidget {
   const _Row({
     required this.icon,
@@ -357,7 +551,7 @@ class _Row extends StatelessWidget {
             const SizedBox(width: 6),
           ],
           if (onTap != null)
-            const Icon(Icons.chevron_left_rounded,
+            Icon(Icons.chevron_left_rounded,
                 color: AppColors.textLow, size: 20),
         ],
       ),

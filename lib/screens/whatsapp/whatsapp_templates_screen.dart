@@ -208,7 +208,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -334,7 +334,7 @@ class _TemplateTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevronLeft,
+              Icon(LucideIcons.chevronLeft,
                   size: 16, color: AppColors.textLow),
             ],
           ),
@@ -487,7 +487,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -583,7 +583,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                                       fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(width: 6),
-                            const Icon(LucideIcons.arrowLeftRight,
+                            Icon(LucideIcons.arrowLeftRight,
                                 size: 11, color: AppColors.textLow),
                           ],
                         ),

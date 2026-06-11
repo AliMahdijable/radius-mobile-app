@@ -140,7 +140,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -211,7 +211,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(LucideIcons.calendar,
+                              Icon(LucideIcons.calendar,
                                   size: 16, color: AppColors.textMid),
                               const SizedBox(width: 8),
                               Expanded(
@@ -221,7 +221,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                                       color: AppColors.textHi),
                                 ),
                               ),
-                              const Icon(LucideIcons.chevronDown,
+                              Icon(LucideIcons.chevronDown,
                                   size: 14, color: AppColors.textLow),
                             ],
                           ),
@@ -238,7 +238,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                         hintText: 'وصف الصرفية…',
                         hintStyle:
                             AppType.input(color: AppColors.textLow),
-                        prefixIcon: const Padding(
+                        prefixIcon: Padding(
                           padding: EdgeInsets.only(
                               left: 8, right: 4, bottom: 16),
                           child: Icon(LucideIcons.fileText,

@@ -159,7 +159,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -237,7 +237,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           padding: const EdgeInsets.symmetric(vertical: Sp.huge),
           child: Column(
             children: [
-              const Icon(LucideIcons.inbox,
+              Icon(LucideIcons.inbox,
                   color: AppColors.textLow, size: 32),
               const SizedBox(height: Sp.sm),
               Text('لا توجد باقات متاحة للتمديد',

@@ -105,7 +105,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
       expand: false,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
@@ -180,7 +180,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(LucideIcons.tag,
+                            Icon(LucideIcons.tag,
                                 size: 13, color: AppColors.textMid),
                             const SizedBox(width: 6),
                             Text(

@@ -213,7 +213,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
             ),
           ],
         ),
-        iconTheme: const IconThemeData(color: AppColors.textHi),
+        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
@@ -384,7 +384,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
         children: [
           Row(
             children: [
-              const Icon(LucideIcons.bookOpen,
+              Icon(LucideIcons.bookOpen,
                   size: 14, color: AppColors.textMid),
               const SizedBox(width: 6),
               Text(
@@ -413,7 +413,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
             width: 4,
             height: 4,
             margin: const EdgeInsets.only(top: 6),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.textMid,
               shape: BoxShape.circle,
             ),
@@ -467,7 +467,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         Sp.lg, Sp.md, Sp.lg, Sp.sm),
                     child: Row(
                       children: [
-                        const Icon(LucideIcons.userCog,
+                        Icon(LucideIcons.userCog,
                             size: 16, color: AppColors.textMid),
                         const SizedBox(width: 6),
                         Text(
@@ -577,7 +577,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.packageX,
+          Icon(LucideIcons.packageX,
               size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(

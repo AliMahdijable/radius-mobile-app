@@ -256,7 +256,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.search_rounded,
+                      Icon(Icons.search_rounded,
                           color: AppColors.textMid, size: 22),
                       const SizedBox(width: Sp.sm),
                       Expanded(
@@ -286,7 +286,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: AppColors.border),
+                Divider(height: 1, color: AppColors.border),
                 ConstrainedBox(
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(context).height * 0.5,
@@ -448,7 +448,7 @@ class _Results extends StatelessWidget {
             child: Center(
               child: Column(
                 children: [
-                  const Icon(LucideIcons.searchX,
+                  Icon(LucideIcons.searchX,
                       color: AppColors.textLow, size: 32),
                   const SizedBox(height: Sp.sm),
                   Text(
@@ -769,7 +769,7 @@ class _ResultRow extends StatelessWidget {
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          const Icon(LucideIcons.phone,
+                          Icon(LucideIcons.phone,
                               size: 10, color: AppColors.textLow),
                           const SizedBox(width: 4),
                           Text(
@@ -786,7 +786,7 @@ class _ResultRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevronLeft,
+              Icon(LucideIcons.chevronLeft,
                   color: AppColors.textLow, size: 16),
             ],
           ),

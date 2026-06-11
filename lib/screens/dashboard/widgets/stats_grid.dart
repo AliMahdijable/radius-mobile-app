@@ -127,7 +127,7 @@ class _DebtCard extends StatelessWidget {
                 const SizedBox(height: 7),
                 Row(
                   children: [
-                    const Icon(LucideIcons.users,
+                    Icon(LucideIcons.users,
                         color: AppColors.textMid, size: 12),
                     const SizedBox(width: 4),
                     Text(
