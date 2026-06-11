@@ -7,7 +7,6 @@ import '../services/theme_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
-import 'admin_permissions_screen.dart';
 import 'app_permissions_screen.dart';
 import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
@@ -128,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: AppType.title(color: AppColors.textHi)
                         .copyWith(fontSize: 22)),
               ),
-            _IdentityCard(name: _name, id: _id),
+            _IdentityCard(name: _name),
             const SizedBox(height: Sp.lg),
             // مطلب 2026-06-10: شاشة الإعدادات تضم أقسام: واتساب +
             // قوالبه، طباعة + قوالبها، المظهر، البصمة، الصلاحيات،
@@ -205,16 +204,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: Sp.xs),
             _Row(
-              icon: Icons.shield_outlined,
-              label: 'صلاحيات الادمن',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const AdminPermissionsScreen(),
-                ),
-              ),
-            ),
-            const SizedBox(height: Sp.xs),
-            _Row(
               icon: Icons.notifications_none_rounded,
               label: 'الإشعارات وأوقات السكون',
               onTap: () => Navigator.of(context).push(
@@ -228,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.info_outline_rounded,
               label: 'الإصدار',
-              trailing: 'v2.0.0 (87)',
+              trailing: 'V2.0.0',
             ),
             const SizedBox(height: Sp.huge),
             SizedBox(
@@ -257,9 +246,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _IdentityCard extends StatelessWidget {
-  const _IdentityCard({required this.name, required this.id});
+  const _IdentityCard({required this.name});
   final String name;
-  final String id;
 
   @override
   Widget build(BuildContext context) {
@@ -296,12 +284,6 @@ class _IdentityCard extends StatelessWidget {
                   name.isEmpty ? 'مستخدم' : name,
                   style: AppType.title(color: AppColors.textHi)
                       .copyWith(fontSize: 16),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  id.isEmpty ? '—' : 'ID: $id',
-                  style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 12),
                 ),
               ],
             ),

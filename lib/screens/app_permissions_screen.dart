@@ -9,11 +9,9 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
 /// شاشة "صلاحيات التطبيق" — تجمع الأذونات الخاصة بالتطبيق نفسه:
-///   • إشعارات النظام (FCM push) — حالة الـOS + زر طلب أو فتح الإعدادات
-///   • القفل بالبصمة / Face ID — toggle محفوظ
-///
-/// لا علاقة لها بـ"صلاحيات الادمن" (دور super_admin، managers.*، إلخ) —
-/// تلك شاشة منفصلة (AdminPermissionsScreen).
+///   • إشعارات النظام (FCM push) — toggle يطلب OS permission أو يفتح
+///     الإعدادات لو محظور.
+///   • القفل بالبصمة / Face ID — toggle محفوظ في secure storage.
 class AppPermissionsScreen extends StatefulWidget {
   const AppPermissionsScreen({super.key});
 
@@ -191,16 +189,16 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
                   Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
                 _SectionLabel('الإشعارات'),
-                _PermCard(
+                _BioCard(
                   icon: LucideIcons.bell,
                   label: 'إشعارات النظام',
                   sub: _notifAuthorized
-                      ? 'الإشعارات مفعّلة — تصلك كل التنبيهات'
-                      : 'الإشعارات معطّلة — لن تصلك تنبيهات الفوريّة',
-                  granted: _notifAuthorized,
+                      ? 'مفعّلة — تصلك كل التنبيهات'
+                      : 'معطّلة — لن تصلك تنبيهات فوريّة',
+                  enabled: _notifAuthorized,
+                  canAuth: !_notifBusy,
                   busy: _notifBusy,
-                  switchLabel: _notifAuthorized ? 'فتح الإعدادات' : 'تفعيل',
-                  onAction: _toggleNotif,
+                  onChanged: (_) => _toggleNotif(),
                 ),
                 const SizedBox(height: Sp.md),
                 _SectionLabel('القفل'),

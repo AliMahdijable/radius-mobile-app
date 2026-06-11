@@ -105,33 +105,39 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       return;
     }
     setState(() => _saving = true);
-    final r = _isEdit
-        ? await EmployeesApi.update(
-            id: widget.employee!.id,
-            fullName: _fullNameCtrl.text.trim(),
-            phone: _phoneCtrl.text.trim(),
-            password: _passCtrl.text.isEmpty ? null : _passCtrl.text,
-            isActive: _isActive,
-            permissions: _perms,
-          )
-        : await EmployeesApi.create(
-            username: username,
-            password: _passCtrl.text,
-            fullName: _fullNameCtrl.text.trim().isEmpty
-                ? null
-                : _fullNameCtrl.text.trim(),
-            phone: _phoneCtrl.text.trim().isEmpty
-                ? null
-                : _phoneCtrl.text.trim(),
-            isActive: _isActive,
-            permissions: _perms,
-          );
+    // مطلب 2026-06-11: الـrecords في Dart لا تُكسر cast عبر dynamic،
+    // فنحلّ كل فرع بنفسه ونستخرج ok/message محلياً.
+    bool ok;
+    String? message;
+    if (_isEdit) {
+      final r = await EmployeesApi.update(
+        id: widget.employee!.id,
+        fullName: _fullNameCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+        password: _passCtrl.text.isEmpty ? null : _passCtrl.text,
+        isActive: _isActive,
+        permissions: _perms,
+      );
+      ok = r.ok;
+      message = r.message;
+    } else {
+      final r = await EmployeesApi.create(
+        username: username,
+        password: _passCtrl.text,
+        fullName: _fullNameCtrl.text.trim().isEmpty
+            ? null
+            : _fullNameCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim().isEmpty
+            ? null
+            : _phoneCtrl.text.trim(),
+        isActive: _isActive,
+        permissions: _perms,
+      );
+      ok = r.ok;
+      message = r.message;
+    }
     if (!mounted) return;
     setState(() => _saving = false);
-    // Both signatures share .ok and .message — local typing on r as
-    // ({bool ok, String? message, ...}).
-    final ok = (r as dynamic).ok as bool;
-    final message = (r as dynamic).message as String?;
     if (ok) {
       _snack(_isEdit ? 'تم حفظ التعديلات' : 'تم إنشاء الموظف');
       Navigator.of(context).pop(true);
@@ -282,32 +288,31 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       children: [
         _field(
           ctrl: _userCtrl,
-          label: 'اسم المستخدم *',
+          hint: _isEdit
+              ? _userCtrl.text
+              : 'اسم المستخدم — يستعمله الموظف للدخول',
           icon: LucideIcons.atSign,
           enabled: !_isEdit, // username غير قابل للتعديل بعد الإنشاء
-          hint: 'يستعمله الموظف لتسجيل الدخول',
         ),
         const SizedBox(height: Sp.md),
         _field(
           ctrl: _passCtrl,
-          label: _isEdit ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور *',
+          hint: _isEdit
+              ? 'كلمة مرور جديدة (اتركها فارغة لإبقائها)'
+              : 'كلمة المرور (4 أحرف على الأقل)',
           icon: LucideIcons.key,
           obscure: true,
-          hint: _isEdit
-              ? 'اتركها فارغة لإبقاء الكلمة الحالية'
-              : 'لا تقل عن 4 أحرف',
         ),
         const SizedBox(height: Sp.md),
         _field(
           ctrl: _fullNameCtrl,
-          label: 'الاسم الكامل',
+          hint: 'الاسم الكامل',
           icon: LucideIcons.user,
-          hint: 'للعرض في القائمة + الفواتير',
         ),
         const SizedBox(height: Sp.md),
         _field(
           ctrl: _phoneCtrl,
-          label: 'الهاتف',
+          hint: 'الهاتف',
           icon: LucideIcons.phone,
           keyboard: TextInputType.phone,
           formatters: [FilteringTextInputFormatter.digitsOnly],
@@ -467,9 +472,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
 
   Widget _field({
     required TextEditingController ctrl,
-    required String label,
+    required String hint,
     required IconData icon,
-    String? hint,
     bool obscure = false,
     bool enabled = true,
     TextInputType? keyboard,
@@ -483,11 +487,16 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       inputFormatters: formatters,
       style: AppType.input(color: AppColors.textHi),
       decoration: InputDecoration(
-        labelText: label,
+        // مطلب 2026-06-11: hint فقط، لا label عائم. التصميم أنظف
+        // والـplaceholder يختفي تلقائياً لما تكتب.
         hintText: hint,
+        hintStyle: AppType.input(color: AppColors.textLow),
         prefixIcon: Icon(icon, size: 16),
         filled: true,
         fillColor: AppColors.surface,
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
           borderSide: BorderSide(
