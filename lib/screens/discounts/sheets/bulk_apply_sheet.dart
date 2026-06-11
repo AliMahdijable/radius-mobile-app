@@ -404,7 +404,12 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
-                              childAspectRatio: 2.4,
+                              // 2.4 كانت تقصّ السطر الرابع (badge
+                              // الخصم الموجود) لما الكارت يحتوي على
+                              // اسم + fullName + باقة + badge. خفّض
+                              // إلى 2.1 يعطي مساحة كافية للسطور
+                              // الأربعة بدون overflow.
+                              childAspectRatio: 2.1,
                               crossAxisSpacing: 6,
                               mainAxisSpacing: 6,
                             ),
@@ -598,7 +603,9 @@ class _SubscriberCard extends StatelessWidget {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+            // start (مو center) — يمنع overflow عند ازدحام السطور.
+            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
