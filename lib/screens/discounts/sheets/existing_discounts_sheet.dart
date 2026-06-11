@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/discounts_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -63,20 +65,31 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    // الخصومات + قائمة المشتركين بالتوازي. الـcache يخدم القائمة
-    // (45s TTL) فلا نضرب SAS4 إذا الـscreen الأم فتحت قبل قليل.
-    final results = await Future.wait([
-      DiscountsApi.list(),
-      SubscribersApi.loadAll(),
-    ]);
-    if (!mounted) return;
-    final rows = results[0] as List<Discount>;
-    final subs = results[1] as List<dynamic>?; // List<Subscriber>?
+    // الخصومات + قائمة المشتركين بالتوازي. لو الأسماء فشلت لأي سبب
+    // (شبكة، token منتهٍ) ما نمنع الـlist من العرض — يطلع username
+    // فقط. كل call في try/catch منفصل.
+    List<Discount> rows = const [];
+    List<Subscriber>? subs;
+    try {
+      final results = await Future.wait([
+        DiscountsApi.list(),
+        SubscribersApi.loadAll(),
+      ]);
+      if (!mounted) return;
+      // Future.wait returns List<Object?> — index explicitly + cast each.
+      final r0 = results[0];
+      final r1 = results[1];
+      rows = r0 is List<Discount> ? r0 : const [];
+      subs = r1 is List<Subscriber> ? r1 : null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('🔴 existing_discounts load: $e');
+      if (!mounted) return;
+    }
     final map = <String, String>{};
     if (subs != null) {
       for (final s in subs) {
-        final un = (s.username as String).toLowerCase();
-        final fn = (s.fullName as String).trim();
+        final un = s.username.toLowerCase();
+        final fn = s.fullName.trim();
         if (fn.isNotEmpty && fn != s.username) map[un] = fn;
       }
     }
