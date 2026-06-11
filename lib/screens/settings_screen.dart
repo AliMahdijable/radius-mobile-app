@@ -7,8 +7,11 @@ import '../services/theme_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'admin_permissions_screen.dart';
+import 'biometric_settings_screen.dart';
 import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
+import 'notifications_settings_screen.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
 
@@ -194,25 +197,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.fingerprint_rounded,
               label: 'البصمة / Face ID',
-              onTap: () => _todo(context, 'البصمة — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const BiometricSettingsScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.shield_outlined,
               label: 'الصلاحيات',
-              onTap: () => _todo(context, 'الصلاحيات — قيد التطوير'),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AdminPermissionsScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.notifications_none_rounded,
-              label: 'الإشعارات',
-              onTap: () => _todo(context, 'الإشعارات — قيد التطوير'),
-            ),
-            const SizedBox(height: Sp.xs),
-            _Row(
-              icon: Icons.bedtime_outlined,
-              label: 'أوقات السكون',
-              onTap: () => _todo(context, 'أوقات السكون — قيد التطوير'),
+              label: 'الإشعارات وأوقات السكون',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const NotificationsSettingsScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.md),
             _SectionLabel('عن التطبيق'),

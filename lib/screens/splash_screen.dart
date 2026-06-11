@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
+import '../services/biometric_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -68,6 +69,17 @@ class _SplashScreenState extends State<SplashScreen> {
       // first dashboard call would fail and the auth interceptor would
       // catch the 401, which works but causes a visible loading flash.
       await _refreshIfExpired();
+      // مطلب 2026-06-11: لو الـadmin فعّل البصمة من الإعدادات،
+      // نطلبها قبل الدخول. لو فشل → نرجع لشاشة login.
+      final passed = await BiometricService.guard();
+      if (!mounted) return;
+      if (!passed) {
+        next = const LoginScreen();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => next),
+        );
+        return;
+      }
       next = const MainShell();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered. Send
