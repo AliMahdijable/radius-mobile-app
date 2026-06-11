@@ -8,21 +8,25 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
-/// شاشة سجل الحركات المالية على المدير الفرعي. مطابق v1
-/// manager_movements_screen — قائمة مرتّبة زمنياً بالنوع + المبلغ
-/// + الملاحظة + الفاعل + إجراء حذف.
+/// Unified manager movements timeline — مطابق v1
+/// mobile-app/lib/screens/managers/manager_movements_screen.dart.
+///
+/// The backend stitches three row types into one descending feed:
+/// `balance` (deposits, withdraws, points, sas pay-debt), `debt_created`
+/// (parent recorded a new custom debt), `debt_payment` (any payment
+/// against a custom debt). Each row is editable / deletable depending
+/// on its type.
 class ManagerMovementsScreen extends StatefulWidget {
   const ManagerMovementsScreen({super.key, required this.manager});
   final Manager manager;
 
   @override
-  State<ManagerMovementsScreen> createState() =>
-      _ManagerMovementsScreenState();
+  State<ManagerMovementsScreen> createState() => _ManagerMovementsScreenState();
 }
 
 class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
-  List<ManagerMovement> _rows = const [];
   bool _loading = true;
+  List<ManagerMovement> _rows = const [];
 
   @override
   void initState() {
@@ -32,7 +36,8 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await ManagerMovementsApi.list(widget.manager.id);
+    final list =
+        await ManagerMovementsApi.list(targetAdminId: widget.manager.id);
     if (!mounted) return;
     setState(() {
       _rows = list;
@@ -40,22 +45,87 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
     });
   }
 
+  Future<void> _editBalance(ManagerMovement m) async {
+    final noteCtrl = TextEditingController(text: m.note ?? '');
+    final amountCtrl = TextEditingController(
+      text: m.amount > 0 ? m.amount.toInt().toString() : '',
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('تعديل ${m.arabicLabel}',
+            style: AppType.title(color: AppColors.textHi)
+                .copyWith(fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'المبلغ',
+                helperText: 'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
+                helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: Sp.sm),
+            TextField(
+              controller: noteCtrl,
+              decoration: const InputDecoration(labelText: 'الملاحظة'),
+              minLines: 1,
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true || !mounted) return;
+    final newAmt =
+        num.tryParse(amountCtrl.text.replaceAll(',', '').trim()) ?? m.amount;
+    final r = await ManagerMovementsApi.update(
+      id: m.id,
+      note: noteCtrl.text.trim(),
+      amount: newAmt == m.amount ? null : newAmt,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(r.ok ? 'تم التعديل' : (r.message ?? 'تعذّر التعديل')),
+        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
+      ),
+    );
+    if (r.ok) _load();
+  }
+
   Future<void> _confirmDelete(ManagerMovement m) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف الحركة'),
+        backgroundColor: AppColors.surface,
+        title: const Text('حذف من السجل'),
         content: Text(
-          'حذف ${m.kind.label} (${formatIQD(m.amount)} د.ع) من السجل؟ '
-          'هذا لا يعكس العملية في SAS4 — فقط حذف من سجل التطبيق.',
+          'حذف ${m.arabicLabel} بقيمة ${formatIQD(m.amount)} د.ع؟\n\n'
+          'هذا يحذف القيد من سجل التطبيق فقط — لا يُعيد المبلغ على SAS4. '
+          'استعمل عملية معاكسة (إيداع/سحب) لتصحيح الرصيد الفعلي.',
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('إلغاء')),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('حذف'),
           ),
@@ -65,220 +135,227 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
     if (ok != true || !mounted) return;
     final r = await ManagerMovementsApi.delete(m.id);
     if (!mounted) return;
+    if (r.ok) _load();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف')),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) _load();
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF14B8A6);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.bg,
+        foregroundColor: AppColors.textHi,
         elevation: 0,
         scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: IconThemeData(color: AppColors.textHi),
         title: Text(
           'حركات ${widget.manager.username}',
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: accent,
-          child: ListView(
-            padding:
-                const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-            children: [
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_rows.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(Sp.huge),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(R.lg),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(LucideIcons.activity,
-                          size: 36, color: AppColors.textLow),
-                      const SizedBox(height: 10),
-                      Text(
-                        'لا توجد حركات مسجَّلة',
-                        style: AppType.muted(color: AppColors.textHi)
-                            .copyWith(fontSize: 13),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _rows.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(Sp.huge),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.activity,
+                              size: 36, color: AppColors.textLow),
+                          const SizedBox(height: 10),
+                          Text(
+                            'لا توجد حركات بعد',
+                            style: AppType.label(color: AppColors.textMid),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(Sp.lg),
+                    itemCount: _rows.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) => _MovementCard(
+                      movement: _rows[i],
+                      onEdit: _rows[i].rowType == 'balance'
+                          ? () => _editBalance(_rows[i])
+                          : null,
+                      onDelete: () => _confirmDelete(_rows[i]),
+                    ),
                   ),
-                )
-              else
-                Column(
-                  children: [
-                    for (final m in _rows) ...[
-                      _MovementTile(
-                        movement: m,
-                        onDelete: () => _confirmDelete(m),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                ),
-            ],
-          ),
-        ),
       ),
     );
   }
 }
 
-class _MovementTile extends StatelessWidget {
-  const _MovementTile({required this.movement, required this.onDelete});
+class _MovementCard extends StatelessWidget {
+  const _MovementCard({
+    required this.movement,
+    required this.onDelete,
+    this.onEdit,
+  });
   final ManagerMovement movement;
   final VoidCallback onDelete;
+  final VoidCallback? onEdit;
 
-  Color get _color {
-    switch (movement.kind) {
-      case MovementKind.depositCash:
-      case MovementKind.debtPayment:
-        return AppColors.brand;
-      case MovementKind.withdraw:
-      case MovementKind.sasPayDebt:
-        return const Color(0xFFE08F2D);
-      case MovementKind.depositLoan:
-      case MovementKind.debtCreated:
-        return AppColors.error;
-      case MovementKind.addPoints:
-        return const Color(0xFF8B5CF6);
-      case MovementKind.unknown:
-        return AppColors.textMid;
+  ({IconData icon, Color color}) get _style {
+    if (movement.rowType == 'debt_created') {
+      return (icon: LucideIcons.receipt, color: const Color(0xFF0EA5E9));
     }
-  }
-
-  IconData get _icon {
-    switch (movement.kind) {
-      case MovementKind.depositCash:
-        return LucideIcons.arrowUpToLine;
-      case MovementKind.depositLoan:
-        return LucideIcons.handCoins;
-      case MovementKind.withdraw:
-        return LucideIcons.arrowDownToLine;
-      case MovementKind.sasPayDebt:
-        return LucideIcons.banknote;
-      case MovementKind.addPoints:
-        return LucideIcons.star;
-      case MovementKind.debtCreated:
-        return LucideIcons.receipt;
-      case MovementKind.debtPayment:
-        return LucideIcons.check;
-      case MovementKind.unknown:
-        return LucideIcons.activity;
+    if (movement.rowType == 'debt_payment') {
+      return (icon: LucideIcons.banknote, color: const Color(0xFF0EA5E9));
     }
-  }
-
-  String _humanDate() {
-    final iso = movement.createdAt;
-    if (iso == null || iso.isEmpty) return '';
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return iso;
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${dt.year}/${two(dt.month)}/${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+    switch (movement.subKind) {
+      case 'deposit_cash':
+        return (icon: LucideIcons.plus, color: const Color(0xFF14B8A6));
+      case 'deposit_loan':
+        return (icon: LucideIcons.plus, color: const Color(0xFFE08F2D));
+      case 'withdraw':
+        return (icon: LucideIcons.circleMinus, color: AppColors.error);
+      case 'points':
+        return (icon: LucideIcons.star, color: const Color(0xFF8B5CF6));
+      case 'sas_pay_debt':
+        return (icon: LucideIcons.banknote, color: const Color(0xFFE08F2D));
+      default:
+        return (icon: LucideIcons.activity, color: AppColors.textMid);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final style = _style;
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
+      padding: const EdgeInsets.symmetric(
+          horizontal: Sp.md, vertical: Sp.md),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: _color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.md),
+              color: style.color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Icon(_icon, size: 16, color: _color),
+            child: Icon(style.icon, color: style.color, size: 18),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: Sp.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text(
-                      movement.kind.label,
-                      style: AppType.title(color: AppColors.textHi)
-                          .copyWith(fontSize: 13),
+                    Expanded(
+                      child: Text(
+                        movement.arabicLabel,
+                        style: AppType.label(color: AppColors.textHi)
+                            .copyWith(fontWeight: FontWeight.w800),
+                      ),
                     ),
-                    const Spacer(),
                     Text(
-                      '${movement.isCredit ? '+' : '-'}${formatIQD(movement.amount)}',
-                      style: AppType.label(color: _color)
-                          .copyWith(
-                              fontSize: 14, fontWeight: FontWeight.w800),
+                      '${movement.signLabel}${formatIQD(movement.amount)}',
+                      style: TextStyle(
+                        color: style.color,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 2),
-                if (_humanDate().isNotEmpty)
-                  Text(
-                    _humanDate(),
-                    style: AppType.muted().copyWith(fontSize: 10.5),
-                  ),
+                Text(
+                  _fmtTime(movement.eventAt),
+                  style: AppType.muted(color: AppColors.textLow)
+                      .copyWith(fontSize: 11),
+                ),
                 if ((movement.note ?? '').trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     movement.note!.trim(),
                     style: AppType.muted(color: AppColors.textMid)
-                        .copyWith(fontSize: 11, height: 1.4),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                        .copyWith(fontSize: 12),
                   ),
                 ],
+                if (movement.source != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceInput,
+                        borderRadius: BorderRadius.circular(R.sm),
+                      ),
+                      child: Text(
+                        movement.source == MovementSource.sas4
+                            ? 'الساس'
+                            : 'يدوي',
+                        style: AppType.muted(color: AppColors.textMid)
+                            .copyWith(fontSize: 10),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
-          const SizedBox(width: 4),
-          InkResponse(
-            onTap: onDelete,
-            radius: 18,
-            child: Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
+          PopupMenuButton<String>(
+            icon: Icon(LucideIcons.ellipsisVertical,
+                size: 16, color: AppColors.textMid),
+            onSelected: (v) {
+              if (v == 'edit' && onEdit != null) onEdit!();
+              if (v == 'delete') onDelete();
+            },
+            itemBuilder: (_) => [
+              if (onEdit != null)
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(children: [
+                    Icon(LucideIcons.pencil, size: 14),
+                    SizedBox(width: 6),
+                    Text('تعديل'),
+                  ]),
+                ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(children: [
+                  Icon(LucideIcons.trash2, size: 14),
+                  SizedBox(width: 6),
+                  Text('حذف من السجل'),
+                ]),
               ),
-              child: const Icon(LucideIcons.trash2,
-                  size: 13, color: AppColors.error),
-            ),
+            ],
           ),
         ],
       ),
     );
   }
+}
+
+/// Baghdad-time DateTime → "yyyy-MM-dd HH:mm". The API already added
+/// +3h so the value lands on the correct civil time; we just need to
+/// strip the timezone marker and format.
+String _fmtTime(DateTime t) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
 }

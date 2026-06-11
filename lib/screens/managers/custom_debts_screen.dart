@@ -38,7 +38,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final debts =
-        await ManagerDebtsApi.listForManager(widget.manager.id);
+        await ManagerDebtsApi.list(debtorAdminId: widget.manager.id);
     if (!mounted) return;
     setState(() {
       _debts = debts;
@@ -342,11 +342,9 @@ class _DebtTile extends StatelessWidget {
                           style: AppType.title(color: AppColors.textHi)
                               .copyWith(fontSize: 14),
                         ),
-                        if ((debt.debtDate ?? '').isNotEmpty)
+                        if (true)
                           Text(
-                            (debt.debtDate ?? '').length >= 10
-                                ? debt.debtDate!.substring(0, 10)
-                                : debt.debtDate!,
+                            _fmtIsoDate(debt.debtDate),
                             style: AppType.muted().copyWith(fontSize: 11),
                           ),
                       ],
@@ -413,3 +411,9 @@ class _DebtTile extends StatelessWidget {
     );
   }
 }
+
+/// "yyyy-MM-dd" — used in the debt list to render `debt_date` next
+/// to each row. ManagerDebt now exposes a DateTime (non-null), so we
+/// no longer parse strings here.
+String _fmtIsoDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

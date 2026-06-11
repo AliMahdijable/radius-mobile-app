@@ -12,7 +12,7 @@ import 'sheets/add_manager_sheet.dart';
 import 'sheets/balance_op_sheet.dart';
 import 'sheets/edit_manager_sheet.dart';
 import 'sheets/manager_actions_sheet.dart';
-import 'sheets/sas_pay_debt_sheet.dart';
+import 'sheets/pay_debt_sheet.dart';
 import 'sheets/send_info_sheet.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
@@ -125,7 +125,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       case ManagerAction.addPoints:
         await _openBalanceOp(m, preselected: BalanceOpKind.addPoints);
       case ManagerAction.payDebt:
-        final ok = await showSasPayDebtSheet(context, m);
+        final ok = await showPayDebtSheet(context, m);
         if (ok == true) _load();
       case ManagerAction.otherDebts:
         await Navigator.of(context).push(
@@ -469,7 +469,7 @@ class _ManagerTile extends StatelessWidget {
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(R.lg),
             border: Border.all(
-              color: manager.enabled
+              color: manager.isActive
                   ? AppColors.border
                   : AppColors.error.withValues(alpha: 0.3),
             ),
@@ -502,7 +502,7 @@ class _ManagerTile extends StatelessWidget {
                           width: 11,
                           height: 11,
                           decoration: BoxDecoration(
-                            color: manager.enabled
+                            color: manager.isActive
                                 ? AppColors.brand
                                 : AppColors.error,
                             shape: BoxShape.circle,
@@ -551,18 +551,18 @@ class _ManagerTile extends StatelessWidget {
                   runSpacing: 5,
                   children: [
                     _badge(
-                      icon: manager.enabled
+                      icon: manager.isActive
                           ? LucideIcons.circleCheck
                           : LucideIcons.circleX,
-                      label: manager.enabled ? 'مفعّل' : 'معطّل',
-                      color: manager.enabled
+                      label: manager.isActive ? 'مفعّل' : 'معطّل',
+                      color: manager.isActive
                           ? AppColors.brand
                           : AppColors.error,
                     ),
-                    if ((manager.aclGroupName ?? '').isNotEmpty)
+                    if ((manager.aclName ?? '').isNotEmpty)
                       _badge(
                         icon: LucideIcons.shieldCheck,
-                        label: manager.aclGroupName!,
+                        label: manager.aclName!,
                         color: const Color(0xFF3B82F6),
                       ),
                     if ((manager.mobile ?? '').isNotEmpty)
@@ -624,7 +624,7 @@ class _ManagerTile extends StatelessWidget {
   }
 
   bool get _hasInfoBadges =>
-      (manager.aclGroupName ?? '').isNotEmpty ||
+      (manager.aclName ?? '').isNotEmpty ||
       (manager.mobile ?? '').isNotEmpty ||
       (manager.company ?? '').isNotEmpty;
 

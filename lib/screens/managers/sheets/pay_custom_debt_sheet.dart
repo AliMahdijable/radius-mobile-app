@@ -51,7 +51,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   }
 
   Future<void> _loadPayments() async {
-    final list = await ManagerDebtsApi.listPayments(widget.debt.id);
+    final list = await ManagerDebtsApi.payments(widget.debt.id);
     if (!mounted) return;
     setState(() {
       _payments = list;
@@ -94,7 +94,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   }
 
   num get _remaining {
-    final paid = _payments.fold<num>(0, (a, p) => a + p.amount);
+    final paid = _payments.fold<num>(0, (a, p) => a + p.amountPaid);
     final r = widget.debt.amount - paid;
     return r < 0 ? 0 : r;
   }
@@ -124,15 +124,15 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     }
     setState(() => _submitting = true);
     final r = await ManagerDebtsApi.addPayment(
-      debtId: widget.debt.id,
-      amount: _amount,
+        debtId: widget.debt.id,
+        amountPaid: _amount,
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     );
     if (!mounted) return;
     setState(() => _submitting = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok ? 'تم التسديد' : (r.message ?? 'تعذّر التسديد')),
+        content: Text(r.ok ? 'تم التسديد' : (r.errorMessage ?? 'تعذّر التسديد')),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -151,7 +151,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('حذف التسديد'),
-        content: Text('حذف تسديد ${formatIQD(p.amount)} د.ع؟'),
+        content: Text('حذف تسديد ${formatIQD(p.amountPaid)} د.ع؟'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -454,17 +454,15 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${formatIQD(p.amount)} د.ع',
+                        '${formatIQD(p.amountPaid)} د.ع',
                         style: AppType.label(color: AppColors.brand)
                             .copyWith(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800),
                       ),
-                      if ((p.paymentDate ?? '').isNotEmpty)
+                      if (true)
                         Text(
-                          (p.paymentDate ?? '').length >= 10
-                              ? p.paymentDate!.substring(0, 10)
-                              : p.paymentDate!,
+                          _fmtIsoDate(p.paymentDate),
                           style:
                               AppType.muted().copyWith(fontSize: 10.5),
                         ),
@@ -525,3 +523,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         suffixText: suffix,
       );
 }
+
+/// "yyyy-MM-dd" — used in the payment-history list to render the
+/// payment date next to the amount.
+String _fmtIsoDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

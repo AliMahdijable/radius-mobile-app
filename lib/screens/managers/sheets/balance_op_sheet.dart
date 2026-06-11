@@ -135,7 +135,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       case _BalanceOp.withdraw:
         r = await ManagersApi.withdraw(id: id, amount: _amount, note: note);
       case _BalanceOp.addPoints:
-        r = await ManagersApi.addPoints(id: id, amount: _amount, note: note);
+        r = await ManagersApi.addPoints(id: id, points: _amount, note: note);
     }
     if (!mounted) return;
     if (!r.ok) {

@@ -35,9 +35,9 @@ class _EditManagerSheet extends StatelessWidget {
         lastname: manager.lastname,
         mobile: manager.mobile,
         email: manager.email,
-        aclGroupId: manager.aclGroupId,
+        aclGroupId: manager.aclId,
         parentId: manager.parentId,
-        enabled: manager.enabled,
+        enabled: manager.isActive,
       ),
       onSubmit: (data) async {
         final r = await ManagersApi.update(

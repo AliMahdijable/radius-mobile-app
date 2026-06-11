@@ -91,7 +91,6 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
       amount: _amount,
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       debtDate: dateStr,
-      phone: widget.manager.mobile,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
