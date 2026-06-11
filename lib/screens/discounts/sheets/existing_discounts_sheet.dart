@@ -65,42 +65,40 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    // مطلب 2026-06-11: لا Future.wait — السحب الموازي بدونه ممكن
-    // عبر إطلاق الـfutures منفصلة. تجنّبنا الـList<Object?> cast
-    // الذي أرجع 0 خصومات في بعض الـbuilds رغم وجود البيانات في
-    // الـscreen الأم. الآن النوع الـstatic = الـruntime، صفر مفاجآت.
-    final discountsFuture = DiscountsApi.list();
-    final subsFuture = SubscribersApi.loadAll();
-    List<Discount> rows = const [];
-    List<Subscriber>? subs;
-    try {
-      rows = await discountsFuture;
-    } catch (e) {
-      if (kDebugMode) debugPrint('🔴 existing_discounts (discounts): $e');
-    }
-    try {
-      subs = await subsFuture;
-    } catch (e) {
-      if (kDebugMode) debugPrint('🔴 existing_discounts (subs): $e');
-    }
+    // مطلب 2026-06-11: الخصومات تظهر فوراً (الأهم)، ثم نزيّنها
+    // بالاسم العربي على ركضة ثانية fire-and-forget. كان جلب
+    // الـsubs بالتوازي يُسبّب فشلاً لجلب الخصومات في بعض
+    // الـbuilds (user reported: "كان يشتغل قبل ما تظهر الاسم").
+    final rows = await DiscountsApi.list();
     if (!mounted) return;
     if (kDebugMode) {
-      debugPrint('🟢 existing_discounts loaded: ${rows.length} discounts, '
-          '${subs?.length ?? 0} subs');
+      debugPrint('🟢 existing_discounts (discounts only): ${rows.length}');
     }
-    final map = <String, String>{};
-    if (subs != null) {
+    setState(() {
+      _rows = rows;
+      _loading = false;
+    });
+    // بعد ما الـlist ظهرت، نزيّن بالأسماء العربية في الخلفية.
+    _loadFullNames();
+  }
+
+  /// fire-and-forget — يجلب الـsubs ويبني map الأسماء العربية. لو
+  /// فشل لأي سبب، الـlist يبقى عاملاً (يظهر username فقط).
+  Future<void> _loadFullNames() async {
+    try {
+      final subs = await SubscribersApi.loadAll();
+      if (!mounted || subs == null) return;
+      final map = <String, String>{};
       for (final s in subs) {
         final un = s.username.toLowerCase();
         final fn = s.fullName.trim();
         if (fn.isNotEmpty && fn != s.username) map[un] = fn;
       }
+      if (!mounted) return;
+      setState(() => _fullNames = map);
+    } catch (e) {
+      if (kDebugMode) debugPrint('🔴 existing_discounts (fullNames): $e');
     }
-    setState(() {
-      _rows = rows;
-      _fullNames = map;
-      _loading = false;
-    });
   }
 
   String? _fullNameFor(String username) =>
