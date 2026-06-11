@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/discounts_api.dart';
+import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
+import '../../models/subscriber.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import 'sheets/bulk_apply_sheet.dart';
-import 'sheets/edit_discount_sheet.dart';
+import 'sheets/existing_discounts_sheet.dart';
 
-/// مديول الخصومات. شاشة قراءة + edit/delete. الـadd الفردي يحصل من
-/// شاشة المشترك ('خصم سريع') — هذي شاشة الإدارة الشاملة لكل
-/// الخصومات النشطة، مع total قيمتها.
+/// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
+///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
+///     المشتركين كـcards/grid + multi-select + زر تطبيق ثابت أسفل.
+///   • زر "📋 عرض الخصومات الحالية" بالأعلى يفتح bottom sheet
+///     مخصّص للقائمة (existing_discounts_sheet) مع edit/delete.
+///   • زر "🗑 حذف الكل" بالأعلى للحذف الجماعي.
+/// المنطق نُقل من bulk_apply_sheet.dart (المرشّح للحذف بعد التحقّق).
 class DiscountsScreen extends StatefulWidget {
   const DiscountsScreen({super.key});
 
@@ -20,57 +25,188 @@ class DiscountsScreen extends StatefulWidget {
 }
 
 class _DiscountsScreenState extends State<DiscountsScreen> {
-  List<Discount> _rows = const [];
-  bool _loading = true;
+  final _amountCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
+  int _amount = 0;
+  bool _suppressFormat = false;
+  bool _submitting = false;
+
+  bool _loading = true;
+  List<Subscriber> _all = const [];
+  /// خريطة username (lowercased) → قيمة الخصم. مبنية من
+  /// DiscountsApi.list. مستخدمة لـ:
+  ///   1. badge "-X" على كارت المشترك إذا عنده خصم سابق.
+  ///   2. عداد الـhero (عدد + إجمالي).
+  Map<String, num> _existing = const {};
+  final Set<String> _selected = {};
   String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _amountCtrl.addListener(_onAmount);
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
       if (q == _query) return;
       setState(() => _query = q);
     });
+    _load();
   }
 
   @override
   void dispose() {
+    _amountCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final rows = await DiscountsApi.list();
+    final results = await Future.wait([
+      SubscribersApi.loadAll(),
+      DiscountsApi.list(),
+    ]);
     if (!mounted) return;
+    final subs = results[0] as List<Subscriber>?;
+    final discounts = results[1] as List<Discount>;
+    final map = <String, num>{};
+    for (final d in discounts) {
+      map[d.subscriberUsername.toLowerCase()] = d.discountAmount;
+    }
     setState(() {
-      _rows = rows;
+      _all = subs ?? const [];
+      _existing = map;
       _loading = false;
     });
   }
 
-  List<Discount> get _filtered {
-    if (_query.isEmpty) return _rows;
+  void _onAmount() {
+    if (_suppressFormat) return;
+    final digits = _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final parsed = int.tryParse(digits) ?? 0;
+    final formatted = _fmt(parsed);
+    if (formatted != _amountCtrl.text) {
+      _suppressFormat = true;
+      _amountCtrl.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+      _suppressFormat = false;
+    }
+    if (parsed != _amount) setState(() => _amount = parsed);
+  }
+
+  void _addQuickAmount(int v) {
+    final next = _amount + v;
+    final f = _fmt(next);
+    _suppressFormat = true;
+    _amountCtrl.value = TextEditingValue(
+      text: f,
+      selection: TextSelection.collapsed(offset: f.length),
+    );
+    _suppressFormat = false;
+    setState(() => _amount = next);
+  }
+
+  static String _fmt(int v) {
+    if (v == 0) return '';
+    final s = v.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  List<Subscriber> get _filtered {
+    if (_query.isEmpty) return _all;
     final q = _query.toLowerCase();
-    return _rows.where((d) {
-      return d.subscriberUsername.toLowerCase().contains(q) ||
-          (d.packageName ?? '').toLowerCase().contains(q);
+    return _all.where((s) {
+      return s.username.toLowerCase().contains(q) ||
+          s.fullName.toLowerCase().contains(q) ||
+          s.displayPhone.contains(q);
     }).toList();
   }
 
   num get _totalDiscount =>
-      _rows.fold<num>(0, (acc, d) => acc + d.discountAmount);
+      _existing.values.fold<num>(0, (acc, v) => acc + v);
 
-  Future<void> _openEdit(Discount d) async {
-    final changed = await showEditDiscountSheet(context, d);
+  void _toggle(String username) {
+    setState(() {
+      if (_selected.contains(username)) {
+        _selected.remove(username);
+      } else {
+        _selected.add(username);
+      }
+    });
+  }
+
+  void _selectAllVisible() {
+    setState(() {
+      for (final s in _filtered) {
+        _selected.add(s.username);
+      }
+    });
+  }
+
+  void _clearSelection() => setState(() => _selected.clear());
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (_amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('أدخل قيمة الخصم'),
+          backgroundColor: Color(0xFFE08F2D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (_selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اختر مشتركاً واحداً على الأقل'),
+          backgroundColor: Color(0xFFE08F2D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    final r = await DiscountsApi.bulkApply(
+      usernames: _selected.toList(),
+      discountAmount: _amount,
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    final summary = r.ok
+        ? 'جديد ${r.applied} · محدّث ${r.updated}'
+            '${r.failed > 0 ? ' · فشل ${r.failed}' : ''}'
+        : (r.message ?? 'فشل التطبيق');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(summary),
+        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (r.ok) {
+      _selected.clear();
+      _amountCtrl.clear();
+      _amount = 0;
+      _load();
+    }
+  }
+
+  Future<void> _openExistingDiscounts() async {
+    final changed = await showExistingDiscountsSheet(context);
     if (changed == true) _load();
   }
 
   Future<void> _confirmDeleteAll() async {
-    if (_rows.isEmpty) return;
+    if (_existing.isEmpty) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -80,9 +216,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         content: Text(
-          'سيتم حذف ${_rows.length} خصم بإجمالي '
+          'سيتم حذف ${_existing.length} خصم بإجمالي '
           '${formatIQD(_totalDiscount)} د.ع. لا يمكن التراجع.',
-          style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.5),
+          style:
+              AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.5),
         ),
         actions: [
           TextButton(
@@ -112,42 +249,6 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     if (r.ok) _load();
   }
 
-  Future<void> _confirmDelete(Discount d) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('حذف الخصم'),
-        content: Text(
-          'إزالة خصم ${formatIQD(d.discountAmount)} د.ع للمشترك '
-          '${d.subscriberUsername}؟',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('حذف'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final r = await DiscountsApi.delete(d.id);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    if (r.ok) _load();
-  }
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -167,114 +268,140 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: accent,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-                Sp.lg, Sp.md, Sp.lg, Sp.huge),
-            children: [
-              _hero(accent),
-              const SizedBox(height: Sp.md),
-              _actionButtons(accent),
-              const SizedBox(height: Sp.lg),
-              _sectionHeader(filtered.length),
-              const SizedBox(height: Sp.sm),
-              _searchField(),
-              const SizedBox(height: Sp.md),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (filtered.isEmpty)
-                _empty()
-              else
-                Column(
-                  children: [
-                    for (final d in filtered) ...[
-                      _DiscountTile(
-                        discount: d,
-                        onTap: () => _openEdit(d),
-                        onDelete: () => _confirmDelete(d),
+        bottom: false,
+        child: Column(
+          children: [
+            // ---------- HEADER (hero + actions + amount + search) ----------
+            Padding(
+              padding:
+                  const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+              child: Column(
+                children: [
+                  _hero(accent),
+                  const SizedBox(height: Sp.sm),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ActionCard(
+                          icon: LucideIcons.list,
+                          label: 'الخصومات الحالية',
+                          sub: '${_existing.length} مطبّق',
+                          color: accent,
+                          onTap: _openExistingDiscounts,
+                        ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: _ActionCard(
+                          icon: LucideIcons.trash2,
+                          label: 'حذف الكل',
+                          sub: _existing.isNotEmpty
+                              ? 'إزالة الجميع'
+                              : 'لا يوجد',
+                          color: AppColors.error,
+                          onTap: _existing.isNotEmpty
+                              ? _confirmDeleteAll
+                              : null,
+                        ),
+                      ),
                     ],
-                  ],
+                  ),
+                  const SizedBox(height: Sp.md),
+                  _amountField(accent),
+                  const SizedBox(height: Sp.sm),
+                  _searchField(),
+                  const SizedBox(height: 8),
+                  _selectionBar(accent, filtered.length),
+                ],
+              ),
+            ),
+            // ---------- GRID ----------
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : filtered.isEmpty
+                      ? _emptyState()
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          color: accent,
+                          child: GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(
+                                Sp.lg, 0, Sp.lg, 90),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 2.1,
+                              crossAxisSpacing: 6,
+                              mainAxisSpacing: 6,
+                            ),
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final s = filtered[i];
+                              return _SubscriberCard(
+                                sub: s,
+                                selected: _selected.contains(s.username),
+                                accent: accent,
+                                existingDiscount:
+                                    _existing[s.username.toLowerCase()],
+                                onTap: () => _toggle(s.username),
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
+      // زر التطبيق ثابت أسفل الشاشة. يتفعّل لما يكون في amount + في
+      // مشتركون مختارون. مطلب 2026-06-11.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+          child: SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed:
+                  (_amount > 0 && _selected.isNotEmpty && !_submitting)
+                      ? _submit
+                      : null,
+              icon: _submitting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(LucideIcons.percent, size: 16),
+              label: Text(
+                _submitting
+                    ? 'جاري التطبيق...'
+                    : (_amount > 0 && _selected.isNotEmpty
+                        ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
+                        : 'تطبيق الخصم'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(R.md),
                 ),
-            ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// مطلب 2026-06-11: زرّان كبيرة فوق القائمة بدل الـFAB الواحد.
-  /// أكثر اكتشافاً + يفتحان عمليتين متمايزتين بصرياً (تطبيق جماعي
-  /// أزرق primary، حذف الكل أحمر danger). الـ"حذف الكل" يتعطّل
-  /// عند عدم وجود خصومات.
-  Widget _actionButtons(Color accent) {
-    final hasRows = _rows.isNotEmpty;
-    return Row(
-      children: [
-        Expanded(
-          child: _ActionCard(
-            icon: LucideIcons.users,
-            label: 'تطبيق خصم جماعي',
-            sub: 'لمجموعة مشتركين',
-            color: accent,
-            onTap: () async {
-              final r = await showBulkApplyDiscountSheet(context);
-              if (r == true) _load();
-            },
-          ),
-        ),
-        const SizedBox(width: Sp.sm),
-        Expanded(
-          child: _ActionCard(
-            icon: LucideIcons.trash2,
-            label: 'حذف الكل',
-            sub: hasRows ? 'إزالة كل الخصومات' : 'لا توجد خصومات',
-            color: AppColors.error,
-            onTap: hasRows ? _confirmDeleteAll : null,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _sectionHeader(int shownCount) {
-    return Row(
-      children: [
-        Icon(LucideIcons.list, size: 14, color: AppColors.textMid),
-        const SizedBox(width: 6),
-        Text(
-          'الخصومات النشطة',
-          style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceInput,
-            borderRadius: BorderRadius.circular(R.pill),
-          ),
-          child: Text(
-            // لو في فلتر بحث يفرّق بين الظاهر والإجمالي. غير
-            // ذلك يكفي عدد واحد.
-            _query.isEmpty
-                ? '${_rows.length}'
-                : '$shownCount / ${_rows.length}',
-            style: AppType.muted(color: AppColors.textMid).copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // ============================================================
+  // Sub-widgets
+  // ============================================================
 
   Widget _hero(Color accent) {
     return Container(
@@ -307,12 +434,12 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_rows.length} خصم نشط',
+                  '${_existing.length} خصم نشط',
                   style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 18, letterSpacing: -0.4),
+                      .copyWith(fontSize: 17, letterSpacing: -0.3),
                 ),
                 Text(
-                  'إجمالي الخصومات ${formatIQD(_totalDiscount)} د.ع',
+                  'إجمالي ${formatIQD(_totalDiscount)} د.ع',
                   style: AppType.muted().copyWith(fontSize: 11),
                 ),
               ],
@@ -323,185 +450,170 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     );
   }
 
+  Widget _amountField(Color accent) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _amountCtrl,
+          keyboardType: TextInputType.number,
+          style: AppType.input(color: AppColors.textHi),
+          decoration: InputDecoration(
+            hintText: 'قيمة الخصم (مثلاً 5,000)',
+            hintStyle: AppType.input(color: AppColors.textLow),
+            filled: true,
+            fillColor: AppColors.surface,
+            prefixIcon: const Icon(LucideIcons.percent, size: 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+              borderSide:
+                  BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+              borderSide:
+                  BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+            ),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            suffixText: 'د.ع',
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final v in const [5000, 10000, 15000, 20000, 25000])
+              _quickAmountChip(v, accent),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _quickAmountChip(int v, Color accent) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _addQuickAmount(v),
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: accent.withValues(alpha: 0.3)),
+          ),
+          child: Text(
+            '+${_fmt(v)}',
+            style: TextStyle(
+              color: accent,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _searchField() {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Row(
         children: [
-          Icon(LucideIcons.search,
-              color: AppColors.textMid, size: 18),
+          Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: TextField(
               controller: _searchCtrl,
               style: AppType.input(color: AppColors.textHi),
               decoration: InputDecoration(
-                hintText: 'ابحث باليوزر أو الباقة…',
+                hintText: 'ابحث عن مشترك…',
                 hintStyle: AppType.input(color: AppColors.textLow),
                 border: InputBorder.none,
                 isCollapsed: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: Sp.md),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
             ),
           ),
-          if (_searchCtrl.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(LucideIcons.x, size: 16),
-              color: AppColors.textMid,
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                _searchCtrl.clear();
-                setState(() => _query = '');
-              },
-            ),
         ],
       ),
     );
   }
 
-  Widget _empty() {
-    return Container(
-      padding: const EdgeInsets.all(Sp.huge),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          Icon(LucideIcons.percent,
-              size: 36, color: AppColors.textLow),
-          const SizedBox(height: 10),
-          Text(
-            _query.isEmpty
-                ? 'لا توجد خصومات نشطة'
-                : 'لا توجد نتائج لـ "$_query"',
-            style: AppType.muted(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'تضاف الخصومات من شاشة كل مشترك',
-            style: AppType.muted().copyWith(fontSize: 11),
-          ),
-        ],
-      ),
+  Widget _selectionBar(Color accent, int filteredCount) {
+    return Row(
+      children: [
+        _miniBtn(
+          icon: LucideIcons.listChecks,
+          label: 'اختر المرئيين',
+          onTap: filteredCount > 0 ? _selectAllVisible : null,
+          color: accent,
+        ),
+        const SizedBox(width: 6),
+        _miniBtn(
+          icon: LucideIcons.eraser,
+          label: 'مسح',
+          onTap: _selected.isEmpty ? null : _clearSelection,
+          color: AppColors.error,
+        ),
+        const Spacer(),
+        Text(
+          '${_selected.length} محدد · $filteredCount نتيجة',
+          style: AppType.muted().copyWith(fontSize: 11),
+        ),
+      ],
     );
   }
-}
 
-/// مطلب 2026-06-12 (تحديث): التايل مطابق v1 (discounts_screen.dart:825+).
-///   • Header: user-icon + username + packageName + edit/delete أزرار
-///   • Price breakdown: 3 أعمدة (السعر الأصلي | الخصم | بعد الخصم)
-///     بـdividers بين الأعمدة + خلفية teal فاتحة.
-///   • Footer: clock icon + created_at مُنسّق.
-class _DiscountTile extends StatelessWidget {
-  const _DiscountTile({
-    required this.discount,
-    required this.onTap,
-    required this.onDelete,
-  });
-  final Discount discount;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
+  Widget _miniBtn({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+    required Color color,
+  }) {
+    final disabled = onTap == null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(R.lg),
+        borderRadius: BorderRadius.circular(R.sm),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(color: AppColors.border),
+            color: disabled
+                ? AppColors.surfaceInput
+                : color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(
+              color: disabled
+                  ? AppColors.border
+                  : color.withValues(alpha: 0.3),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Header row
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color:
-                          const Color(0xFF14B8A6).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(LucideIcons.user,
-                        size: 16, color: Color(0xFF14B8A6)),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          discount.subscriberUsername,
-                          style: AppType.title(color: AppColors.textHi)
-                              .copyWith(fontSize: 13),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if ((discount.packageName ?? '').isNotEmpty)
-                          Text(
-                            discount.packageName!,
-                            style: AppType.muted().copyWith(
-                                fontSize: 11, fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                  ),
-                  InkResponse(
-                    onTap: onDelete,
-                    radius: 18,
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(LucideIcons.trash2,
-                          size: 13, color: AppColors.error),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Price breakdown — 3 cols
-              _priceBreakdown(),
-              if ((discount.createdAt ?? '').isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(LucideIcons.clock,
-                        size: 10, color: AppColors.textLow),
-                    const SizedBox(width: 4),
-                    Text(
-                      _humanDate(discount.createdAt!),
-                      style: AppType.muted().copyWith(fontSize: 10.5),
-                    ),
-                  ],
+              Icon(icon,
+                  size: 11,
+                  color: disabled ? AppColors.textLow : color),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: disabled ? AppColors.textLow : color,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -509,75 +621,31 @@ class _DiscountTile extends StatelessWidget {
     );
   }
 
-  Widget _priceBreakdown() {
-    final original = discount.packagePrice;
-    final effective = discount.effectivePrice;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF14B8A6).withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(
-            color: const Color(0xFF14B8A6).withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          _priceCol(
-            'السعر الأصلي',
-            original != null ? '${formatIQD(original)} د.ع' : '—',
-            AppColors.textHi,
-          ),
-          _divider(),
-          _priceCol(
-            'الخصم',
-            '${formatIQD(discount.discountAmount)} د.ع',
-            AppColors.error,
-          ),
-          _divider(),
-          _priceCol(
-            'بعد الخصم',
-            effective != null ? '${formatIQD(effective)} د.ع' : '—',
-            AppColors.brand,
-          ),
-        ],
+  Widget _emptyState() {
+    return Padding(
+      padding: const EdgeInsets.all(Sp.huge),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.users, size: 36, color: AppColors.textLow),
+            const SizedBox(height: 10),
+            Text(
+              _query.isEmpty
+                  ? 'لا يوجد مشتركون'
+                  : 'لا توجد نتائج لـ "$_query"',
+              style: AppType.muted().copyWith(fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  Widget _priceCol(String label, String value, Color valueColor) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(label,
-              style: AppType.muted().copyWith(fontSize: 9.5)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: AppType.label(color: valueColor).copyWith(
-                  fontSize: 11.5, fontWeight: FontWeight.w800),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
-  }
-
-  Widget _divider() => Container(
-        width: 1,
-        height: 26,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        color: const Color(0xFF14B8A6).withValues(alpha: 0.18),
-      );
-
-  static String _humanDate(String iso) {
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return iso;
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${dt.year}/${two(dt.month)}/${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
   }
 }
 
-/// زر إجراء كبير على شاشة الخصومات — كارت بأيقونة دائرية ملوّنة
-/// + label + sub. يتعطّل عند `onTap == null` (لون باهت + لا تفاعل).
+/// ============================================================
+/// Action card (الـheader buttons)
+/// ============================================================
 class _ActionCard extends StatelessWidget {
   const _ActionCard({
     required this.icon,
@@ -608,8 +676,8 @@ class _ActionCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: Sp.md),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(color: AppColors.border),
@@ -617,37 +685,161 @@ class _ActionCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: iconBg,
-                  borderRadius: BorderRadius.circular(R.md),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, color: iconFg, size: 18),
+                child: Icon(icon, color: iconFg, size: 16),
               ),
-              const SizedBox(width: Sp.sm),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       label,
-                      style: AppType.label(color: fg)
-                          .copyWith(fontWeight: FontWeight.w800, fontSize: 13),
+                      style: AppType.label(color: fg).copyWith(
+                          fontWeight: FontWeight.w800, fontSize: 12.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       sub,
                       style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 10.5),
+                          .copyWith(fontSize: 10),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ============================================================
+/// Subscriber select card — مطابق v1 _SubscriberSelectCard.
+/// ============================================================
+class _SubscriberCard extends StatelessWidget {
+  const _SubscriberCard({
+    required this.sub,
+    required this.selected,
+    required this.accent,
+    required this.existingDiscount,
+    required this.onTap,
+  });
+
+  final Subscriber sub;
+  final bool selected;
+  final Color accent;
+  final num? existingDiscount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? accent.withValues(alpha: 0.08)
+                : AppColors.surface,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(
+              color: selected
+                  ? accent
+                  : AppColors.border.withValues(alpha: 0.5),
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    selected
+                        ? LucideIcons.squareCheck
+                        : LucideIcons.square,
+                    size: 12,
+                    color: selected ? accent : AppColors.textLow,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      sub.username,
+                      style: AppType.label(color: AppColors.textHi)
+                          .copyWith(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              if (sub.fullName != sub.username) ...[
+                const SizedBox(height: 1),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Text(
+                    sub.fullName,
+                    style: AppType.muted().copyWith(fontSize: 9.5),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              if ((sub.profileName ?? '').isNotEmpty) ...[
+                const SizedBox(height: 1),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Text(
+                    sub.profileName!,
+                    style: AppType.label(color: const Color(0xFF14B8A6))
+                        .copyWith(
+                            fontSize: 9.5, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              if (existingDiscount != null && existingDiscount! > 0) ...[
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE08F2D).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(R.sm),
+                    border: Border.all(
+                        color: const Color(0xFFE08F2D)
+                            .withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '-${formatIQD(existingDiscount!)}',
+                    style: const TextStyle(
+                      color: Color(0xFFE08F2D),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
