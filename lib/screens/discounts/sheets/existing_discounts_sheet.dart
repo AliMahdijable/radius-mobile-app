@@ -65,25 +65,28 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    // الخصومات + قائمة المشتركين بالتوازي. لو الأسماء فشلت لأي سبب
-    // (شبكة، token منتهٍ) ما نمنع الـlist من العرض — يطلع username
-    // فقط. كل call في try/catch منفصل.
+    // مطلب 2026-06-11: لا Future.wait — السحب الموازي بدونه ممكن
+    // عبر إطلاق الـfutures منفصلة. تجنّبنا الـList<Object?> cast
+    // الذي أرجع 0 خصومات في بعض الـbuilds رغم وجود البيانات في
+    // الـscreen الأم. الآن النوع الـstatic = الـruntime، صفر مفاجآت.
+    final discountsFuture = DiscountsApi.list();
+    final subsFuture = SubscribersApi.loadAll();
     List<Discount> rows = const [];
     List<Subscriber>? subs;
     try {
-      final results = await Future.wait([
-        DiscountsApi.list(),
-        SubscribersApi.loadAll(),
-      ]);
-      if (!mounted) return;
-      // Future.wait returns List<Object?> — index explicitly + cast each.
-      final r0 = results[0];
-      final r1 = results[1];
-      rows = r0 is List<Discount> ? r0 : const [];
-      subs = r1 is List<Subscriber> ? r1 : null;
+      rows = await discountsFuture;
     } catch (e) {
-      if (kDebugMode) debugPrint('🔴 existing_discounts load: $e');
-      if (!mounted) return;
+      if (kDebugMode) debugPrint('🔴 existing_discounts (discounts): $e');
+    }
+    try {
+      subs = await subsFuture;
+    } catch (e) {
+      if (kDebugMode) debugPrint('🔴 existing_discounts (subs): $e');
+    }
+    if (!mounted) return;
+    if (kDebugMode) {
+      debugPrint('🟢 existing_discounts loaded: ${rows.length} discounts, '
+          '${subs?.length ?? 0} subs');
     }
     final map = <String, String>{};
     if (subs != null) {
