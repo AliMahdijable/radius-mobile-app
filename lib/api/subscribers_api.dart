@@ -137,6 +137,15 @@ class _SubsListCache {
     _list = null;
     _at = null;
   }
+
+  /// مطلب 2026-06-11: يُستدعى عند تسجيل الخروج عشان لا يرى الـadmin
+  /// الجديد رواسب الـadmin السابق (التخزين العمري 45 ثانية كان كفيلاً
+  /// بإظهار بيانات admin@A لـadmin@B إذا دخل خلال هاي الفترة).
+  static void reset() {
+    _list = null;
+    _at = null;
+    _inFlight = null;
+  }
 }
 
 /// Subscribers API — wraps the same endpoints v1 uses so v2 reads the
@@ -293,6 +302,12 @@ class SubscribersApi {
   /// so Dashboard and SubscribersScreen don't double-fetch on app
   /// open. Use [refreshAll] for pull-to-refresh.
   static Future<List<Subscriber>?> loadAll() => _SubsListCache.get();
+
+  /// مطلب 2026-06-11: مسح كل cache داخل process. يستعمله flow
+  /// تسجيل الخروج عشان admin جديد ما يشوف بيانات admin السابق.
+  static void clearAllCaches() {
+    _SubsListCache.reset();
+  }
 
   /// Forces the next `loadAll` to re-fetch from the backend instead
   /// of serving the cached list. Hooked to the subscribers screen

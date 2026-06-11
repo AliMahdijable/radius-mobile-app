@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../api/device_probe_api.dart';
+import '../api/subscribers_api.dart';
 import '../services/auth_storage.dart';
 import '../services/theme_service.dart';
 import '../theme/colors.dart';
@@ -61,6 +63,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (ok != true) return;
+    // مطلب 2026-06-11: امسح كل in-memory caches قبل الـauth wipe
+    // عشان أوّل dashboard للـadmin الجديد ما يلصق على بقايا
+    // admin السابق (45s TTL على الـsubscribers list كان كافياً
+    // لتسريب الأرقام بين الجلستين).
+    SubscribersApi.clearAllCaches();
+    DeviceProbeApi.clearAllCaches();
     await AuthStorage.clear();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(

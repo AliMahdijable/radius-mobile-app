@@ -19,6 +19,14 @@ import 'device_config_api.dart';
 class DeviceProbeApi {
   static final _snapCache = <String, _Cached>{};
   static Future<AdminDeviceDefaults>? _adminFetch;
+
+  /// مطلب 2026-06-11: مسح كل الـcaches عند تسجيل الخروج. الـadmin
+  /// الجديد قد يكون له defaults مختلفة (telecomadmin/ubnt) وما نريد
+  /// نلصق snapshots على IPs قد تنتمي لشبكة admin سابق.
+  static void clearAllCaches() {
+    _snapCache.clear();
+    _adminFetch = null;
+  }
   static const _ttl = Duration(minutes: 5);
   static const _probeCap = Duration(seconds: 6);
 
