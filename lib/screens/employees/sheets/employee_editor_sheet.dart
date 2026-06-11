@@ -45,6 +45,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   late Map<String, bool> _perms;
   bool _saving = false;
 
+  /// رسالة الخطأ المعروضة بأعلى الـsheet. تنمسح عند بدء الكتابة في
+  /// أي حقل عشان المستخدم ما يشوف خطأ قديم بعد ما يصحّح. لو null لا
+  /// banner.
+  String? _error;
+
   bool get _isEdit => widget.employee != null;
 
   @override
@@ -61,6 +66,14 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       ...widget.catalog.defaults,
       if (e != null) ...e.permissions,
     };
+    // مسح الـerror banner تلقائياً لما المستخدم يبدأ يصحّح أي حقل.
+    void clearOnEdit() {
+      if (_error != null) setState(() => _error = null);
+    }
+    _userCtrl.addListener(clearOnEdit);
+    _passCtrl.addListener(clearOnEdit);
+    _fullNameCtrl.addListener(clearOnEdit);
+    _phoneCtrl.addListener(clearOnEdit);
   }
 
   @override
@@ -92,19 +105,27 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     });
   }
 
+  /// يعرض الخطأ في الـbanner أعلى الـsheet ويرجع الـadmin للـtab
+  /// المعلوم للحقل المتأثّر.
+  void _showError(String msg, {int tabIndex = 0}) {
+    setState(() => _error = msg);
+    if (_tab.index != tabIndex) _tab.animateTo(tabIndex);
+  }
+
   Future<void> _save() async {
     final username = _userCtrl.text.trim();
     if (username.isEmpty) {
-      _snack('اسم المستخدم مطلوب', warn: true);
-      _tab.animateTo(0);
+      _showError('اسم المستخدم مطلوب');
       return;
     }
     if (!_isEdit && _passCtrl.text.length < 4) {
-      _snack('كلمة المرور ٤ أحرف على الأقل', warn: true);
-      _tab.animateTo(0);
+      _showError('كلمة المرور ٤ أحرف على الأقل');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     // مطلب 2026-06-11: الـrecords في Dart لا تُكسر cast عبر dynamic،
     // فنحلّ كل فرع بنفسه ونستخرج ok/message محلياً.
     bool ok;
@@ -142,7 +163,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       _snack(_isEdit ? 'تم حفظ التعديلات' : 'تم إنشاء الموظف');
       Navigator.of(context).pop(true);
     } else {
-      _snack(message ?? 'فشل الحفظ', warn: true);
+      _showError(message ?? 'فشل الحفظ');
     }
   }
 
@@ -231,6 +252,51 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                   Tab(text: 'الصلاحيات ($activeCount)'),
                 ],
               ),
+              // مطلب 2026-06-11: banner أخطاء أعلى الـsheet (ما يطلع
+              // snackbar — الـadmin لازم يشوف السبب قبل الإضافة).
+              // يختفي تلقائياً مع أول حرف يكتبه أو عند إعادة المحاولة.
+              if (_error != null)
+                Container(
+                  width: double.infinity,
+                  margin:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: Sp.md, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(R.md),
+                    border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(LucideIcons.circleAlert,
+                          size: 14, color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: AppColors.error,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => setState(() => _error = null),
+                        borderRadius: BorderRadius.circular(R.pill),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(LucideIcons.x,
+                              size: 14, color: AppColors.error),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Expanded(
                 child: TabBarView(
                   controller: _tab,
