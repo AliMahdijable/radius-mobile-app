@@ -230,6 +230,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Directionality(
       textDirection: TextDirection.rtl,
       child: SafeArea(
@@ -349,6 +350,7 @@ class _MicButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final bg = listening
         ? AppColors.error
         : (enabled ? AppColors.brand.withValues(alpha: 0.12) : AppColors.surfaceInput);
@@ -413,6 +415,7 @@ class _Results extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const _EmptyHints();
     return FutureBuilder<List<Subscriber>?>(
@@ -566,6 +569,7 @@ class _EmptyHints extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.all(Sp.lg),
       child: Column(
@@ -603,6 +607,7 @@ class _ResultRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final statusColor = _statusColor(sub);
     final statusLabel = _statusLabel(sub);
     return Material(

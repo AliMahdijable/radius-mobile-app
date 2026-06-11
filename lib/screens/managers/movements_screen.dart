@@ -77,6 +77,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -200,6 +201,7 @@ class _MovementTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(

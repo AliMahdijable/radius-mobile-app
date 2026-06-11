@@ -127,6 +127,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF8B5CF6);
     String two(int n) => n.toString().padLeft(2, '0');
     final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';

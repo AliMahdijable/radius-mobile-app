@@ -128,6 +128,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF8B5CF6);
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -324,6 +325,7 @@ class _ExpenseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(

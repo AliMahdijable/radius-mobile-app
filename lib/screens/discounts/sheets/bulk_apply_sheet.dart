@@ -191,6 +191,7 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     final filtered = _filtered;
     return DraggableScrollableSheet(
@@ -575,6 +576,7 @@ class _SubscriberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(

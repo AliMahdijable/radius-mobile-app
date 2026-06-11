@@ -81,6 +81,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final disabled = sub.isDisabled;
     final statusColor = _statusColor();
     final statusLabel = _statusLabel();
@@ -426,6 +427,7 @@ class _StatusIconBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       width: 42,
       height: 42,
@@ -459,6 +461,7 @@ class _ExpiryBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final ({Color color, String big, String small, IconData icon}) v;
     if (disabled) {
       v = (
@@ -615,6 +618,7 @@ class _PackageWithPrice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final hasDiscount = (discount ?? 0) > 0;
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -695,6 +699,7 @@ class _MetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -720,6 +725,7 @@ class _BalanceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isDebt = sub.hasDebt;
     final color = isDebt ? AppColors.error : AppColors.brand;
     return Container(
@@ -768,6 +774,7 @@ class _LiveSessionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final ip = sub.ipAddress?.trim();
     final session = sub.sessionTime;
     final dl = sub.downloadBytes;
@@ -891,6 +898,7 @@ class _LastPaymentLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final amount = _readAmount(payment);
     final createdRaw = payment['created_at']?.toString();
     final action = (payment['action_type'] ?? payment['action'] ?? '').toString();
@@ -966,6 +974,7 @@ class _GhostAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(

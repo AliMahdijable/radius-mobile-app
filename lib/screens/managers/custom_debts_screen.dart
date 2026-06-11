@@ -99,6 +99,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF0EA5E9);
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -287,6 +288,7 @@ class _DebtTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final closed = debt.isClosed;
     return Material(
       color: Colors.transparent,

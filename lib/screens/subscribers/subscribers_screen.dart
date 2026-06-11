@@ -778,6 +778,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   // ───────── build ─────────
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final filtered = _filteredAll;
     final totalPages = (filtered.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
@@ -1101,6 +1102,7 @@ class _SearchHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Row(
       children: [
         Expanded(
@@ -1214,6 +1216,7 @@ class _SelectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       height: 42,
       decoration: BoxDecoration(
@@ -1264,6 +1267,7 @@ class _PageSizePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return PopupMenuButton<int>(
       tooltip: 'حجم الصفحة',
       onSelected: onChange,
@@ -1300,6 +1304,7 @@ class _Pager extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: EdgeInsets.fromLTRB(
         Sp.lg,
@@ -1347,6 +1352,7 @@ class _ArrowBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final color = enabled ? AppColors.brand : AppColors.textLow;
     return Material(
       color: enabled
@@ -1385,6 +1391,7 @@ class _ManagerFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 4),
       child: Row(
@@ -1432,6 +1439,7 @@ class _ManagerChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return InkWell(
       onTap: () {
         HapticFeedback.selectionClick();
@@ -1505,6 +1513,7 @@ class _BulkActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(
@@ -1651,6 +1660,7 @@ class _SecondaryBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: color,
@@ -1676,6 +1686,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final msg = query.isNotEmpty
         ? 'لا توجد نتائج بحث "$query"'
         : 'لا يوجد مشترك في هذا الفلتر';
@@ -1717,6 +1728,7 @@ class _DeviceSortChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isActive = current != null && current!.startsWith('${metric}_');
     final isAsc = current == '${metric}_asc';
     final accent = const Color(0xFF7C3AED);
@@ -1772,6 +1784,7 @@ class _ClearSortChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1814,6 +1827,7 @@ class _ScanAllChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF7C3AED);
     return Material(
       color: Colors.transparent,

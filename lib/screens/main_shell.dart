@@ -120,6 +120,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final tabs = <Widget>[
       DashboardScreen(onOpenSubscribers: _openSubscribers),
       SubscribersScreen(filterCmd: _subsFilterCmd),
@@ -204,6 +205,7 @@ class _PillBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return LayoutBuilder(
       builder: (context, c) {
         const totalSlots = 5;
@@ -285,6 +287,7 @@ class _TabSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final fg = selected ? AppColors.brand : AppColors.textLow;
     return SizedBox(
       width: slotWidth,
@@ -342,6 +345,7 @@ class _FabSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
       width: slotWidth,
       child: Center(
@@ -385,6 +389,7 @@ class _SearchPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
       shape: const CircleBorder(),
@@ -427,6 +432,7 @@ class _QuickAddSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
       child: Column(
@@ -526,6 +532,7 @@ class _QuickItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(

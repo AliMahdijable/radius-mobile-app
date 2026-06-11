@@ -24,6 +24,7 @@ class _AddManagerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return ManagerFormSheet(
       title: 'مدير جديد',
       subtitle: 'إضافة مدير فرعي',

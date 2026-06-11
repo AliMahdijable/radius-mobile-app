@@ -37,6 +37,7 @@ class FilterChipsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
       height: 42,
       child: ListView.separated(
@@ -88,6 +89,7 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Tooltip(
       message: label,
       child: Material(

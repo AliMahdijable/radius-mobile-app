@@ -185,6 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: RefreshIndicator(
@@ -279,6 +280,7 @@ class _ActivitiesLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       height: 120,
       decoration: BoxDecoration(
@@ -305,6 +307,7 @@ class _ActivitiesError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.symmetric(vertical: Sp.huge, horizontal: Sp.lg),
       decoration: BoxDecoration(
@@ -335,6 +338,7 @@ class _NoActivitiesYet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: Sp.huge, horizontal: Sp.lg),
@@ -460,6 +464,7 @@ class _WAStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // 3 visual states: loading dot, connected (brand), disconnected (red).
     final Color c;
     final String label;
@@ -512,6 +517,7 @@ class _IconChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Stack(
       clipBehavior: Clip.none,
       children: [

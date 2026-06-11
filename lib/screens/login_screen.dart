@@ -146,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
       // resizeToAvoidBottomInset lets the layout shift up when the keyboard
@@ -217,6 +218,7 @@ class _Logo extends StatelessWidget {
   const _Logo();
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // Tint the logo brand-green using BlendMode.modulate via ColorFilter.
     // The logo is violet shapes on a transparent/white background.
     // We render it inside a ShaderMask that:
@@ -256,6 +258,7 @@ class _BrandTitle extends StatelessWidget {
   const _BrandTitle();
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Column(
       children: [
         Text(
@@ -301,6 +304,7 @@ class _FormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -406,6 +410,7 @@ class _LabeledInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -427,6 +432,7 @@ class _RememberToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(R.sm),
@@ -482,6 +488,7 @@ class _PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
       height: 54,
       child: Material(
@@ -514,6 +521,7 @@ class _BiometricButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -543,6 +551,7 @@ class _Footer extends StatelessWidget {
   const _Footer();
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Center(
       child: Text(
         'v2.0  •  جميع الحقوق محفوظة',

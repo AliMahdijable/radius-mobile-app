@@ -37,6 +37,7 @@ class StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,6 +64,7 @@ class _BalancePointsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return _ShellCard(
       icon: LucideIcons.wallet,
       iconAccent: _accent,
@@ -109,6 +111,7 @@ class _DebtCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return _ShellCard(
       icon: LucideIcons.creditCard,
       iconAccent: _accent,
@@ -162,6 +165,7 @@ class _ShellCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
@@ -227,6 +231,7 @@ class _HeroAmount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: AlignmentDirectional.centerStart,
@@ -261,6 +266,7 @@ class _Spinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
       height: 22,
       width: 22,

@@ -408,6 +408,7 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final s = _summary;
     return DraggableScrollableSheet(
       initialChildSize: 0.92,
@@ -494,6 +495,7 @@ class _SummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, Sp.sm),
       decoration: BoxDecoration(
@@ -542,6 +544,7 @@ class _SummaryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
@@ -569,6 +572,7 @@ class _SetAllRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, Sp.xs),
       child: Row(
@@ -609,6 +613,7 @@ class _SetAllBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final color = method.color;
     return Material(
       color: AppColors.surface,
@@ -659,6 +664,7 @@ class _RenewRowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     if (row.loadFailed) {
       return _FailedRowCard(sub: row.sub);
     }
@@ -839,6 +845,7 @@ class _FailedRowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
@@ -887,6 +894,7 @@ class _PriceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final hasDiscount = row.discount > 0 && row.discount < row.originalPrice;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -937,6 +945,7 @@ class _MethodTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final color = method.color;
     return Material(
       color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
@@ -995,6 +1004,7 @@ class _PartialField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF8B5CF6);
     final price = row.effectivePrice.round();
     final chips = const [5000, 10000, 15000, 25000, 35000, 50000]
@@ -1128,6 +1138,7 @@ class _PartialTextFieldState extends State<_PartialTextField> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return TextField(
       controller: widget.controller,
       enabled: widget.enabled,
@@ -1157,6 +1168,7 @@ class _AfterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isDebt = balanceAfter < 0;
     final color = isDebt ? AppColors.error : AppColors.brand;
     return Container(
@@ -1231,6 +1243,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -1294,6 +1307,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

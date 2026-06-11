@@ -152,6 +152,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.5,
@@ -293,6 +294,7 @@ class _MetaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
@@ -356,6 +358,7 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Text(text,
@@ -377,6 +380,7 @@ class _PackagePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Column(
       children: [
         for (final p in packages)
@@ -408,6 +412,7 @@ class _PackageRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final name = pkg['name']?.toString() ?? '';
     final price = pkg['price'] is num
         ? (pkg['price'] as num).toInt()
@@ -510,6 +515,7 @@ class _SelectedSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       decoration: BoxDecoration(
@@ -556,6 +562,7 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -581,6 +588,7 @@ class _MethodPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Row(
       children: [
         Expanded(
@@ -634,6 +642,7 @@ class _MethodBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final tile = Material(
       color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -726,6 +735,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -789,6 +799,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

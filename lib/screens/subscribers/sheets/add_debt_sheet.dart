@@ -178,6 +178,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFFE08F2D); // amber — debt addition
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -264,6 +265,7 @@ class _CurrentStatusRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     if (debt <= 0 && credit <= 0) {
       return _StatusChip(
         icon: LucideIcons.circleCheck,
@@ -312,6 +314,7 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
@@ -367,6 +370,7 @@ class _AmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // مطلب 2026-06-10: no tinted outer container — TextField's own
     // OutlinedInputBorder is enough; the wrapping box was reading as
     // a double frame.
@@ -455,6 +459,7 @@ class _CommentField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return TextField(
       controller: controller,
       maxLines: 2,
@@ -496,6 +501,7 @@ class _AfterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
@@ -589,6 +595,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -652,6 +659,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

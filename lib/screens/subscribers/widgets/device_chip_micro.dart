@@ -61,6 +61,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final clean = widget.ip?.trim() ?? '';
     if (clean.isEmpty) return const SizedBox.shrink();
     return ValueListenableBuilder<int>(

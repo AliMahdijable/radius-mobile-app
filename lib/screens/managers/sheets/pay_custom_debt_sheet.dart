@@ -183,6 +183,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF0EA5E9);
     return PopScope(
       canPop: true,

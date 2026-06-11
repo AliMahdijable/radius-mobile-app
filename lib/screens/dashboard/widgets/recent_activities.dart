@@ -17,6 +17,7 @@ class RecentActivities extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -254,6 +255,7 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final n = _normalize();
     return Material(
       color: Colors.transparent,

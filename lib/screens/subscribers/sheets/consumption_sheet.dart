@@ -24,6 +24,7 @@ class _ConsumptionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,

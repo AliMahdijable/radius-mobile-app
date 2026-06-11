@@ -27,6 +27,7 @@ class SubscribersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     if (stats == null) return const _Skeleton();
     final s = stats!;
     final activeRatio = s.total > 0 ? s.active / s.total : 0.0;
@@ -165,6 +166,7 @@ class _Skeleton extends StatelessWidget {
   const _Skeleton();
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       height: 220,
       decoration: BoxDecoration(
@@ -206,6 +208,7 @@ class _Ring extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -266,6 +269,7 @@ class _RingStatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,

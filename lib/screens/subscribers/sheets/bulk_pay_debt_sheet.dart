@@ -230,6 +230,7 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     final s = _summary;
     return DraggableScrollableSheet(
@@ -322,6 +323,7 @@ class _SummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding:
           const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, Sp.sm),
@@ -385,6 +387,7 @@ class _PayRowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     final chips = const [5000, 10000, 15000, 25000, 50000]
         .where((c) => c < row.debt)
@@ -641,6 +644,7 @@ class _RowPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isCredit = balanceAfter >= 0;
     final color =
         isCredit ? const Color(0xFF14B8A6) : const Color(0xFFE08F2D);
@@ -721,6 +725,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -784,6 +789,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

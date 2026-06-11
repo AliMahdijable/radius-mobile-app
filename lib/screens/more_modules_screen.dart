@@ -23,6 +23,7 @@ class MoreModulesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -123,6 +124,7 @@ class _ModuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),

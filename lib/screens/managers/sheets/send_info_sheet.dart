@@ -101,6 +101,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF25D366);
     final hasPhone = (widget.manager.mobile ?? '').trim().isNotEmpty;
     return DraggableScrollableSheet(

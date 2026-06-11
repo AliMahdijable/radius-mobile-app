@@ -108,6 +108,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,

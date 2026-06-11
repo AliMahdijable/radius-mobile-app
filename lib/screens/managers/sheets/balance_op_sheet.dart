@@ -239,6 +239,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.5,

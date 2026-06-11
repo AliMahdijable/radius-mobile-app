@@ -49,6 +49,7 @@ class _ActionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final hasDebt = (manager.debt ?? 0) > 0;
     final hasBalance = (manager.balance ?? 0) > 0;
     final hasPhone = (manager.mobile ?? '').isNotEmpty;

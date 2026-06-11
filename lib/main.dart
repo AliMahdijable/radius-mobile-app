@@ -79,6 +79,7 @@ class _MyServicesAppState extends State<MyServicesApp>
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeService.notifier,
       builder: (context, mode, _) {

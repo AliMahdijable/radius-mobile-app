@@ -96,6 +96,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     final d = widget.discount;
     return DraggableScrollableSheet(

@@ -216,6 +216,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -380,6 +381,7 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
@@ -435,6 +437,7 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Text(
@@ -453,6 +456,7 @@ class _PayPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Row(
       children: [
         Expanded(
@@ -510,6 +514,7 @@ class _PayBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -587,6 +592,7 @@ class _PartialAmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final filtered = _chips.where((c) => c < price).toList();
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -671,6 +677,7 @@ class _AfterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isDebt = balanceAfter < 0;
     final color = isDebt ? AppColors.error : AppColors.brand;
     return Container(
@@ -739,6 +746,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -802,6 +810,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

@@ -154,6 +154,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -247,6 +248,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -297,6 +299,7 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -380,6 +383,7 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final (label, color, icon) = switch (state) {
       _State.granted => ('مفعّلة', AppColors.brand, Icons.check_rounded),
       _State.silentlyBlocked =>
@@ -416,6 +420,7 @@ class _Badge extends StatelessWidget {
 class _SilentlyBlockedBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.error.withValues(alpha: 0.07),
@@ -462,6 +467,7 @@ class _ContinueButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
       height: 54,
       child: Material(

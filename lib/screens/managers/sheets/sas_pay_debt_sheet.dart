@@ -181,6 +181,7 @@ class _SasPayDebtSheetState extends State<_SasPayDebtSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF0EA5E9);
     return DraggableScrollableSheet(
       initialChildSize: 0.75,

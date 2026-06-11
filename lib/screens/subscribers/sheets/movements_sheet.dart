@@ -83,6 +83,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -231,6 +232,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       // Roomier header — top=Sp.sm (8 vs old 4) so the title sits
       // clear of the handle, bigger icon-box (8 vs 6) so the brand
@@ -324,6 +326,7 @@ class _FilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // Taller chip strip (48 vs the original 38) — Arabic chip labels
     // need extra vertical breathing room because the descenders on
     // letters like ع, ج clipped against the pill border before. Also
@@ -385,6 +388,7 @@ class _DateHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, Sp.sm, 4, 4),
       child: Row(
@@ -416,6 +420,7 @@ class _MovementTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final type = (txn['action_type'] ?? '').toString().toUpperCase();
     final desc =
         (txn['description'] ?? txn['action_description'] ?? '').toString();

@@ -106,6 +106,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -197,6 +198,7 @@ class _PeriodTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(

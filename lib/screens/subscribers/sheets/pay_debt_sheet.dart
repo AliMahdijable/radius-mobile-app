@@ -183,6 +183,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6); // teal — pay/credit
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -304,6 +305,7 @@ class _DebtHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
@@ -378,6 +380,7 @@ class _AmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // No tinted outer container — مطلب 2026-06-10: 'تكدر تلغي او
     // تخفيف تاطير التيكست بوكس لان صاير حددود قوية'. The TextField
     // keeps its single OutlinedInputBorder so the field still reads
@@ -481,6 +484,7 @@ class _PayAllToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const teal = Color(0xFF14B8A6);
     return InkWell(
       onTap: () {
@@ -538,6 +542,7 @@ class _NotesField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return TextField(
       controller: controller,
       maxLines: 2,
@@ -578,6 +583,7 @@ class _AfterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isCredit = balanceAfter >= 0;
     final color =
         isCredit ? const Color(0xFF14B8A6) : const Color(0xFFE08F2D);
@@ -660,6 +666,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -723,6 +730,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

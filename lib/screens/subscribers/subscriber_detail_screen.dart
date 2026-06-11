@@ -129,6 +129,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -512,6 +513,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final statusColor = _statusColor(sub);
     final statusLabel = _statusLabel(sub);
     return Container(
@@ -652,6 +654,7 @@ class _LiveSessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return _SectionCard(
       icon: LucideIcons.wifi,
       title: 'معلومات الاتصال',
@@ -715,6 +718,7 @@ class _SubscriptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return _SectionCard(
       icon: LucideIcons.package,
       title: 'معلومات الاشتراك',
@@ -844,6 +848,7 @@ class _BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isDebt = sub.hasDebt;
     final color = isDebt ? AppColors.error : AppColors.brand;
     final label = isDebt ? 'دين على المشترك' : 'رصيد للمشترك';
@@ -956,6 +961,7 @@ class _OperationsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final phone = sub.displayPhone;
     final ops = <_Op>[
       _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
@@ -1133,6 +1139,7 @@ class _OpCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return InkResponse(
       onTap: () {
         HapticFeedback.selectionClick();
@@ -1209,6 +1216,7 @@ class _SectionCardState extends State<_SectionCard> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
@@ -1298,6 +1306,7 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // مطلب 2026-06-11: فونت/icon +1 على كل قيمة وعنوان في صفوف
     // كروت التفاصيل — كان 11/12/13 ضعيف الوضوح، صار 12/13/14.
     final row = Padding(
@@ -1354,6 +1363,7 @@ class _BytesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -1411,6 +1421,7 @@ class _SimpleAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       color: AppColors.bg,
@@ -1449,6 +1460,7 @@ class _SubscriberHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = AppColors.brand;
     final remaining = sub.remainingDays;
     String remainingTop = '—';
@@ -1751,6 +1763,7 @@ class _CopyChipState extends State<_CopyChip> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkResponse(

@@ -185,6 +185,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF25D366);
     // نضيف ديناميكياً أي type رجّعه الـbackend غير معروف.
     final extras = _templates
@@ -269,6 +270,7 @@ class _TemplateTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final isActive = existing?.isActive == true;
     final hasBody = (existing?.messageContent ?? '').trim().isNotEmpty;
     final accent = isActive
@@ -471,6 +473,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF25D366);
     // مطلب 2026-06-12 (iPhone): على iOS ما يوجد زر "خلف" يخفي
     // الكيبورد فيستحيل على المدير يطلع من حقل التعديل. GestureDetector

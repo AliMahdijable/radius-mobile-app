@@ -71,6 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     // Render with our own AppBar that shows a back arrow when this
     // screen was pushed (i.e. not used as a bottom-tab anymore —
     // since 2026-06-10 the gear opens this as a route, not a tab).
@@ -245,6 +246,7 @@ class _IdentityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -299,6 +301,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, Sp.sm, 4, 6),
       child: Text(
@@ -337,6 +340,7 @@ class _ThemePickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
       borderRadius:
@@ -438,6 +442,7 @@ class _ThemeOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: selected
           ? AppColors.brand.withValues(alpha: 0.10)
@@ -526,6 +531,7 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final card = Container(
       decoration: BoxDecoration(
         color: AppColors.surface,

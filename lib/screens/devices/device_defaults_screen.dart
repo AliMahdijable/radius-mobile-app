@@ -88,6 +88,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(

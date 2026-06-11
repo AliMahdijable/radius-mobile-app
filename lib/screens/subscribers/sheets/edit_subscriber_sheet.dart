@@ -279,6 +279,7 @@ class _EditSheetState extends State<_EditSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -452,6 +453,7 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.only(bottom: 4, right: 2),
       child: Text(
@@ -487,6 +489,7 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return TextField(
       controller: controller,
       enabled: enabled,
@@ -528,6 +531,7 @@ class _PackagePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     if (loading) {
       return const SizedBox(
         height: 38,
@@ -637,6 +641,7 @@ class _ExpirationPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     String two(int n) => n.toString().padLeft(2, '0');
     final label = value == null
         ? 'لم يُختر'
@@ -729,6 +734,7 @@ class _ManagerPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     if (loading) {
       return const SizedBox(
         height: 38,
@@ -833,6 +839,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.sm, Sp.md),
       decoration: BoxDecoration(
@@ -900,6 +907,7 @@ class _SubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       top: false,
       child: Container(

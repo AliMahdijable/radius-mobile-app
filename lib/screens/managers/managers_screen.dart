@@ -188,6 +188,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF3B82F6);
     final filtered = _filtered;
     return Scaffold(
@@ -453,6 +454,7 @@ class _ManagerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final balance = manager.balance ?? 0;
     final debt = manager.debt ?? 0;
     final points = manager.rewardPoints ?? 0;

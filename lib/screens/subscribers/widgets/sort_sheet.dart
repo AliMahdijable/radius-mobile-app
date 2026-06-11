@@ -68,6 +68,7 @@ class _SortSheetState extends State<_SortSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.lg),
@@ -159,6 +160,7 @@ class _DirBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final color = selected ? AppColors.brand : AppColors.textMid;
     return InkWell(
       onTap: onTap,
@@ -205,6 +207,7 @@ class _FieldChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     final color = selected ? Colors.white : AppColors.textMid;
     return InkWell(
       onTap: onTap,

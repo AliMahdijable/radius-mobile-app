@@ -202,6 +202,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF25D366);
     return Scaffold(
       backgroundColor: AppColors.bg,

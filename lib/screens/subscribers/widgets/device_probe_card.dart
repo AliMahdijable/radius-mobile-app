@@ -78,6 +78,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return _Card(
       icon: LucideIcons.router,
       title: 'معلومات الجهاز',
@@ -368,6 +369,7 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(

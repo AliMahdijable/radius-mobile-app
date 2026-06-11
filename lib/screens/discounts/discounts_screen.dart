@@ -107,6 +107,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     final filtered = _filtered;
     return Scaffold(
@@ -308,6 +309,7 @@ class _DiscountTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: Colors.transparent,
       child: InkWell(

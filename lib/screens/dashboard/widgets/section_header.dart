@@ -18,6 +18,7 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.md, top: Sp.lg),
       child: Row(
