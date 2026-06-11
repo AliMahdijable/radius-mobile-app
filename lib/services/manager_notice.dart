@@ -37,6 +37,11 @@ class ManagerNoticeService {
     required num currentCredit,
     required num currentDebt,
     required String actionKind,
+    /// مطلب 2026-06-11 (مطابق v1 _ManagerFinancialNoticeData): الكاش
+    /// والقالب يفصلان دين الـSAS عن الديون الأخرى. callers يعرفون
+    /// التقسيم عند العملية ويمرّرونه؛ لو ما مرّر سيُحسب كله SAS.
+    num sasDebts = 0,
+    num otherDebts = 0,
     String? notes,
     bool sendWhatsApp = true,
     bool sendPush = true,
@@ -69,8 +74,11 @@ class ManagerNoticeService {
                 amount: amount,
                 isLoan: isLoan,
                 previousCredit: previousCredit,
+                previousDebt: previousDebt,
                 currentCredit: currentCredit,
                 currentDebt: currentDebt,
+                sasDebts: sasDebts,
+                otherDebts: otherDebts,
                 actionKind: actionKind,
                 notes: notes,
               )
@@ -78,8 +86,12 @@ class ManagerNoticeService {
                 manager: manager,
                 amount: amount,
                 isLoan: isLoan,
+                previousCredit: previousCredit,
+                previousDebt: previousDebt,
                 currentCredit: currentCredit,
                 currentDebt: currentDebt,
+                sasDebts: sasDebts,
+                otherDebts: otherDebts,
                 actionKind: actionKind,
                 notes: notes,
               );
@@ -118,74 +130,157 @@ class ManagerNoticeService {
     );
   }
 
-  /// Render template تستعمل placeholders مثل v1 _ManagerFinancialNoticeData
-  /// {manager_name} / {manager_username} / {amount} / {previous_credit}
-  /// / {current_credit} / {current_debt} / {action_label} / {notes}.
+  /// Render the `manager_agent` template. Placeholders mirror v1
+  /// _ManagerFinancialNoticeData.applyTemplate (managers_screen:132):
+  ///   {manager_name}, {manager_username}, {amount},
+  ///   {action_type}      ← الـlabel القصير (مطابق v1)
+  ///   {previous_credit}, {current_credit},
+  ///   {previous_debt},   ← v2 كان ناسيها
+  ///   {current_debt},
+  ///   {sas_debts}, {other_debts}, {total_debts},
+  ///   {movement_description} ← الـnotes إن وُجد، وإلا الـdescription
+  ///                            الافتراضي للنوع.
+  /// نُبقي `{action_label}` و `{notes}` كـaliases للقوالب القديمة
+  /// التي قد يكون admin أنشأها بالأسماء V2 الأصلية.
   static String _renderTemplate(
     String template, {
     required Manager manager,
     required num amount,
     required bool isLoan,
     required num previousCredit,
+    required num previousDebt,
     required num currentCredit,
     required num currentDebt,
+    required num sasDebts,
+    required num otherDebts,
     required String actionKind,
     String? notes,
   }) {
-    final actionLabel = _actionLabel(actionKind, isLoan: isLoan);
-    return template
-        .replaceAll('{manager_name}', manager.fullName)
-        .replaceAll('{manager_username}', manager.username)
-        .replaceAll('{amount}', _fmt(amount))
-        .replaceAll('{previous_credit}', _fmt(previousCredit))
-        .replaceAll('{current_credit}', _fmt(currentCredit))
-        .replaceAll('{current_debt}', _fmt(currentDebt))
-        .replaceAll('{action_label}', actionLabel)
-        .replaceAll('{notes}', (notes ?? '').trim());
+    final actionTypeLabel = _actionTypeLabel(actionKind, isLoan: isLoan);
+    final movementDescription = _movementDescription(
+      actionKind,
+      isLoan: isLoan,
+      notes: notes,
+    );
+    final managerName = manager.fullName.isNotEmpty
+        ? manager.fullName
+        : manager.username;
+    final replacements = <String, String>{
+      '{manager_name}': managerName,
+      '{manager_username}': manager.username,
+      '{amount}': _fmt(amount),
+      '{action_type}': actionTypeLabel,
+      '{action_label}': actionTypeLabel, // alias للتوافق
+      '{previous_credit}': _fmt(previousCredit),
+      '{current_credit}': _fmt(currentCredit),
+      '{previous_debt}': _fmt(previousDebt),
+      '{current_debt}': _fmt(currentDebt),
+      '{sas_debts}': _fmt(sasDebts),
+      '{other_debts}': _fmt(otherDebts),
+      '{total_debts}': _fmt(sasDebts + otherDebts),
+      '{movement_description}': movementDescription,
+      '{notes}': (notes ?? '').trim(),
+    };
+    var result = template;
+    replacements.forEach((k, v) {
+      result = result.replaceAll(k, v);
+    });
+    return result;
   }
 
-  /// Fallback message لو ما يوجد قالب manager_agent فعّال.
+  /// Fallback message لو ما يوجد قالب manager_agent فعّال. النصّ
+  /// مبسّط يطابق preview v1 (managers_screen:160) — تحية + سطر
+  /// العملية + الرصيد + الدين + الملاحظة.
   static String _defaultMessage({
     required Manager manager,
     required num amount,
     required bool isLoan,
+    required num previousCredit,
+    required num previousDebt,
     required num currentCredit,
     required num currentDebt,
+    required num sasDebts,
+    required num otherDebts,
     required String actionKind,
     String? notes,
   }) {
     final name = manager.fullName.isNotEmpty
         ? manager.fullName
         : manager.username;
-    final label = _actionLabel(actionKind, isLoan: isLoan);
+    final label = _actionTypeLabel(actionKind, isLoan: isLoan);
+    final totalDebt = sasDebts + otherDebts > 0
+        ? sasDebts + otherDebts
+        : currentDebt;
     final lines = <String>[
-      'مرحباً $name،',
-      'تم تنفيذ: $label ${_fmt(amount)} د.ع',
-      'رصيدك الحالي: ${_fmt(currentCredit)} د.ع',
-      if (currentDebt > 0) 'الدين عليك: ${_fmt(currentDebt)} د.ع',
-      if ((notes ?? '').trim().isNotEmpty) 'ملاحظة: ${notes!.trim()}',
+      'عزيزي المدير $name، 👋',
+      '',
+      '🧾 العملية: $label',
+      '💵 المبلغ: ${_fmt(amount)} د.ع',
+      '',
+      '💳 رصيدك الحالي: ${_fmt(currentCredit)} د.ع',
+      if (previousDebt > 0)
+        '↩️ الدين السابق: ${_fmt(previousDebt)} د.ع',
+      if (totalDebt > 0) '📊 الدين الحالي: ${_fmt(totalDebt)} د.ع',
+      if ((notes ?? '').trim().isNotEmpty)
+        '📝 ملاحظة: ${notes!.trim()}',
     ];
     return lines.join('\n');
   }
 
-  static String _actionLabel(String kind, {required bool isLoan}) {
+  /// مطابق v1 _ManagerFinancialNoticeData.actionTypeLabel.
+  static String _actionTypeLabel(String kind, {required bool isLoan}) {
     switch (kind) {
+      case 'cash_deposit':
       case 'deposit_cash':
-        return isLoan ? 'إيداع آجل' : 'شحن رصيد';
+        return 'إيداع نقدي';
+      case 'loan_deposit':
       case 'deposit_loan':
-        return 'إيداع آجل';
+        return 'إيداع دين';
       case 'withdraw':
         return 'سحب رصيد';
       case 'sas_pay_debt':
+      case 'debt_payment':
         return 'تسديد دين';
       case 'add_points':
         return 'إضافة نقاط';
       case 'debt_created':
         return 'إضافة دين';
-      case 'debt_payment':
-        return 'تسديد دين خارجي';
+      case 'info':
+        return 'معلومات الحساب';
       default:
         return 'حركة رصيد';
+    }
+  }
+
+  /// مطابق v1 _ManagerFinancialNoticeData.movementDescription —
+  /// لو الـadmin مرّر ملاحظة نظهرها، وإلا الـdescription الافتراضي.
+  static String _movementDescription(
+    String kind, {
+    required bool isLoan,
+    String? notes,
+  }) {
+    final trimmed = (notes ?? '').trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    switch (kind) {
+      case 'cash_deposit':
+      case 'deposit_cash':
+        return 'إضافة رصيد نقدي';
+      case 'loan_deposit':
+      case 'deposit_loan':
+        return 'إضافة رصيد آجل';
+      case 'withdraw':
+        return 'سحب رصيد من الحساب';
+      case 'sas_pay_debt':
+      case 'debt_payment':
+        return 'تسديد دين مدير';
+      case 'add_points':
+        return 'إضافة نقاط مكافأة';
+      case 'debt_created':
+        return 'تسجيل دين جديد';
+      case 'info':
+        return 'استعلام عن الحساب';
+      default:
+        return 'حركة على الحساب';
     }
   }
 

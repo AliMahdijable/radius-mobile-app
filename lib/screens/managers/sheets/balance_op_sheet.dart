@@ -210,6 +210,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       previousDebt: previousDebt,
       currentCredit: currentCredit,
       currentDebt: currentDebt,
+      // شحن/سحب/نقاط تؤثّر فقط على دين الـSAS — الديون الخارجية
+      // تبقى كما هي. الكاش هنا لا يعرف الـperDebtor remaining لذا
+      // نقدّر sasDebts ≈ currentDebt و otherDebts = 0. كافٍ للقالب.
+      sasDebts: currentDebt,
+      otherDebts: 0,
       actionKind: actionKind,
       notes: notes,
       sendWhatsApp: _sendWhatsApp,

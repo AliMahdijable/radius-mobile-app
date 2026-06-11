@@ -222,6 +222,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       previousDebt: _sasDebt + _customRemaining,
       currentCredit: _sasCredit,
       currentDebt: newSasDebt + newCustomDebt,
+      // التقسيم لـ{sas_debts} + {other_debts} في قالب v1 manager_agent.
+      sasDebts: newSasDebt,
+      otherDebts: newCustomDebt,
       actionKind: 'debt_payment',
       sendWhatsApp: _sendWhatsApp,
       sendPush: _sendPush,
