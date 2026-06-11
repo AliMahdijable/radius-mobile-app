@@ -189,6 +189,23 @@ class _Row extends StatelessWidget {
         lower.contains('delete_subscriber')) {
       return (label: 'حذف مشترك', detail: null);
     }
+    // مطلب 2026-06-11: شحن/سحب الرصيد للمدير الفرعي كان يتسجّل
+    // بـBALANCE_ADD/BALANCE_DEDUCT ويسقط على قاعدة "إضافة دين" /
+    // "تسديد دين" المصممة للمشترك. افحص الوصف أولاً — لو يحوي
+    // "للمدير" / "من المدير" أعطه label مدير منفصل.
+    if (description.contains('للمدير') || description.contains('من المدير')) {
+      final isWithdraw = description.contains('سحب') ||
+          lower.contains('balance_deduct') ||
+          lower.contains('balance_withdraw');
+      final amt = _extractAmount(
+        description,
+        RegExp(r'(?:شحن(?:\s+رصيد\s+\S+)?|سحب(?:\s+رصيد)?)\s+([\d,]+)'),
+      );
+      return (
+        label: isWithdraw ? 'سحب رصيد مدير' : 'شحن رصيد مدير',
+        detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
+      );
+    }
     // Order matters — 'debt_pay' contains 'debt' before 'pay', and
     // 'balance_deduct' contains neither. Check the specific labels
     // before falling through.
