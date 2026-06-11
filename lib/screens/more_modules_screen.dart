@@ -6,6 +6,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'discounts/discounts_screen.dart';
+import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
@@ -88,6 +89,18 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const DiscountsScreen(),
+                ),
+              ),
+            ),
+            const SizedBox(height: Sp.sm),
+            _ModuleCard(
+              icon: LucideIcons.users,
+              color: const Color(0xFF8B5CF6),
+              title: 'الموظفون',
+              subtitle: 'إدارة موظفي الفرع وصلاحياتهم',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const EmployeesScreen(),
                 ),
               ),
             ),
