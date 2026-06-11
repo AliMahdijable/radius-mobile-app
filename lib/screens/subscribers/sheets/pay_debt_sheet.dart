@@ -231,9 +231,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
 
   List<Widget> _buildBody(Color accent) {
     if (_currentDebt <= 0) {
-      return const [
+      return [
         Padding(
-          padding: EdgeInsets.symmetric(vertical: Sp.huge),
+          padding: const EdgeInsets.symmetric(vertical: Sp.huge),
           child: Center(
             child: Text(
               'لا يوجد دين على هذا المشترك',
