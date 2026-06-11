@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/discounts_api.dart';
+import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -38,6 +39,11 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
+  /// خريطة username (lowercased) → الاسم العربي الكامل. تُجلب من
+  /// قائمة المشتركين بالتوازي مع الخصومات. الـDiscount نفسه ما
+  /// يحفظ fullName، نلحقه من هنا عند العرض.
+  Map<String, String> _fullNames = const {};
+
   @override
   void initState() {
     super.initState();
@@ -57,19 +63,40 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final rows = await DiscountsApi.list();
+    // الخصومات + قائمة المشتركين بالتوازي. الـcache يخدم القائمة
+    // (45s TTL) فلا نضرب SAS4 إذا الـscreen الأم فتحت قبل قليل.
+    final results = await Future.wait([
+      DiscountsApi.list(),
+      SubscribersApi.loadAll(),
+    ]);
     if (!mounted) return;
+    final rows = results[0] as List<Discount>;
+    final subs = results[1] as List<dynamic>?; // List<Subscriber>?
+    final map = <String, String>{};
+    if (subs != null) {
+      for (final s in subs) {
+        final un = (s.username as String).toLowerCase();
+        final fn = (s.fullName as String).trim();
+        if (fn.isNotEmpty && fn != s.username) map[un] = fn;
+      }
+    }
     setState(() {
       _rows = rows;
+      _fullNames = map;
       _loading = false;
     });
   }
+
+  String? _fullNameFor(String username) =>
+      _fullNames[username.toLowerCase()];
 
   List<Discount> get _filtered {
     if (_query.isEmpty) return _rows;
     final q = _query.toLowerCase();
     return _rows.where((d) {
+      final fn = _fullNameFor(d.subscriberUsername) ?? '';
       return d.subscriberUsername.toLowerCase().contains(q) ||
+          fn.toLowerCase().contains(q) ||
           (d.packageName ?? '').toLowerCase().contains(q);
     }).toList();
   }
@@ -272,6 +299,8 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                                   const SizedBox(height: 8),
                               itemBuilder: (_, i) => _Tile(
                                 discount: filtered[i],
+                                fullName: _fullNameFor(
+                                    filtered[i].subscriberUsername),
                                 onEdit: () => _openEdit(filtered[i]),
                                 onDelete: () =>
                                     _confirmDelete(filtered[i]),
@@ -290,16 +319,22 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
 class _Tile extends StatelessWidget {
   const _Tile({
     required this.discount,
+    required this.fullName,
     required this.onEdit,
     required this.onDelete,
   });
   final Discount discount;
+  /// الاسم العربي الكامل للمشترك إن وُجد. لو null أو فارغ نخفي
+  /// السطر ولا نظهر username مرّتين.
+  final String? fullName;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final hasName = (fullName ?? '').trim().isNotEmpty &&
+        fullName!.trim() != discount.subscriberUsername;
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -331,20 +366,44 @@ class _Tile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      discount.subscriberUsername,
-                      style: AppType.label(color: AppColors.textHi)
-                          .copyWith(fontWeight: FontWeight.w800),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if ((discount.packageName ?? '').isNotEmpty)
+                    // الاسم العربي بالأعلى لو موجود — هو الأبرز
+                    // للقراءة السريعة (مطلب 2026-06-11).
+                    if (hasName) ...[
                       Text(
-                        discount.packageName!,
+                        fullName!,
+                        style: AppType.label(color: AppColors.textHi)
+                            .copyWith(fontWeight: FontWeight.w800),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        discount.subscriberUsername,
                         style: AppType.muted(color: AppColors.textMid)
                             .copyWith(fontSize: 11),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                      ),
+                    ] else
+                      Text(
+                        discount.subscriberUsername,
+                        style: AppType.label(color: AppColors.textHi)
+                            .copyWith(fontWeight: FontWeight.w800),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    if ((discount.packageName ?? '').isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          discount.packageName!,
+                          style: AppType.label(
+                                  color: const Color(0xFF14B8A6))
+                              .copyWith(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
                 ),
