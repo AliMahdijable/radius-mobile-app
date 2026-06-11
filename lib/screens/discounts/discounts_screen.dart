@@ -329,8 +329,11 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                                 Sp.lg, 0, Sp.lg, 90),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 2.1,
+                              // مطلب 2026-06-11: cards أصغر — 3
+                              // أعمدة + childAspectRatio أعلى = خلايا
+                              // قصيرة، أكثر مشتركاً مرئياً في الشاشة.
+                              crossAxisCount: 3,
+                              childAspectRatio: 1.7,
                               crossAxisSpacing: 6,
                               mainAxisSpacing: 6,
                             ),
@@ -745,16 +748,18 @@ class _SubscriberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final hasName =
+        sub.fullName.trim().isNotEmpty && sub.fullName != sub.username;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.sm),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           decoration: BoxDecoration(
             color: selected
-                ? accent.withValues(alpha: 0.08)
+                ? accent.withValues(alpha: 0.10)
                 : AppColors.surface,
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
@@ -766,25 +771,26 @@ class _SubscriberCard extends StatelessWidget {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.max,
             children: [
+              // الـheader: checkbox + اسم (عربي إن وُجد، وإلا username).
               Row(
                 children: [
                   Icon(
                     selected
                         ? LucideIcons.squareCheck
                         : LucideIcons.square,
-                    size: 12,
+                    size: 11,
                     color: selected ? accent : AppColors.textLow,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 3),
                   Expanded(
                     child: Text(
-                      sub.username,
+                      hasName ? sub.fullName : sub.username,
                       style: AppType.label(color: AppColors.textHi)
                           .copyWith(
-                              fontSize: 11.5,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w800),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -792,54 +798,53 @@ class _SubscriberCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (sub.fullName != sub.username) ...[
-                const SizedBox(height: 1),
-                Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Text(
-                    sub.fullName,
-                    style: AppType.muted().copyWith(fontSize: 9.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              // sub-line: username لو الـheader فيه الاسم العربي،
+              // أو الباقة لو ما في اسم عربي.
+              if (hasName)
+                Text(
+                  sub.username,
+                  style: AppType.muted().copyWith(fontSize: 9),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-              if ((sub.profileName ?? '').isNotEmpty) ...[
-                const SizedBox(height: 1),
-                Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Text(
-                    sub.profileName!,
-                    style: AppType.label(color: const Color(0xFF14B8A6))
-                        .copyWith(
-                            fontSize: 9.5, fontWeight: FontWeight.w700),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              if (existingDiscount != null && existingDiscount! > 0) ...[
-                const SizedBox(height: 2),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE08F2D).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(R.sm),
-                    border: Border.all(
+              // الـfooter: الباقة + badge الخصم الموجود.
+              Row(
+                children: [
+                  if ((sub.profileName ?? '').isNotEmpty)
+                    Expanded(
+                      child: Text(
+                        sub.profileName!,
+                        style: AppType.label(
+                                color: const Color(0xFF14B8A6))
+                            .copyWith(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  if (existingDiscount != null && existingDiscount! > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
                         color: const Color(0xFFE08F2D)
-                            .withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    '-${formatIQD(existingDiscount!)}',
-                    style: const TextStyle(
-                      color: Color(0xFFE08F2D),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(R.sm),
+                      ),
+                      child: Text(
+                        '-${formatIQD(existingDiscount!)}',
+                        style: const TextStyle(
+                          color: Color(0xFFE08F2D),
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ],
           ),
         ),
