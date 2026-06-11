@@ -108,8 +108,10 @@ class Manager {
       // v1 manager_model:70 — SAS4 uses `total_debt` for the
       // authoritative debt column; `debt` and `total` are fallbacks
       // for older endpoints (/manager/{id}/debt returns `total`).
-      totalDebt: _toDouble(j['total_debt'] ?? j['debt'] ?? j['total'] ?? 0),
-      debtForMe: _toDouble(j['debt_for_me']),
+      // SAS4 reports debt as a negative magnitude; mirror v1's
+      // .abs() so all callers can treat it as a positive size.
+      totalDebt: _toDouble(j['total_debt'] ?? j['debt'] ?? j['total'] ?? 0).abs(),
+      debtForMe: _toDouble(j['debt_for_me']).abs(),
       // v1 manager_model:74 — reward_points lives in many places
       // depending on the endpoint. Mirror the full fallback list.
       rewardPoints: _toInt(
@@ -206,10 +208,14 @@ class ManagerDebtInfo {
   factory ManagerDebtInfo.fromJson(Map<String, dynamic> j) {
     final data =
         j['data'] is Map<String, dynamic> ? j['data'] as Map<String, dynamic> : j;
+    // مطلب 2026-06-11: SAS4 يرجّع الدين كرقم سالب (debt = -1.6M
+    // معناها مدين بـ1.6M). v1 يأخذ `.abs()` في _enrichManagers
+    // فنبقي على نفس الاتفاقية: الدين هنا دائماً magnitude موجب،
+    // والإشارة تأتي من سياق الحقل (balance قد يكون سالب).
     return ManagerDebtInfo(
       balance: _toDouble(data['balance']),
-      totalDebt: _toDouble(data['total']),
-      debtForMe: _toDouble(data['debt_for_me']),
+      totalDebt: _toDouble(data['total']).abs(),
+      debtForMe: _toDouble(data['debt_for_me']).abs(),
     );
   }
 }
