@@ -81,7 +81,11 @@ class Manager {
       email: j['email']?.toString(),
       company: j['company']?.toString(),
       balance: toNum(j['balance']),
-      debt: toNum(j['debt']),
+      // مطابق v1 manager_model.dart:70 — SAS4 يستعمل
+      // `total_debt` للحقل الحاسم؛ `debt` و`total` احتياط لو الـ
+      // index/manager رجّع بصيغة قديمة. بدون هاي الـfallbacks الدين
+      // ما يطلع بالـUI بعد شحن آجل (bug 2026-06-11).
+      debt: toNum(j['total_debt'] ?? j['debt'] ?? j['total']),
       rewardPoints: toNum(j['reward_points'] ?? j['rewardPoints']),
       usersCount: toInt(j['users_count']),
       parentId: toInt(j['parent_id']),
