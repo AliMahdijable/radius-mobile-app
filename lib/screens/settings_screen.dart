@@ -8,7 +8,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'admin_permissions_screen.dart';
-import 'biometric_settings_screen.dart';
+import 'app_permissions_screen.dart';
 import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
 import 'notifications_settings_screen.dart';
@@ -195,18 +195,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: Sp.xs),
             _Row(
-              icon: Icons.fingerprint_rounded,
-              label: 'البصمة / Face ID',
+              icon: Icons.lock_outline_rounded,
+              label: 'صلاحيات التطبيق',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const BiometricSettingsScreen(),
+                  builder: (_) => const AppPermissionsScreen(),
                 ),
               ),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.shield_outlined,
-              label: 'الصلاحيات',
+              label: 'صلاحيات الادمن',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const AdminPermissionsScreen(),

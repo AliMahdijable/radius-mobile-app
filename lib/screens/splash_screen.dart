@@ -5,11 +5,12 @@ import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
 import '../services/biometric_service.dart';
 import '../theme/colors.dart';
+// permissions_screen is gone — biometric guard runs inline, notification
+// permission is offered from the app-permissions settings screen.
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'main_shell.dart';
 import 'login_screen.dart';
-import 'permissions_screen.dart';
 
 /// First screen on launch. Decides where to route:
 ///   - Token + autoLogin enabled  → home (skipping login + perms)

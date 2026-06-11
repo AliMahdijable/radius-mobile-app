@@ -9,7 +9,6 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'main_shell.dart';
-import 'permissions_screen.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -105,8 +104,10 @@ class _LoginScreenState extends State<LoginScreen> {
           // TODO[2fa-screen]: route to 2FA when that screen exists.
           return;
         }
+        // مطلب 2026-06-11: نُلغي صفحة طلب الإشعارات في البداية —
+        // الـadmin يفعّلها لاحقاً من الإعدادات → صلاحيات التطبيق.
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const PermissionsScreen()),
+          MaterialPageRoute(builder: (_) => const MainShell()),
         );
       case LoginFailure(:final message):
         HapticFeedback.heavyImpact();
