@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../core/util/format.dart';
@@ -33,11 +34,29 @@ class _SendInfoSheet extends StatefulWidget {
 class _SendInfoSheetState extends State<_SendInfoSheet> {
   late final TextEditingController _msgCtrl;
   bool _submitting = false;
+  // مطلب 2026-06-11: الديون الخارجية (manager-debts) تُجلب عند فتح
+  // الـsheet بالتوازي مع رسم القالب الافتراضي. v1 يمرّر extraDebt من
+  // الأب (managers_screen) لأنه يحتفظ بـsummary cached؛ v2 لا يحتفظ
+  // فيها فنجلبها هنا. عند الوصول، نُعيد بناء النص بالقيم الصحيحة.
+  double _extraDebt = 0;
+  bool _extraLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _msgCtrl = TextEditingController(text: _defaultMessage());
+    _msgCtrl = TextEditingController(text: _composeMessage(0));
+    _loadExtraDebt();
+  }
+
+  Future<void> _loadExtraDebt() async {
+    final summary = await ManagerDebtsApi.summary();
+    if (!mounted) return;
+    final extra = summary?.remainingForDebtor(widget.manager.id) ?? 0;
+    setState(() {
+      _extraDebt = extra;
+      _extraLoaded = true;
+      _msgCtrl.text = _composeMessage(extra);
+    });
   }
 
   @override
@@ -46,22 +65,26 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     super.dispose();
   }
 
-  String _defaultMessage() {
+  /// مطابق v1 _sendManagerInfoMessage (managers_screen.dart:1109).
+  /// الشكل ثابت — تحية + الرصيد الحالي + بريك-داون الديون الثلاث.
+  /// الفاصلة العربية بعد الاسم مهمّة: السيرفر يستعملها لاستخراج
+  /// `recipient_name` في سجلّ الواتساب (لو حُذفت الفاصلة، الـRegEx
+  /// يأخذ بقية الرسالة كلها كاسم → سجلّ مشوّش).
+  String _composeMessage(double extraDebt) {
     final m = widget.manager;
-    final name = m.fullName.isNotEmpty ? m.fullName : m.username;
-    final lines = <String>[
-      'مرحباً $name،',
-      'هذا تذكير بوضعك المالي الحالي:',
+    final managerName = m.fullName.isNotEmpty ? m.fullName : m.username;
+    final sas = m.debt;
+    final total = sas + extraDebt;
+    return [
+      'عزيزي المدير $managerName، 👋',
       '',
-      'الرصيد: ${formatIQD(m.balance ?? 0)} د.ع',
-      if ((m.debt ?? 0) > 0)
-        'الدين: ${formatIQD(m.debt!)} د.ع',
-      if ((m.rewardPoints ?? 0) > 0)
-        'النقاط: ${(m.rewardPoints ?? 0).toInt()}',
+      '💳 رصيدك الحالي: ${formatIQD(m.credit)} د.ع',
       '',
-      'يُرجى المراجعة عند الحاجة.',
-    ];
-    return lines.join('\n');
+      '— الديون عليك —',
+      '🧾 ديون الساس: ${formatIQD(sas)} د.ع',
+      '📑 ديون أخرى: ${formatIQD(extraDebt)} د.ع',
+      '📊 المجموع: ${formatIQD(total)} د.ع',
+    ].join('\n');
   }
 
   Future<void> _send() async {

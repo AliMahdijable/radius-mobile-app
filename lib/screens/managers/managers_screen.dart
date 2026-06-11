@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/manager_debts_api.dart';
 import '../../api/managers_api.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
@@ -36,6 +37,12 @@ class _ManagersScreenState extends State<ManagersScreen> {
   _ManagerSort _sort = _ManagerSort.username;
   bool _sortAsc = true;
 
+  /// مطلب 2026-06-11 (مطابق v1 managers_screen.dart:1167): الديون
+  /// الخارجية تنضمّ إلى دين الـSAS عند عرضها في الكارت. الـmap يُملأ
+  /// من /api/admin/manager-debts/summary ويُستهلَك في chip الدين +
+  /// يُمرَّر للـactions sheet + pay-debt sheet.
+  Map<int, double> _customDebtByManager = const {};
+
   @override
   void initState() {
     super.initState();
@@ -45,24 +52,49 @@ class _ManagersScreenState extends State<ManagersScreen> {
       if (q == _query) return;
       setState(() => _query = q);
     });
+    // أعد التحميل تلقائياً لمّا أيّ شاشة ثانية تُغيّر بيانات (إضافة
+    // مدير، تسديد دين، شحن، إلخ.) — مطابق سلوك شاشة المشتركين.
+    SubscriberEvents.dataChanged.addListener(_onExternalChange);
+  }
+
+  void _onExternalChange() {
+    if (!mounted) return;
+    _load();
   }
 
   @override
   void dispose() {
+    SubscriberEvents.dataChanged.removeListener(_onExternalChange);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final r = await ManagersApi.listFull(page: 1, count: 200);
+    // اجلب القائمة + ملخّص الديون الخارجية بالتوازي. أيّاً منهما لو فشل
+    // تُكمل الأخرى بشكل طبيعي.
+    final results = await Future.wait([
+      ManagersApi.listFull(page: 1, count: 200),
+      ManagerDebtsApi.summary(),
+    ]);
     if (!mounted) return;
+    final list = results[0] as ({List<Manager> rows, int total});
+    final summary = results[1] as ManagerDebtsSummary?;
     setState(() {
-      _rows = r.rows;
-      _total = r.total;
+      _rows = list.rows;
+      _total = list.total;
+      _customDebtByManager = {
+        for (final d in summary?.perDebtor ?? const [])
+          d.debtorAdminId: d.totalRemaining,
+      };
       _loading = false;
     });
   }
+
+  /// الدين الإجمالي على مدير = SAS + الديون الخارجية. يُستعمل في
+  /// الـchip + لتمريرها لـpay-debt sheet.
+  double _totalDebtFor(Manager m) =>
+      m.debt + (_customDebtByManager[m.id] ?? 0);
 
   List<Manager> get _filtered {
     Iterable<Manager> it = _rows;
@@ -126,7 +158,13 @@ class _ManagersScreenState extends State<ManagersScreen> {
       case ManagerAction.addPoints:
         await _openBalanceOp(m, preselected: BalanceOpKind.addPoints);
       case ManagerAction.payDebt:
-        final ok = await showPayDebtSheet(context, m);
+        // مرّر مجموع الديون الخارجية الحالي حتى الـsheet يعرض الكلتا
+        // فوراً بدون انتظار fetch ثاني.
+        final ok = await showPayDebtSheet(
+          context,
+          m,
+          initialCustomRemaining: _customDebtByManager[m.id] ?? 0,
+        );
         if (ok == true) _load();
       case ManagerAction.otherDebts:
         await Navigator.of(context).push(
@@ -242,6 +280,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                     for (final m in filtered) ...[
                       _ManagerTile(
                         manager: m,
+                        extraDebt: _customDebtByManager[m.id] ?? 0,
                         onTap: () => _openActions(m),
                       ),
                       const SizedBox(height: 8),
@@ -449,6 +488,7 @@ class _ManagerTile extends StatelessWidget {
   const _ManagerTile({
     required this.manager,
     required this.onTap,
+    this.extraDebt = 0,
   });
   final Manager manager;
   /// مطلب 2026-06-12: نقر الـtile يفتح actions sheet ضامناً 9 عمليات
@@ -456,11 +496,16 @@ class _ManagerTile extends StatelessWidget {
   /// / إرسال معلومات / حذف). الـtile نفسه ما عاد فيه أزرار.
   final VoidCallback onTap;
 
+  /// مطلب 2026-06-11: مجموع الديون الخارجية (manager-debts) المستحقّة
+  /// على هذا المدير. تُجمع مع `manager.debt` لتعرض chip دين موحّد
+  /// يطابق v1 (managers_screen.dart:1179).
+  final double extraDebt;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final balance = manager.balance ?? 0;
-    final debt = manager.debt ?? 0;
+    final debt = manager.debt + extraDebt;
     final points = manager.rewardPoints ?? 0;
     return Material(
       color: Colors.transparent,
