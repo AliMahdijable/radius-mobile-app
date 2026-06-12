@@ -434,6 +434,16 @@ class _QuickAddSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // مطلب 2026-06-12: لو الموظف ما عنده ولا صلاحية للـquick-add،
+    // empty state بدل صفحة عنوان فارغة محرجة.
+    final hasAny = Perms.hasAny(const [
+      'subscribers.add',
+      'subscribers.activate',
+      'subscribers.extend',
+      'subscribers.pay_debt',
+      'subscribers.add_debt',
+      'reports.expenses',
+    ]);
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
       child: Column(
@@ -444,6 +454,16 @@ class _QuickAddSheet extends StatelessWidget {
               style: AppType.title(color: AppColors.textHi)
                   .copyWith(fontSize: 18)),
           const SizedBox(height: Sp.lg),
+          if (!hasAny)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Sp.lg),
+              child: Center(
+                child: Text(
+                  'ليس لديك صلاحيات لأي عملية سريعة',
+                  style: AppType.muted().copyWith(fontSize: 13),
+                ),
+              ),
+            ),
           // مطلب 2026-06-10: الترتيب = إضافة مشترك → تجديد اشتراك →
           // تسديد دين → إضافة دين → إضافة صرفية. مطلب 2026-06-11:
           // كل بند يختفي إذا الموظف ما عنده الصلاحية المناسبة بدل

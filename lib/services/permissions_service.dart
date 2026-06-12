@@ -68,12 +68,16 @@ class PermissionsService {
   /// يُستدعى بعد تسجيل الدخول (login_screen.dart) لجلب الصلاحيات من
   /// `/api/v2/employees/me` وحفظها. لو الـadmin (مو موظف) ينظّف
   /// الـcache + flag (employee=false → كل شي مسموح).
-  static Future<void> refreshFromBackend() async {
+  ///
+  /// يرجع `true` لو نجح الجلب وحُفظت الحالة، `false` لو فشلت الشبكة
+  /// أو رجع response غير متوقّع. الـcaller (login flow) يستعملها ليقرر
+  /// هل يكمل للـMainShell — لا نريد employee يدخل والـcache في حالة
+  /// غير محدّدة (قد يرتفع لصلاحيات admin من بقايا جلسة سابقة).
+  static Future<bool> refreshFromBackend() async {
     final me = await EmployeesApi.me();
     if (me == null) {
-      // لا نُسقط الـcache الحالي — قد يكون فقط فشل شبكة. الـuser
-      // يبقى كما كان.
-      return;
+      // لا نُسقط الـcache الحالي — قد يكون فقط فشل شبكة. الـcaller يقرر.
+      return false;
     }
     if (me.isEmployee && me.permissions != null) {
       await _saveEmployee(me.permissions!);
@@ -81,6 +85,7 @@ class PermissionsService {
       // admin = full access
       await _clearEmployee();
     }
+    return true;
   }
 
   static Future<void> _saveEmployee(Map<String, bool> perms) async {

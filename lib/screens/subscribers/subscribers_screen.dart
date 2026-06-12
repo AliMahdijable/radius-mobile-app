@@ -9,6 +9,7 @@ import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
+import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -1514,6 +1515,17 @@ class _BulkActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // مطلب 2026-06-12: كل زر في الـbulk bar مربوط بصلاحية. لو الموظف
+    // ما يقدر يجدّد/يسدّد/يفعّل/يحذف الزر يختفي تماماً (مو disable).
+    final canRenew = Perms.hasAny(
+        const ['subscribers.activate', 'subscribers.extend']);
+    final canPayDebt = Perms.has('subscribers.pay_debt');
+    final canToggle = Perms.has('subscribers.toggle');
+    final canDelete = Perms.has('subscribers.delete');
+    // لو ما عنده أي عملية مجمّعة — البار كامل ما يحتاج يظهر.
+    if (!canRenew && !canPayDebt && !canToggle && !canDelete) {
+      return const SizedBox.shrink();
+    }
     return SafeArea(
       top: false,
       child: Container(
@@ -1527,29 +1539,30 @@ class _BulkActionBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(R.md),
+            if (canRenew)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(R.md),
+                    ),
+                  ),
+                  onPressed: onRenew,
+                  icon: const Icon(LucideIcons.calendarPlus, size: 18),
+                  label: Text(
+                    'تجديد الاشتراك ($selectedCount)',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14),
                   ),
                 ),
-                onPressed: onRenew,
-                icon: const Icon(LucideIcons.calendarPlus, size: 18),
-                label: Text(
-                  'تجديد الاشتراك ($selectedCount)',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 14),
-                ),
               ),
-            ),
             // Bulk pay-debt — shows only when the selection contains at
             // least one subscriber with debt. Counter in the label tells
             // the admin exactly how many rows will participate.
-            if (debtorCount > 0) ...[
+            if (debtorCount > 0 && canPayDebt) ...[
               const SizedBox(height: Sp.sm),
               SizedBox(
                 width: double.infinity,
@@ -1573,8 +1586,9 @@ class _BulkActionBar extends StatelessWidget {
             ],
             // Bulk disconnect — kicks online sessions off the network
             // without touching the enabled flag. Hidden when nobody in
-            // the selection is online (no point showing 'فصل (0)').
-            if (onlineCount > 0) ...[
+            // the selection is online (no point showing 'فصل (0)'),
+            // ومخفي لو الموظف ما عنده subscribers.toggle.
+            if (onlineCount > 0 && canToggle) ...[
               const SizedBox(height: Sp.sm),
               SizedBox(
                 width: double.infinity,
@@ -1596,43 +1610,51 @@ class _BulkActionBar extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: Sp.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: _SecondaryBtn(
-                    icon: LucideIcons.ban,
-                    label: enabledCount > 0
-                        ? 'تعطيل ($enabledCount)'
-                        : 'تعطيل',
-                    color: const Color(0xFFCD8B00),
-                    enabled: enabledCount > 0,
-                    onTap: onDisable,
-                  ),
-                ),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: _SecondaryBtn(
-                    icon: LucideIcons.circleCheck,
-                    label: disabledCount > 0
-                        ? 'تفعيل ($disabledCount)'
-                        : 'تفعيل',
-                    color: AppColors.brand,
-                    enabled: disabledCount > 0,
-                    onTap: onEnable,
-                  ),
-                ),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: _SecondaryBtn(
-                    icon: LucideIcons.trash2,
-                    label: 'حذف',
-                    color: AppColors.error,
-                    onTap: onDelete,
-                  ),
-                ),
-              ],
-            ),
+            // مطلب 2026-06-12: صف العمليات الثانوي. toggle (تعطيل/تفعيل)
+            // يحتاج subscribers.toggle، delete يحتاج subscribers.delete.
+            // لو الاثنين مخفيّين، الصف كله يختفي.
+            if (canToggle || canDelete) ...[
+              const SizedBox(height: Sp.sm),
+              Row(
+                children: [
+                  if (canToggle) ...[
+                    Expanded(
+                      child: _SecondaryBtn(
+                        icon: LucideIcons.ban,
+                        label: enabledCount > 0
+                            ? 'تعطيل ($enabledCount)'
+                            : 'تعطيل',
+                        color: const Color(0xFFCD8B00),
+                        enabled: enabledCount > 0,
+                        onTap: onDisable,
+                      ),
+                    ),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: _SecondaryBtn(
+                        icon: LucideIcons.circleCheck,
+                        label: disabledCount > 0
+                            ? 'تفعيل ($disabledCount)'
+                            : 'تفعيل',
+                        color: AppColors.brand,
+                        enabled: disabledCount > 0,
+                        onTap: onEnable,
+                      ),
+                    ),
+                    if (canDelete) const SizedBox(width: Sp.sm),
+                  ],
+                  if (canDelete)
+                    Expanded(
+                      child: _SecondaryBtn(
+                        icon: LucideIcons.trash2,
+                        label: 'حذف',
+                        color: AppColors.error,
+                        onTap: onDelete,
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

@@ -152,7 +152,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                 emp: e,
                                 onTap: Perms.has('employees.manage')
                                     ? () => _openEditor(employee: e)
-                                    : () {/* read-only */},
+                                    : null,
                                 onDelete: Perms.has('employees.manage')
                                     ? () => _confirmDelete(e)
                                     : null,
@@ -276,7 +276,9 @@ class _EmployeeTile extends StatelessWidget {
     this.onDelete,
   });
   final Employee emp;
-  final VoidCallback onTap;
+  /// null لو الـactor ما عنده صلاحية التعديل — InkWell يصير inert
+  /// (لا ripple، لا فعل) بدل ما يفتح editor فاضي.
+  final VoidCallback? onTap;
   /// null لو الـactor ما عنده صلاحية الحذف — يخفي زر الحذف بدل
   /// تعطيله.
   final VoidCallback? onDelete;

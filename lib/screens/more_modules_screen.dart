@@ -150,16 +150,6 @@ class MoreModulesScreen extends StatelessWidget {
       },
     );
   }
-
-  static void _todo(BuildContext ctx, String msg) {
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.textHi,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 }
 
 class _ModuleCard extends StatelessWidget {

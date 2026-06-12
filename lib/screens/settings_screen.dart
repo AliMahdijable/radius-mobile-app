@@ -135,38 +135,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // قوالبه، طباعة + قوالبها، المظهر، البصمة، الصلاحيات،
             // الإشعارات، السكون. حالياً كل واحد stub يفتح snack
             // 'قيد التطوير' حتى نبني كل قسم على حدة.
-            _SectionLabel('الواتساب'),
-            _Row(
-              icon: Icons.chat_bubble_outline_rounded,
-              label: 'حالة الواتساب',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const WhatsAppStatusScreen(),
+            // مطلب 2026-06-12: قسم الواتساب يختفي كلياً لو الموظف ما
+            // عنده ولا واحدة من whatsapp.connect/templates. كل بند
+            // محمي بمفتاحه.
+            if (Perms.hasAny(
+                const ['whatsapp.connect', 'whatsapp.templates'])) ...[
+              _SectionLabel('الواتساب'),
+              if (Perms.has('whatsapp.connect'))
+                _Row(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  label: 'حالة الواتساب',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WhatsAppStatusScreen(),
+                    ),
+                  ),
+                ),
+              if (Perms.hasAll(
+                  const ['whatsapp.connect', 'whatsapp.templates']))
+                const SizedBox(height: Sp.xs),
+              if (Perms.has('whatsapp.templates'))
+                _Row(
+                  icon: Icons.message_outlined,
+                  label: 'قوالب الواتساب',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WhatsAppTemplatesScreen(),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: Sp.md),
+            ],
+            // اعتمادات الأجهزة = إعدادات حسّاسة، نقفلها بـsettings.edit.
+            if (Perms.has('settings.edit')) ...[
+              _SectionLabel('الأجهزة'),
+              _Row(
+                icon: Icons.router_outlined,
+                label: 'اعتمادات ONU / Ubiquiti',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DeviceDefaultsScreen(),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: Sp.xs),
-            _Row(
-              icon: Icons.message_outlined,
-              label: 'قوالب الواتساب',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const WhatsAppTemplatesScreen(),
-                ),
-              ),
-            ),
-            const SizedBox(height: Sp.md),
-            _SectionLabel('الأجهزة'),
-            _Row(
-              icon: Icons.router_outlined,
-              label: 'اعتمادات ONU / Ubiquiti',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const DeviceDefaultsScreen(),
-                ),
-              ),
-            ),
-            const SizedBox(height: Sp.md),
+              const SizedBox(height: Sp.md),
+            ],
             _SectionLabel('الطباعة'),
             _Row(
               icon: Icons.print_outlined,

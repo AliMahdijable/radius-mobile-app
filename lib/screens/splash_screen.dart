@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
 import '../services/biometric_service.dart';
+import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 // permissions_screen is gone — biometric guard runs inline, notification
 // permission is offered from the app-permissions settings screen.
@@ -81,6 +84,10 @@ class _SplashScreenState extends State<SplashScreen> {
         );
         return;
       }
+      // مطلب 2026-06-12: نُعيد جلب صلاحيات الـactor حتى لو الـauto-login
+      // (الـadmin قد يكون عدّل صلاحيات الموظف من الويب بين فتح
+      // وفتح). الكاش يُحدّث؛ لو فشل الجلب يبقى الكاش الأخير.
+      unawaited(PermissionsService.refreshFromBackend());
       next = const MainShell();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered. Send

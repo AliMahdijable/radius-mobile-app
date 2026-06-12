@@ -107,12 +107,17 @@ class _LoginScreenState extends State<LoginScreen> {
           // TODO[2fa-screen]: route to 2FA when that screen exists.
           return;
         }
-        // مطلب 2026-06-11: نجلب صلاحيات الـactor الحالي من backend
-        // (admin → null = full access؛ employee → permissions map).
-        // الـnavigation ما ينتظرها — تجري بالخلفية ضمن fire-and-forget.
-        unawaited(PermissionsService.refreshFromBackend());
-        // مطلب 2026-06-11: نُلغي صفحة طلب الإشعارات في البداية —
-        // الـadmin يفعّلها لاحقاً من الإعدادات → صلاحيات التطبيق.
+        // مطلب 2026-06-12: نجلب صلاحيات الـactor قبل التنقّل لـMainShell.
+        // لو فشلت (شبكة/خطأ سيرفر) نمسح الكاش ونوقف الدخول — أأمن من
+        // دخول بكاش قديم لمستخدم سابق على نفس الجهاز.
+        final permsOk = await PermissionsService.refreshFromBackend();
+        if (!mounted) return;
+        if (!permsOk) {
+          await PermissionsService.clear();
+          if (!mounted) return;
+          _showSnack('تعذّر جلب الصلاحيات — حاول مرة أخرى', error: true);
+          return;
+        }
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainShell()),
         );
