@@ -15,6 +15,7 @@ import 'sheets/edit_manager_sheet.dart';
 import 'sheets/manager_actions_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/send_info_sheet.dart';
+import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
@@ -246,13 +247,15 @@ class _ManagersScreenState extends State<ManagersScreen> {
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: accent,
-        foregroundColor: Colors.white,
-        onPressed: _openAdd,
-        icon: const Icon(LucideIcons.userPlus, size: 16),
-        label: const Text('مدير جديد'),
-      ),
+      floatingActionButton: Perms.has('managers.add')
+          ? FloatingActionButton.extended(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              onPressed: _openAdd,
+              icon: const Icon(LucideIcons.userPlus, size: 16),
+              label: const Text('مدير جديد'),
+            )
+          : null,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,

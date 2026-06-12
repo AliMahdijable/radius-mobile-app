@@ -5,6 +5,7 @@ import '../../api/discounts_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -279,33 +280,45 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 children: [
                   _hero(accent),
                   const SizedBox(height: Sp.sm),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionCard(
-                          icon: LucideIcons.list,
-                          label: 'الخصومات الحالية',
-                          sub: '${_existing.length} مطبّق',
-                          color: accent,
-                          onTap: _openExistingDiscounts,
+                  // مطلب 2026-06-11: زر "حذف الكل" يختفي إذا الموظف
+                  // ما عنده discounts.manage. لو الاثنين ما متوفرة
+                  // (نادر — discounts.view بس)، الـRow كله يختفي.
+                  if (Perms.has('discounts.manage'))
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ActionCard(
+                            icon: LucideIcons.list,
+                            label: 'الخصومات الحالية',
+                            sub: '${_existing.length} مطبّق',
+                            color: accent,
+                            onTap: _openExistingDiscounts,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: Sp.sm),
-                      Expanded(
-                        child: _ActionCard(
-                          icon: LucideIcons.trash2,
-                          label: 'حذف الكل',
-                          sub: _existing.isNotEmpty
-                              ? 'إزالة الجميع'
-                              : 'لا يوجد',
-                          color: AppColors.error,
-                          onTap: _existing.isNotEmpty
-                              ? _confirmDeleteAll
-                              : null,
+                        const SizedBox(width: Sp.sm),
+                        Expanded(
+                          child: _ActionCard(
+                            icon: LucideIcons.trash2,
+                            label: 'حذف الكل',
+                            sub: _existing.isNotEmpty
+                                ? 'إزالة الجميع'
+                                : 'لا يوجد',
+                            color: AppColors.error,
+                            onTap: _existing.isNotEmpty
+                                ? _confirmDeleteAll
+                                : null,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    )
+                  else
+                    _ActionCard(
+                      icon: LucideIcons.list,
+                      label: 'الخصومات الحالية',
+                      sub: '${_existing.length} مطبّق',
+                      color: accent,
+                      onTap: _openExistingDiscounts,
+                    ),
                   const SizedBox(height: Sp.md),
                   _amountField(accent),
                   const SizedBox(height: Sp.sm),
@@ -356,8 +369,11 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         ),
       ),
       // زر التطبيق ثابت أسفل الشاشة. يتفعّل لما يكون في amount + في
-      // مشتركون مختارون. مطلب 2026-06-11.
-      bottomNavigationBar: SafeArea(
+      // مشتركون مختارون. مطلب 2026-06-11: يختفي بالكامل لو الموظف
+      // ما عنده discounts.manage (يقدر بس يشوف).
+      bottomNavigationBar: !Perms.has('discounts.manage')
+          ? null
+          : SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),

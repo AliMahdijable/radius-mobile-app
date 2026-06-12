@@ -5,6 +5,7 @@ import '../../api/managers_api.dart';
 import '../../api/packages_api.dart';
 import '../../core/util/format.dart';
 import '../../services/auth_storage.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -193,6 +194,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF8B5CF6);
     final changedCount = _changedCount();
+    // مطلب 2026-06-11: لو الموظف عنده packages.view بدون
+    // packages.edit_prices، تظهر القائمة كـread-only وزر الحفظ
+    // مخفي تماماً.
+    final canEdit = Perms.has('packages.edit_prices');
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -216,7 +221,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: !canEdit
+          ? null
+          : SafeArea(
         top: false,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -714,6 +721,9 @@ class _PackageTile extends StatelessWidget {
         TextField(
           controller: ctrl,
           onChanged: onChanged,
+          // مطلب 2026-06-11: لو الموظف ما عنده packages.edit_prices،
+          // كل الحقول read-only (مع gating إضافي لزر الحفظ).
+          readOnly: !Perms.has('packages.edit_prices'),
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
           style: AppType.label(

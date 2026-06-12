@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -54,16 +55,22 @@ class _ActionsSheet extends StatelessWidget {
     final hasBalance = (manager.balance ?? 0) > 0;
     final hasPhone = (manager.mobile ?? '').isNotEmpty;
     // 9 actions — ترتيب مطابق v1.
+    // مطلب 2026-06-11: كل action يختفي إذا الموظف ما عنده الصلاحية.
+    // payDebt يستعمل managers.deposit (نفس الدور — تحويل من الـbalance
+    // لتغطية الـdebt). otherDebts + movements + sendInfo افتراضياً
+    // مرئية لو الـactor يقدر يشوف المدير أصلاً.
     final actions = <ManagerAction>[
-      ManagerAction.edit,
-      ManagerAction.deposit,
-      if (hasBalance) ManagerAction.withdraw,
-      if (hasDebt) ManagerAction.payDebt,
-      ManagerAction.addPoints,
-      ManagerAction.otherDebts,
+      if (Perms.has('managers.edit')) ManagerAction.edit,
+      if (Perms.has('managers.deposit')) ManagerAction.deposit,
+      if (hasBalance && Perms.has('managers.withdraw'))
+        ManagerAction.withdraw,
+      if (hasDebt && Perms.has('managers.deposit')) ManagerAction.payDebt,
+      if (Perms.has('managers.add_points')) ManagerAction.addPoints,
+      if (Perms.has('reports.manager_debts')) ManagerAction.otherDebts,
       ManagerAction.movements,
-      if (hasDebt && hasPhone) ManagerAction.sendInfo,
-      ManagerAction.delete,
+      if (hasDebt && hasPhone && Perms.has('subscribers.send_whatsapp'))
+        ManagerAction.sendInfo,
+      if (Perms.has('managers.delete')) ManagerAction.delete,
     ];
     return SafeArea(
       top: false,

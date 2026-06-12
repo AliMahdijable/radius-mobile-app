@@ -7,6 +7,7 @@ import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
+import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -963,27 +964,35 @@ class _OperationsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final phone = sub.displayPhone;
+    // مطلب 2026-06-11: كل زر يختفي إذا الموظف ما عنده الصلاحية.
+    // الـactions كثيرة، فنبني list مع شرط لكل عنصر بدل nested if.
     final ops = <_Op>[
-      _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
-          () => showEditSubscriberSheet(context, sub)),
+      if (Perms.has('subscribers.edit'))
+        _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
+            () => showEditSubscriberSheet(context, sub)),
       // 'تجديد اشتراك' — sheet renews the package (same as v1's
       // _activateSubscriber). The label avoids collision with the
       // separate 'تعطيل/تفعيل حساب' toggle below which manages the
       // enabled flag.
-      _Op(LucideIcons.zap, 'تجديد اشتراك', const Color(0xFF14B8A6),
-          () => showActivateSheet(context, sub)),
-      _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
-          () => showExtendSheet(context, sub)),
-      _Op(LucideIcons.plus, 'إضافة دين', const Color(0xFFE08F2D),
-          () => showAddDebtSheet(context, sub)),
-      if (sub.hasDebt)
+      if (Perms.has('subscribers.activate'))
+        _Op(LucideIcons.zap, 'تجديد اشتراك', const Color(0xFF14B8A6),
+            () => showActivateSheet(context, sub)),
+      if (Perms.has('subscribers.extend'))
+        _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
+            () => showExtendSheet(context, sub)),
+      if (Perms.has('subscribers.add_debt'))
+        _Op(LucideIcons.plus, 'إضافة دين', const Color(0xFFE08F2D),
+            () => showAddDebtSheet(context, sub)),
+      if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
         _Op(LucideIcons.banknote, 'تسديد دين', const Color(0xFF14B8A6),
             () => showPayDebtSheet(context, sub)),
-      _Op(LucideIcons.tag, 'خصم سريع', const Color(0xFF14B8A6),
-          () => showQuickDiscountSheet(context, sub)),
-      _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
-          () => showMovementsSheet(context, sub)),
-      if (sub.hasDebt)
+      if (Perms.has('discounts.manage'))
+        _Op(LucideIcons.tag, 'خصم سريع', const Color(0xFF14B8A6),
+            () => showQuickDiscountSheet(context, sub)),
+      if (Perms.has('subscribers.view_activity'))
+        _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
+            () => showMovementsSheet(context, sub)),
+      if (sub.hasDebt && Perms.has('subscribers.send_whatsapp'))
         _Op(
           LucideIcons.bellRing,
           sendingTemplate == 'debt_reminder'
@@ -992,7 +1001,7 @@ class _OperationsCard extends StatelessWidget {
           Colors.orange,
           () => onSendTemplate('debt_reminder'),
         ),
-      if (sub.isNearExpiry)
+      if (sub.isNearExpiry && Perms.has('subscribers.send_whatsapp'))
         _Op(
           LucideIcons.alarmClock,
           sendingTemplate == 'expiry_warning'
@@ -1001,34 +1010,38 @@ class _OperationsCard extends StatelessWidget {
           Colors.deepOrange,
           () => onSendTemplate('expiry_warning'),
         ),
-      _Op(
-        LucideIcons.link,
-        generatingLink ? 'جاري التوليد…' : 'توليد رابط',
-        Colors.indigo,
-        onGenerateLink,
-      ),
-      _Op(
-        LucideIcons.info,
-        sendingTemplate == 'subscriber_info'
-            ? 'جاري الإرسال…'
-            : 'إرسال المعلومات',
-        Colors.blueAccent,
-        () => onSendTemplate('subscriber_info'),
-      ),
-      _Op(
-        sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
-        toggling
-            ? 'جاري...'
-            : (sub.isDisabled ? 'تفعيل حساب' : 'تعطيل'),
-        sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
-        onToggleEnabled ?? () {},
-      ),
-      _Op(
-        LucideIcons.trash2,
-        deleting ? 'جاري الحذف…' : 'حذف',
-        AppColors.error,
-        onDelete ?? () {},
-      ),
+      if (Perms.has('subscribers.generate_link'))
+        _Op(
+          LucideIcons.link,
+          generatingLink ? 'جاري التوليد…' : 'توليد رابط',
+          Colors.indigo,
+          onGenerateLink,
+        ),
+      if (Perms.has('subscribers.send_whatsapp'))
+        _Op(
+          LucideIcons.info,
+          sendingTemplate == 'subscriber_info'
+              ? 'جاري الإرسال…'
+              : 'إرسال المعلومات',
+          Colors.blueAccent,
+          () => onSendTemplate('subscriber_info'),
+        ),
+      if (Perms.has('subscribers.toggle'))
+        _Op(
+          sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
+          toggling
+              ? 'جاري...'
+              : (sub.isDisabled ? 'تفعيل حساب' : 'تعطيل'),
+          sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
+          onToggleEnabled ?? () {},
+        ),
+      if (Perms.has('subscribers.delete'))
+        _Op(
+          LucideIcons.trash2,
+          deleting ? 'جاري الحذف…' : 'حذف',
+          AppColors.error,
+          onDelete ?? () {},
+        ),
       if (phone.isNotEmpty)
         _Op(LucideIcons.phone, 'اتصال', const Color(0xFF14B8A6),
             () => _launchUri(context, Uri.parse('tel:$phone'))),

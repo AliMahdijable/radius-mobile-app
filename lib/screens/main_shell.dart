@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -444,69 +445,74 @@ class _QuickAddSheet extends StatelessWidget {
                   .copyWith(fontSize: 18)),
           const SizedBox(height: Sp.lg),
           // مطلب 2026-06-10: الترتيب = إضافة مشترك → تجديد اشتراك →
-          // تسديد دين → إضافة دين → إضافة صرفية. كل onTap يستعمل
-          // rootContext لا context الـsheet الحالي لأن الـFAB sheet
-          // تنهار قبل ما تنفتح الـsheet التالية.
-          _QuickItem(
-            icon: Icons.person_add_rounded,
-            color: const Color(0xFF3B82F6),
-            title: 'إضافة مشترك',
-            subtitle: 'إنشاء مشترك جديد في النظام',
-            onTap: () => showAddSubscriberSheet(rootContext),
-          ),
-          _QuickItem(
-            icon: Icons.bolt_rounded,
-            color: AppColors.brand,
-            title: 'تجديد اشتراك',
-            subtitle: 'تجديد اشتراك مشترك موجود',
-            onTap: () async {
-              final picked = await showSubscriberPickerSheet(
-                rootContext,
-                title: 'تجديد اشتراك',
-              );
-              if (picked != null && rootContext.mounted) {
-                await showActivateSheet(rootContext, picked);
-              }
-            },
-          ),
-          _QuickItem(
-            icon: Icons.payments_rounded,
-            color: const Color(0xFF14B8A6),
-            title: 'تسديد دين',
-            subtitle: 'استلام دفعة من مشترك',
-            onTap: () async {
-              final picked = await showSubscriberPickerSheet(
-                rootContext,
-                title: 'تسديد دين',
-                debtorsOnly: true,
-              );
-              if (picked != null && rootContext.mounted) {
-                await showPayDebtSheet(rootContext, picked);
-              }
-            },
-          ),
-          _QuickItem(
-            icon: Icons.account_balance_wallet_rounded,
-            color: const Color(0xFFE08F2D),
-            title: 'إضافة دين',
-            subtitle: 'إضافة دين على مشترك',
-            onTap: () async {
-              final picked = await showSubscriberPickerSheet(
-                rootContext,
-                title: 'إضافة دين',
-              );
-              if (picked != null && rootContext.mounted) {
-                await showAddDebtSheet(rootContext, picked);
-              }
-            },
-          ),
-          _QuickItem(
-            icon: Icons.receipt_long_rounded,
-            color: const Color(0xFF8B5CF6),
-            title: 'إضافة صرفية',
-            subtitle: 'تسجيل مصروف جديد',
-            onTap: () => showAddExpenseSheet(rootContext),
-          ),
+          // تسديد دين → إضافة دين → إضافة صرفية. مطلب 2026-06-11:
+          // كل بند يختفي إذا الموظف ما عنده الصلاحية المناسبة بدل
+          // ما يطلع له خطأ "غير مسموح" بعد الضغط.
+          if (Perms.has('subscribers.add'))
+            _QuickItem(
+              icon: Icons.person_add_rounded,
+              color: const Color(0xFF3B82F6),
+              title: 'إضافة مشترك',
+              subtitle: 'إنشاء مشترك جديد في النظام',
+              onTap: () => showAddSubscriberSheet(rootContext),
+            ),
+          if (Perms.hasAny(['subscribers.activate', 'subscribers.extend']))
+            _QuickItem(
+              icon: Icons.bolt_rounded,
+              color: AppColors.brand,
+              title: 'تجديد اشتراك',
+              subtitle: 'تجديد اشتراك مشترك موجود',
+              onTap: () async {
+                final picked = await showSubscriberPickerSheet(
+                  rootContext,
+                  title: 'تجديد اشتراك',
+                );
+                if (picked != null && rootContext.mounted) {
+                  await showActivateSheet(rootContext, picked);
+                }
+              },
+            ),
+          if (Perms.has('subscribers.pay_debt'))
+            _QuickItem(
+              icon: Icons.payments_rounded,
+              color: const Color(0xFF14B8A6),
+              title: 'تسديد دين',
+              subtitle: 'استلام دفعة من مشترك',
+              onTap: () async {
+                final picked = await showSubscriberPickerSheet(
+                  rootContext,
+                  title: 'تسديد دين',
+                  debtorsOnly: true,
+                );
+                if (picked != null && rootContext.mounted) {
+                  await showPayDebtSheet(rootContext, picked);
+                }
+              },
+            ),
+          if (Perms.has('subscribers.add_debt'))
+            _QuickItem(
+              icon: Icons.account_balance_wallet_rounded,
+              color: const Color(0xFFE08F2D),
+              title: 'إضافة دين',
+              subtitle: 'إضافة دين على مشترك',
+              onTap: () async {
+                final picked = await showSubscriberPickerSheet(
+                  rootContext,
+                  title: 'إضافة دين',
+                );
+                if (picked != null && rootContext.mounted) {
+                  await showAddDebtSheet(rootContext, picked);
+                }
+              },
+            ),
+          if (Perms.has('reports.expenses'))
+            _QuickItem(
+              icon: Icons.receipt_long_rounded,
+              color: const Color(0xFF8B5CF6),
+              title: 'إضافة صرفية',
+              subtitle: 'تسجيل مصروف جديد',
+              onTap: () => showAddExpenseSheet(rootContext),
+            ),
         ],
       ),
     );

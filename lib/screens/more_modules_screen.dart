@@ -33,7 +33,7 @@ class MoreModulesScreen extends StatelessWidget {
       valueListenable: PermissionsService.changes,
       builder: (context, _, __) {
         final cards = <Widget>[
-          if (Perms.has('expenses.view'))
+          if (Perms.has('reports.expenses'))
             _ModuleCard(
               icon: LucideIcons.receipt,
               color: const Color(0xFFE08F2D),
@@ -57,7 +57,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          if (Perms.hasAny(['profiles.view', 'profiles.edit']))
+          if (Perms.hasAny(['packages.view', 'packages.edit_prices']))
             _ModuleCard(
               icon: LucideIcons.package,
               color: const Color(0xFF8B5CF6),
