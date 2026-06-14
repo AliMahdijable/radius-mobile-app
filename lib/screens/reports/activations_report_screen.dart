@@ -209,7 +209,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         child: Center(
           child: Column(
             children: [
-              Icon(LucideIcons.zapOff, size: 36, color: AppColors.textLow),
+              Icon(LucideIcons.zap, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
               Text('لا توجد تفعيلات في هذه الفترة',
                   style: AppType.label(color: AppColors.textMid)),

@@ -232,7 +232,7 @@ _ActionMeta _actionMeta(String at) {
           'تطبيق خصم', LucideIcons.tag, Color(0xFF14B8A6));
     case 'DISCOUNT_REMOVE':
       return const _ActionMeta(
-          'إزالة خصم', LucideIcons.tagX, Color(0xFFE08F2D));
+          'إزالة خصم', LucideIcons.tag, Color(0xFFE08F2D));
     case 'WHATSAPP_SEND_MESSAGE':
       return const _ActionMeta(
           'إرسال واتساب', LucideIcons.messageCircle, Color(0xFF25D366));
@@ -247,7 +247,7 @@ _ActionMeta _actionMeta(String at) {
           'حفظ قالب WA', LucideIcons.fileText, Color(0xFF25D366));
     case 'WHATSAPP_TEMPLATE_DELETE':
       return const _ActionMeta(
-          'حذف قالب WA', LucideIcons.fileX, Color(0xFFE08F2D));
+          'حذف قالب WA', LucideIcons.fileText, Color(0xFFE08F2D));
     case 'PRINT_RECEIPT':
       return const _ActionMeta(
           'طباعة وصل', LucideIcons.printer, Color(0xFF3B82F6));
@@ -256,10 +256,10 @@ _ActionMeta _actionMeta(String at) {
           'حفظ قالب طباعة', LucideIcons.fileText, Color(0xFF3B82F6));
     case 'LOGIN':
       return const _ActionMeta(
-          'تسجيل دخول', LucideIcons.logIn, Color(0xFF26A69A));
+          'تسجيل دخول', LucideIcons.circleCheck, Color(0xFF26A69A));
     case 'LOGOUT':
       return const _ActionMeta(
-          'تسجيل خروج', LucideIcons.logOut, Color(0xFFCD8B00));
+          'تسجيل خروج', LucideIcons.power, Color(0xFFCD8B00));
     case 'LOGIN_FAILED':
       return _ActionMeta('فشل دخول', LucideIcons.alertCircle, AppColors.error);
     case 'EXPIRY_NOTIFICATION':

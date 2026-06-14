@@ -166,7 +166,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                 Row(
                   children: [
                     if (s.ipAddress != null && s.ipAddress!.isNotEmpty) ...[
-                      Icon(LucideIcons.globe,
+                      Icon(LucideIcons.wifi,
                           size: 10, color: AppColors.textLow),
                       const SizedBox(width: 3),
                       Text(s.ipAddress!,
