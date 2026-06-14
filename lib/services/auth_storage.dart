@@ -34,6 +34,14 @@ class AuthStorage {
   // admins who hold prm_managers_create still see the parent picker.
   static const _kCanAccessManagers = 'auth.can_access_managers';
   static const _kCanAccessPackages = 'auth.can_access_packages';
+  // 2026-06-14 incident: حين يدخل موظف، الـserver يصدر empToken خاص.
+  // عند 401 على أي endpoint، الـinterceptor كان ينادي
+  // /api/auth/refresh-token الذي يجدد توكن SAS4 للأب (admin@popq) ثم
+  // يكتبه فوق empToken. النتيجة: الموظف يصير admin بعد أول refresh،
+  // me() يرجع is_employee:false، الـcache يصير empty، Perms.has()=true
+  // لكل شي. الفلتر هذا flag يخلي refreshToken() ترفض التجديد للموظف
+  // (يستعمل empToken طول مدته 24h، ثم relogin).
+  static const _kIsEmployee = 'auth.is_employee';
 
   static Future<void> saveSession({
     required String token,
@@ -45,6 +53,7 @@ class AuthStorage {
     bool isSuperAdmin = false,
     bool canAccessManagers = false,
     bool canAccessPackages = false,
+    bool isEmployee = false,
   }) async {
     await Future.wait([
       _storage.write(key: _kToken, value: token),
@@ -57,9 +66,18 @@ class AuthStorage {
           key: _kCanAccessManagers, value: canAccessManagers ? '1' : '0'),
       _storage.write(
           key: _kCanAccessPackages, value: canAccessPackages ? '1' : '0'),
+      _storage.write(key: _kIsEmployee, value: isEmployee ? '1' : '0'),
       if (tokenExpiry != null)
         _storage.write(key: _kTokenExpiry, value: tokenExpiry),
     ]);
+  }
+
+  /// True إذا الـuser سجل دخول كموظف (empToken). يقرأها
+  /// AuthApi.refreshToken() لترفض refresh والـinterceptor لـ
+  /// kick-to-login عند 401.
+  static Future<bool> isEmployee() async {
+    final v = await _storage.read(key: _kIsEmployee);
+    return v == '1';
   }
 
   /// Replace just the token after a refresh. Keeps adminId / username /
@@ -142,6 +160,7 @@ class AuthStorage {
       _storage.delete(key: _kIsSuperAdmin),
       _storage.delete(key: _kCanAccessManagers),
       _storage.delete(key: _kCanAccessPackages),
+      _storage.delete(key: _kIsEmployee),
     ]);
   }
 }

@@ -2,7 +2,17 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
+import '../services/permissions_service.dart';
 import 'auth_api.dart';
+
+/// تنبيه عام لِلوصول 401 + فشل refresh — تستمع له الـMainShell/Splash
+/// لتدفع المستخدم لـLoginScreen. القيمة عداد بسيط (bump على كل
+/// authentication failure)، لا تحمل معلومات.
+///
+/// 2026-06-14: مطلوب للموظفين خاصة — refreshToken() ترفض التجديد لهم
+/// (وإلا تكتب SAS4 admin token فوق empToken). فالـinterceptor يحتاج
+/// قناة لإخبار الـUI أن الجلسة انتهت ولا فائدة من المتابعة.
+final ValueNotifier<int> authExpiredSignal = ValueNotifier<int>(0);
 
 /// Two shared Dio instances:
 ///  • `dio` → backend (rad.mysvcs.net)
@@ -111,7 +121,18 @@ class _AuthInterceptor extends Interceptor {
   /// on the same future so refresh-token is hit at most once.
   Future<Response?> _refreshAndRetry(RequestOptions failed) async {
     final ok = await _runRefresh();
-    if (!ok) return null;
+    if (!ok) {
+      // 2026-06-14: لو الـuser موظف، refresh مرفوض بقصد — empToken
+      // لا يُجدّد. الـsession انتهت فعلياً. نمسح المخزن ونطلق إشارة
+      // لـMainShell ليـnavigate إلى LoginScreen. الـadmin العادي
+      // يرى snack وحدها لو refresh فشل (مشكلة شبكة).
+      if (await AuthStorage.isEmployee()) {
+        await AuthStorage.clear();
+        await PermissionsService.clear();
+        authExpiredSignal.value = authExpiredSignal.value + 1;
+      }
+      return null;
+    }
     final newToken = await AuthStorage.readToken();
     if (newToken == null) return null;
     // Prevent infinite loops: tag the retried request and skip refresh

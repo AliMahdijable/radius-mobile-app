@@ -21,6 +21,7 @@ class LoginSuccess extends LoginResult {
     this.isSuperAdmin = false,
     this.canAccessManagers = false,
     this.canAccessPackages = false,
+    this.isEmployee = false,
   });
 
   final String token;
@@ -41,6 +42,11 @@ class LoginSuccess extends LoginResult {
   /// 'prm_profiles_create' SAS4. Combined with canAccessManagers to
   /// gate the expiration date picker (canEditExpiration = either).
   final bool canAccessPackages;
+  /// True عند login موظف (user.role='employee' في الـbackend response).
+  /// يُحفظ في AuthStorage عشان AuthApi.refreshToken() ترفض التجديد
+  /// للموظف — الـempToken لا يقدر يتجدد عبر /api/auth/refresh-token
+  /// (الذي يجدد SAS4 admin token للأب) بدون ما يخسر الموظف صلاحياته.
+  final bool isEmployee;
 }
 
 class LoginFailure extends LoginResult {
@@ -128,6 +134,7 @@ class AuthApi {
         isSuperAdmin: isSuperAdmin,
         canAccessManagers: canAccessManagers,
         canAccessPackages: canAccessPackages,
+        isEmployee: isEmployee,
       );
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));
@@ -144,6 +151,17 @@ class AuthApi {
   static Future<({String token, String? expiresAt})?> refreshToken() async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return null;
+    // 2026-06-14: لو الـsession لموظف، /api/auth/refresh-token يجدد
+    // توكن SAS4 للأب (parent_admin_id) ويرجع admin token. الـinterceptor
+    // كان يكتبه فوق empToken فالموظف يتحول لـadmin بصمت = كل شي يصير
+    // مفتوح عنده. نرفض refresh هنا — الـempToken عمره 24h، بعدها يطلع
+    // 401 → الـUI يدفعه لـlogin (في api_client.dart onError).
+    if (await AuthStorage.isEmployee()) {
+      if (!kReleaseMode) {
+        debugPrint('🟡 refresh-token: skipped (employee session — must re-login)');
+      }
+      return null;
+    }
     try {
       // Fresh Dio without the auth interceptor — otherwise a 401 on the
       // refresh call itself would try to refresh recursively.

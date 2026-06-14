@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../api/api_client.dart' show authExpiredSignal;
 import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'dashboard/dashboard_screen.dart';
+import 'login_screen.dart';
 import 'more_modules_screen.dart';
 import 'reports_screen.dart';
 import 'search/quick_search_overlay.dart';
@@ -50,8 +52,32 @@ class _MainShellState extends State<MainShell> {
   DateTime? _lastBackPress;
   static const _backExitWindow = Duration(seconds: 2);
 
+  int _authExpiredSeen = 0;
+  void _onAuthExpired() {
+    final v = authExpiredSignal.value;
+    if (v == _authExpiredSeen || !mounted) return;
+    _authExpiredSeen = v;
+    // 2026-06-14: signal من api_client.dart حين empToken الموظف انتهى
+    // (refresh مرفوض بقصد). نمسح أي حالة محلية ونرجع لشاشة الدخول.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('انتهت الجلسة — سجّل دخول من جديد')),
+    );
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _authExpiredSeen = authExpiredSignal.value;
+    authExpiredSignal.addListener(_onAuthExpired);
+  }
+
   @override
   void dispose() {
+    authExpiredSignal.removeListener(_onAuthExpired);
     _subsFilterCmd.dispose();
     super.dispose();
   }
