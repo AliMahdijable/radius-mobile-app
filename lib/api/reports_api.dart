@@ -203,39 +203,73 @@ class SessionRow {
     this.username,
     this.userManager,
     this.ipAddress,
+    this.mac,
+    this.device,
     this.bytesIn = 0,
     this.bytesOut = 0,
     this.startedAt,
     this.endedAt,
+    this.sessionTime,
+    this.isOnlineOverride,
   });
   final int id;
   final String? username;
   final String? userManager;
   final String? ipAddress;
+  final String? mac;
+  final String? device;
   final num bytesIn;
   final num bytesOut;
   final String? startedAt;
   final String? endedAt;
+  final num? sessionTime;
+  final bool? isOnlineOverride;
 
-  bool get isOnline => endedAt == null || endedAt!.isEmpty;
+  bool get isOnline =>
+      isOnlineOverride ?? (endedAt == null || endedAt!.isEmpty);
 
   static SessionRow? fromJson(Map<String, dynamic> j) {
-    // SAS4 يرجع radacctid (مو id). نجرّب الاثنين للتوافق.
+    // نمطان محتملان:
+    //  (1) /api/v2/sessions (historical): radacctid + framedipaddress + callingstationid + acctstarttime/acctstoptime
+    //  (2) /api/v2/online-users (live): بدون id، ip/mac/session_time مباشرة
     final id = int.tryParse(j['id']?.toString() ?? '') ??
         int.tryParse(j['radacctid']?.toString() ?? '');
-    if (id == null) return null;
+    // لو ما ملقينا id، نصنع hash من username+mac كـfallback عشان
+    // ما نرفض صف online-users. الـid يستعمل بس داخل الـUI.
+    final username = j['username']?.toString();
+    final ip = j['ip_address']?.toString() ??
+        j['ip']?.toString() ??
+        j['framedipaddress']?.toString();
+    final mac = j['mac']?.toString() ?? j['callingstationid']?.toString();
+    if (id == null && (username == null || username.isEmpty)) return null;
+    final finalId = id ?? '$username|$mac'.hashCode.abs();
+    final st = j['session_time'];
+    final sessionTime = st is num
+        ? st
+        : (st != null ? num.tryParse(st.toString()) : null);
+    // online-users ما فيه endedAt — نضبطها = null، والـisOnline يعتمد
+    // على المصدر (لو مافيه radacctid عادة يعني /online-users).
+    final endedAt =
+        j['ended_at']?.toString() ?? j['acctstoptime']?.toString();
+    final isOnlineOverride = id == null && endedAt == null ? true : null;
     return SessionRow(
-      id: id,
-      username: j['username']?.toString(),
-      userManager:
-          j['user_manager']?.toString() ?? j['manager']?.toString(),
-      ipAddress: j['ip_address']?.toString() ??
-          j['ip']?.toString() ??
-          j['framedipaddress']?.toString(),
-      bytesIn: FinanceKPIs._n(j['bytes_in'] ?? j['acctinputoctets']),
-      bytesOut: FinanceKPIs._n(j['bytes_out'] ?? j['acctoutputoctets']),
-      startedAt: j['started_at']?.toString() ?? j['acctstarttime']?.toString(),
-      endedAt: j['ended_at']?.toString() ?? j['acctstoptime']?.toString(),
+      id: finalId,
+      username: username,
+      userManager: j['user_manager']?.toString() ??
+          j['manager']?.toString() ??
+          j['parent']?.toString(),
+      ipAddress: ip,
+      mac: (mac != null && mac.isNotEmpty) ? mac : null,
+      device: j['device']?.toString() ?? j['oui']?.toString(),
+      bytesIn: FinanceKPIs._n(
+          j['bytes_in'] ?? j['download_bytes'] ?? j['acctinputoctets']),
+      bytesOut: FinanceKPIs._n(
+          j['bytes_out'] ?? j['upload_bytes'] ?? j['acctoutputoctets']),
+      startedAt:
+          j['started_at']?.toString() ?? j['acctstarttime']?.toString(),
+      endedAt: endedAt,
+      sessionTime: sessionTime,
+      isOnlineOverride: isOnlineOverride,
     );
   }
 }

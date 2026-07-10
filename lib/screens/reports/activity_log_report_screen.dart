@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/expenses_api.dart';
 import '../../api/reports_api.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -93,20 +94,65 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
       _error = null;
     });
     _scopeIds ??= await loadScopeUserIds();
-    final r = await ReportsApi.activities(
-      from: _range.from,
-      to: _range.to,
-      search: _search.isEmpty ? null : _search,
-      userIds: _scopeIds,
-      limit: 5000,
-    );
+    // نجلب activities + expenses بالتوازي.
+    // الصرفيات في جدول منفصل ولا تظهر في /api/activities — نجلبها من
+    // /api/admin/expenses ونحوّلها إلى ActivityRow صناعية.
+    final results = await Future.wait([
+      ReportsApi.activities(
+        from: _range.from,
+        to: _range.to,
+        search: _search.isEmpty ? null : _search,
+        userIds: _scopeIds,
+        limit: 5000,
+      ),
+      ExpensesApi.list(
+        from: _fmt(_range.from),
+        to: _fmt(_range.to),
+        limit: 2000,
+      ),
+    ]);
+    final r = results[0] as ({bool ok, List<ActivityRow> rows, String? error});
+    final expList = results[1] as ({List<ExpenseRow> rows, num total});
+
     if (!mounted) return;
+
+    // نحوّل الصرفيات لـActivityRow-shaped rows. نصنع id مركّب مع فارق
+    // كبير حتى لا يتصادم مع IDs الحقيقية.
+    final expenseRows = expList.rows
+        .where((e) {
+          if (_search.isNotEmpty) {
+            return (e.note ?? '').contains(_search);
+          }
+          return true;
+        })
+        .map((e) => ActivityRow(
+              id: 900000000 + e.id,
+              actionType: 'EXPENSE_ADD',
+              actionDescription: e.note ?? 'صرفية',
+              amount: e.amount,
+              adminUsername: null,
+              actingEmployeeFullName: e.actingEmployeeUsername,
+              targetName: null,
+              createdAt: e.expenseDate,
+            ))
+        .toList();
+
+    // ندمج ونرتّب DESC حسب createdAt (نص ISO / YYYY-MM-DD).
+    final merged = [...r.rows, ...expenseRows]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     setState(() {
       _loading = false;
-      _rows = r.rows;
+      _rows = merged;
       _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
       _page = 0;
     });
+  }
+
+  static String _fmt(DateTime? d) {
+    if (d == null) return '';
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
 
   List<List<String>> get _exportRows => _visibleRows

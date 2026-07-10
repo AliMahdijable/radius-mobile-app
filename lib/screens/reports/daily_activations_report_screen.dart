@@ -30,6 +30,25 @@ class _DailyActivationsReportScreenState
   int _page = 0;
   int _pageSize = 25;
 
+  /// فلتر: all / cash_only (يوم بأي نقدي) / non_cash_only / no_revenue
+  String _typeFilter = 'all';
+
+  List<DailyActivationRow> get _visibleRows {
+    if (_typeFilter == 'all') return _rows;
+    return _rows.where((r) {
+      switch (_typeFilter) {
+        case 'cash_only':
+          return r.count > 0;
+        case 'non_cash_only':
+          return r.nonCashCount > 0;
+        case 'no_revenue':
+          return r.count == 0;
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,7 +75,7 @@ class _DailyActivationsReportScreenState
     });
   }
 
-  List<List<String>> get _exportRows => _rows
+  List<List<String>> get _exportRows => _visibleRows
       .map((r) => [
             r.day,
             '${r.count}',
@@ -65,20 +84,24 @@ class _DailyActivationsReportScreenState
           ])
       .toList();
 
-  int get _totalCount =>
-      _rows.fold(0, (s, r) => s + r.count + r.nonCashCount);
-  num get _totalCash => _rows.fold<num>(0, (s, r) => s + r.cashSum);
+  int get _totalActivations =>
+      _visibleRows.fold(0, (s, r) => s + r.count + r.nonCashCount);
+  num get _totalRevenue => _visibleRows.fold<num>(0, (s, r) => s + r.cashSum);
+
+  int get _totalCount => _totalActivations;
+  num get _totalCash => _totalRevenue;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
+    final visible = _visibleRows;
     final totalPages =
-        (_rows.length / _pageSize).ceil().clamp(1, 99999);
+        (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, _rows.length);
-    final pageRows = _rows.isEmpty
+    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    final pageRows = visible.isEmpty
         ? const <DailyActivationRow>[]
-        : _rows.sublist(pageStart, pageEnd);
+        : visible.sublist(pageStart, pageEnd);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -108,6 +131,8 @@ class _DailyActivationsReportScreenState
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
+              _typeChips(),
+              const SizedBox(height: Sp.sm),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -122,7 +147,7 @@ class _DailyActivationsReportScreenState
                   children: [
                     Expanded(
                       child: ReportStatsBar(
-                        totalItems: _rows.length,
+                        totalItems: visible.length,
                         pageStart: pageStart,
                         pageEnd: pageEnd,
                         pageSize: _pageSize,
@@ -288,6 +313,85 @@ class _DailyActivationsReportScreenState
     if (d == null) return '';
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
+  }
+
+  Widget _typeChips() {
+    // كل chip: (key, label, count, color)
+    final all = _rows.length;
+    final cashOnly = _rows.where((r) => r.count > 0).length;
+    final nonCashOnly = _rows.where((r) => r.nonCashCount > 0).length;
+    final noRev = _rows.where((r) => r.count == 0).length;
+    final chips = [
+      ('all', 'الكل', all, const Color(0xFF14B8A6)),
+      ('cash_only', 'أيام نقدي', cashOnly, const Color(0xFF14B8A6)),
+      ('non_cash_only', 'أيام غير نقدي', nonCashOnly, AppColors.error),
+      ('no_revenue', 'بلا إيراد', noRev, AppColors.textLow),
+    ];
+    return SizedBox(
+      height: 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) {
+          final c = chips[i];
+          final selected = _typeFilter == c.$1;
+          return InkWell(
+            borderRadius: BorderRadius.circular(R.sm),
+            onTap: () => setState(() {
+              _typeFilter = c.$1;
+              _page = 0;
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: selected
+                    ? c.$4.withValues(alpha: 0.18)
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(
+                  color: selected
+                      ? c.$4.withValues(alpha: 0.55)
+                      : AppColors.border,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    c.$2,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? c.$4 : AppColors.textMid,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: (selected ? c.$4 : AppColors.textLow)
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '${c.$3}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: selected ? c.$4 : AppColors.textMid,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _emptyBlock() => Padding(

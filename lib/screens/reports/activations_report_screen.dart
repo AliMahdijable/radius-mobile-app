@@ -92,9 +92,11 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     });
   }
 
+  // العدّادات + المجموع يعكسان الفلتر النشط (visible) — لو الفلتر "الكل"
+  // نستعمل _rows كامل، لو مختار نوع محدّد نستعمل الصفوف المفلترة فقط.
   num get _totalCash {
     num s = 0;
-    for (final r in _rows) {
+    for (final r in _visibleRows) {
       final isCash = (r.actionDescription ?? '').contains('نقدي') &&
           !(r.actionDescription ?? '').contains('غير نقدي');
       if (isCash) s += r.amount;
@@ -102,11 +104,11 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     return s;
   }
 
-  int get _activateCount => _rows.where((r) {
+  int get _activateCount => _visibleRows.where((r) {
         final at = r.actionType.toUpperCase().trim();
         return at == 'SUBSCRIBER_ACTIVATE' || at == 'SUBSCRIBER_ADD';
       }).length;
-  int get _extendCount => _rows.where((r) {
+  int get _extendCount => _visibleRows.where((r) {
         return r.actionType.toUpperCase().trim() == 'SUBSCRIBER_EXTEND';
       }).length;
 
@@ -346,7 +348,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             child: _stat(
               icon: LucideIcons.zap,
               label: 'إجمالي',
-              value: '${_rows.length}',
+              value: '${_visibleRows.length}',
               color: const Color(0xFF14B8A6),
             ),
           ),

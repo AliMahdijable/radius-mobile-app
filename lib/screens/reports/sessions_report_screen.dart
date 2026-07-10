@@ -66,6 +66,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
       .map((s) => [
             s.username ?? '',
             s.ipAddress ?? '',
+            s.mac ?? '',
             s.userManager ?? '',
             _humanBytes(s.bytesIn),
             _humanBytes(s.bytesOut),
@@ -255,6 +256,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                         columns: const [
                                           'المستخدم',
                                           'IP',
+                                          'MAC',
                                           'المدير',
                                           'تنزيل',
                                           'رفع',
@@ -346,6 +348,23 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                     ],
                   ],
                 ),
+                if (s.mac != null && s.mac!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.smartphone,
+                          size: 10, color: AppColors.textLow),
+                      const SizedBox(width: 3),
+                      Text(
+                        'MAC: ${s.mac!}',
+                        style: AppType.muted().copyWith(
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (s.bytesIn > 0 || s.bytesOut > 0) ...[
                   const SizedBox(height: 2),
                   Row(
