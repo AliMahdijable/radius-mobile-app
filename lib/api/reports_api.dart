@@ -54,7 +54,12 @@ class FinanceKPIs {
   /// (مطابق Financial.tsx). balance_add يدخل debt — لا revenue.
   num get totalCashRevenue =>
       activateCashSum + debtPaySum + balanceDeductSum;
-  num get netCash => totalCashRevenue - expensesSum;
+
+  /// الصافي = الإيراد - المصاريف - إضافة الدين اليدوي (2026-07-10).
+  /// إضافة الدين اليدوي هي مبالغ منحها المدير للمشترك بلا استلام نقد
+  /// (subsidy فعلي)، فتُطرَح من الصافي مثل المصاريف.
+  num get netCash =>
+      totalCashRevenue - expensesSum - balanceAddSum;
 
   static FinanceKPIs fromJson(Map<String, dynamic> j) {
     return FinanceKPIs(

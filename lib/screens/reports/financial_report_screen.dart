@@ -213,6 +213,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           // خط فاصل خفيف يفصل الإيراد عن الصافي/المصاريف
           Container(height: 1, color: AppColors.border),
           const SizedBox(height: Sp.sm),
+          // صف الخصومات: المصاريف + إضافة الدين اليدوي (كلاهما يُطرح
+          // من الصافي).
           Row(
             children: [
               Expanded(
@@ -226,19 +228,25 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: _heroMini(
-                  icon: k.netCash < 0
-                      ? LucideIcons.trendingDown
-                      : LucideIcons.trendingUp,
-                  label: 'الصافي',
-                  // formatIQD تشيل الإشارة — نضيفها هنا. الأيقونة واللون
-                  // يتبدّلان كذلك حتى يوضح الصافي السالب (المصاريف > الإيراد).
-                  value: k.netCash < 0
-                      ? '-${formatIQD(k.netCash)}'
-                      : formatIQD(k.netCash),
-                  color: k.netCash < 0 ? AppColors.error : brand,
+                  icon: LucideIcons.plus,
+                  label: 'إضافة دين',
+                  value: '-${formatIQD(k.balanceAddSum)}',
+                  color: AppColors.error,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: Sp.sm),
+          // صف الصافي — يعرض netCash بشكل بارز مع رمزه ولونه المناسب.
+          _heroMini(
+            icon: k.netCash < 0
+                ? LucideIcons.trendingDown
+                : LucideIcons.trendingUp,
+            label: 'الصافي',
+            value: k.netCash < 0
+                ? '-${formatIQD(k.netCash)}'
+                : formatIQD(k.netCash),
+            color: k.netCash < 0 ? AppColors.error : brand,
           ),
         ],
       ),
