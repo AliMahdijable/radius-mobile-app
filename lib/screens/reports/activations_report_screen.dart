@@ -163,6 +163,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               const SizedBox(height: Sp.sm),
               ReportFiltersPanel(
                 value: _filters,
+                actionTypeOptions: kActivationsActionTypes,
                 onChanged: (v) {
                   setState(() {
                     _filters = v;

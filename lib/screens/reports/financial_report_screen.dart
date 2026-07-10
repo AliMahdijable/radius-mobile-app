@@ -108,6 +108,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               const SizedBox(height: Sp.sm),
               ReportFiltersPanel(
                 value: _filters,
+                actionTypeOptions: kFinancialActionTypes,
                 onChanged: (v) {
                   setState(() {
                     _filters = v;
@@ -385,12 +386,34 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
+  /// virtual types: SUBSCRIBER_ACTIVATE_CASH / _NON_CASH يتفكّكان بحسب
+  /// description (مطابق backend FinanceReportController).
+  bool _matchesFinancialType(FinanceLog l, String type) {
+    final at = l.actionType.toUpperCase().trim();
+    final desc = (l.actionDescription ?? '');
+    final isNonCash = desc.contains('غير نقدي');
+    final isCash = desc.contains('نقدي') && !isNonCash;
+    switch (type) {
+      case 'SUBSCRIBER_ACTIVATE_CASH':
+        return (at == 'SUBSCRIBER_ACTIVATE' ||
+                (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'))) &&
+            isCash;
+      case 'SUBSCRIBER_ACTIVATE_NON_CASH':
+        return (at == 'SUBSCRIBER_ACTIVATE' ||
+                (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'))) &&
+            isNonCash;
+      case 'ADMIN_EXPENSE':
+        return at == 'ADMIN_EXPENSE' || at == 'EXPENSE_ADD';
+      default:
+        return at == type;
+    }
+  }
+
   List<FinanceLog> _filterLogs(List<FinanceLog> logs) {
     final types = _filters.actionTypes;
     if (types == null || types.isEmpty) return logs;
-    final wanted = types.toSet();
     return logs
-        .where((l) => wanted.contains(l.actionType.toUpperCase().trim()))
+        .where((l) => types.any((t) => _matchesFinancialType(l, t)))
         .toList();
   }
 

@@ -66,26 +66,53 @@ class ReportFilters {
   static const _sentinel = Object();
 }
 
-/// أنواع الحركات المدعومة بالـmulti-select (كما في client-v2 _shared).
-/// key = action_type الذي يُرسَل للـbackend / يُقارَن بالصفوف.
-/// label = نص العرض.
-const List<({String key, String label})> kReportActionTypeOptions = [
-  (key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
-  (key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
-  (key: 'DEBT_PAY', label: 'تسديد دين'),
-  (key: 'BALANCE_DEDUCT', label: 'استقطاع رصيد'),
-  (key: 'BALANCE_ADD', label: 'إضافة دين'),
-  (key: 'ADMIN_EXPENSE', label: 'صرفية'),
-  (key: 'EXPENSE_ADD', label: 'صرفية (يدوي)'),
-  (key: 'SUBSCRIBER_ADD', label: 'إضافة مشترك'),
-  (key: 'SUBSCRIBER_EDIT', label: 'تعديل مشترك'),
-  (key: 'SUBSCRIBER_DELETE', label: 'حذف مشترك'),
-  (key: 'MANAGER_ADD', label: 'إضافة مدير'),
-  (key: 'MANAGER_EDIT', label: 'تعديل مدير'),
-  (key: 'MANAGER_DELETE', label: 'حذف مدير'),
-  (key: 'PACKAGE_EDIT', label: 'تعديل باقة'),
-  (key: 'DISCOUNT_SET', label: 'تطبيق خصم'),
-  (key: 'DISCOUNT_REMOVE', label: 'إزالة خصم'),
+/// أنواع الحركات — مجموعة مسمّاة تخدم كل شاشة.
+///
+/// * `kFinancialActionTypes` — الحركات المالية فقط (لشاشة التقرير المالي).
+/// * `kActivationsActionTypes` — تفعيل/تمديد (لشاشة التفعيلات والتمديدات).
+/// * `kAllActionTypes` — كل الأنواع (لسجل النشاط).
+class ReportActionTypeOption {
+  const ReportActionTypeOption({required this.key, required this.label});
+  final String key;
+  final String label;
+}
+
+/// نفس قائمة web Financial.tsx (ACTION_TYPE_OPTIONS).
+/// SUBSCRIBER_ACTIVATE_CASH و_NON_CASH virtual types يفهمها الـbackend
+/// (FinanceReportController.js) بحيث يفلتر SUBSCRIBER_ACTIVATE + description.
+const List<ReportActionTypeOption> kFinancialActionTypes = [
+  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'تسديد دين'),
+  ReportActionTypeOption(
+      key: 'SUBSCRIBER_ACTIVATE_CASH', label: 'تفعيل نقدي'),
+  ReportActionTypeOption(
+      key: 'SUBSCRIBER_ACTIVATE_NON_CASH', label: 'تفعيل غير نقدي'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'إضافة دين'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد اشتراك'),
+  ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'صرفية'),
+];
+
+const List<ReportActionTypeOption> kActivationsActionTypes = [
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
+];
+
+const List<ReportActionTypeOption> kAllActionTypes = [
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
+  ReportActionTypeOption(key: 'DEBT_PAY', label: 'تسديد دين'),
+  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'استقطاع رصيد'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'إضافة دين'),
+  ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'صرفية'),
+  ReportActionTypeOption(key: 'EXPENSE_ADD', label: 'صرفية يدوي'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ADD', label: 'إضافة مشترك'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EDIT', label: 'تعديل مشترك'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_DELETE', label: 'حذف مشترك'),
+  ReportActionTypeOption(key: 'MANAGER_ADD', label: 'إضافة مدير'),
+  ReportActionTypeOption(key: 'MANAGER_EDIT', label: 'تعديل مدير'),
+  ReportActionTypeOption(key: 'MANAGER_DELETE', label: 'حذف مدير'),
+  ReportActionTypeOption(key: 'PACKAGE_EDIT', label: 'تعديل باقة'),
+  ReportActionTypeOption(key: 'DISCOUNT_SET', label: 'تطبيق خصم'),
+  ReportActionTypeOption(key: 'DISCOUNT_REMOVE', label: 'إزالة خصم'),
 ];
 
 /// لوحة فلاتر أفقية inline — دائماً ظاهرة على أعلى الشاشة (مطابق web).
@@ -101,12 +128,17 @@ class ReportFiltersPanel extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.includeActionTypes = true,
+    this.actionTypeOptions = kAllActionTypes,
   });
   final ReportFilters value;
   final ValueChanged<ReportFilters> onChanged;
 
   /// أخفِ dropdown "كل الحركات" (مثلاً لو الشاشة عندها filter نوع خاص بها).
   final bool includeActionTypes;
+
+  /// قائمة أنواع الحركات المتاحة للـmulti-select. الشاشات المختلفة
+  /// تُضيّق هذه القائمة حسب طبيعة التقرير (المالية → 6 أنواع فقط).
+  final List<ReportActionTypeOption> actionTypeOptions;
 
   @override
   State<ReportFiltersPanel> createState() => _ReportFiltersPanelState();
@@ -240,51 +272,154 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   Future<List<String>?> _openActionTypesDialog(
       BuildContext ctx, List<String> current) async {
     final set = current.toSet();
+    final options = widget.actionTypeOptions;
     return showDialog<List<String>>(
       context: ctx,
       builder: (dctx) {
         return StatefulBuilder(builder: (dctx, setLocal) {
-          return AlertDialog(
-            title: const Text('اختر الحركات'),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final o in kReportActionTypeOptions)
-                    CheckboxListTile(
-                      dense: true,
-                      title: Text(o.label,
-                          style: const TextStyle(fontSize: 13)),
-                      value: set.contains(o.key),
-                      onChanged: (v) => setLocal(() {
-                        if (v == true) {
-                          set.add(o.key);
-                        } else {
-                          set.remove(o.key);
-                        }
-                      }),
-                    ),
-                ],
-              ),
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24, vertical: 60),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(R.lg),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dctx),
-                child: const Text('إلغاء'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setLocal(set.clear);
-                },
-                child: const Text('مسح'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dctx, set.toList()),
-                child: const Text('تطبيق'),
-              ),
-            ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.filter,
+                          size: 15, color: AppColors.brand),
+                      const SizedBox(width: 6),
+                      Text('أنواع الحركات',
+                          style: AppType.title(color: AppColors.textHi)
+                              .copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800)),
+                      const Spacer(),
+                      if (set.isNotEmpty)
+                        TextButton(
+                          onPressed: () => setLocal(set.clear),
+                          style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4)),
+                          child: Text('مسح',
+                              style: TextStyle(
+                                  color: AppColors.error,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(height: 1, color: AppColors.border),
+                // Compact rows بدل CheckboxListTile
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: options.length,
+                    itemBuilder: (_, i) {
+                      final o = options[i];
+                      final checked = set.contains(o.key);
+                      return InkWell(
+                        onTap: () => setLocal(() {
+                          if (checked) {
+                            set.remove(o.key);
+                          } else {
+                            set.add(o.key);
+                          }
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: checked
+                                      ? AppColors.brand
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: checked
+                                        ? AppColors.brand
+                                        : AppColors.border,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: checked
+                                    ? const Icon(Icons.check,
+                                        size: 12, color: Colors.white)
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(o.label,
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.textHi,
+                                        fontWeight: checked
+                                            ? FontWeight.w700
+                                            : FontWeight.w500)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(height: 1, color: AppColors.border),
+                // Footer
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(dctx),
+                          style: TextButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          child: Text('إلغاء',
+                              style: TextStyle(
+                                  color: AppColors.textMid,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton(
+                          onPressed: () =>
+                              Navigator.pop(dctx, set.toList()),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.brand,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          child: Text(
+                              set.isEmpty
+                                  ? 'تطبيق'
+                                  : 'تطبيق (${set.length})',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         });
       },
@@ -292,7 +427,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   }
 
   String _labelFor(String key) {
-    for (final o in kReportActionTypeOptions) {
+    for (final o in widget.actionTypeOptions) {
       if (o.key == key) return o.label;
     }
     return key;
