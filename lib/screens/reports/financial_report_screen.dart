@@ -229,12 +229,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   }
 
   Widget _kpiGrid(FinanceKPIs k) {
+    // تسديد دين = debt_pay + balance_deduct مجموعان (BALANCE_DEDUCT مع
+    // description "تسديد دين …" هو تسديد دين فعلياً — مطابق web _shared.tsx).
+    final debtPayTotal = k.debtPaySum + k.balanceDeductSum;
     final items = <_KpiItem>[
       _KpiItem('تفعيل نقدي', formatIQD(k.activateCashSum), const Color(0xFF14B8A6), LucideIcons.zap),
-      _KpiItem('تسديد دين', formatIQD(k.debtPaySum), const Color(0xFF0EA5E9), LucideIcons.banknote),
-      _KpiItem('استقطاع رصيد', formatIQD(k.balanceDeductSum), const Color(0xFF3B82F6), LucideIcons.minus),
-      _KpiItem('تفعيل غير نقدي', formatIQD(k.activateNonCashSum), const Color(0xFFE08F2D), LucideIcons.creditCard, isDebit: true),
-      _KpiItem('إضافة دين', formatIQD(k.balanceAddSum), const Color(0xFFE08F2D), LucideIcons.plus, isDebit: true),
+      _KpiItem('تسديد دين', formatIQD(debtPayTotal), const Color(0xFF14B8A6), LucideIcons.banknote),
+      _KpiItem('تفعيل غير نقدي', formatIQD(k.activateNonCashSum), AppColors.error, LucideIcons.creditCard, isDebit: true),
+      _KpiItem('إضافة دين', formatIQD(k.balanceAddSum), AppColors.error, LucideIcons.plus, isDebit: true),
       _KpiItem('# تفعيلات', '${k.activationsCount}', const Color(0xFF8B5CF6), LucideIcons.userCheck, isCount: true),
       _KpiItem('# تمديدات', '${k.extendCount}', const Color(0xFF26A69A), LucideIcons.repeat, isCount: true),
       _KpiItem('# مصاريف', '${k.expensesCount}', AppColors.error, LucideIcons.receipt, isCount: true),
@@ -285,7 +287,13 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 Text(
                   it.isCount ? it.value : '${it.isDebit ? '-' : ''}${it.value}',
                   style: TextStyle(
-                    color: it.isDebit ? AppColors.error : AppColors.textHi,
+                    // المبالغ: أحمر (سالب) لـdebit، أخضر (موجب) للباقي.
+                    // العدّاد يبقى بلون النص العادي.
+                    color: it.isCount
+                        ? AppColors.textHi
+                        : (it.isDebit
+                            ? AppColors.error
+                            : const Color(0xFF14B8A6)),
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),

@@ -34,7 +34,7 @@ class ReportLogTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final meta = _actionMeta(actionType);
+    final meta = _actionMeta(actionType, description);
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -82,7 +82,8 @@ class ReportLogTile extends StatelessWidget {
                       Text(
                         '${meta.debit ? '-' : ''}${formatIQD(amount.abs())} د.ع',
                         style: TextStyle(
-                          color: meta.debit ? AppColors.error : AppColors.textHi,
+                          // debit → أحمر (سالب)، عكسه → أخضر (موجب).
+                          color: meta.debit ? AppColors.error : _kPositive,
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
                         ),
@@ -163,17 +164,48 @@ class _ActionMeta {
   final bool debit;
 }
 
-_ActionMeta _actionMeta(String at) {
+/// ألوان اتفاقية:
+///   • أخضر (0xFF14B8A6) = موجب (تفعيل نقدي، تمديد نقدي، تسديد دين)
+///   • أحمر (AppColors.error) = سالب (تفعيل غير نقدي، إضافة دين، صرفية)
+/// المستخدم صرّح 2026-07-10 بالقاعدة.
+const Color _kPositive = Color(0xFF14B8A6);
+
+/// نقدي أم غير نقدي حسب وصف الحركة.
+/// وصف مثال: "تفعيل المشترك | ... | نقدي" أو "... | غير نقدي".
+bool _isNonCash(String desc) => desc.contains('غير نقدي');
+bool _isCash(String desc) =>
+    desc.contains('نقدي') && !desc.contains('غير نقدي');
+
+_ActionMeta _actionMeta(String at, String desc) {
   switch (at) {
     case 'SUBSCRIBER_ACTIVATE':
-      return const _ActionMeta(
-          'تفعيل', LucideIcons.zap, Color(0xFF14B8A6));
+      // نقدي = موجب أخضر، غير نقدي = سالب أحمر، مجهول = افتراضي.
+      if (_isNonCash(desc)) {
+        return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
+            debit: true);
+      }
+      if (_isCash(desc)) {
+        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+      }
+      return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
     case 'SUBSCRIBER_EXTEND':
-      return const _ActionMeta(
-          'تمديد', LucideIcons.repeat, Color(0xFF3B82F6));
+      // نفس منطق التفعيل — نقدي أخضر، غير نقدي أحمر.
+      if (_isNonCash(desc)) {
+        return _ActionMeta('تمديد', LucideIcons.repeat, AppColors.error,
+            debit: true);
+      }
+      return const _ActionMeta('تمديد', LucideIcons.repeat, _kPositive);
     case 'SUBSCRIBER_ADD':
+      // لو الوصف تفعيل نتعامل معه مثل SUBSCRIBER_ACTIVATE.
+      if (desc.contains('تفعيل')) {
+        if (_isNonCash(desc)) {
+          return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
+              debit: true);
+        }
+        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+      }
       return const _ActionMeta(
-          'إضافة مشترك', LucideIcons.userPlus, Color(0xFF14B8A6));
+          'إضافة مشترك', LucideIcons.userPlus, _kPositive);
     case 'SUBSCRIBER_EDIT':
       return const _ActionMeta(
           'تعديل مشترك', LucideIcons.pencil, Color(0xFF3B82F6));
@@ -187,15 +219,17 @@ _ActionMeta _actionMeta(String at) {
       return const _ActionMeta(
           'تعطيل حساب', LucideIcons.ban, Color(0xFFE08F2D));
     case 'BALANCE_ADD':
-      return const _ActionMeta(
-          'إضافة دين', LucideIcons.plus, Color(0xFFE08F2D),
+      // إضافة دين = سالب أحمر (مبلغ يزيد على المشترك، خسارة للمدير).
+      return _ActionMeta('إضافة دين', LucideIcons.plus, AppColors.error,
           debit: true);
     case 'BALANCE_DEDUCT':
+      // BALANCE_DEDUCT + description "تسديد دين …" = تسديد دين فعلياً
+      // (مطابق web _shared.tsx:520-522). لون موجب أخضر.
       return const _ActionMeta(
-          'استقطاع', LucideIcons.minus, Color(0xFF3B82F6));
+          'تسديد دين', LucideIcons.banknote, _kPositive);
     case 'DEBT_PAY':
       return const _ActionMeta(
-          'تسديد دين', LucideIcons.banknote, Color(0xFF0EA5E9));
+          'تسديد دين', LucideIcons.banknote, _kPositive);
     case 'PAYMENT_ADD':
       return const _ActionMeta(
           'دفعة', LucideIcons.banknote, Color(0xFF14B8A6));
