@@ -66,7 +66,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       from: _range.from,
       to: _range.to,
       userIds: _scopeIds,
-      recentLimit: 500,
+      // 2000 حد أعلى مطمئن للـmerge بين backend KPIs والمُحسَبة client-side
+      // عند تفعيل فلتر. مغلق على 2000 لتقليل حجم الاستجابة.
+      recentLimit: 2000,
     );
     if (!mounted) return;
     setState(() {
@@ -115,10 +117,22 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               else if (_error != null)
                 _errorPanel()
               else if (_data != null) ...[
-                _hero(_data!.kpis),
-                const SizedBox(height: Sp.md),
-                _kpiGrid(_data!.kpis),
-                const SizedBox(height: Sp.lg),
+                // KPIs: عند الفلتر "الكل" استعمل قيم backend (فترة كاملة).
+                // عند فلتر محدّد نحسب من الـrecentLogs المفلترة.
+                Builder(builder: (_) {
+                  final filtered = _filterLogs(_data!.recentLogs);
+                  final effectiveKpis = _typeFilter == 'all'
+                      ? _data!.kpis
+                      : _kpisFromLogs(filtered);
+                  return Column(
+                    children: [
+                      _hero(effectiveKpis),
+                      const SizedBox(height: Sp.md),
+                      _kpiGrid(effectiveKpis),
+                      const SizedBox(height: Sp.lg),
+                    ],
+                  );
+                }),
                 _recentLogs(_data!.recentLogs),
               ],
             ],
@@ -150,36 +164,51 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   }
 
   /// هيرو — الإيراد الإجمالي + الصافي بعد المصاريف.
+  /// تصميم موحّد مع بقية بطاقات KPI (surface + border خفيف)، والاعتماد
+  /// على اللون فقط في القيم الرقمية والأيقونات (تعليق مستخدم 2026-07-10:
+  /// الـgradient كان نشازاً).
   Widget _hero(FinanceKPIs k) {
     final brand = AppColors.brand;
     return Container(
       padding: const EdgeInsets.all(Sp.lg),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            brand.withValues(alpha: 0.18),
-            brand.withValues(alpha: 0.04),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: brand.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('الإيراد النقدي الإجمالي',
-              style: AppType.muted().copyWith(fontSize: 11)),
-          const SizedBox(height: 4),
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: brand.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Icon(LucideIcons.wallet,
+                    size: 14, color: brand),
+              ),
+              const SizedBox(width: 8),
+              Text('الإيراد النقدي الإجمالي',
+                  style: AppType.muted().copyWith(
+                      fontSize: 11, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 6),
           Text(
             '${formatIQD(k.totalCashRevenue)} د.ع',
-            style: AppType.title(color: AppColors.textHi).copyWith(
+            style: AppType.title(color: brand).copyWith(
               fontSize: 24,
               fontWeight: FontWeight.w900,
               letterSpacing: -0.5,
             ),
           ),
+          const SizedBox(height: Sp.sm),
+          // خط فاصل خفيف يفصل الإيراد عن الصافي/المصاريف
+          Container(height: 1, color: AppColors.border),
           const SizedBox(height: Sp.sm),
           Row(
             children: [
@@ -213,39 +242,41 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     required String value,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label,
-                    style: AppType.muted().copyWith(
-                        fontSize: 10, color: color.withValues(alpha: 0.85))),
-                Text(
-                  value,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+    // بدون خلفية ملوّنة — نعتمد على اللون في الأيقونة + القيمة فقط،
+    // بحيث تنسجم مع hero card الجديدة (خلفية surface).
+    return Row(
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
-        ],
-      ),
+          child: Icon(icon, size: 13, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: AppType.muted().copyWith(
+                      fontSize: 10, fontWeight: FontWeight.w600)),
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -337,6 +368,56 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     return logs
         .where((l) => wanted.contains(l.actionType.toUpperCase().trim()))
         .toList();
+  }
+
+  /// نحسب KPIs من قائمة FinanceLog — يُستدعى عند تفعيل فلتر لعرض
+  /// قيم مطابقة للفلتر بدلاً من فترة كاملة. عند "الكل" نستعمل قيم
+  /// backend مباشرةً (أدقّ لأنها من الاستعلام الكامل بلا حد).
+  FinanceKPIs _kpisFromLogs(List<FinanceLog> logs) {
+    num activateCash = 0,
+        activateNonCash = 0,
+        debtPay = 0,
+        balanceDeduct = 0,
+        balanceAdd = 0,
+        expenses = 0;
+    int activationsCount = 0, extendCount = 0, expensesCount = 0;
+    for (final l in logs) {
+      final at = l.actionType.toUpperCase().trim();
+      final desc = l.actionDescription ?? '';
+      final isNonCash = desc.contains('غير نقدي');
+      final isCash = desc.contains('نقدي') && !isNonCash;
+      if (at == 'SUBSCRIBER_ACTIVATE' ||
+          (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'))) {
+        activationsCount++;
+        if (isNonCash) {
+          activateNonCash += l.amount;
+        } else if (isCash) {
+          activateCash += l.amount;
+        }
+      } else if (at == 'SUBSCRIBER_EXTEND') {
+        extendCount++;
+      } else if (at == 'DEBT_PAY') {
+        debtPay += l.amount;
+      } else if (at == 'BALANCE_DEDUCT') {
+        balanceDeduct += l.amount;
+      } else if (at == 'BALANCE_ADD') {
+        balanceAdd += l.amount;
+      } else if (at == 'EXPENSE_ADD') {
+        expenses += l.amount;
+        expensesCount++;
+      }
+    }
+    return FinanceKPIs(
+      activateCashSum: activateCash,
+      activateNonCashSum: activateNonCash,
+      debtPaySum: debtPay,
+      balanceDeductSum: balanceDeduct,
+      balanceAddSum: balanceAdd,
+      expensesSum: expenses,
+      expensesCount: expensesCount,
+      activationsCount: activationsCount,
+      extendCount: extendCount,
+    );
   }
 
   int _countLogsFor(String key, List<FinanceLog> logs) {
