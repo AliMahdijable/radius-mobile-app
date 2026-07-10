@@ -9,6 +9,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
+import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/scope_helper.dart';
@@ -34,23 +35,11 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   int _page = 0;
   int _pageSize = 25;
 
-  /// فلتر نوع الحركة على قائمة "آخر الحركات".
-  String _typeFilter = 'all';
+  /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
+  ReportFilters _filters = const ReportFilters();
 
-  static const Map<String, ({String label, List<String> types})>
-      _typeGroups = {
-    'activate': (
-      label: 'تفعيل',
-      types: ['SUBSCRIBER_ACTIVATE', 'SUBSCRIBER_ADD'],
-    ),
-    'extend': (label: 'تمديد', types: ['SUBSCRIBER_EXTEND']),
-    'debt_pay': (label: 'تسديد دين', types: ['DEBT_PAY', 'BALANCE_DEDUCT']),
-    'debt_add': (label: 'إضافة دين', types: ['BALANCE_ADD']),
-    // backend `/api/reports/finance` يحقن الصرفيات كصفوف صناعية بـ
-    // action_type='ADMIN_EXPENSE' (مطلع 2026-05-x)، مو EXPENSE_ADD.
-    // نقبل كليهما للتوافق مع كلاّ المسارَين.
-    'expenses': (label: 'صرفيات', types: ['ADMIN_EXPENSE', 'EXPENSE_ADD']),
-  };
+  // فلتر النوع القديم (chips) استُبدل بـReportFiltersPanel multi-select
+  // في actionTypes. المنطق: _filterLogs يفلتر بحسب _filters.actionTypes.
 
   @override
   void initState() {
@@ -68,7 +57,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     final r = await ReportsApi.finance(
       from: _range.from,
       to: _range.to,
-      userIds: _scopeIds,
+      // scope الافتراضي فقط لو المستخدم ما اختار مدير حركة محدّد.
+      userIds:
+          _filters.actionManagerId == null ? _scopeIds : null,
+      actionManagerId: _filters.actionManagerId,
+      userManager: _filters.userManager,
+      employeeId: _filters.employeeId,
       // 2000 حد أعلى مطمئن للـmerge بين backend KPIs والمُحسَبة client-side
       // عند تفعيل فلتر. مغلق على 2000 لتقليل حجم الاستجابة.
       recentLimit: 2000,
@@ -111,6 +105,17 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                   _load();
                 },
               ),
+              const SizedBox(height: Sp.sm),
+              ReportFiltersPanel(
+                value: _filters,
+                onChanged: (v) {
+                  setState(() {
+                    _filters = v;
+                    _page = 0;
+                  });
+                  _load();
+                },
+              ),
               const SizedBox(height: Sp.md),
               if (_loading)
                 const Padding(
@@ -120,13 +125,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               else if (_error != null)
                 _errorPanel()
               else if (_data != null) ...[
-                // KPIs: عند الفلتر "الكل" استعمل قيم backend (فترة كاملة).
-                // عند فلتر محدّد نحسب من الـrecentLogs المفلترة.
+                // KPIs: عند فلتر أنواع الحركات نحسبها من الـrecentLogs
+                // المفلترة (client-side)، وإلا نستعمل قيم backend للفترة كاملة.
                 Builder(builder: (_) {
+                  final hasTypeFilter = _filters.actionTypes != null &&
+                      _filters.actionTypes!.isNotEmpty;
                   final filtered = _filterLogs(_data!.recentLogs);
-                  final effectiveKpis = _typeFilter == 'all'
-                      ? _data!.kpis
-                      : _kpisFromLogs(filtered);
+                  final effectiveKpis = hasTypeFilter
+                      ? _kpisFromLogs(filtered)
+                      : _data!.kpis;
                   return Column(
                     children: [
                       _hero(effectiveKpis),
@@ -379,10 +386,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   }
 
   List<FinanceLog> _filterLogs(List<FinanceLog> logs) {
-    if (_typeFilter == 'all') return logs;
-    final grp = _typeGroups[_typeFilter];
-    if (grp == null) return logs;
-    final wanted = grp.types.toSet();
+    final types = _filters.actionTypes;
+    if (types == null || types.isEmpty) return logs;
+    final wanted = types.toSet();
     return logs
         .where((l) => wanted.contains(l.actionType.toUpperCase().trim()))
         .toList();
@@ -438,16 +444,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  int _countLogsFor(String key, List<FinanceLog> logs) {
-    if (key == 'all') return logs.length;
-    final grp = _typeGroups[key];
-    if (grp == null) return 0;
-    final wanted = grp.types.toSet();
-    return logs
-        .where((l) => wanted.contains(l.actionType.toUpperCase().trim()))
-        .length;
-  }
-
   Widget _recentLogs(List<FinanceLog> logs) {
     if (logs.isEmpty) {
       return Padding(
@@ -500,7 +496,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             ],
           ),
         ),
-        _typeChipsFor(logs),
         const SizedBox(height: Sp.sm),
         Row(
           children: [
@@ -563,86 +558,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
 
-  Widget _typeChipsFor(List<FinanceLog> logs) {
-    Color colorFor(String key) => switch (key) {
-          'activate' => const Color(0xFF14B8A6),
-          'extend' => const Color(0xFF3B82F6),
-          'debt_pay' => const Color(0xFF14B8A6),
-          'debt_add' => AppColors.error,
-          'expenses' => AppColors.error,
-          _ => const Color(0xFF14B8A6),
-        };
-    final entries = [
-      ('all', 'الكل', _countLogsFor('all', logs), const Color(0xFF14B8A6)),
-      for (final e in _typeGroups.entries)
-        (e.key, e.value.label, _countLogsFor(e.key, logs), colorFor(e.key)),
-    ];
-    return SizedBox(
-      height: 30,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: entries.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (_, i) {
-          final c = entries[i];
-          final selected = _typeFilter == c.$1;
-          return InkWell(
-            borderRadius: BorderRadius.circular(R.sm),
-            onTap: () => setState(() {
-              _typeFilter = c.$1;
-              _page = 0;
-            }),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: selected
-                    ? c.$4.withValues(alpha: 0.18)
-                    : AppColors.surface,
-                borderRadius: BorderRadius.circular(R.sm),
-                border: Border.all(
-                  color: selected
-                      ? c.$4.withValues(alpha: 0.55)
-                      : AppColors.border,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    c.$2,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? c.$4 : AppColors.textMid,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: (selected ? c.$4 : AppColors.textLow)
-                          .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Text(
-                      '${c.$3}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: selected ? c.$4 : AppColors.textMid,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 }
 
 class _KpiItem {

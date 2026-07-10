@@ -8,6 +8,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
+import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/scope_helper.dart';
@@ -33,47 +34,17 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
   int _page = 0;
   int _pageSize = 25;
 
-  /// فلتر نوع الحركة — 'all' أو مفتاح مجموعة من _typeGroups.
-  String _typeFilter = 'all';
+  /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
+  ReportFilters _filters = const ReportFilters();
 
-  /// مجموعات فلاتر — كل مجموعة تتضمّن action_types عدة تحت مسمّى واحد.
-  static const Map<String, ({String label, List<String> types})> _typeGroups = {
-    'activate': (
-      label: 'تفعيل',
-      types: ['SUBSCRIBER_ACTIVATE', 'SUBSCRIBER_ADD'],
-    ),
-    'extend': (label: 'تمديد', types: ['SUBSCRIBER_EXTEND']),
-    'debt_pay': (label: 'تسديد', types: ['DEBT_PAY', 'BALANCE_DEDUCT']),
-    'debt_add': (label: 'إضافة دين', types: ['BALANCE_ADD']),
-    'expenses': (
-      label: 'صرفيات',
-      types: ['EXPENSE_ADD', 'EXPENSE_EDIT', 'EXPENSE_DELETE'],
-    ),
-    'edit': (label: 'تعديل', types: ['SUBSCRIBER_EDIT', 'SUBSCRIBER_DELETE']),
-    'managers': (
-      label: 'مدراء',
-      types: ['MANAGER_ADD', 'MANAGER_EDIT', 'MANAGER_DELETE'],
-    ),
-  };
-
+  // فلتر النوع القديم استُبدل بـReportFiltersPanel multi-select.
   List<ActivityRow> get _visibleRows {
-    if (_typeFilter == 'all') return _rows;
-    final grp = _typeGroups[_typeFilter];
-    if (grp == null) return _rows;
-    final wanted = grp.types.toSet();
+    final types = _filters.actionTypes;
+    if (types == null || types.isEmpty) return _rows;
+    final wanted = types.toSet();
     return _rows
         .where((r) => wanted.contains(r.actionType.toUpperCase().trim()))
         .toList();
-  }
-
-  int _countFor(String key) {
-    if (key == 'all') return _rows.length;
-    final grp = _typeGroups[key];
-    if (grp == null) return 0;
-    final wanted = grp.types.toSet();
-    return _rows
-        .where((r) => wanted.contains(r.actionType.toUpperCase().trim()))
-        .length;
   }
 
   @override
@@ -102,7 +73,11 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
         from: _range.from,
         to: _range.to,
         search: _search.isEmpty ? null : _search,
-        userIds: _scopeIds,
+        userIds:
+            _filters.actionManagerId == null ? _scopeIds : null,
+        actionManagerId: _filters.actionManagerId,
+        userManager: _filters.userManager,
+        employeeId: _filters.employeeId,
         limit: 5000,
       ),
       ExpensesApi.list(
@@ -232,7 +207,16 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                     ),
                   ),
                   const SizedBox(height: Sp.sm),
-                  _typeChips(),
+                  ReportFiltersPanel(
+                    value: _filters,
+                    onChanged: (v) {
+                      setState(() {
+                        _filters = v;
+                        _page = 0;
+                      });
+                      _load();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -314,90 +298,6 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     );
   }
 
-  Widget _typeChips() {
-    final entries = [
-      ('all', 'الكل', _countFor('all'), const Color(0xFF14B8A6)),
-      for (final e in _typeGroups.entries)
-        (e.key, e.value.label, _countFor(e.key), _colorFor(e.key)),
-    ];
-    return SizedBox(
-      height: 30,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: entries.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (_, i) {
-          final c = entries[i];
-          final selected = _typeFilter == c.$1;
-          return InkWell(
-            borderRadius: BorderRadius.circular(R.sm),
-            onTap: () => setState(() {
-              _typeFilter = c.$1;
-              _page = 0;
-            }),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: selected
-                    ? c.$4.withValues(alpha: 0.18)
-                    : AppColors.surface,
-                borderRadius: BorderRadius.circular(R.sm),
-                border: Border.all(
-                  color: selected
-                      ? c.$4.withValues(alpha: 0.55)
-                      : AppColors.border,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    c.$2,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? c.$4 : AppColors.textMid,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: (selected ? c.$4 : AppColors.textLow)
-                          .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Text(
-                      '${c.$3}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: selected ? c.$4 : AppColors.textMid,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Color _colorFor(String key) => switch (key) {
-        'activate' => const Color(0xFF14B8A6),
-        'extend' => const Color(0xFF3B82F6),
-        'debt_pay' => const Color(0xFF14B8A6),
-        'debt_add' => AppColors.error,
-        'expenses' => AppColors.error,
-        'edit' => const Color(0xFF8B5CF6),
-        'managers' => const Color(0xFF8B5CF6),
-        _ => const Color(0xFF14B8A6),
-      };
-
   Widget _emptyState() => ListView(
         children: [
           const SizedBox(height: Sp.huge * 2),
@@ -442,4 +342,5 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
+
 }

@@ -8,6 +8,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
+import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/scope_helper.dart';
@@ -31,31 +32,18 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   int _page = 0;
   int _pageSize = 25;
 
-  /// فلتر النوع: all / activate_cash / activate_non_cash / extend
-  String _typeFilter = 'all';
+  /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
+  ReportFilters _filters = const ReportFilters();
 
+  // فلتر النوع القديم استُبدل بـReportFiltersPanel multi-select.
+  // _visibleRows يفلتر بحسب _filters.actionTypes.
   List<ActivityRow> get _visibleRows {
-    if (_typeFilter == 'all') return _rows;
-    return _rows.where((r) {
-      final at = r.actionType.toUpperCase().trim();
-      final desc = (r.actionDescription ?? '');
-      final isNonCash = desc.contains('غير نقدي');
-      final isCash = desc.contains('نقدي') && !isNonCash;
-      switch (_typeFilter) {
-        case 'activate_cash':
-          return (at == 'SUBSCRIBER_ACTIVATE' ||
-                  at == 'SUBSCRIBER_ADD') &&
-              isCash;
-        case 'activate_non_cash':
-          return (at == 'SUBSCRIBER_ACTIVATE' ||
-                  at == 'SUBSCRIBER_ADD') &&
-              isNonCash;
-        case 'extend':
-          return at == 'SUBSCRIBER_EXTEND';
-        default:
-          return true;
-      }
-    }).toList();
+    final types = _filters.actionTypes;
+    if (types == null || types.isEmpty) return _rows;
+    final wanted = types.toSet();
+    return _rows
+        .where((r) => wanted.contains(r.actionType.toUpperCase().trim()))
+        .toList();
   }
 
   @override
@@ -73,7 +61,11 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     final r = await ReportsApi.activities(
       from: _range.from,
       to: _range.to,
-      userIds: _scopeIds,
+      userIds:
+          _filters.actionManagerId == null ? _scopeIds : null,
+      actionManagerId: _filters.actionManagerId,
+      userManager: _filters.userManager,
+      employeeId: _filters.employeeId,
       limit: 5000,
     );
     if (!mounted) return;
@@ -168,11 +160,20 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                   _load();
                 },
               ),
+              const SizedBox(height: Sp.sm),
+              ReportFiltersPanel(
+                value: _filters,
+                onChanged: (v) {
+                  setState(() {
+                    _filters = v;
+                    _page = 0;
+                  });
+                  _load();
+                },
+              ),
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
-              _typeChips(),
-              const SizedBox(height: Sp.sm),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -238,98 +239,6 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _typeChips() {
-    // كل chip: (key, label, count).
-    final all = _rows.length;
-    final activateCash = _rows.where((r) {
-      final at = r.actionType.toUpperCase().trim();
-      final d = r.actionDescription ?? '';
-      return (at == 'SUBSCRIBER_ACTIVATE' || at == 'SUBSCRIBER_ADD') &&
-          d.contains('نقدي') && !d.contains('غير نقدي');
-    }).length;
-    final activateNonCash = _rows.where((r) {
-      final at = r.actionType.toUpperCase().trim();
-      final d = r.actionDescription ?? '';
-      return (at == 'SUBSCRIBER_ACTIVATE' || at == 'SUBSCRIBER_ADD') &&
-          d.contains('غير نقدي');
-    }).length;
-    final extend = _rows.where((r) {
-      return r.actionType.toUpperCase().trim() == 'SUBSCRIBER_EXTEND';
-    }).length;
-    final chips = [
-      ('all', 'الكل', all, const Color(0xFF14B8A6)),
-      ('activate_cash', 'تفعيل نقدي', activateCash, const Color(0xFF14B8A6)),
-      ('activate_non_cash', 'تفعيل غير نقدي', activateNonCash,
-          AppColors.error),
-      ('extend', 'تمديد', extend, const Color(0xFF3B82F6)),
-    ];
-    return SizedBox(
-      height: 30,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: chips.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (_, i) {
-          final c = chips[i];
-          final selected = _typeFilter == c.$1;
-          return InkWell(
-            borderRadius: BorderRadius.circular(R.sm),
-            onTap: () => setState(() {
-              _typeFilter = c.$1;
-              _page = 0;
-            }),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: selected
-                    ? c.$4.withValues(alpha: 0.18)
-                    : AppColors.surface,
-                borderRadius: BorderRadius.circular(R.sm),
-                border: Border.all(
-                  color: selected
-                      ? c.$4.withValues(alpha: 0.55)
-                      : AppColors.border,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    c.$2,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? c.$4 : AppColors.textMid,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: (selected ? c.$4 : AppColors.textLow)
-                          .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Text(
-                      '${c.$3}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: selected ? c.$4 : AppColors.textMid,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -448,4 +357,5 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
+
 }

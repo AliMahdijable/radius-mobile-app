@@ -296,21 +296,32 @@ class ReportsApi {
 
   /// التقرير المالي — KPIs + آخر السجلات.
   /// dateFrom/dateTo بصيغة YYYY-MM-DD. لو فاضي يرجع الـbackend الافتراضي.
-  /// userIds — قائمة IDs المدراء المرشّحين (المدير الحالي + الفرعيين). لو
-  /// فاضي يرجع الـbackend كل المدراء (سلوك خطأ للمدير العادي).
+  /// userIds — قائمة IDs المدراء المرشّحين. لو فاضي يرجع كل المدراء.
+  /// actionManagerId يحل محل userIds إذا حُدّد (فلتر بمدير معيّن).
+  /// userManager — filter بمدير المشترك المستهدَف (username).
+  /// employeeId — فلتر بموظف مُنفِّذ.
   static Future<({bool ok, FinanceReport? data, String? error})> finance({
     DateTime? from,
     DateTime? to,
     int recentLimit = 50,
     List<String>? userIds,
+    String? actionManagerId,
+    String? userManager,
+    int? employeeId,
   }) async {
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
         if (from != null) 'date_from': _date(from),
         if (to != null) 'date_to': _date(to),
-        if (userIds != null && userIds.isNotEmpty)
+        // priority: actionManagerId (single) > userIds (list)
+        if (actionManagerId != null && actionManagerId.isNotEmpty)
+          'user_id': actionManagerId
+        else if (userIds != null && userIds.isNotEmpty)
           'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
+        if (userManager != null && userManager.isNotEmpty)
+          'user_manager': userManager,
+        if (employeeId != null) 'employee_id': '$employeeId',
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/reports/finance',
@@ -349,15 +360,20 @@ class ReportsApi {
   }
 
   /// قائمة activities — يستعمل للـActivations + ActivityLog.
-  /// activityType: فلتر اختياري (مثلاً 'SUBSCRIBER_ACTIVATE'). فاضي = الكل.
-  /// backend يقبل واحد فقط — للفلترة على أكثر من نوع اجلب الكل وفلتر client-side.
-  /// userIds — قائمة IDs المدراء المرشّحين. لو فاضي يرجع الكل (خطأ للمدير العادي).
+  /// activityType: فلتر اختياري. فاضي = الكل.
+  /// userIds — قائمة IDs المدراء المرشّحين.
+  /// actionManagerId (single) يحل محل userIds إذا حُدّد.
+  /// userManager: username المدير الفرعي للمشترك المستهدَف.
+  /// employeeId: الموظف المنفِّذ للحركة.
   static Future<({bool ok, List<ActivityRow> rows, String? error})> activities({
     DateTime? from,
     DateTime? to,
     String? activityType,
     String? search,
     List<String>? userIds,
+    String? actionManagerId,
+    String? userManager,
+    int? employeeId,
     int limit = 200,
   }) async {
     try {
@@ -368,8 +384,13 @@ class ReportsApi {
         if (activityType != null && activityType.isNotEmpty)
           'activity_type': activityType,
         if (search != null && search.isNotEmpty) 'search': search,
-        if (userIds != null && userIds.isNotEmpty)
+        if (actionManagerId != null && actionManagerId.isNotEmpty)
+          'user_id': actionManagerId
+        else if (userIds != null && userIds.isNotEmpty)
           'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
+        if (userManager != null && userManager.isNotEmpty)
+          'user_manager': userManager,
+        if (employeeId != null) 'employee_id': '$employeeId',
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities',

@@ -51,6 +51,17 @@ class DateRange {
     );
   }
 
+  /// آخر 3 شهور — تبدأ من أول اليوم قبل 90 يوم وتنتهي عند اليوم الحالي.
+  static DateRange last3Months() {
+    final n = DateTime.now();
+    final start = n.subtract(const Duration(days: 90));
+    return DateRange(
+      DateTime(start.year, start.month, start.day),
+      DateTime(n.year, n.month, n.day, 23, 59, 59),
+      label: '3 شهور',
+    );
+  }
+
   static DateRange custom(DateTime from, DateTime to) => DateRange(
         DateTime(from.year, from.month, from.day),
         DateTime(to.year, to.month, to.day, 23, 59, 59),
@@ -83,6 +94,7 @@ class DateRangeChipBar extends StatelessWidget {
       DateRange.yesterday(),
       DateRange.thisWeek(),
       DateRange.thisMonth(),
+      DateRange.last3Months(),
     ];
     final isCustom = !presets.any((p) => p.label == value.label);
     return Wrap(
