@@ -234,6 +234,9 @@ _ActionMeta _actionMeta(String at, String desc) {
       return const _ActionMeta(
           'دفعة', LucideIcons.banknote, Color(0xFF14B8A6));
     case 'EXPENSE_ADD':
+    case 'ADMIN_EXPENSE':
+      // ADMIN_EXPENSE من backend /api/reports/finance (صف صناعي).
+      // EXPENSE_ADD من ExpensesApi في Activity Log. نفس المعنى، نفس التصميم.
       return _ActionMeta('صرفية', LucideIcons.receipt, AppColors.error,
           debit: true);
     case 'EXPENSE_EDIT':

@@ -100,10 +100,15 @@ class FinanceLog {
   final String createdAt;
 
   static FinanceLog? fromJson(Map<String, dynamic> j) {
-    final id = int.tryParse(j['id']?.toString() ?? '');
+    // backend `/api/reports/finance` يحقن صفوف صناعية بمعرّفات نصّية
+    // (id: "expense_5"، "mdebt_12"). لا نرفضها — نصنع hash id من الـstring.
+    // ملاحظة: كنّا نرفضها بـint.tryParse فتختفي الصرفيات من قائمة "آخر
+    // الحركات" رغم أن counters "# مصاريف" في KPIs تعمل صح (bug 2026-07-10).
     final at = j['action_type']?.toString();
     final ts = j['created_at']?.toString();
-    if (id == null || at == null || ts == null) return null;
+    if (at == null || ts == null) return null;
+    final rawId = j['id']?.toString() ?? '';
+    final id = int.tryParse(rawId) ?? rawId.hashCode.abs();
     return FinanceLog(
       id: id,
       actionType: at,
@@ -151,10 +156,14 @@ class ActivityRow {
   final String createdAt;
 
   static ActivityRow? fromJson(Map<String, dynamic> j) {
-    final id = int.tryParse(j['id']?.toString() ?? '');
+    // نتقبّل معرّفات نصّية (مثل "expense_5") ونصنع hash لها. مطابق منطق
+    // FinanceLog.fromJson (bug 2026-07-10: الصفوف الصناعية بمعرّف نصّي
+    // كانت تُرفض).
     final at = j['action_type']?.toString();
     final ts = j['created_at']?.toString();
-    if (id == null || at == null || ts == null) return null;
+    if (at == null || ts == null) return null;
+    final rawId = j['id']?.toString() ?? '';
+    final id = int.tryParse(rawId) ?? rawId.hashCode.abs();
     return ActivityRow(
       id: id,
       actionType: at,
