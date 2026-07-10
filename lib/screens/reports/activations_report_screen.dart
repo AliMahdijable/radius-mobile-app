@@ -8,8 +8,10 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_log_tile.dart';
+import 'widgets/scope_helper.dart';
 
-/// التفعيلات — كل صفوف SUBSCRIBER_ACTIVATE في الفترة + إجمالي.
+/// التفعيلات — تفعيلات + تمديدات في الفترة، ضمن scope المدير الحالي.
+/// نجلب الكل من backend ونفلتر client-side (مطابق web Activations.tsx).
 class ActivationsReportScreen extends StatefulWidget {
   const ActivationsReportScreen({super.key});
 
@@ -23,6 +25,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   List<ActivityRow> _rows = const [];
   bool _loading = true;
   String? _error;
+  List<String>? _scopeIds;
 
   @override
   void initState() {
@@ -35,16 +38,28 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       _loading = true;
       _error = null;
     });
+    _scopeIds ??= await loadScopeUserIds();
+    // نجلب بدون فلتر activity_type — الـfilter الحقيقي (تفعيل+تمديد+
+    // SUBSCRIBER_ADD-يحتوي-تفعيل) يصير client-side بعد الاسترجاع.
     final r = await ReportsApi.activities(
       from: _range.from,
       to: _range.to,
-      actionType: 'SUBSCRIBER_ACTIVATE',
-      limit: 300,
+      userIds: _scopeIds,
+      limit: 1000,
     );
     if (!mounted) return;
+    // فلترة على activate + extend + SUBSCRIBER_ADD-تفعيل (مطابق web:
+    // client-v2/src/pages/reports/Activations.tsx:180-184).
+    final filtered = r.rows.where((row) {
+      final at = (row.actionType).toUpperCase().trim();
+      final desc = (row.actionDescription ?? '').toLowerCase();
+      return at == 'SUBSCRIBER_ACTIVATE' ||
+          at == 'SUBSCRIBER_EXTEND' ||
+          (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'));
+    }).toList();
     setState(() {
       _loading = false;
-      _rows = r.rows;
+      _rows = filtered;
       _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
     });
   }
@@ -59,13 +74,12 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     return s;
   }
 
-  int get _cashCount => _rows.where((r) {
-        final d = r.actionDescription ?? '';
-        return d.contains('نقدي') && !d.contains('غير نقدي');
+  int get _activateCount => _rows.where((r) {
+        final at = r.actionType.toUpperCase().trim();
+        return at == 'SUBSCRIBER_ACTIVATE' || at == 'SUBSCRIBER_ADD';
       }).length;
-  int get _nonCashCount => _rows.where((r) {
-        final d = r.actionDescription ?? '';
-        return d.contains('غير نقدي');
+  int get _extendCount => _rows.where((r) {
+        return r.actionType.toUpperCase().trim() == 'SUBSCRIBER_EXTEND';
       }).length;
 
   @override
@@ -78,7 +92,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'التفعيلات',
+          'التفعيلات والتمديدات',
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -150,19 +164,19 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           Container(width: 1, height: 32, color: AppColors.border),
           Expanded(
             child: _stat(
-              icon: LucideIcons.banknote,
-              label: 'نقدي',
-              value: '$_cashCount',
+              icon: LucideIcons.userCheck,
+              label: 'تفعيلات',
+              value: '$_activateCount',
               color: const Color(0xFF14B8A6),
             ),
           ),
           Container(width: 1, height: 32, color: AppColors.border),
           Expanded(
             child: _stat(
-              icon: LucideIcons.creditCard,
-              label: 'غير نقدي',
-              value: '$_nonCashCount',
-              color: const Color(0xFFE08F2D),
+              icon: LucideIcons.repeat,
+              label: 'تمديدات',
+              value: '$_extendCount',
+              color: const Color(0xFF26A69A),
             ),
           ),
           Container(width: 1, height: 32, color: AppColors.border),
@@ -211,7 +225,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             children: [
               Icon(LucideIcons.zap, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
-              Text('لا توجد تفعيلات في هذه الفترة',
+              Text('لا توجد تفعيلات أو تمديدات في هذه الفترة',
                   style: AppType.label(color: AppColors.textMid)),
             ],
           ),

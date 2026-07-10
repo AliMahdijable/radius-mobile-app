@@ -9,6 +9,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_log_tile.dart';
+import 'widgets/scope_helper.dart';
 
 /// التقرير المالي — نسخة موبايل من client-v2/Financial.tsx:
 ///  • هيرو إجمالي الإيراد + صافي بعد المصاريف
@@ -27,6 +28,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   FinanceReport? _data;
   bool _loading = true;
   String? _error;
+  List<String>? _scopeIds; // cache — لا يتغيّر خلال الجلسة عملياً
 
   @override
   void initState() {
@@ -39,7 +41,13 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       _loading = true;
       _error = null;
     });
-    final r = await ReportsApi.finance(from: _range.from, to: _range.to);
+    // جالب scope مرّة واحدة ثم يُعاد استخدامه
+    _scopeIds ??= await loadScopeUserIds();
+    final r = await ReportsApi.finance(
+      from: _range.from,
+      to: _range.to,
+      userIds: _scopeIds,
+    );
     if (!mounted) return;
     setState(() {
       _loading = false;

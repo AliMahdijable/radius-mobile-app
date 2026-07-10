@@ -241,16 +241,21 @@ class ReportsApi {
 
   /// التقرير المالي — KPIs + آخر السجلات.
   /// dateFrom/dateTo بصيغة YYYY-MM-DD. لو فاضي يرجع الـbackend الافتراضي.
+  /// userIds — قائمة IDs المدراء المرشّحين (المدير الحالي + الفرعيين). لو
+  /// فاضي يرجع الـbackend كل المدراء (سلوك خطأ للمدير العادي).
   static Future<({bool ok, FinanceReport? data, String? error})> finance({
     DateTime? from,
     DateTime? to,
     int recentLimit = 50,
+    List<String>? userIds,
   }) async {
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
         if (from != null) 'date_from': _date(from),
         if (to != null) 'date_to': _date(to),
+        if (userIds != null && userIds.isNotEmpty)
+          'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/reports/finance',
@@ -289,12 +294,15 @@ class ReportsApi {
   }
 
   /// قائمة activities — يستعمل للـActivations + ActivityLog.
-  /// actionType: فلتر اختياري (مثلاً 'SUBSCRIBER_ACTIVATE'). فاضي = الكل.
+  /// activityType: فلتر اختياري (مثلاً 'SUBSCRIBER_ACTIVATE'). فاضي = الكل.
+  /// backend يقبل واحد فقط — للفلترة على أكثر من نوع اجلب الكل وفلتر client-side.
+  /// userIds — قائمة IDs المدراء المرشّحين. لو فاضي يرجع الكل (خطأ للمدير العادي).
   static Future<({bool ok, List<ActivityRow> rows, String? error})> activities({
     DateTime? from,
     DateTime? to,
-    String? actionType,
+    String? activityType,
     String? search,
+    List<String>? userIds,
     int limit = 200,
   }) async {
     try {
@@ -302,9 +310,11 @@ class ReportsApi {
         'limit': '$limit',
         if (from != null) 'date_from': _date(from),
         if (to != null) 'date_to': _date(to),
-        if (actionType != null && actionType.isNotEmpty)
-          'action_type': actionType,
+        if (activityType != null && activityType.isNotEmpty)
+          'activity_type': activityType,
         if (search != null && search.isNotEmpty) 'search': search,
+        if (userIds != null && userIds.isNotEmpty)
+          'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities',
