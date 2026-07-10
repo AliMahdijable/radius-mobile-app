@@ -108,20 +108,6 @@ class _DailyActivationsReportScreenState
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
-              ReportExportBar(
-                title: 'التفعيلات اليومية',
-                subtitle:
-                    '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                fileNameBase: 'daily_activations',
-                columns: const [
-                  'اليوم',
-                  'نقدي',
-                  'غير نقدي',
-                  'إيراد',
-                ],
-                rows: _exportRows,
-              ),
-              const SizedBox(height: Sp.md),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -132,15 +118,34 @@ class _DailyActivationsReportScreenState
               else if (_rows.isEmpty)
                 _emptyBlock()
               else ...[
-                ReportStatsBar(
-                  totalItems: _rows.length,
-                  pageStart: pageStart,
-                  pageEnd: pageEnd,
-                  pageSize: _pageSize,
-                  onPageSizeChange: (s) => setState(() {
-                    _pageSize = s;
-                    _page = 0;
-                  }),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ReportStatsBar(
+                        totalItems: _rows.length,
+                        pageStart: pageStart,
+                        pageEnd: pageEnd,
+                        pageSize: _pageSize,
+                        onPageSizeChange: (s) => setState(() {
+                          _pageSize = s;
+                          _page = 0;
+                        }),
+                      ),
+                    ),
+                    ReportExportBar(
+                      title: 'التفعيلات اليومية',
+                      subtitle:
+                          '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                      fileNameBase: 'daily_activations',
+                      columns: const [
+                        'اليوم',
+                        'نقدي',
+                        'غير نقدي',
+                        'إيراد',
+                      ],
+                      rows: _exportRows,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: Sp.sm),
                 for (final r in pageRows) ...[

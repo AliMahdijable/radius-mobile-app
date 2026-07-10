@@ -25,6 +25,9 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   String? _error;
   int _page = 0;
   int _pageSize = 25;
+  final _searchCtrl = TextEditingController();
+  String _searchField = 'username'; // username / ip / mac
+  String _searchValue = '';
 
   @override
   void initState() {
@@ -32,12 +35,24 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
-    final r = await ReportsApi.sessions(onlineOnly: _onlineOnly, limit: 2000);
+    final r = await ReportsApi.sessions(
+      onlineOnly: _onlineOnly,
+      limit: 2000,
+      username: _searchField == 'username' ? _searchValue : null,
+      ip: _searchField == 'ip' ? _searchValue : null,
+      mac: _searchField == 'mac' ? _searchValue : null,
+    );
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -88,26 +103,94 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(
-                    value: true,
-                    label: Text('متصلون الآن'),
-                    icon: Icon(LucideIcons.wifi, size: 14),
+              child: Column(
+                children: [
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: true,
+                        label: Text('متصلون الآن'),
+                        icon: Icon(LucideIcons.wifi, size: 14),
+                      ),
+                      ButtonSegment(
+                        value: false,
+                        label: Text('الكل'),
+                        icon: Icon(LucideIcons.history, size: 14),
+                      ),
+                    ],
+                    selected: {_onlineOnly},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (s) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _onlineOnly = s.first);
+                      _load();
+                    },
                   ),
-                  ButtonSegment(
-                    value: false,
-                    label: Text('الكل'),
-                    icon: Icon(LucideIcons.history, size: 14),
+                  const SizedBox(height: Sp.sm),
+                  // شريط بحث + منتقي حقل (username / ip / mac).
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          onSubmitted: (v) {
+                            _searchValue = v.trim();
+                            _load();
+                          },
+                          decoration: InputDecoration(
+                            hintText: _searchField == 'username'
+                                ? 'بحث باسم المستخدم…'
+                                : _searchField == 'ip'
+                                    ? 'بحث بـIP…'
+                                    : 'بحث بـMAC…',
+                            hintStyle: AppType.input(color: AppColors.textLow),
+                            prefixIcon: Icon(LucideIcons.search,
+                                size: 18, color: AppColors.textMid),
+                            suffixIcon: _searchValue.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: Icon(LucideIcons.x,
+                                        size: 16,
+                                        color: AppColors.textMid),
+                                    onPressed: () {
+                                      _searchCtrl.clear();
+                                      _searchValue = '';
+                                      _load();
+                                    },
+                                  ),
+                            filled: true,
+                            fillColor: AppColors.surfaceInput,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(R.sm),
+                              borderSide:
+                                  BorderSide(color: AppColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(R.sm),
+                              borderSide:
+                                  BorderSide(color: AppColors.border),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _SearchFieldPicker(
+                        current: _searchField,
+                        onChange: (v) {
+                          setState(() {
+                            _searchField = v;
+                            _searchCtrl.clear();
+                            _searchValue = '';
+                          });
+                          _load();
+                        },
+                      ),
+                    ],
                   ),
                 ],
-                selected: {_onlineOnly},
-                showSelectedIcon: false,
-                onSelectionChanged: (s) {
-                  HapticFeedback.selectionClick();
-                  setState(() => _onlineOnly = s.first);
-                  _load();
-                },
               ),
             ),
             Padding(
@@ -128,24 +211,6 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: Sp.sm),
-                  ReportExportBar(
-                    title: _onlineOnly ? 'الجلسات المتصلة' : 'كل الجلسات',
-                    subtitle: 'عدد الصفوف: ${_rows.length}',
-                    fileNameBase:
-                        _onlineOnly ? 'sessions_online' : 'sessions_all',
-                    columns: const [
-                      'المستخدم',
-                      'IP',
-                      'المدير',
-                      'تنزيل',
-                      'رفع',
-                      'بدء',
-                      'انتهاء',
-                      'الحالة',
-                    ],
-                    rows: _exportRows,
-                  ),
                 ],
               ),
             ),
@@ -163,15 +228,43 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                 padding: const EdgeInsets.fromLTRB(
                                     Sp.lg, 0, Sp.lg, Sp.huge),
                                 children: [
-                                  ReportStatsBar(
-                                    totalItems: _rows.length,
-                                    pageStart: pageStart,
-                                    pageEnd: pageEnd,
-                                    pageSize: _pageSize,
-                                    onPageSizeChange: (s) => setState(() {
-                                      _pageSize = s;
-                                      _page = 0;
-                                    }),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ReportStatsBar(
+                                          totalItems: _rows.length,
+                                          pageStart: pageStart,
+                                          pageEnd: pageEnd,
+                                          pageSize: _pageSize,
+                                          onPageSizeChange: (s) =>
+                                              setState(() {
+                                            _pageSize = s;
+                                            _page = 0;
+                                          }),
+                                        ),
+                                      ),
+                                      ReportExportBar(
+                                        title: _onlineOnly
+                                            ? 'الجلسات المتصلة'
+                                            : 'كل الجلسات',
+                                        subtitle:
+                                            'عدد الصفوف: ${_rows.length}',
+                                        fileNameBase: _onlineOnly
+                                            ? 'sessions_online'
+                                            : 'sessions_all',
+                                        columns: const [
+                                          'المستخدم',
+                                          'IP',
+                                          'المدير',
+                                          'تنزيل',
+                                          'رفع',
+                                          'بدء',
+                                          'انتهاء',
+                                          'الحالة',
+                                        ],
+                                        rows: _exportRows,
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: Sp.sm),
                                   for (final s in pageRows) ...[
@@ -329,5 +422,66 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
           ),
         ],
       );
+}
+
+/// منتقي حقل البحث في الجلسات (username / IP / MAC).
+class _SearchFieldPicker extends StatelessWidget {
+  const _SearchFieldPicker({required this.current, required this.onChange});
+  final String current;
+  final ValueChanged<String> onChange;
+
+  static const _fields = [
+    ('username', 'اسم', LucideIcons.user),
+    ('ip', 'IP', LucideIcons.globe),
+    ('mac', 'MAC', LucideIcons.wifi),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return PopupMenuButton<String>(
+      tooltip: 'حقل البحث',
+      onSelected: onChange,
+      itemBuilder: (_) => [
+        for (final f in _fields)
+          PopupMenuItem(
+            value: f.$1,
+            child: Row(
+              children: [
+                Icon(f.$3, size: 14, color: AppColors.textMid),
+                const SizedBox(width: 8),
+                Text(f.$2),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              current == 'username'
+                  ? LucideIcons.user
+                  : current == 'ip'
+                      ? LucideIcons.globe
+                      : LucideIcons.wifi,
+              size: 15,
+              color: AppColors.textMid,
+            ),
+            const SizedBox(width: 4),
+            Icon(LucideIcons.chevronDown,
+                size: 12, color: AppColors.textLow),
+          ],
+        ),
+      ),
+    );
+  }
 }
 

@@ -24,12 +24,39 @@ class ActivationsReportScreen extends StatefulWidget {
 
 class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   DateRange _range = DateRange.thisMonth();
-  List<ActivityRow> _rows = const [];
+  List<ActivityRow> _rows = const []; // بعد فلتر التفعيل/التمديد
   bool _loading = true;
   String? _error;
   List<String>? _scopeIds;
   int _page = 0;
   int _pageSize = 25;
+
+  /// فلتر النوع: all / activate_cash / activate_non_cash / extend
+  String _typeFilter = 'all';
+
+  List<ActivityRow> get _visibleRows {
+    if (_typeFilter == 'all') return _rows;
+    return _rows.where((r) {
+      final at = r.actionType.toUpperCase().trim();
+      final desc = (r.actionDescription ?? '');
+      final isNonCash = desc.contains('غير نقدي');
+      final isCash = desc.contains('نقدي') && !isNonCash;
+      switch (_typeFilter) {
+        case 'activate_cash':
+          return (at == 'SUBSCRIBER_ACTIVATE' ||
+                  at == 'SUBSCRIBER_ADD') &&
+              isCash;
+        case 'activate_non_cash':
+          return (at == 'SUBSCRIBER_ACTIVATE' ||
+                  at == 'SUBSCRIBER_ADD') &&
+              isNonCash;
+        case 'extend':
+          return at == 'SUBSCRIBER_EXTEND';
+        default:
+          return true;
+      }
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -83,8 +110,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         return r.actionType.toUpperCase().trim() == 'SUBSCRIBER_EXTEND';
       }).length;
 
-  // صفوف للتصدير — الـfiltered كامل (لا يقتصر على الصفحة الحالية).
-  List<List<String>> get _exportRows => _rows
+  // صفوف للتصدير — visible (يحترم الفلتر النشط).
+  List<List<String>> get _exportRows => _visibleRows
       .map((r) => [
             r.createdAt,
             _actionLabel(r),
@@ -104,13 +131,14 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
+    final visible = _visibleRows;
     final totalPages =
-        (_rows.length / _pageSize).ceil().clamp(1, 99999);
+        (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, _rows.length);
-    final pageRows = _rows.isEmpty
+    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    final pageRows = visible.isEmpty
         ? const <ActivityRow>[]
-        : _rows.sublist(pageStart, pageEnd);
+        : visible.sublist(pageStart, pageEnd);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -141,21 +169,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
-              ReportExportBar(
-                title: 'التفعيلات والتمديدات',
-                subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                fileNameBase: 'activations',
-                columns: const [
-                  'التاريخ',
-                  'النوع',
-                  'المشترك',
-                  'الوصف',
-                  'المبلغ',
-                  'المنفّذ',
-                ],
-                rows: _exportRows,
-              ),
-              const SizedBox(height: Sp.md),
+              _typeChips(),
+              const SizedBox(height: Sp.sm),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -166,15 +181,36 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               else if (_rows.isEmpty)
                 _emptyBlock()
               else ...[
-                ReportStatsBar(
-                  totalItems: _rows.length,
-                  pageStart: pageStart,
-                  pageEnd: pageEnd,
-                  pageSize: _pageSize,
-                  onPageSizeChange: (s) => setState(() {
-                    _pageSize = s;
-                    _page = 0;
-                  }),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ReportStatsBar(
+                        totalItems: visible.length,
+                        pageStart: pageStart,
+                        pageEnd: pageEnd,
+                        pageSize: _pageSize,
+                        onPageSizeChange: (s) => setState(() {
+                          _pageSize = s;
+                          _page = 0;
+                        }),
+                      ),
+                    ),
+                    ReportExportBar(
+                      title: 'التفعيلات والتمديدات',
+                      subtitle:
+                          '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                      fileNameBase: 'activations',
+                      columns: const [
+                        'التاريخ',
+                        'النوع',
+                        'المشترك',
+                        'الوصف',
+                        'المبلغ',
+                        'المنفّذ',
+                      ],
+                      rows: _exportRows,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: Sp.sm),
                 for (final r in pageRows) ...[
@@ -200,6 +236,98 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _typeChips() {
+    // كل chip: (key, label, count).
+    final all = _rows.length;
+    final activateCash = _rows.where((r) {
+      final at = r.actionType.toUpperCase().trim();
+      final d = r.actionDescription ?? '';
+      return (at == 'SUBSCRIBER_ACTIVATE' || at == 'SUBSCRIBER_ADD') &&
+          d.contains('نقدي') && !d.contains('غير نقدي');
+    }).length;
+    final activateNonCash = _rows.where((r) {
+      final at = r.actionType.toUpperCase().trim();
+      final d = r.actionDescription ?? '';
+      return (at == 'SUBSCRIBER_ACTIVATE' || at == 'SUBSCRIBER_ADD') &&
+          d.contains('غير نقدي');
+    }).length;
+    final extend = _rows.where((r) {
+      return r.actionType.toUpperCase().trim() == 'SUBSCRIBER_EXTEND';
+    }).length;
+    final chips = [
+      ('all', 'الكل', all, const Color(0xFF14B8A6)),
+      ('activate_cash', 'تفعيل نقدي', activateCash, const Color(0xFF14B8A6)),
+      ('activate_non_cash', 'تفعيل غير نقدي', activateNonCash,
+          AppColors.error),
+      ('extend', 'تمديد', extend, const Color(0xFF3B82F6)),
+    ];
+    return SizedBox(
+      height: 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) {
+          final c = chips[i];
+          final selected = _typeFilter == c.$1;
+          return InkWell(
+            borderRadius: BorderRadius.circular(R.sm),
+            onTap: () => setState(() {
+              _typeFilter = c.$1;
+              _page = 0;
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: selected
+                    ? c.$4.withValues(alpha: 0.18)
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(
+                  color: selected
+                      ? c.$4.withValues(alpha: 0.55)
+                      : AppColors.border,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    c.$2,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? c.$4 : AppColors.textMid,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: (selected ? c.$4 : AppColors.textLow)
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '${c.$3}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: selected ? c.$4 : AppColors.textMid,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

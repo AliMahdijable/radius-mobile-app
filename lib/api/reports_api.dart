@@ -470,20 +470,27 @@ class ReportsApi {
   }
 
   /// الجلسات الحالية + التاريخية (filter بـonlineOnly).
+  /// search: filter عام (SAS4 يفهمه). أو تعطي username/ip/mac منفردين.
   static Future<({bool ok, List<SessionRow> rows, String? error})> sessions({
     bool onlineOnly = false,
     DateTime? from,
     DateTime? to,
+    String? search,
+    String? username,
+    String? ip,
+    String? mac,
     int limit = 200,
   }) async {
     try {
-      // backend يستخدم count (مو limit). onlineOnly يُفعّل عبر endpoint
-      // مختلف /api/v2/online-users لو مطلوب فقط المتصلون حالياً.
       final qp = <String, String>{
         'count': '$limit',
         'page': '1',
         if (from != null) 'from': _date(from),
         if (to != null) 'to': _date(to),
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (username != null && username.isNotEmpty) 'username': username,
+        if (ip != null && ip.isNotEmpty) 'ip': ip,
+        if (mac != null && mac.isNotEmpty) 'mac': mac,
       };
       final endpoint =
           onlineOnly ? '/api/v2/online-users' : '/api/v2/sessions';

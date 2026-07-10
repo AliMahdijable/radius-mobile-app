@@ -34,6 +34,21 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   int _page = 0;
   int _pageSize = 25;
 
+  /// فلتر نوع الحركة على قائمة "آخر الحركات".
+  String _typeFilter = 'all';
+
+  static const Map<String, ({String label, List<String> types})>
+      _typeGroups = {
+    'activate': (
+      label: 'تفعيل',
+      types: ['SUBSCRIBER_ACTIVATE', 'SUBSCRIBER_ADD'],
+    ),
+    'extend': (label: 'تمديد', types: ['SUBSCRIBER_EXTEND']),
+    'debt_pay': (label: 'تسديد دين', types: ['DEBT_PAY', 'BALANCE_DEDUCT']),
+    'debt_add': (label: 'إضافة دين', types: ['BALANCE_ADD']),
+    'expenses': (label: 'صرفيات', types: ['EXPENSE_ADD']),
+  };
+
   @override
   void initState() {
     super.initState();
@@ -314,6 +329,26 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
+  List<FinanceLog> _filterLogs(List<FinanceLog> logs) {
+    if (_typeFilter == 'all') return logs;
+    final grp = _typeGroups[_typeFilter];
+    if (grp == null) return logs;
+    final wanted = grp.types.toSet();
+    return logs
+        .where((l) => wanted.contains(l.actionType.toUpperCase().trim()))
+        .toList();
+  }
+
+  int _countLogsFor(String key, List<FinanceLog> logs) {
+    if (key == 'all') return logs.length;
+    final grp = _typeGroups[key];
+    if (grp == null) return 0;
+    final wanted = grp.types.toSet();
+    return logs
+        .where((l) => wanted.contains(l.actionType.toUpperCase().trim()))
+        .length;
+  }
+
   Widget _recentLogs(List<FinanceLog> logs) {
     if (logs.isEmpty) {
       return Padding(
@@ -330,12 +365,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         ),
       );
     }
+    final filtered = _filterLogs(logs);
     final totalPages =
-        (logs.length / _pageSize).ceil().clamp(1, 99999);
+        (filtered.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, logs.length);
-    final pageRows = logs.sublist(pageStart, pageEnd);
-    final exportRows = logs
+    final pageEnd = (pageStart + _pageSize).clamp(0, filtered.length);
+    final pageRows = filtered.isEmpty
+        ? const <FinanceLog>[]
+        : filtered.sublist(pageStart, pageEnd);
+    final exportRows = filtered
         .map((l) => [
               l.createdAt,
               l.actionType,
@@ -348,21 +386,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ReportExportBar(
-          title: 'التقرير المالي',
-          subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-          fileNameBase: 'financial',
-          columns: const [
-            'التاريخ',
-            'النوع',
-            'الهدف',
-            'الوصف',
-            'المبلغ',
-            'المنفّذ',
-          ],
-          rows: exportRows,
-        ),
-        const SizedBox(height: Sp.md),
         Padding(
           padding: const EdgeInsets.only(bottom: 6, right: 4),
           child: Row(
@@ -373,20 +396,42 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                   style: AppType.label(color: AppColors.textHi)
                       .copyWith(fontSize: 13, fontWeight: FontWeight.w800)),
               const Spacer(),
-              Text('${logs.length}',
+              Text('${filtered.length}',
                   style: AppType.muted().copyWith(fontSize: 11)),
             ],
           ),
         ),
-        ReportStatsBar(
-          totalItems: logs.length,
-          pageStart: pageStart,
-          pageEnd: pageEnd,
-          pageSize: _pageSize,
-          onPageSizeChange: (s) => setState(() {
-            _pageSize = s;
-            _page = 0;
-          }),
+        _typeChipsFor(logs),
+        const SizedBox(height: Sp.sm),
+        Row(
+          children: [
+            Expanded(
+              child: ReportStatsBar(
+                totalItems: filtered.length,
+                pageStart: pageStart,
+                pageEnd: pageEnd,
+                pageSize: _pageSize,
+                onPageSizeChange: (s) => setState(() {
+                  _pageSize = s;
+                  _page = 0;
+                }),
+              ),
+            ),
+            ReportExportBar(
+              title: 'التقرير المالي',
+              subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+              fileNameBase: 'financial',
+              columns: const [
+                'التاريخ',
+                'النوع',
+                'الهدف',
+                'الوصف',
+                'المبلغ',
+                'المنفّذ',
+              ],
+              rows: exportRows,
+            ),
+          ],
         ),
         const SizedBox(height: Sp.sm),
         for (final l in pageRows) ...[
@@ -417,6 +462,87 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     if (d == null) return '';
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
+  }
+
+  Widget _typeChipsFor(List<FinanceLog> logs) {
+    Color colorFor(String key) => switch (key) {
+          'activate' => const Color(0xFF14B8A6),
+          'extend' => const Color(0xFF3B82F6),
+          'debt_pay' => const Color(0xFF14B8A6),
+          'debt_add' => AppColors.error,
+          'expenses' => AppColors.error,
+          _ => const Color(0xFF14B8A6),
+        };
+    final entries = [
+      ('all', 'الكل', _countLogsFor('all', logs), const Color(0xFF14B8A6)),
+      for (final e in _typeGroups.entries)
+        (e.key, e.value.label, _countLogsFor(e.key, logs), colorFor(e.key)),
+    ];
+    return SizedBox(
+      height: 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: entries.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) {
+          final c = entries[i];
+          final selected = _typeFilter == c.$1;
+          return InkWell(
+            borderRadius: BorderRadius.circular(R.sm),
+            onTap: () => setState(() {
+              _typeFilter = c.$1;
+              _page = 0;
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: selected
+                    ? c.$4.withValues(alpha: 0.18)
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(
+                  color: selected
+                      ? c.$4.withValues(alpha: 0.55)
+                      : AppColors.border,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    c.$2,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? c.$4 : AppColors.textMid,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: (selected ? c.$4 : AppColors.textLow)
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '${c.$3}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: selected ? c.$4 : AppColors.textMid,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 

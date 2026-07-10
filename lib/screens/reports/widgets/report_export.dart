@@ -11,7 +11,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
-import '../../../theme/typography.dart';
 
 /// ================================================================
 /// Report export — CSV/Excel + PDF/Print للتقارير.
@@ -53,25 +52,22 @@ class ReportExportBar extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context);
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: _ActionBtn(
-            icon: LucideIcons.fileSpreadsheet,
-            label: 'Excel',
-            color: const Color(0xFF14B8A6),
-            enabled: _hasData,
-            onTap: () => _exportCsv(context),
-          ),
+        _IconBtn(
+          icon: LucideIcons.fileSpreadsheet,
+          tooltip: 'تصدير Excel',
+          color: const Color(0xFF14B8A6),
+          enabled: _hasData,
+          onTap: () => _exportCsv(context),
         ),
-        const SizedBox(width: Sp.sm),
-        Expanded(
-          child: _ActionBtn(
-            icon: LucideIcons.printer,
-            label: 'طباعة',
-            color: const Color(0xFF3B82F6),
-            enabled: _hasData,
-            onTap: () => _printPdf(context),
-          ),
+        const SizedBox(width: 6),
+        _IconBtn(
+          icon: LucideIcons.printer,
+          tooltip: 'طباعة PDF',
+          color: const Color(0xFF3B82F6),
+          enabled: _hasData,
+          onTap: () => _printPdf(context),
         ),
       ],
     );
@@ -180,16 +176,16 @@ class ReportExportBar extends StatelessWidget {
   }
 }
 
-class _ActionBtn extends StatelessWidget {
-  const _ActionBtn({
+class _IconBtn extends StatelessWidget {
+  const _IconBtn({
     required this.icon,
-    required this.label,
+    required this.tooltip,
     required this.color,
     required this.enabled,
     required this.onTap,
   });
   final IconData icon;
-  final String label;
+  final String tooltip;
   final Color color;
   final bool enabled;
   final VoidCallback onTap;
@@ -198,40 +194,32 @@ class _ActionBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context);
     final active = enabled;
-    return InkWell(
-      onTap: active ? onTap : null,
-      borderRadius: BorderRadius.circular(R.sm),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: active
-              ? color.withValues(alpha: 0.10)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: active ? onTap : null,
+        radius: 22,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
             color: active
-                ? color.withValues(alpha: 0.30)
-                : AppColors.border,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon,
-                size: 15,
-                color: active ? color : AppColors.textLow),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: active ? color : AppColors.textLow,
-              ),
+                ? color.withValues(alpha: 0.10)
+                : AppColors.surface,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(
+              color: active
+                  ? color.withValues(alpha: 0.30)
+                  : AppColors.border,
             ),
-          ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon,
+              size: 17,
+              color: active ? color : AppColors.textLow),
         ),
       ),
     );
   }
 }
+
