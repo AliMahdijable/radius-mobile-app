@@ -46,7 +46,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     'extend': (label: 'تمديد', types: ['SUBSCRIBER_EXTEND']),
     'debt_pay': (label: 'تسديد دين', types: ['DEBT_PAY', 'BALANCE_DEDUCT']),
     'debt_add': (label: 'إضافة دين', types: ['BALANCE_ADD']),
-    'expenses': (label: 'صرفيات', types: ['EXPENSE_ADD']),
+    // backend `/api/reports/finance` يحقن الصرفيات كصفوف صناعية بـ
+    // action_type='ADMIN_EXPENSE' (مطلع 2026-05-x)، مو EXPENSE_ADD.
+    // نقبل كليهما للتوافق مع كلاّ المسارَين.
+    'expenses': (label: 'صرفيات', types: ['ADMIN_EXPENSE', 'EXPENSE_ADD']),
   };
 
   @override
@@ -402,7 +405,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         balanceDeduct += l.amount;
       } else if (at == 'BALANCE_ADD') {
         balanceAdd += l.amount;
-      } else if (at == 'EXPENSE_ADD') {
+      } else if (at == 'EXPENSE_ADD' || at == 'ADMIN_EXPENSE') {
         expenses += l.amount;
         expensesCount++;
       }

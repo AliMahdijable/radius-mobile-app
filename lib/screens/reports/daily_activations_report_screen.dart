@@ -22,7 +22,9 @@ class DailyActivationsReportScreen extends StatefulWidget {
 
 class _DailyActivationsReportScreenState
     extends State<DailyActivationsReportScreen> {
-  DateRange _range = DateRange.thisMonth();
+  // 2026-07-10: الصفحة "التفعيلات اليومية" مخصّصة لليوم الحالي فقط
+  // (feed مباشر). لا نعرض شريط تحديد الفترة — الافتراضي اليوم دائماً.
+  final DateRange _range = DateRange.today();
   List<DailyActivationRow> _rows = const [];
   bool _loading = true;
   String? _error;
@@ -121,13 +123,8 @@ class _DailyActivationsReportScreenState
           child: ListView(
             padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
-              DateRangeChipBar(
-                value: _range,
-                onChanged: (r) {
-                  setState(() => _range = r);
-                  _load();
-                },
-              ),
+              // شريط "اليوم" ثابت — تنبيه بصري بأن الصفحة scope=today.
+              _todayBadge(),
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
@@ -313,6 +310,34 @@ class _DailyActivationsReportScreenState
     if (d == null) return '';
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
+  }
+
+  Widget _todayBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(LucideIcons.calendarCheck,
+              size: 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('اليوم — ${_fmtToday()}',
+              style: AppType.label(color: AppColors.textHi)
+                  .copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+
+  String _fmtToday() {
+    final n = _range.from ?? DateTime.now();
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${n.year}-${p(n.month)}-${p(n.day)}';
   }
 
   Widget _typeChips() {
