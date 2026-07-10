@@ -1,30 +1,18 @@
-import '../../../api/managers_api.dart';
 import '../../../services/auth_storage.dart';
 
-/// جالب IDs الـscope: المدير الحالي + كل مدراءه الفرعيين.
+/// جالب IDs الـscope للتقارير — **فقط المدير المسجّل دخول**.
 ///
-/// يُستعمل كفلتر `user_ids` على تقارير الـactivity_logs (المالي/التفعيلات/…).
-/// بدونه الـbackend يرجع كل المدراء في النظام — لا يليق للمدير العادي.
+/// 2026-07-10: كنّا نُضمِّن المدراء الفرعيين لكن المستخدم صرّح أن هذا
+/// خطأ — لأدمن super يرى الجميع، والمقصود بالتقارير "حركاتي أنا"
+/// وليس "أنا + تحتاني". فالسلوك الآن: **adminId فقط**.
 ///
-/// السلوك:
-/// * لو أخفق جلب أي منهما → يرجع بس adminId (كحدّ أدنى — أفضل من فارغ).
-/// * لو adminId نفسه غير متوفّر → يرجع فاضي (يخلّي الـUI يعرض حالة خطأ صادقة).
+/// لو احتجنا لاحقاً "أنا + الفرعيين" نضيف دالة منفصلة `loadScopeWithSubs()`
+/// وwidget toggle في كل شاشة.
 ///
-/// نتائج مخبأة في-الذاكرة داخل الجلسة (submanagers لا تتغيّر كثيراً).
+/// يرجع قائمة فيها adminId واحد فقط، أو فارغة لو غير متوفّر (يخلّي الـUI
+/// يعرض حالة خطأ صادقة).
 Future<List<String>> loadScopeUserIds() async {
   final adminId = await AuthStorage.readAdminId();
   if (adminId == null || adminId.isEmpty) return const [];
-
-  final ids = <String>{adminId};
-  try {
-    final subs = await ManagersApi.lite();
-    if (subs != null) {
-      for (final m in subs) {
-        ids.add(m.id.toString());
-      }
-    }
-  } catch (_) {
-    // نتحمّل الفشل — نرجع بس adminId
-  }
-  return ids.toList();
+  return [adminId];
 }
