@@ -324,7 +324,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
 
   Widget _kpiCard(_KpiItem it) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
@@ -333,15 +333,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 26,
+            height: 26,
             decoration: BoxDecoration(
               color: it.color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(R.sm),
             ),
-            child: Icon(it.icon, color: it.color, size: 16),
+            child: Icon(it.icon, color: it.color, size: 13),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,7 +349,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               children: [
                 Text(
                   it.label,
-                  style: AppType.muted().copyWith(fontSize: 10),
+                  style: AppType.muted().copyWith(fontSize: 9.5),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -363,8 +363,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                         : (it.isDebit
                             ? AppColors.error
                             : const Color(0xFF14B8A6)),
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w900,
+                    letterSpacing: -0.3,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
