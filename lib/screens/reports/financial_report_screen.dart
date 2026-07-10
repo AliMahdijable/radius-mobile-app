@@ -226,10 +226,16 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: _heroMini(
-                  icon: LucideIcons.trendingUp,
+                  icon: k.netCash < 0
+                      ? LucideIcons.trendingDown
+                      : LucideIcons.trendingUp,
                   label: 'الصافي',
-                  value: formatIQD(k.netCash),
-                  color: brand,
+                  // formatIQD تشيل الإشارة — نضيفها هنا. الأيقونة واللون
+                  // يتبدّلان كذلك حتى يوضح الصافي السالب (المصاريف > الإيراد).
+                  value: k.netCash < 0
+                      ? '-${formatIQD(k.netCash)}'
+                      : formatIQD(k.netCash),
+                  color: k.netCash < 0 ? AppColors.error : brand,
                 ),
               ),
             ],
