@@ -7,7 +7,9 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
+import 'widgets/report_export.dart';
 import 'widgets/report_log_tile.dart';
+import 'widgets/report_pagination.dart';
 import 'widgets/scope_helper.dart';
 
 /// التفعيلات — تفعيلات + تمديدات في الفترة، ضمن scope المدير الحالي.
@@ -26,6 +28,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   bool _loading = true;
   String? _error;
   List<String>? _scopeIds;
+  int _page = 0;
+  int _pageSize = 25;
 
   @override
   void initState() {
@@ -39,17 +43,13 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       _error = null;
     });
     _scopeIds ??= await loadScopeUserIds();
-    // نجلب بدون فلتر activity_type — الـfilter الحقيقي (تفعيل+تمديد+
-    // SUBSCRIBER_ADD-يحتوي-تفعيل) يصير client-side بعد الاسترجاع.
     final r = await ReportsApi.activities(
       from: _range.from,
       to: _range.to,
       userIds: _scopeIds,
-      limit: 1000,
+      limit: 5000,
     );
     if (!mounted) return;
-    // فلترة على activate + extend + SUBSCRIBER_ADD-تفعيل (مطابق web:
-    // client-v2/src/pages/reports/Activations.tsx:180-184).
     final filtered = r.rows.where((row) {
       final at = (row.actionType).toUpperCase().trim();
       final desc = (row.actionDescription ?? '').toLowerCase();
@@ -61,6 +61,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       _loading = false;
       _rows = filtered;
       _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _page = 0;
     });
   }
 
@@ -82,9 +83,35 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         return r.actionType.toUpperCase().trim() == 'SUBSCRIBER_EXTEND';
       }).length;
 
+  // صفوف للتصدير — الـfiltered كامل (لا يقتصر على الصفحة الحالية).
+  List<List<String>> get _exportRows => _rows
+      .map((r) => [
+            r.createdAt,
+            _actionLabel(r),
+            r.targetName ?? r.userUsername ?? '',
+            (r.actionDescription ?? '').replaceAll('\n', ' '),
+            r.amount == 0 ? '0' : r.amount.toString(),
+            r.actingEmployeeFullName ?? r.adminUsername ?? '',
+          ])
+      .toList();
+
+  String _actionLabel(ActivityRow r) {
+    final at = r.actionType.toUpperCase().trim();
+    if (at == 'SUBSCRIBER_EXTEND') return 'تمديد';
+    return 'تفعيل';
+  }
+
   @override
   Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep
+    Theme.of(context);
+    final totalPages =
+        (_rows.length / _pageSize).ceil().clamp(1, 99999);
+    final pageStart = _page * _pageSize;
+    final pageEnd = (pageStart + _pageSize).clamp(0, _rows.length);
+    final pageRows = _rows.isEmpty
+        ? const <ActivityRow>[]
+        : _rows.sublist(pageStart, pageEnd);
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -114,6 +141,21 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
+              ReportExportBar(
+                title: 'التفعيلات والتمديدات',
+                subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                fileNameBase: 'activations',
+                columns: const [
+                  'التاريخ',
+                  'النوع',
+                  'المشترك',
+                  'الوصف',
+                  'المبلغ',
+                  'المنفّذ',
+                ],
+                rows: _exportRows,
+              ),
+              const SizedBox(height: Sp.md),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -123,8 +165,19 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                 _errorBlock()
               else if (_rows.isEmpty)
                 _emptyBlock()
-              else
-                for (final r in _rows) ...[
+              else ...[
+                ReportStatsBar(
+                  totalItems: _rows.length,
+                  pageStart: pageStart,
+                  pageEnd: pageEnd,
+                  pageSize: _pageSize,
+                  onPageSizeChange: (s) => setState(() {
+                    _pageSize = s;
+                    _page = 0;
+                  }),
+                ),
+                const SizedBox(height: Sp.sm),
+                for (final r in pageRows) ...[
                   ReportLogTile(
                     actionType: r.actionType,
                     description: r.actionDescription ?? '',
@@ -136,6 +189,14 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                   ),
                   const SizedBox(height: 4),
                 ],
+                if (totalPages > 1)
+                  ReportPager(
+                    page: _page,
+                    totalPages: totalPages,
+                    onPrev: () => setState(() => _page--),
+                    onNext: () => setState(() => _page++),
+                  ),
+              ],
             ],
           ),
         ),
@@ -251,4 +312,10 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           ),
         ),
       );
+
+  static String _dateStr(DateTime? d) {
+    if (d == null) return '';
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${p(d.month)}-${p(d.day)}';
+  }
 }

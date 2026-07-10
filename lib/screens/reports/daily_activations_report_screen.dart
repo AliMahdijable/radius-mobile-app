@@ -7,6 +7,9 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
+import 'widgets/report_export.dart';
+import 'widgets/report_pagination.dart';
+import 'widgets/scope_helper.dart';
 
 /// التفعيلات اليومية — مُجمّعة بـday + إيراد لكل يوم + عدد نقدي/غير.
 class DailyActivationsReportScreen extends StatefulWidget {
@@ -23,6 +26,9 @@ class _DailyActivationsReportScreenState
   List<DailyActivationRow> _rows = const [];
   bool _loading = true;
   String? _error;
+  List<String>? _scopeIds;
+  int _page = 0;
+  int _pageSize = 25;
 
   @override
   void initState() {
@@ -35,17 +41,29 @@ class _DailyActivationsReportScreenState
       _loading = true;
       _error = null;
     });
+    _scopeIds ??= await loadScopeUserIds();
     final r = await ReportsApi.dailyActivations(
       from: _range.from,
       to: _range.to,
+      userIds: _scopeIds,
     );
     if (!mounted) return;
     setState(() {
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _page = 0;
     });
   }
+
+  List<List<String>> get _exportRows => _rows
+      .map((r) => [
+            r.day,
+            '${r.count}',
+            '${r.nonCashCount}',
+            r.cashSum.toString(),
+          ])
+      .toList();
 
   int get _totalCount =>
       _rows.fold(0, (s, r) => s + r.count + r.nonCashCount);
@@ -54,6 +72,13 @@ class _DailyActivationsReportScreenState
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
+    final totalPages =
+        (_rows.length / _pageSize).ceil().clamp(1, 99999);
+    final pageStart = _page * _pageSize;
+    final pageEnd = (pageStart + _pageSize).clamp(0, _rows.length);
+    final pageRows = _rows.isEmpty
+        ? const <DailyActivationRow>[]
+        : _rows.sublist(pageStart, pageEnd);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -83,6 +108,20 @@ class _DailyActivationsReportScreenState
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),
+              ReportExportBar(
+                title: 'التفعيلات اليومية',
+                subtitle:
+                    '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                fileNameBase: 'daily_activations',
+                columns: const [
+                  'اليوم',
+                  'نقدي',
+                  'غير نقدي',
+                  'إيراد',
+                ],
+                rows: _exportRows,
+              ),
+              const SizedBox(height: Sp.md),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -92,11 +131,30 @@ class _DailyActivationsReportScreenState
                 _errorBlock()
               else if (_rows.isEmpty)
                 _emptyBlock()
-              else
-                for (final r in _rows) ...[
+              else ...[
+                ReportStatsBar(
+                  totalItems: _rows.length,
+                  pageStart: pageStart,
+                  pageEnd: pageEnd,
+                  pageSize: _pageSize,
+                  onPageSizeChange: (s) => setState(() {
+                    _pageSize = s;
+                    _page = 0;
+                  }),
+                ),
+                const SizedBox(height: Sp.sm),
+                for (final r in pageRows) ...[
                   _dayRow(r),
                   const SizedBox(height: 6),
                 ],
+                if (totalPages > 1)
+                  ReportPager(
+                    page: _page,
+                    totalPages: totalPages,
+                    onPrev: () => setState(() => _page--),
+                    onNext: () => setState(() => _page++),
+                  ),
+              ],
             ],
           ),
         ),
@@ -219,6 +277,12 @@ class _DailyActivationsReportScreenState
         ],
       ),
     );
+  }
+
+  static String _dateStr(DateTime? d) {
+    if (d == null) return '';
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
 
   Widget _emptyBlock() => Padding(

@@ -1,0 +1,237 @@
+import 'dart:io';
+
+import 'package:csv/csv.dart';
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
+
+/// ================================================================
+/// Report export — CSV/Excel + PDF/Print للتقارير.
+///
+/// النمط: كل شاشة تقرير تُعطي:
+///   * عنوان (للـPDF)
+///   * تسميات الأعمدة (List<String>)
+///   * صفوف كـ List<List<String>> (كل صف قيم بنفس ترتيب الأعمدة)
+///
+/// الأزرار تولّد الملف مؤقتاً وتفتح shareSheet — Excel يفتح CSV مباشرة.
+/// الطباعة تفتح previewPDF عبر printing.Printing.layoutPdf.
+///
+/// نُبقي حد أعلى معقول (5000 صف) — الصفحة تعرض ضمن pagination لكن
+/// التصدير يشمل الـfiltered set كامل.
+/// ================================================================
+
+class ReportExportBar extends StatelessWidget {
+  const ReportExportBar({
+    super.key,
+    required this.title,
+    required this.columns,
+    required this.rows,
+    this.fileNameBase = 'report',
+    this.subtitle,
+  });
+
+  /// يُستعمل في رأس PDF + اسم الملف.
+  final String title;
+  final String? subtitle;
+  final List<String> columns;
+  final List<List<String>> rows;
+
+  /// اسم الملف (بدون امتداد + بدون timestamp — نضيفه تلقائياً).
+  final String fileNameBase;
+
+  bool get _hasData => rows.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: _ActionBtn(
+            icon: LucideIcons.fileSpreadsheet,
+            label: 'Excel',
+            color: const Color(0xFF14B8A6),
+            enabled: _hasData,
+            onTap: () => _exportCsv(context),
+          ),
+        ),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: _ActionBtn(
+            icon: LucideIcons.printer,
+            label: 'طباعة',
+            color: const Color(0xFF3B82F6),
+            enabled: _hasData,
+            onTap: () => _printPdf(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _exportCsv(BuildContext context) async {
+    // CSV مع BOM لإجبار Excel يفتحه Unicode/UTF-8 (يعرض العربية صح).
+    final data = <List<String>>[columns, ...rows];
+    final csvString = const ListToCsvConverter().convert(data);
+    final withBom = '﻿$csvString';
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${dir.path}/${fileNameBase}_$ts.csv');
+      await file.writeAsString(withBom);
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: title,
+        text: subtitle ?? title,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل تصدير CSV: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _printPdf(BuildContext context) async {
+    try {
+      // خط عربي — نستعمل NotoNaskh من Google Fonts (Cairo نستعملها بالتطبيق
+      // لكن NotoNaskh أنقى للـPDF). أو أي خط مضمّن بالمشروع.
+      final font = await PdfGoogleFonts.cairoRegular();
+      final fontBold = await PdfGoogleFonts.cairoBold();
+      final doc = pw.Document();
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          textDirection: pw.TextDirection.rtl,
+          theme: pw.ThemeData.withFont(base: font, bold: fontBold),
+          margin: const pw.EdgeInsets.all(24),
+          build: (ctx) => [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(title,
+                    style: pw.TextStyle(fontSize: 18, font: fontBold)),
+                pw.Text(_nowStr(),
+                    style:
+                        pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+              ],
+            ),
+            if (subtitle != null && subtitle!.isNotEmpty) ...[
+              pw.SizedBox(height: 4),
+              pw.Text(subtitle!,
+                  style:
+                      pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+            ],
+            pw.SizedBox(height: 12),
+            pw.TableHelper.fromTextArray(
+              headers: columns,
+              data: rows,
+              headerStyle: pw.TextStyle(
+                  font: fontBold, fontSize: 11, color: PdfColors.white),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.teal600),
+              cellStyle: pw.TextStyle(font: font, fontSize: 9),
+              cellAlignment: pw.Alignment.centerRight,
+              headerAlignment: pw.Alignment.centerRight,
+              border: pw.TableBorder.all(
+                  color: PdfColors.grey400, width: 0.4),
+              columnWidths: {
+                for (int i = 0; i < columns.length; i++)
+                  i: const pw.FlexColumnWidth(1),
+              },
+            ),
+            pw.SizedBox(height: 6),
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Text('عدد الصفوف: ${rows.length}',
+                  style: pw.TextStyle(
+                      fontSize: 9, color: PdfColors.grey700, font: font)),
+            ),
+          ],
+        ),
+      );
+      await Printing.layoutPdf(
+        onLayout: (fmt) async => doc.save(),
+        name: '$fileNameBase.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل الطباعة: $e')),
+        );
+      }
+    }
+  }
+
+  static String _nowStr() {
+    final n = DateTime.now();
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${n.year}-${p(n.month)}-${p(n.day)} ${p(n.hour)}:${p(n.minute)}';
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  const _ActionBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.enabled,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    final active = enabled;
+    return InkWell(
+      onTap: active ? onTap : null,
+      borderRadius: BorderRadius.circular(R.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: active
+              ? color.withValues(alpha: 0.10)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(
+            color: active
+                ? color.withValues(alpha: 0.30)
+                : AppColors.border,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 15,
+                color: active ? color : AppColors.textLow),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppType.label(color: AppColors.textHi).copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: active ? color : AppColors.textLow,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

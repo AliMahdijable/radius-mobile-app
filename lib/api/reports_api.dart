@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -218,13 +220,18 @@ class SessionRow {
   bool get isOnline => endedAt == null || endedAt!.isEmpty;
 
   static SessionRow? fromJson(Map<String, dynamic> j) {
-    final id = int.tryParse(j['id']?.toString() ?? '');
+    // SAS4 يرجع radacctid (مو id). نجرّب الاثنين للتوافق.
+    final id = int.tryParse(j['id']?.toString() ?? '') ??
+        int.tryParse(j['radacctid']?.toString() ?? '');
     if (id == null) return null;
     return SessionRow(
       id: id,
       username: j['username']?.toString(),
-      userManager: j['user_manager']?.toString(),
-      ipAddress: j['ip_address']?.toString() ?? j['ip']?.toString(),
+      userManager:
+          j['user_manager']?.toString() ?? j['manager']?.toString(),
+      ipAddress: j['ip_address']?.toString() ??
+          j['ip']?.toString() ??
+          j['framedipaddress']?.toString(),
       bytesIn: FinanceKPIs._n(j['bytes_in'] ?? j['acctinputoctets']),
       bytesOut: FinanceKPIs._n(j['bytes_out'] ?? j['acctoutputoctets']),
       startedAt: j['started_at']?.toString() ?? j['acctstarttime']?.toString(),
@@ -348,16 +355,27 @@ class ReportsApi {
     }
   }
 
-  /// التفعيلات اليومية — مُجمَّعة حسب اليوم.
+  /// التفعيلات اليومية — مُجمَّعة حسب اليوم عبر الفترة.
+  ///
+  /// backend `/api/activities/daily-activations` يرجع "اليوم فقط" (ليس
+  /// مُجمَّعاً لفترة). فنستخدم `/api/activities` مع فلتر تفعيلات +
+  /// نُجمّع محلياً حسب تاريخ اليوم.
   static Future<({bool ok, List<DailyActivationRow> rows, String? error})>
-      dailyActivations({DateTime? from, DateTime? to}) async {
+      dailyActivations({
+    DateTime? from,
+    DateTime? to,
+    List<String>? userIds,
+  }) async {
     try {
       final qp = <String, String>{
+        'limit': '5000',
         if (from != null) 'date_from': _date(from),
         if (to != null) 'date_to': _date(to),
+        if (userIds != null && userIds.isNotEmpty)
+          'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/activations/daily',
+        '/api/activities',
         queryParameters: qp,
       );
       final body = r.data ?? const {};
@@ -372,16 +390,68 @@ class ReportsApi {
       if (list is! List) {
         return (ok: true, rows: const <DailyActivationRow>[], error: null);
       }
-      return (
-        ok: true,
-        rows: list
-            .whereType<Map>()
-            .map((m) =>
-                DailyActivationRow.fromJson(Map<String, dynamic>.from(m)))
-            .whereType<DailyActivationRow>()
-            .toList(),
-        error: null,
-      );
+      // نفلتر ونجمّع محلياً حسب اليوم.
+      final byDay = <String, ({int cash, int nonCash, num cashSum})>{};
+      for (final row in list) {
+        if (row is! Map) continue;
+        final at = (row['action_type']?.toString() ?? '').toUpperCase().trim();
+        final desc = (row['action_description']?.toString() ?? '').toLowerCase();
+        final isActivate = at == 'SUBSCRIBER_ACTIVATE' ||
+            (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'));
+        if (!isActivate) continue;
+        final ts = row['created_at']?.toString();
+        if (ts == null || ts.length < 10) continue;
+        final day = ts.substring(0, 10); // YYYY-MM-DD
+        final isCash =
+            desc.contains('نقدي') && !desc.contains('غير نقدي');
+        num amount = 0;
+        // نجرّب استخراج المبلغ من action_data (JSON string) → ثم من الوصف.
+        final dataRaw = row['action_data'];
+        if (dataRaw is String && dataRaw.isNotEmpty) {
+          try {
+            final map = jsonDecode(dataRaw);
+            if (map is Map) {
+              final v = map['final_price'] ??
+                  map['partial_cash_amount'] ??
+                  map['amount'] ??
+                  map['price'] ??
+                  map['user_price'] ??
+                  0;
+              amount = v is num ? v : num.tryParse(v.toString()) ?? 0;
+            }
+          } catch (_) {}
+        } else if (dataRaw is Map) {
+          final v = dataRaw['final_price'] ??
+              dataRaw['partial_cash_amount'] ??
+              dataRaw['amount'] ??
+              dataRaw['price'] ??
+              dataRaw['user_price'] ??
+              0;
+          amount = v is num ? v : num.tryParse(v.toString()) ?? 0;
+        }
+        if (amount == 0) {
+          final m = RegExp(r'IQD\s*([0-9][0-9,]*)').firstMatch(desc);
+          if (m != null) {
+            amount = num.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+          }
+        }
+        final prev = byDay[day] ?? (cash: 0, nonCash: 0, cashSum: 0);
+        byDay[day] = (
+          cash: prev.cash + (isCash ? 1 : 0),
+          nonCash: prev.nonCash + (isCash ? 0 : 1),
+          cashSum: prev.cashSum + (isCash ? amount : 0),
+        );
+      }
+      final rows = byDay.entries
+          .map((e) => DailyActivationRow(
+                day: e.key,
+                count: e.value.cash,
+                cashSum: e.value.cashSum,
+                nonCashCount: e.value.nonCash,
+              ))
+          .toList()
+        ..sort((a, b) => b.day.compareTo(a.day));
+      return (ok: true, rows: rows, error: null);
     } on DioException catch (e) {
       _log('daily activations', e);
       return (
@@ -407,14 +477,18 @@ class ReportsApi {
     int limit = 200,
   }) async {
     try {
+      // backend يستخدم count (مو limit). onlineOnly يُفعّل عبر endpoint
+      // مختلف /api/v2/online-users لو مطلوب فقط المتصلون حالياً.
       final qp = <String, String>{
-        'limit': '$limit',
-        if (onlineOnly) 'status': 'online',
-        if (from != null) 'date_from': _date(from),
-        if (to != null) 'date_to': _date(to),
+        'count': '$limit',
+        'page': '1',
+        if (from != null) 'from': _date(from),
+        if (to != null) 'to': _date(to),
       };
+      final endpoint =
+          onlineOnly ? '/api/v2/online-users' : '/api/v2/sessions';
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/v2/sessions',
+        endpoint,
         queryParameters: qp,
       );
       final body = r.data ?? const {};

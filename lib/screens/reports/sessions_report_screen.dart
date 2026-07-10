@@ -6,6 +6,8 @@ import '../../api/reports_api.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'widgets/report_export.dart';
+import 'widgets/report_pagination.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
 /// Toggle بين "متصلون الآن" و "كل الجلسات (أحدث 200)".
@@ -21,6 +23,8 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   List<SessionRow> _rows = const [];
   bool _loading = true;
   String? _error;
+  int _page = 0;
+  int _pageSize = 25;
 
   @override
   void initState() {
@@ -33,18 +37,40 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
       _loading = true;
       _error = null;
     });
-    final r = await ReportsApi.sessions(onlineOnly: _onlineOnly, limit: 200);
+    final r = await ReportsApi.sessions(onlineOnly: _onlineOnly, limit: 2000);
     if (!mounted) return;
     setState(() {
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _page = 0;
     });
   }
+
+  List<List<String>> get _exportRows => _rows
+      .map((s) => [
+            s.username ?? '',
+            s.ipAddress ?? '',
+            s.userManager ?? '',
+            _humanBytes(s.bytesIn),
+            _humanBytes(s.bytesOut),
+            s.startedAt ?? '',
+            s.endedAt ?? '',
+            s.isOnline ? 'متصل' : 'منتهي',
+          ])
+      .toList();
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
+    final totalPages =
+        (_rows.length / _pageSize).ceil().clamp(1, 99999);
+    final pageStart = _page * _pageSize;
+    final pageEnd = (pageStart + _pageSize).clamp(0, _rows.length);
+    final pageRows = _rows.isEmpty
+        ? const <SessionRow>[]
+        : _rows.sublist(pageStart, pageEnd);
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -87,16 +113,38 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
             Padding(
               padding:
                   const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
-              child: Row(
+              child: Column(
                 children: [
-                  Icon(LucideIcons.activity,
-                      size: 14, color: AppColors.textMid),
-                  const SizedBox(width: 6),
-                  Text(
-                    _loading
-                        ? '...'
-                        : '${_rows.length} ${_onlineOnly ? 'مستخدم متصل' : 'جلسة'}',
-                    style: AppType.muted().copyWith(fontSize: 12),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.activity,
+                          size: 14, color: AppColors.textMid),
+                      const SizedBox(width: 6),
+                      Text(
+                        _loading
+                            ? '...'
+                            : '${_rows.length} ${_onlineOnly ? 'مستخدم متصل' : 'جلسة'}',
+                        style: AppType.muted().copyWith(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Sp.sm),
+                  ReportExportBar(
+                    title: _onlineOnly ? 'الجلسات المتصلة' : 'كل الجلسات',
+                    subtitle: 'عدد الصفوف: ${_rows.length}',
+                    fileNameBase:
+                        _onlineOnly ? 'sessions_online' : 'sessions_all',
+                    columns: const [
+                      'المستخدم',
+                      'IP',
+                      'المدير',
+                      'تنزيل',
+                      'رفع',
+                      'بدء',
+                      'انتهاء',
+                      'الحالة',
+                    ],
+                    rows: _exportRows,
                   ),
                 ],
               ),
@@ -111,13 +159,33 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                         ? _errorState()
                         : _rows.isEmpty
                             ? _emptyState()
-                            : ListView.separated(
+                            : ListView(
                                 padding: const EdgeInsets.fromLTRB(
                                     Sp.lg, 0, Sp.lg, Sp.huge),
-                                itemCount: _rows.length,
-                                separatorBuilder: (_, __) =>
+                                children: [
+                                  ReportStatsBar(
+                                    totalItems: _rows.length,
+                                    pageStart: pageStart,
+                                    pageEnd: pageEnd,
+                                    pageSize: _pageSize,
+                                    onPageSizeChange: (s) => setState(() {
+                                      _pageSize = s;
+                                      _page = 0;
+                                    }),
+                                  ),
+                                  const SizedBox(height: Sp.sm),
+                                  for (final s in pageRows) ...[
+                                    _sessionTile(s),
                                     const SizedBox(height: 6),
-                                itemBuilder: (_, i) => _sessionTile(_rows[i]),
+                                  ],
+                                  if (totalPages > 1)
+                                    ReportPager(
+                                      page: _page,
+                                      totalPages: totalPages,
+                                      onPrev: () => setState(() => _page--),
+                                      onNext: () => setState(() => _page++),
+                                    ),
+                                ],
                               ),
               ),
             ),

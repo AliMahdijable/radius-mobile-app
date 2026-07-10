@@ -8,7 +8,9 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
+import 'widgets/report_export.dart';
 import 'widgets/report_log_tile.dart';
+import 'widgets/report_pagination.dart';
 import 'widgets/scope_helper.dart';
 
 /// التقرير المالي — نسخة موبايل من client-v2/Financial.tsx:
@@ -29,6 +31,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   bool _loading = true;
   String? _error;
   List<String>? _scopeIds; // cache — لا يتغيّر خلال الجلسة عملياً
+  int _page = 0;
+  int _pageSize = 25;
 
   @override
   void initState() {
@@ -47,12 +51,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       from: _range.from,
       to: _range.to,
       userIds: _scopeIds,
+      recentLimit: 500,
     );
     if (!mounted) return;
     setState(() {
       _loading = false;
       _data = r.data;
       _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _page = 0;
     });
   }
 
@@ -324,9 +330,39 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         ),
       );
     }
+    final totalPages =
+        (logs.length / _pageSize).ceil().clamp(1, 99999);
+    final pageStart = _page * _pageSize;
+    final pageEnd = (pageStart + _pageSize).clamp(0, logs.length);
+    final pageRows = logs.sublist(pageStart, pageEnd);
+    final exportRows = logs
+        .map((l) => [
+              l.createdAt,
+              l.actionType,
+              l.targetName ?? l.userUsername ?? '',
+              (l.actionDescription ?? '').replaceAll('\n', ' '),
+              l.amount == 0 ? '' : l.amount.toString(),
+              l.actingEmployeeFullName ?? l.adminUsername ?? '',
+            ])
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        ReportExportBar(
+          title: 'التقرير المالي',
+          subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+          fileNameBase: 'financial',
+          columns: const [
+            'التاريخ',
+            'النوع',
+            'الهدف',
+            'الوصف',
+            'المبلغ',
+            'المنفّذ',
+          ],
+          rows: exportRows,
+        ),
+        const SizedBox(height: Sp.md),
         Padding(
           padding: const EdgeInsets.only(bottom: 6, right: 4),
           child: Row(
@@ -342,7 +378,18 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             ],
           ),
         ),
-        for (final l in logs) ...[
+        ReportStatsBar(
+          totalItems: logs.length,
+          pageStart: pageStart,
+          pageEnd: pageEnd,
+          pageSize: _pageSize,
+          onPageSizeChange: (s) => setState(() {
+            _pageSize = s;
+            _page = 0;
+          }),
+        ),
+        const SizedBox(height: Sp.sm),
+        for (final l in pageRows) ...[
           ReportLogTile(
             actionType: l.actionType,
             description: l.actionDescription ?? '',
@@ -355,8 +402,21 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           ),
           const SizedBox(height: 4),
         ],
+        if (totalPages > 1)
+          ReportPager(
+            page: _page,
+            totalPages: totalPages,
+            onPrev: () => setState(() => _page--),
+            onNext: () => setState(() => _page++),
+          ),
       ],
     );
+  }
+
+  static String _dateStr(DateTime? d) {
+    if (d == null) return '';
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
 }
 

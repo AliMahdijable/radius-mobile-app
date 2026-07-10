@@ -59,6 +59,16 @@ dependencies:
   # both iOS (Contacts framework) and Android (ContactsContract).
   flutter_contacts: ^1.1.9+2
 
+  # تصدير التقارير — CSV/Excel + PDF + مشاركة (2026-07-10). csv خفيف
+  # (pure Dart) وتفتحه Excel/Sheets مباشرة. printing/pdf يخلق PDF
+  # قابل للطباعة أو المشاركة. share_plus يفتح shareSheet لحفظ
+  # الملف أو إرساله. path_provider للـtemp files.
+  csv: ^6.0.0
+  pdf: ^3.11.0
+  printing: ^5.13.0
+  share_plus: ^10.0.0
+  path_provider: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
