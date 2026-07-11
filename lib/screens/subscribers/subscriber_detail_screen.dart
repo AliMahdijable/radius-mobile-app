@@ -12,6 +12,7 @@ import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../reports/account_statement_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
 import 'sheets/edit_subscriber_sheet.dart';
@@ -992,6 +993,22 @@ class _OperationsCard extends StatelessWidget {
       if (Perms.has('subscribers.view_activity'))
         _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
             () => showMovementsSheet(context, sub)),
+      if (Perms.has('reports.account_statement'))
+        _Op(LucideIcons.fileText, 'كشف الحساب', const Color(0xFF0EA5E9),
+            () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => AccountStatementScreen(
+                      username: sub.username,
+                      displayName: (sub.firstname == null && sub.lastname == null)
+                          ? null
+                          : [sub.firstname, sub.lastname]
+                              .where((s) => s != null && s.isNotEmpty)
+                              .join(' ')
+                              .trim(),
+                      phone: sub.phone,
+                    ),
+                  ),
+                )),
       if (sub.hasDebt && Perms.has('subscribers.send_whatsapp'))
         _Op(
           LucideIcons.bellRing,

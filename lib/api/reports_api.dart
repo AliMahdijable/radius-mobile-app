@@ -288,6 +288,106 @@ class SessionRow {
   }
 }
 
+/// كشف حساب مشترك — صف حركة واحدة (تفعيل/تسديد/إضافة دين/…).
+class StatementRow {
+  const StatementRow({
+    required this.id,
+    required this.createdAt,
+    this.actionType,
+    this.description,
+    this.amount = 0,
+    this.adminName,
+    this.notes,
+  });
+  final int id;
+  final String createdAt;
+  final String? actionType;
+  final String? description;
+  final num amount;
+  final String? adminName;
+  final String? notes;
+
+  static StatementRow? fromJson(Map<String, dynamic> j) {
+    final rawId = j['id']?.toString() ?? '';
+    final id = int.tryParse(rawId) ?? rawId.hashCode.abs();
+    final ts = j['created_at']?.toString();
+    if (ts == null) return null;
+    return StatementRow(
+      id: id,
+      createdAt: ts,
+      actionType: j['action_type']?.toString(),
+      description: j['description']?.toString(),
+      amount: FinanceKPIs._n(j['amount']),
+      adminName: j['admin_name']?.toString(),
+      notes: j['notes']?.toString(),
+    );
+  }
+}
+
+class StatementSummary {
+  const StatementSummary({
+    this.totalTransactions = 0,
+    this.totalDebt = 0,
+    this.totalPayments = 0,
+    this.totalActivations = 0,
+  });
+  final int totalTransactions;
+  final num totalDebt;
+  final num totalPayments;
+  final int totalActivations;
+
+  /// الرصيد الصافي: مدفوع - دين. سالب = مدين للمدير، موجب = رصيد إضافي.
+  num get balance => totalPayments - totalDebt;
+
+  static StatementSummary fromJson(Map<String, dynamic> j) {
+    return StatementSummary(
+      totalTransactions: FinanceKPIs._i(j['totalTransactions']),
+      totalDebt: FinanceKPIs._n(j['totalDebt']),
+      totalPayments: FinanceKPIs._n(j['totalPayments']),
+      totalActivations: FinanceKPIs._i(j['totalActivations']),
+    );
+  }
+}
+
+class SubscriberInfo {
+  const SubscriberInfo({
+    this.username,
+    this.firstname,
+    this.lastname,
+    this.phone,
+  });
+  final String? username;
+  final String? firstname;
+  final String? lastname;
+  final String? phone;
+
+  String get displayName {
+    final full =
+        [firstname, lastname].where((s) => s != null && s.isNotEmpty).join(' ');
+    return full.isNotEmpty ? full : (username ?? '');
+  }
+
+  static SubscriberInfo? fromJson(Map<String, dynamic> j) {
+    return SubscriberInfo(
+      username: j['username']?.toString(),
+      firstname: j['firstname']?.toString(),
+      lastname: j['lastname']?.toString(),
+      phone: j['phone']?.toString(),
+    );
+  }
+}
+
+class StatementResponse {
+  const StatementResponse({
+    required this.rows,
+    required this.summary,
+    this.subscriber,
+  });
+  final List<StatementRow> rows;
+  final StatementSummary summary;
+  final SubscriberInfo? subscriber;
+}
+
 class ReportsApi {
   ReportsApi._();
 
@@ -601,6 +701,75 @@ class ReportsApi {
     } catch (e) {
       _log('sessions', e);
       return (ok: false, rows: const <SessionRow>[], error: 'تعذّر التحميل');
+    }
+  }
+
+  /// كشف حساب مشترك — يجلب حركاته المالية في الفترة + summary.
+  /// backend: GET /api/reports/account-statement?username=X&date_from=Y&date_to=Z
+  static Future<({bool ok, StatementResponse? data, String? error})>
+      accountStatement({
+    required String username,
+    DateTime? from,
+    DateTime? to,
+    String? userId,
+    List<String>? actionTypes,
+  }) async {
+    try {
+      final qp = <String, String>{
+        'username': username,
+        if (from != null) 'date_from': _date(from),
+        if (to != null) 'date_to': _date(to),
+        if (userId != null && userId.isNotEmpty) 'user_id': userId,
+        if (actionTypes != null && actionTypes.isNotEmpty)
+          'action_types': actionTypes.join(','),
+      };
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/reports/account-statement',
+        queryParameters: qp,
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          ok: false,
+          data: null,
+          error: body['message']?.toString(),
+        );
+      }
+      final data = body['data'];
+      if (data is! Map) {
+        return (ok: false, data: null, error: 'تنسيق غير متوقع');
+      }
+      final rawRows = data['transactions'];
+      final rows = rawRows is List
+          ? rawRows
+              .whereType<Map>()
+              .map((m) => StatementRow.fromJson(Map<String, dynamic>.from(m)))
+              .whereType<StatementRow>()
+              .toList()
+          : const <StatementRow>[];
+      final summary = data['summary'] is Map
+          ? StatementSummary.fromJson(
+              Map<String, dynamic>.from(data['summary'] as Map))
+          : const StatementSummary();
+      final subscriber = data['subscriber'] is Map
+          ? SubscriberInfo.fromJson(
+              Map<String, dynamic>.from(data['subscriber'] as Map))
+          : null;
+      return (
+        ok: true,
+        data: StatementResponse(
+          rows: rows,
+          summary: summary,
+          subscriber: subscriber,
+        ),
+        error: null,
+      );
+    } on DioException catch (e) {
+      _log('account-statement', e);
+      return (ok: false, data: null, error: _friendly(e));
+    } catch (e) {
+      _log('account-statement', e);
+      return (ok: false, data: null, error: 'تعذّر التحميل');
     }
   }
 
