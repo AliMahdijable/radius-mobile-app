@@ -181,13 +181,13 @@ _ActionMeta _actionMeta(String at, String desc) {
     case 'SUBSCRIBER_ACTIVATE':
       // نقدي = موجب أخضر، غير نقدي = سالب أحمر، مجهول = افتراضي.
       if (_isNonCash(desc)) {
-        return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
+        return _ActionMeta('تجديد', LucideIcons.zap, AppColors.error,
             debit: true);
       }
       if (_isCash(desc)) {
-        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+        return const _ActionMeta('تجديد', LucideIcons.zap, _kPositive);
       }
-      return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+      return const _ActionMeta('تجديد', LucideIcons.zap, _kPositive);
     case 'SUBSCRIBER_EXTEND':
       // نفس منطق التفعيل — نقدي أخضر، غير نقدي أحمر.
       if (_isNonCash(desc)) {
@@ -202,7 +202,7 @@ _ActionMeta _actionMeta(String at, String desc) {
           return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
               debit: true);
         }
-        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+        return const _ActionMeta('تجديد', LucideIcons.zap, _kPositive);
       }
       return const _ActionMeta(
           'إضافة مشترك', LucideIcons.userPlus, _kPositive);
