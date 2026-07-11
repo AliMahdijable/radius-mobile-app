@@ -55,6 +55,7 @@ class DebtorsResult {
     required this.count,
     required this.total,
     required this.nearExpiry,
+    required this.expiringToday,
     required this.online,
     required this.offline,
     required this.active,
@@ -65,6 +66,10 @@ class DebtorsResult {
   final int total;
   /// Subscribers whose remaining days fall in [0, 3] — soon-to-expire.
   final int nearExpiry;
+  /// مطلب 2026-07-11: مشتركين متبقّي لهم أقل من 24 ساعة (دقيقة/ثانية)
+  /// ولم ينتهوا بعد. يُستعمل في بطاقة الإشعارات "قربوا الانتهاء" التي
+  /// يجب أن يختفي منها المشترك فور انتهائه.
+  final int expiringToday;
   /// مطلب 2026-06-11: حسابات حالة الاتصال من القائمة المحلية مثل v1
   /// لأن SAS4 widget الـactive يرجّع رقم خاطئ على بعض الحسابات
   /// (offline يحسب صفر مع وجود متصلين). نمشي بنفس predicate v1:
@@ -166,6 +171,7 @@ class DashboardApi {
     var debtCount = 0;
     var debtTotal = 0;
     var nearExpiry = 0;
+    var expiringToday = 0;
     var online = 0;
     var offline = 0;
     var active = 0;
@@ -176,6 +182,7 @@ class DashboardApi {
         debtTotal += s.debtAbs.round();
       }
       if (s.isNearExpiry) nearExpiry++;
+      if (s.isExpiringWithinDay) expiringToday++;
       if (s.isOnline) online++;
       if (s.isOffline) offline++; // !isOnline && !isExpired
       if (s.isExpired) expired++;
@@ -185,6 +192,7 @@ class DashboardApi {
       count: debtCount,
       total: debtTotal,
       nearExpiry: nearExpiry,
+      expiringToday: expiringToday,
       online: online,
       offline: offline,
       active: active,
