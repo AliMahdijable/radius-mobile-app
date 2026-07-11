@@ -1080,7 +1080,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
 
 enum _BulkAction {
   disable('تعطيل'),
-  enable('تفعيل'),
+  enable('تشغيل'),
   delete('حذف');
 
   const _BulkAction(this.label);
@@ -1634,8 +1634,8 @@ class _BulkActionBar extends StatelessWidget {
                       child: _SecondaryBtn(
                         icon: LucideIcons.circleCheck,
                         label: disabledCount > 0
-                            ? 'تفعيل ($disabledCount)'
-                            : 'تفعيل',
+                            ? 'تشغيل ($disabledCount)'
+                            : 'تشغيل',
                         color: AppColors.brand,
                         enabled: disabledCount > 0,
                         onTap: onEnable,

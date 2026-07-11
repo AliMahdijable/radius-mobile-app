@@ -257,7 +257,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   Future<void> _confirmToggleEnabled() async {
     final wantEnable = sub.isDisabled;
-    final action = wantEnable ? 'تفعيل حساب' : 'تعطيل';
+    final action = wantEnable ? 'تشغيل' : 'تعطيل';
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1048,7 +1048,7 @@ class _OperationsCard extends StatelessWidget {
           sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
           toggling
               ? 'جاري...'
-              : (sub.isDisabled ? 'تفعيل حساب' : 'تعطيل'),
+              : (sub.isDisabled ? 'تشغيل' : 'تعطيل'),
           sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
           onToggleEnabled ?? () {},
         ),
