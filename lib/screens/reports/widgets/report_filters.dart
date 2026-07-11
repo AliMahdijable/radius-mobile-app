@@ -92,14 +92,14 @@ const List<ReportActionTypeOption> kFinancialActionTypes = [
 ];
 
 const List<ReportActionTypeOption> kActivationsActionTypes = [
-  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تجديد'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
   ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
 ];
 
 /// الأنواع المسموحة في كشف حساب مشترك (مطابق backend ACCOUNT_ACTIONS
 /// في server.js:15021).
 const List<ReportActionTypeOption> kAccountStatementActionTypes = [
-  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تجديد'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
   ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
   ReportActionTypeOption(key: 'DEBT_PAY', label: 'تسديد دين'),
   ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'استقطاع رصيد'),
@@ -107,7 +107,7 @@ const List<ReportActionTypeOption> kAccountStatementActionTypes = [
 ];
 
 const List<ReportActionTypeOption> kAllActionTypes = [
-  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تجديد'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
   ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
   ReportActionTypeOption(key: 'DEBT_PAY', label: 'تسديد دين'),
   ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'استقطاع رصيد'),

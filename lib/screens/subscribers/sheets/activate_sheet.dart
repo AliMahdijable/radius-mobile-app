@@ -56,7 +56,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool _submitting = false;
   String? _loadError;
 
-  _PayType _pay = _PayType.cash;
+  // Default = آجل (dept/deferred). المستخدم صرّح 2026-07-11: أغلب
+  // التفعيلات تكون آجلة، فنجعله الافتراضي بدل نقدي.
+  _PayType _pay = _PayType.debt;
   final _partialCtrl = TextEditingController();
   int _partialAmount = 0;
   // True while the controller text is being rewritten by us (e.g. when

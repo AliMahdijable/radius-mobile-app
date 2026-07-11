@@ -181,13 +181,13 @@ _ActionMeta _actionMeta(String at, String desc) {
     case 'SUBSCRIBER_ACTIVATE':
       // نقدي = موجب أخضر، غير نقدي = سالب أحمر، مجهول = افتراضي.
       if (_isNonCash(desc)) {
-        return _ActionMeta('تجديد', LucideIcons.zap, AppColors.error,
+        return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
             debit: true);
       }
       if (_isCash(desc)) {
-        return const _ActionMeta('تجديد', LucideIcons.zap, _kPositive);
+        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
       }
-      return const _ActionMeta('تجديد', LucideIcons.zap, _kPositive);
+      return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
     case 'SUBSCRIBER_EXTEND':
       // نفس منطق التفعيل — نقدي أخضر، غير نقدي أحمر.
       if (_isNonCash(desc)) {
@@ -202,7 +202,7 @@ _ActionMeta _actionMeta(String at, String desc) {
           return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
               debit: true);
         }
-        return const _ActionMeta('تجديد', LucideIcons.zap, _kPositive);
+        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
       }
       return const _ActionMeta(
           'إضافة مشترك', LucideIcons.userPlus, _kPositive);
@@ -214,10 +214,10 @@ _ActionMeta _actionMeta(String at, String desc) {
           debit: false);
     case 'SUBSCRIBER_ENABLE':
       return const _ActionMeta(
-          'تفعيل حساب', LucideIcons.circleCheck, Color(0xFF14B8A6));
+          'تشغيل', LucideIcons.circleCheck, Color(0xFF14B8A6));
     case 'SUBSCRIBER_DISABLE':
       return const _ActionMeta(
-          'تعطيل حساب', LucideIcons.ban, Color(0xFFE08F2D));
+          'تعطيل', LucideIcons.ban, Color(0xFFE08F2D));
     case 'BALANCE_ADD':
       // إضافة دين = سالب أحمر (مبلغ يزيد على المشترك، خسارة للمدير).
       return _ActionMeta('إضافة دين', LucideIcons.plus, AppColors.error,
