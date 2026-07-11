@@ -200,9 +200,9 @@ class _MyServicesAppState extends State<MyServicesApp>
       // Android نُطبّقه صراحةً حتى نحصل على نفس السلوك.
       pageTransitionsTheme: PageTransitionsTheme(
         builders: {
-          TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
-          TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
         },
       ),
     );
