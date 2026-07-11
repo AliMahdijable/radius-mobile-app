@@ -124,20 +124,6 @@ class Subscriber {
     return d != null && d >= 1 && d <= 3;
   }
 
-  /// أضيق من isNearExpiry — أي مشترك متبقّي له أقل من 24 ساعة (حتى دقيقة/
-  /// ثانية) وما زال غير منتهٍ. يُستعمل في smart cards تبع الإشعارات
-  /// حيث ينبغي أن يختفي المشترك من الإشعار فور انتهائه.
-  bool get isExpiringWithinDay {
-    final exp = parsedExpiration;
-    if (exp != null) {
-      final now = DateTime.now();
-      if (exp.isBefore(now)) return false;
-      return exp.difference(now).inHours < 24;
-    }
-    final d = remainingDays;
-    return d != null && d >= 0 && d < 1;
-  }
-
   /// v1 says: active = not-expired. Disabled subscribers are NOT
   /// excluded from this count — they have a separate 'disabled' filter.
   bool get isActive => !isExpired;

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../api/dashboard_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/app_notification.dart';
 import '../../models/subscriber.dart';
@@ -10,62 +9,82 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
-import '../subscribers/widgets/filter_chips_bar.dart';
 
-/// شاشة inbox — الإشعارات الذكية (قريب الانتهاء / منتهي) + قائمة
-/// إشعارات FCM المستلمة مجمّعة يومياً.
-///
-/// - **بطاقات ذكية** بأعلى الشاشة: تعرض عدد المشتركين قربوا للانتهاء
-///   والمنتهين، مع tap يفتح شاشة المشتركين بالفلتر المناسب.
-/// - **قائمة FCM**: الإشعارات المستلمة من backend عبر Firebase.
-/// - Swipe لحذف صف واحد.
-/// - AppBar action لتعليم الكل كمقروء.
+/// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
+///   1. **إشعارات التطبيق** — FCM inbox items (المستلمة).
+///   2. **انتهى اليوم** — قائمة مشتركين انتهى اشتراكهم اليوم (name+detail،
+///      tap يفتح كارت المشترك).
+///   3. **قريب الانتهاء** — قائمة مشتركين متبقّي لهم 0..3 أيام
+///      (مطلوب من المستخدم 2026-07-11: يظهروا لغاية ما ينتهي اشتراكهم).
+/// كل صف مشترك قابل للنقر ويفتح SubscriberDetailScreen مثل v1.
 class InboxScreen extends StatefulWidget {
-  const InboxScreen({
-    super.key,
-    this.onTapNotification,
-    this.onOpenSubscribersFilter,
-  });
+  const InboxScreen({super.key, this.onTapNotification});
 
+  /// callback خارجي عند النقر على إشعار FCM: يُستدعى فقط لو ما نعرف
+  /// مشترك محدد من payload (لو نعرفه، نفتح كارته مباشرة).
   final void Function(AppNotification n)? onTapNotification;
-
-  /// callback يفتح صفحة المشتركين بفلتر معيّن. لو null، البطاقات
-  /// الذكية (قربوا الانتهاء / منتهي) تختفي.
-  final void Function(SubscriberFilter)? onOpenSubscribersFilter;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  int _nearExpiryCount = 0;
-  int _expiredCount = 0;
-  bool _countsLoaded = false;
+  List<Subscriber> _expiredToday = const [];
+  List<Subscriber> _nearExpiry = const [];
+  bool _loaded = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCounts();
+    _loadLists();
   }
 
-  Future<void> _loadCounts() async {
-    final r = await DashboardApi.fetchDebtors();
+  Future<void> _loadLists() async {
+    final list = await SubscribersApi.loadAll();
     if (!mounted) return;
+    if (list == null) {
+      setState(() => _loaded = true);
+      return;
+    }
+    // v1 mobile-app منطق (dashboard_provider.dart:373-397, 432-455):
+    // • expiredToday = expDay == today && expDate.isBefore(now)
+    // • nearExpiry = remaining_days في [0..3] && expDate.isAfter(now)
+    // • مطلب 2026-07-11: near-expiry يظهر لغاية ينتهي فيختفي — نفس منطق v1.
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expiredToday = <Subscriber>[];
+    final nearExpiry = <Subscriber>[];
+    for (final s in list) {
+      final exp = s.parsedExpiration;
+      if (exp == null) continue;
+      final expDay = DateTime(exp.year, exp.month, exp.day);
+      if (expDay == today && exp.isBefore(now)) {
+        expiredToday.add(s);
+        continue;
+      }
+      if (exp.isAfter(now)) {
+        final rd = s.remainingDays;
+        if (rd != null && rd >= 0 && rd <= 3) {
+          nearExpiry.add(s);
+        }
+      }
+    }
+    nearExpiry.sort((a, b) =>
+        (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0));
     setState(() {
-      // مطلب المستخدم 2026-07-11: "قربوا الانتهاء" هنا يعني كل مشترك
-      // متبقّي له أقل من 24 ساعة (دقيقة/ثانية) — حتى ينتهي فيختفي.
-      // نستعمل expiringToday (< 24h) بدل nearExpiry (1..3 days).
-      _nearExpiryCount = r?.expiringToday ?? 0;
-      _expiredCount = r?.expired ?? 0;
-      _countsLoaded = true;
+      _expiredToday = expiredToday;
+      _nearExpiry = nearExpiry;
+      _loaded = true;
     });
   }
 
-  void _openSubscribersFilter(SubscriberFilter f) {
-    // نُغلق الـInboxScreen ثم نُنبّه MainShell (عبر callback) لفتح
-    // شاشة المشتركين مع الفلتر المطلوب. هيك ما نحتاج route stack عميق.
-    Navigator.of(context).pop();
-    widget.onOpenSubscribersFilter?.call(f);
+  void _openSubscriber(Subscriber s) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubscriberDetailScreen(sub: s),
+        fullscreenDialog: true,
+      ),
+    );
   }
 
   /// عند النقر على إشعار: لو الـpayload يحمل اسم مشترك محدد
@@ -161,76 +180,86 @@ class _InboxScreenState extends State<InboxScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadCounts,
+          onRefresh: _loadLists,
           color: AppColors.brand,
           child: ValueListenableBuilder<int>(
             valueListenable: InboxService.changes,
             builder: (context, _, __) {
               final items = InboxService.all;
+              final hasApp = items.isNotEmpty;
+              final hasExpiredToday = _expiredToday.isNotEmpty;
+              final hasNearExpiry = _nearExpiry.isNotEmpty;
+              final allEmpty =
+                  _loaded && !hasApp && !hasExpiredToday && !hasNearExpiry;
               return ListView(
                 padding:
                     const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                 children: [
-                  _smartCards(),
-                  if (items.isEmpty) ...[
-                    const SizedBox(height: Sp.md),
-                    _empty(),
-                  ] else ...[
-                    const SizedBox(height: Sp.lg),
-                    Padding(
-                      padding:
-                          const EdgeInsets.only(right: 4, bottom: 6),
-                      child: Text(
-                        'الرسائل المستلمة',
-                        style: AppType.label(color: AppColors.textMid)
-                            .copyWith(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700),
-                      ),
+                  if (hasApp) ...[
+                    _SectionHeader(
+                      title: 'إشعارات التطبيق',
+                      count: items.length,
+                      color: AppColors.brand,
+                      icon: LucideIcons.bell,
                     ),
                     ..._buildGroups(items),
+                    const SizedBox(height: Sp.md),
                   ],
+                  if (hasExpiredToday) ...[
+                    _SectionHeader(
+                      title: 'انتهى اليوم',
+                      count: _expiredToday.length,
+                      color: AppColors.error,
+                      icon: LucideIcons.circleAlert,
+                    ),
+                    for (final s in _expiredToday) ...[
+                      _SubscriberAlertRow(
+                        sub: s,
+                        detail: 'انتهى الاشتراك اليوم',
+                        color: AppColors.error,
+                        icon: LucideIcons.timerOff,
+                        onTap: () => _openSubscriber(s),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    const SizedBox(height: Sp.md),
+                  ],
+                  if (hasNearExpiry) ...[
+                    _SectionHeader(
+                      title: 'قريب الانتهاء',
+                      count: _nearExpiry.length,
+                      color: const Color(0xFFE08F2D),
+                      icon: LucideIcons.triangleAlert,
+                    ),
+                    for (final s in _nearExpiry) ...[
+                      _SubscriberAlertRow(
+                        sub: s,
+                        detail: _formatRemaining(s.parsedExpiration),
+                        color: const Color(0xFFE08F2D),
+                        icon: LucideIcons.clock,
+                        onTap: () => _openSubscriber(s),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                  ],
+                  if (!_loaded && !hasApp)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: Sp.huge),
+                      child: Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                  if (allEmpty) _empty(),
                 ],
               );
             },
           ),
         ),
       ),
-    );
-  }
-
-  // ────────────────────────────────────────────
-  // Smart cards — قربوا للانتهاء + المنتهين
-  Widget _smartCards() {
-    // لو ما فيه callback للـfilter، نُخفي البطاقات (مؤشّر إن الشاشة
-    // ما تعرف كيف تنقل — نمنع confusion).
-    if (widget.onOpenSubscribersFilter == null) {
-      return const SizedBox.shrink();
-    }
-    return Row(
-      children: [
-        Expanded(
-          child: _SmartCard(
-            icon: LucideIcons.alarmClock,
-            label: 'قربوا الانتهاء',
-            count: _nearExpiryCount,
-            color: const Color(0xFFE08F2D),
-            loading: !_countsLoaded,
-            onTap: () => _openSubscribersFilter(SubscriberFilter.nearExpiry),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _SmartCard(
-            icon: LucideIcons.circleAlert,
-            label: 'منتهي',
-            count: _expiredCount,
-            color: AppColors.error,
-            loading: !_countsLoaded,
-            onTap: () => _openSubscribersFilter(SubscriberFilter.expired),
-          ),
-        ),
-      ],
     );
   }
 
@@ -321,26 +350,91 @@ class _InboxScreenState extends State<InboxScreen> {
 }
 
 // ────────────────────────────────────────────
-// Smart card widget
-class _SmartCard extends StatelessWidget {
-  const _SmartCard({
-    required this.icon,
-    required this.label,
+// v1 helper: صياغة "متبقّي X يوم و Y ساعة" لصف قريب الانتهاء.
+String _formatRemaining(DateTime? exp) {
+  if (exp == null) return 'ينتهي قريباً';
+  final diff = exp.difference(DateTime.now());
+  if (diff.isNegative) return 'انتهى';
+  final days = diff.inDays;
+  final hours = diff.inHours % 24;
+  final minutes = diff.inMinutes % 60;
+  if (days > 0) return 'متبقي $days يوم${hours > 0 ? ' و $hours ساعة' : ''}';
+  if (hours > 0) {
+    return 'متبقي $hours ساعة${minutes > 0 ? ' و $minutes دقيقة' : ''}';
+  }
+  if (minutes > 0) return 'متبقي $minutes دقيقة';
+  return 'ينتهي الآن';
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
     required this.count,
     required this.color,
-    required this.loading,
-    required this.onTap,
+    required this.icon,
   });
-  final IconData icon;
-  final String label;
+  final String title;
   final int count;
   final Color color;
-  final bool loading;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 2, bottom: 8, top: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: AppType.label(color: AppColors.textHi)
+                .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                color: color,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubscriberAlertRow extends StatelessWidget {
+  const _SubscriberAlertRow({
+    required this.sub,
+    required this.detail,
+    required this.color,
+    required this.icon,
+    required this.onTap,
+  });
+  final Subscriber sub;
+  final String detail;
+  final Color color;
+  final IconData icon;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
+    final fullName =
+        '${sub.firstname} ${sub.lastname}'.trim();
+    final displayName = fullName.isEmpty ? sub.username : fullName;
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -354,59 +448,55 @@ class _SmartCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(color: AppColors.border),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(R.sm),
-                    ),
-                    child: Icon(icon, size: 15, color: color),
-                  ),
-                  const Spacer(),
-                  Icon(LucideIcons.chevronLeft,
-                      size: 16, color: AppColors.textLow),
-                ],
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Icon(icon, size: 16, color: color),
               ),
-              const SizedBox(height: Sp.sm),
-              if (loading)
-                SizedBox(
-                  height: 22,
-                  width: 30,
-                  child: Center(
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(color),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      displayName,
+                      style: AppType.label(color: AppColors.textHi).copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      sub.username,
+                      style: AppType.muted(color: AppColors.textMid)
+                          .copyWith(fontSize: 11.5),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      detail,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
                       ),
                     ),
-                  ),
-                )
-              else
-                Text(
-                  '$count',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                    height: 1,
-                  ),
+                  ],
                 ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11.5, fontWeight: FontWeight.w700),
               ),
+              Icon(LucideIcons.chevronLeft,
+                  size: 16, color: AppColors.textLow),
             ],
           ),
         ),

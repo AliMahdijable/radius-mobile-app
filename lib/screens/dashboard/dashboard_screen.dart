@@ -205,7 +205,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 whatsApp: _waStatus,
                 waLoaded: _waLoaded,
                 topInset: MediaQuery.paddingOf(context).top,
-                onOpenSubscribersFilter: widget.onOpenSubscribers,
               ),
             ),
             SliverPadding(
@@ -377,7 +376,6 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.whatsApp,
     required this.waLoaded,
     required this.topInset,
-    this.onOpenSubscribersFilter,
   }) : isDark = AppColors.isDark;
 
   final String displayName;
@@ -385,7 +383,6 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final WhatsAppStatus? whatsApp;
   final bool waLoaded;
   final double topInset;
-  final void Function(SubscriberFilter)? onOpenSubscribersFilter;
   // Snapshot of the global dark-mode flag at delegate-creation time.
   // shouldRebuild compares this so a theme switch (with everything
   // else unchanged) still triggers a repaint — without it the pinned
@@ -443,14 +440,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
               badge: InboxService.unreadCount,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => InboxScreen(
-                    // نمرّر callback من MainShell → dashboard → inbox
-                    // حتى tap على "قربوا الانتهاء" يفتح شاشة المشتركين
-                    // مع الفلتر الصحيح.
-                    onOpenSubscribersFilter: onOpenSubscribersFilter != null
-                        ? (f) => onOpenSubscribersFilter!(f)
-                        : null,
-                  ),
+                  builder: (_) => const InboxScreen(),
                 ),
               ),
             ),
