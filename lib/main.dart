@@ -194,6 +194,17 @@ class _MyServicesAppState extends State<MyServicesApp>
               error: AppColors.error,
             ),
       splashFactory: InkSparkle.splashFactory,
+      // Swipe-to-back gesture من الحافة اليمنى في RTL — لأن الـMaterialApp
+      // مضبوطة على Locale('ar') + Directionality.rtl، الـCupertino
+      // page-transition تلقائياً تعكس اتجاه الـswipe. iOS النمط الأصلي،
+      // Android نُطبّقه صراحةً حتى نحصل على نفس السلوك.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
 
     AppColors.setDarkMode(wasDark);
