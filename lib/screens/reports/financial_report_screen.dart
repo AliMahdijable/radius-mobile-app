@@ -12,6 +12,7 @@ import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
+import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 
 /// التقرير المالي — نسخة موبايل من client-v2/Financial.tsx:
@@ -79,7 +80,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Scaffold(
+    return ReportPermissionGate(
+      permission: 'reports.financial',
+      title: 'التقرير المالي',
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -150,6 +154,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 

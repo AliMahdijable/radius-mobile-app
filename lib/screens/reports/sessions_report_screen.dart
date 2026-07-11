@@ -9,6 +9,7 @@ import '../../theme/typography.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_pagination.dart';
+import 'widgets/report_permission_gate.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
 /// Toggle بين "متصلون الآن" و "كل الجلسات (أحدث 200)".
@@ -99,7 +100,10 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
         ? const <SessionRow>[]
         : visible.sublist(pageStart, pageEnd);
 
-    return Scaffold(
+    return ReportPermissionGate(
+      permission: 'reports.sessions',
+      title: 'الجلسات',
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -314,6 +318,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 

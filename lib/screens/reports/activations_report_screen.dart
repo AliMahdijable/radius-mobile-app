@@ -11,6 +11,7 @@ import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
+import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 
 /// التفعيلات — تفعيلات + تمديدات في الفترة، ضمن scope المدير الحالي.
@@ -134,7 +135,10 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         ? const <ActivityRow>[]
         : visible.sublist(pageStart, pageEnd);
 
-    return Scaffold(
+    return ReportPermissionGate(
+      permission: 'reports.activations',
+      title: 'التفعيلات والتمديدات',
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -241,6 +245,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 

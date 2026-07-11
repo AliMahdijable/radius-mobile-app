@@ -10,6 +10,7 @@ import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_pagination.dart';
+import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 
 /// التفعيلات اليومية — مُجمّعة بـday + إيراد لكل يوم + عدد نقدي/غير.
@@ -113,7 +114,10 @@ class _DailyActivationsReportScreenState
     final pageRows = visible.isEmpty
         ? const <DailyActivationRow>[]
         : visible.sublist(pageStart, pageEnd);
-    return Scaffold(
+    return ReportPermissionGate(
+      permission: 'reports.daily_activations',
+      title: 'التفعيلات اليومية',
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -208,6 +212,7 @@ class _DailyActivationsReportScreenState
           ),
         ),
       ),
+    ),
     );
   }
 

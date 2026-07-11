@@ -8,8 +8,10 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
+import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
+import 'widgets/report_permission_gate.dart';
 
 /// كشف حساب مشترك — الحركات المالية (تفعيل/تمديد/تسديد/إضافة دين) في
 /// فترة محدّدة + summary لإجمالي المدفوع/الدين/الرصيد.
@@ -37,6 +39,9 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
   int _page = 0;
   int _pageSize = 25;
 
+  /// فلتر الأنواع فقط (المشترك محدّد سلفاً — لا حاجة لفلاتر مدير/موظف).
+  ReportFilters _filters = const ReportFilters();
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +57,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       username: widget.username,
       from: _range.from,
       to: _range.to,
+      actionTypes: _filters.actionTypes,
     );
     if (!mounted) return;
     setState(() {
@@ -86,7 +92,10 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
         ? const <StatementRow>[]
         : rows.sublist(pageStart, pageEnd);
 
-    return Scaffold(
+    return ReportPermissionGate(
+      permission: 'reports.account_statement',
+      title: 'كشف الحساب',
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -121,6 +130,22 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                 value: _range,
                 onChanged: (r) {
                   setState(() => _range = r);
+                  _load();
+                },
+              ),
+              const SizedBox(height: Sp.sm),
+              ReportFiltersPanel(
+                value: _filters,
+                actionTypeOptions: kAccountStatementActionTypes,
+                // المشترك محدّد سلفاً — لا نحتاج مدير/موظف.
+                includeActionManager: false,
+                includeUserManager: false,
+                includeEmployee: false,
+                onChanged: (v) {
+                  setState(() {
+                    _filters = v;
+                    _page = 0;
+                  });
                   _load();
                 },
               ),
@@ -192,6 +217,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 

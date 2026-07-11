@@ -11,6 +11,7 @@ import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
+import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 
 /// سجل النشاط الكامل — كل العمليات في النظام، مع filter فترة + بحث +
@@ -153,7 +154,10 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
         ? const <ActivityRow>[]
         : visible.sublist(pageStart, pageEnd);
 
-    return Scaffold(
+    return ReportPermissionGate(
+      permission: 'reports.activity_log',
+      title: 'سجل النشاط',
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -295,6 +299,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
