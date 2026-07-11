@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/dashboard_api.dart';
 import '../../api/sas4_api.dart';
 import '../../models/dashboard.dart';
+import '../../services/alerts_service.dart';
 import '../../services/auth_storage.dart';
 import '../../services/inbox_service.dart';
 import '../../services/subscriber_events.dart';
@@ -139,6 +140,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _debtorsLive = r;
         _debtorsLoaded = true;
       });
+      // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
+      // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
+      AlertsService.refresh();
     });
     DashboardApi.fetchWallet().then((r) {
       if (!mounted) return;
@@ -433,14 +437,21 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
               ],
             ),
           ),
+          // Bell badge: FCM unread + مشتركين في خطر (near-expiry+expired-today).
+          // نُدمج المصدرين حتى المستخدم يشوف رقم واحد يعبّر عن "شي يحتاج
+          // انتباه". AlertsService.count يتحدّث تلقائياً من InboxScreen
+          // بعد كل refresh.
           ValueListenableBuilder<int>(
             valueListenable: InboxService.changes,
-            builder: (context, _, __) => _IconChip(
-              icon: Icons.notifications_none_rounded,
-              badge: InboxService.unreadCount,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const InboxScreen(),
+            builder: (context, _, __) => ValueListenableBuilder<int>(
+              valueListenable: AlertsService.count,
+              builder: (context, alerts, __) => _IconChip(
+                icon: Icons.notifications_none_rounded,
+                badge: InboxService.unreadCount + alerts,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const InboxScreen(),
+                  ),
                 ),
               ),
             ),

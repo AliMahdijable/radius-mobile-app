@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/app_notification.dart';
 import '../../models/subscriber.dart';
+import '../../services/alerts_service.dart';
 import '../../services/inbox_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -46,10 +47,10 @@ class _InboxScreenState extends State<InboxScreen> {
       setState(() => _loaded = true);
       return;
     }
-    // v1 mobile-app منطق (dashboard_provider.dart:373-397, 432-455):
+    // منطق 2026-07-11:
     // • expiredToday = expDay == today && expDate.isBefore(now)
-    // • nearExpiry = remaining_days في [0..3] && expDate.isAfter(now)
-    // • مطلب 2026-07-11: near-expiry يظهر لغاية ينتهي فيختفي — نفس منطق v1.
+    // • nearExpiry = متبقّي < 24 ساعة (حتى دقيقة/ثانية) && لم ينتهِ بعد.
+    //   المستخدم يريد بالضبط < 24h — يختفي فور الانتهاء.
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final expiredToday = <Subscriber>[];
@@ -62,15 +63,19 @@ class _InboxScreenState extends State<InboxScreen> {
         expiredToday.add(s);
         continue;
       }
-      if (exp.isAfter(now)) {
-        final rd = s.remainingDays;
-        if (rd != null && rd >= 0 && rd <= 3) {
-          nearExpiry.add(s);
-        }
+      if (exp.isAfter(now) && exp.difference(now).inHours < 24) {
+        nearExpiry.add(s);
       }
     }
-    nearExpiry.sort((a, b) =>
-        (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0));
+    // فرز تصاعدي حسب المتبقّي الفعلي (بالثواني) — أقرب مشترك للانتهاء
+    // يظهر أوّلاً.
+    nearExpiry.sort((a, b) {
+      final ea = a.parsedExpiration!;
+      final eb = b.parsedExpiration!;
+      return ea.compareTo(eb);
+    });
+    // اتّفاق مع الجرس فوق الـDashboard على نفس العدّاد.
+    AlertsService.updateFrom(list);
     setState(() {
       _expiredToday = expiredToday;
       _nearExpiry = nearExpiry;
