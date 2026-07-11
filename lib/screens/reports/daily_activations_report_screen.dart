@@ -8,6 +8,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
+import 'widgets/report_filters.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/scope_helper.dart';
 
@@ -31,6 +32,10 @@ class _DailyActivationsReportScreenState
   List<String>? _scopeIds;
   int _page = 0;
   int _pageSize = 25;
+
+  /// فلاتر متقدّمة (مدير الحركة/المستخدم/الموظف) — بلا actionTypes لأن
+  /// الشاشة scope=تفعيلات-اليوم أصلاً.
+  ReportFilters _filters = const ReportFilters();
 
   /// فلتر: all / cash_only (يوم بأي نقدي) / non_cash_only / no_revenue
   String _typeFilter = 'all';
@@ -66,7 +71,11 @@ class _DailyActivationsReportScreenState
     final r = await ReportsApi.dailyActivations(
       from: _range.from,
       to: _range.to,
-      userIds: _scopeIds,
+      userIds:
+          _filters.actionManagerId == null ? _scopeIds : null,
+      actionManagerId: _filters.actionManagerId,
+      userManager: _filters.userManager,
+      employeeId: _filters.employeeId,
     );
     if (!mounted) return;
     setState(() {
@@ -125,6 +134,19 @@ class _DailyActivationsReportScreenState
             children: [
               // شريط "اليوم" ثابت — تنبيه بصري بأن الصفحة scope=today.
               _todayBadge(),
+              const SizedBox(height: Sp.sm),
+              ReportFiltersPanel(
+                value: _filters,
+                // بلا actionTypes — الشاشة scope=تفعيلات-اليوم-أصلاً.
+                includeActionTypes: false,
+                onChanged: (v) {
+                  setState(() {
+                    _filters = v;
+                    _page = 0;
+                  });
+                  _load();
+                },
+              ),
               const SizedBox(height: Sp.md),
               _summary(),
               const SizedBox(height: Sp.md),

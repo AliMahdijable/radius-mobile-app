@@ -434,14 +434,23 @@ class ReportsApi {
     DateTime? from,
     DateTime? to,
     List<String>? userIds,
+    String? actionManagerId,
+    String? userManager,
+    int? employeeId,
   }) async {
     try {
       final qp = <String, String>{
         'limit': '5000',
         if (from != null) 'date_from': _date(from),
         if (to != null) 'date_to': _date(to),
-        if (userIds != null && userIds.isNotEmpty)
+        // priority: actionManagerId (single) > userIds (list)
+        if (actionManagerId != null && actionManagerId.isNotEmpty)
+          'user_id': actionManagerId
+        else if (userIds != null && userIds.isNotEmpty)
           'user_ids': userIds.where((id) => id.isNotEmpty).join(','),
+        if (userManager != null && userManager.isNotEmpty)
+          'user_manager': userManager,
+        if (employeeId != null) 'employee_id': '$employeeId',
       };
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/activities',

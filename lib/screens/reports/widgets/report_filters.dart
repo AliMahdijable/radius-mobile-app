@@ -128,6 +128,9 @@ class ReportFiltersPanel extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.includeActionTypes = true,
+    this.includeActionManager = true,
+    this.includeUserManager = true,
+    this.includeEmployee = true,
     this.actionTypeOptions = kAllActionTypes,
   });
   final ReportFilters value;
@@ -135,6 +138,16 @@ class ReportFiltersPanel extends StatefulWidget {
 
   /// أخفِ dropdown "كل الحركات" (مثلاً لو الشاشة عندها filter نوع خاص بها).
   final bool includeActionTypes;
+
+  /// أخفِ dropdown "مدير الحركة" — يفيد شاشات ما تتحدد فيها الـactionManager
+  /// (مثلاً Sessions اللي مصدرها SAS4 UserSessions لا activity_logs).
+  final bool includeActionManager;
+
+  /// أخفِ dropdown "مدير المستخدم" — نادراً ما نحتاج إخفاءه.
+  final bool includeUserManager;
+
+  /// أخفِ dropdown "الموظف" — يفيد شاشات ما فيها acting_employee (Sessions).
+  final bool includeEmployee;
 
   /// قائمة أنواع الحركات المتاحة للـmulti-select. الشاشات المختلفة
   /// تُضيّق هذه القائمة حسب طبيعة التقرير (المالية → 6 أنواع فقط).
@@ -224,24 +237,34 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                // 2×2 grid من الـdropdowns
-                Row(
-                  children: [
-                    if (widget.includeActionTypes) ...[
-                      Expanded(child: _actionTypesSelect()),
-                      const SizedBox(width: 6),
-                    ],
-                    Expanded(child: _actionManagerSelect()),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(child: _userManagerSelect()),
-                    const SizedBox(width: 6),
-                    Expanded(child: _employeeSelect()),
-                  ],
-                ),
+                // grid dropdowns — نبني قائمة العناصر أولاً ثم نوزّعها 2/سطر.
+                Builder(builder: (_) {
+                  final items = <Widget>[
+                    if (widget.includeActionTypes) _actionTypesSelect(),
+                    if (widget.includeActionManager) _actionManagerSelect(),
+                    if (widget.includeUserManager) _userManagerSelect(),
+                    if (widget.includeEmployee) _employeeSelect(),
+                  ];
+                  if (items.isEmpty) return const SizedBox.shrink();
+                  final rows = <Widget>[];
+                  for (var i = 0; i < items.length; i += 2) {
+                    final left = items[i];
+                    final right = i + 1 < items.length ? items[i + 1] : null;
+                    rows.add(Row(
+                      children: [
+                        Expanded(child: left),
+                        if (right != null) ...[
+                          const SizedBox(width: 6),
+                          Expanded(child: right),
+                        ],
+                      ],
+                    ));
+                    if (i + 2 < items.length) {
+                      rows.add(const SizedBox(height: 6));
+                    }
+                  }
+                  return Column(children: rows);
+                }),
               ],
             ),
     );

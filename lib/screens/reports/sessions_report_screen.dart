@@ -7,6 +7,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/report_export.dart';
+import 'widgets/report_filters.dart';
 import 'widgets/report_pagination.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
@@ -28,6 +29,15 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   final _searchCtrl = TextEditingController();
   String _searchField = 'username'; // username / ip / mac
   String _searchValue = '';
+
+  /// فلتر مدير المستخدم — client-side (SAS4 sessions ما تستقبل هذا الـparam).
+  ReportFilters _filters = const ReportFilters();
+
+  List<SessionRow> get _visibleRows {
+    final um = _filters.userManager;
+    if (um == null || um.isEmpty) return _rows;
+    return _rows.where((s) => s.userManager == um).toList();
+  }
 
   @override
   void initState() {
@@ -62,7 +72,8 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     });
   }
 
-  List<List<String>> get _exportRows => _rows
+  // الـexport يعكس الفلتر (visible فقط).
+  List<List<String>> get _exportRows => _visibleRows
       .map((s) => [
             s.username ?? '',
             s.ipAddress ?? '',
@@ -79,13 +90,14 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
+    final visible = _visibleRows;
     final totalPages =
-        (_rows.length / _pageSize).ceil().clamp(1, 99999);
+        (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, _rows.length);
-    final pageRows = _rows.isEmpty
+    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    final pageRows = visible.isEmpty
         ? const <SessionRow>[]
-        : _rows.sublist(pageStart, pageEnd);
+        : visible.sublist(pageStart, pageEnd);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -199,6 +211,21 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                   const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
               child: Column(
                 children: [
+                  // فلتر مدير المستخدم فقط (لا actionManager/employee/actionTypes
+                  // لأن مصدر الجلسات هو SAS4 UserSessions، ليس activity_logs).
+                  ReportFiltersPanel(
+                    value: _filters,
+                    includeActionTypes: false,
+                    includeActionManager: false,
+                    includeEmployee: false,
+                    onChanged: (v) {
+                      setState(() {
+                        _filters = v;
+                        _page = 0;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: Sp.sm),
                   Row(
                     children: [
                       Icon(LucideIcons.activity,
@@ -207,7 +234,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       Text(
                         _loading
                             ? '...'
-                            : '${_rows.length} ${_onlineOnly ? 'مستخدم متصل' : 'جلسة'}',
+                            : '${visible.length} ${_onlineOnly ? 'مستخدم متصل' : 'جلسة'}',
                         style: AppType.muted().copyWith(fontSize: 12),
                       ),
                     ],
@@ -233,7 +260,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                     children: [
                                       Expanded(
                                         child: ReportStatsBar(
-                                          totalItems: _rows.length,
+                                          totalItems: visible.length,
                                           pageStart: pageStart,
                                           pageEnd: pageEnd,
                                           pageSize: _pageSize,
@@ -249,7 +276,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                             ? 'الجلسات المتصلة'
                                             : 'كل الجلسات',
                                         subtitle:
-                                            'عدد الصفوف: ${_rows.length}',
+                                            'عدد الصفوف: ${visible.length}',
                                         fileNameBase: _onlineOnly
                                             ? 'sessions_online'
                                             : 'sessions_all',
