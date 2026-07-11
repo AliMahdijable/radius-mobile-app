@@ -8,7 +8,9 @@ import '../../api/dashboard_api.dart';
 import '../../api/sas4_api.dart';
 import '../../models/dashboard.dart';
 import '../../services/auth_storage.dart';
+import '../../services/inbox_service.dart';
 import '../../services/subscriber_events.dart';
+import '../notifications/inbox_screen.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -431,10 +433,17 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
               ],
             ),
           ),
-          _IconChip(
-            icon: Icons.notifications_none_rounded,
-            badge: 3,
-            onTap: () {},
+          ValueListenableBuilder<int>(
+            valueListenable: InboxService.changes,
+            builder: (context, _, __) => _IconChip(
+              icon: Icons.notifications_none_rounded,
+              badge: InboxService.unreadCount,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const InboxScreen(),
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: Sp.sm),
           _IconChip(

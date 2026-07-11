@@ -6,7 +6,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
+import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
+import 'services/fcm_service.dart';
+import 'services/inbox_service.dart';
 import 'services/notification_service.dart';
 import 'services/permissions_service.dart';
 import 'services/theme_service.dart';
@@ -23,6 +26,10 @@ void main() async {
   // Permissions service يعيد تحميل الـcache المخزّن من الجلسة السابقة
   // قبل أول frame عشان الـgating يشتغل صح.
   await PermissionsService.init();
+  // Inbox الإشعارات — نحمّل من الـcache قبل أي رسالة FCM محتملة عند
+  // startup (الـinit idempotent فآمن). الـFCM registration نفسه يصير
+  // بعد login (في fcm_service.initAfterLogin).
+  await InboxService.init();
 
   // Bring up Firebase with options baked into firebase_options.dart —
   // same approach as v1. This bypasses the GoogleService-Info.plist /
@@ -44,6 +51,11 @@ void main() async {
   runApp(const MyServicesApp());
 }
 
+/// المرجع الأساسي للـNavigator — نستعمله لعرض الـInAppNotificationBanner
+/// من داخل FcmService.onForegroundNotification (خارج شجرة الـwidgets).
+final GlobalKey<NavigatorState> _appNavigatorKey =
+    GlobalKey<NavigatorState>();
+
 class MyServicesApp extends StatefulWidget {
   const MyServicesApp({super.key});
 
@@ -57,6 +69,14 @@ class _MyServicesAppState extends State<MyServicesApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // اربط الـFCM foreground handler بـBanner. نستعمل الـnavigator key
+    // للـcontext لأن الـcallback يشتغل خارج شجرة الـwidgets.
+    FcmService.onForegroundNotification = (n) {
+      final ctx = _appNavigatorKey.currentContext;
+      if (ctx != null) {
+        InAppNotificationBanner.show(ctx, notification: n);
+      }
+    };
   }
 
   @override
@@ -130,6 +150,7 @@ class _MyServicesAppState extends State<MyServicesApp>
             ),
           ),
           home: const SplashScreen(),
+          navigatorKey: _appNavigatorKey,
         );
       },
     );

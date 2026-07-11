@@ -7,6 +7,7 @@ import 'package:local_auth/local_auth.dart';
 
 import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
+import '../services/fcm_service.dart';
 import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -120,6 +121,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _showSnack('تعذّر جلب الصلاحيات — حاول مرة أخرى', error: true);
           return;
         }
+        // نُسجّل FCM بعد إتمام الجلسة + جلب الصلاحيات. آمنة الفشل —
+        // ما تعطّل الدخول لو Firebase غير متوفّر (fire-and-forget).
+        unawaited(FcmService.initAfterLogin());
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainShell()),
         );

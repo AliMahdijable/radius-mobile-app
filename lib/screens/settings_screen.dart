@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
 import '../services/auth_storage.dart';
+import '../services/fcm_service.dart';
+import '../services/inbox_service.dart';
 import '../services/permissions_service.dart';
 import '../services/theme_service.dart';
 import '../theme/colors.dart';
@@ -72,6 +74,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // لتسريب الأرقام بين الجلستين).
     SubscribersApi.clearAllCaches();
     DeviceProbeApi.clearAllCaches();
+    // نُلغي تسجيل الـFCM token قبل مسح الجلسة — عشان الحساب الجديد
+    // (لو أحد سجّل بعدك على نفس الجهاز) ما يستلم إشعارات الحساب السابق.
+    // آمنة الفشل — لا تعطّل الـlogout.
+    await FcmService.unregister();
+    // إفراغ inbox للحساب الحالي (الإشعارات لحساب سابق).
+    await InboxService.clear();
     await PermissionsService.clear();
     await AuthStorage.clear();
     if (!mounted) return;

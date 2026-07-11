@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../api/auth_api.dart';
 import '../services/auth_storage.dart';
 import '../services/biometric_service.dart';
+import '../services/fcm_service.dart';
 import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 // permissions_screen is gone — biometric guard runs inline, notification
@@ -88,6 +89,8 @@ class _SplashScreenState extends State<SplashScreen> {
       // (الـadmin قد يكون عدّل صلاحيات الموظف من الويب بين فتح
       // وفتح). الكاش يُحدّث؛ لو فشل الجلب يبقى الكاش الأخير.
       unawaited(PermissionsService.refreshFromBackend());
+      // auto-login جلسة قديمة — نُسجّل FCM (idempotent).
+      unawaited(FcmService.initAfterLogin());
       next = const MainShell();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered. Send
