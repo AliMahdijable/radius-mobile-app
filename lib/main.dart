@@ -198,11 +198,11 @@ class _MyServicesAppState extends State<MyServicesApp>
       // مضبوطة على Locale('ar') + Directionality.rtl، الـCupertino
       // page-transition تلقائياً تعكس اتجاه الـswipe. iOS النمط الأصلي،
       // Android نُطبّقه صراحةً حتى نحصل على نفس السلوك.
-      pageTransitionsTheme: const PageTransitionsTheme(
+      pageTransitionsTheme: PageTransitionsTheme(
         builders: {
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
         },
       ),
     );
