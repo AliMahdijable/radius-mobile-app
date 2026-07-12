@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
+import 'api/device_probe_api.dart';
 import 'services/fcm_service.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
@@ -37,6 +38,10 @@ void main() async {
   // startup (الـinit idempotent فآمن). الـFCM registration نفسه يصير
   // بعد login (في fcm_service.initAfterLogin).
   await InboxService.init();
+  // Device probe snapshot cache — نستعيد من SharedPreferences حتى قائمة
+  // المشتركين تعرض آخر حالة معروفة فوراً بلا انتظار wave جديد. مطلب
+  // المستخدم 2026-07-12 "instant load".
+  await DeviceProbeApi.hydrateFromPrefs();
 
   // Bring up Firebase with options baked into firebase_options.dart —
   // same approach as v1. This bypasses the GoogleService-Info.plist /

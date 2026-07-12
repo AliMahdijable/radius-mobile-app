@@ -254,8 +254,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _probeDone = 0;
       _probeTotal = targets.length;
     });
+    // مطلب المستخدم 2026-07-12: أولوية للـviewport-visible subs.
+    // الـwave يفحص هؤلاء أوّلاً حتى المستخدم يشوف حالتهم فوراً بدون
+    // انتظار الـ500 مشترك يخلصون. الـpage الحالية أفضل تقريب متاح.
+    final visible = _visibleForCurrentPage();
+    final priorityUsernames = visible.map((s) => s.username).toSet();
+
     DeviceProbeApi.warmProbe(
       targets,
+      priorityUsernames: priorityUsernames.isEmpty ? null : priorityUsernames,
       onProgress: (done, total) {
         if (!mounted || _probeRunId != myRun) return;
         setState(() {
@@ -270,6 +277,20 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       if (!mounted || _probeRunId != myRun) return;
       setState(() => _probing = false);
     });
+  }
+
+  /// snapshot للـsubs المرئيّين على الـpage الحالية. يُستعمل كـpriority
+  /// لـwarmProbe. آمن لو الصفحة تغيّرت أثناء الـwave — الأولوية تُطبَّق
+  /// على snapshot اللحظة، مو reactive.
+  List<Subscriber> _visibleForCurrentPage() {
+    if (_all.isEmpty) return const [];
+    // نستعمل _filteredAll اللي بيه الفلترة/الفرز مُطبّقة أصلاً.
+    final visible = _filteredAll;
+    if (visible.isEmpty) return const [];
+    final pageStart = (_page * _pageSize).clamp(0, visible.length);
+    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    if (pageStart >= pageEnd) return const [];
+    return visible.sublist(pageStart, pageEnd);
   }
 
   Future<void> _refresh() async {

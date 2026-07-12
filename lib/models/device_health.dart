@@ -67,6 +67,24 @@ class OntOpticalInfo {
     final v = double.tryParse(temperature);
     return v != null && v >= -10 && v <= 85;
   }
+
+  Map<String, dynamic> toJson() => {
+        'tx': txPower,
+        'rx': rxPower,
+        'v': voltage,
+        't': temperature,
+        'b': bias,
+        's': sendStatus,
+      };
+
+  static OntOpticalInfo fromJson(Map<String, dynamic> j) => OntOpticalInfo(
+        txPower: (j['tx'] ?? '').toString(),
+        rxPower: (j['rx'] ?? '').toString(),
+        voltage: (j['v'] ?? '').toString(),
+        temperature: (j['t'] ?? '').toString(),
+        bias: (j['b'] ?? '').toString(),
+        sendStatus: (j['s'] ?? '').toString(),
+      );
 }
 
 class OntLoginResult {
@@ -95,6 +113,18 @@ class LanPort {
   }
 
   String get label => name.toUpperCase();
+
+  Map<String, dynamic> toJson() => {
+        'n': name,
+        's': speed,
+        'p': plugged ? 1 : 0,
+      };
+
+  static LanPort fromJson(Map<String, dynamic> j) => LanPort(
+        name: (j['n'] ?? '').toString(),
+        speed: j['s']?.toString(),
+        plugged: (j['p'] ?? 0) == 1,
+      );
 }
 
 /// Unified snapshot the UI consumes — same shape regardless of kind.
@@ -172,6 +202,45 @@ class UbiquitiStatus {
     if (s == null || n == null) return null;
     return s - n;
   }
+
+  Map<String, dynamic> toJson() => {
+        'h': hostname,
+        'f': firmware,
+        'up': uptimeSeconds,
+        'ssid': ssid,
+        'm': mode,
+        'sig': signalDbm,
+        'nf': noiseFloorDbm,
+        'ccq': ccqPercent,
+        'dist': distanceMeters,
+        'tx': txRateKbps,
+        'rx': rxRateKbps,
+        'lan': lanPorts.map((p) => p.toJson()).toList(),
+        'pm': peerMac,
+        'pc': peerCount,
+        'b': baseUrl,
+      };
+
+  static UbiquitiStatus fromJson(Map<String, dynamic> j) => UbiquitiStatus(
+        hostname: (j['h'] ?? '').toString(),
+        firmware: (j['f'] ?? '').toString(),
+        uptimeSeconds: j['up'] is int ? j['up'] as int : null,
+        ssid: (j['ssid'] ?? '').toString(),
+        mode: (j['m'] ?? '').toString(),
+        signalDbm: j['sig'] is int ? j['sig'] as int : null,
+        noiseFloorDbm: j['nf'] is int ? j['nf'] as int : null,
+        ccqPercent: j['ccq'] is int ? j['ccq'] as int : null,
+        distanceMeters: j['dist'] is int ? j['dist'] as int : null,
+        txRateKbps: j['tx'] is int ? j['tx'] as int : null,
+        rxRateKbps: j['rx'] is int ? j['rx'] as int : null,
+        lanPorts: (j['lan'] as List? ?? const [])
+            .whereType<Map>()
+            .map((m) => LanPort.fromJson(Map<String, dynamic>.from(m)))
+            .toList(),
+        peerMac: j['pm']?.toString(),
+        peerCount: j['pc'] is int ? j['pc'] as int : null,
+        baseUrl: (j['b'] ?? '').toString(),
+      );
 }
 
 class UbiquitiLoginResult {
@@ -200,4 +269,27 @@ class DeviceHealthSnapshot {
   final String ip;
   final OntOpticalInfo? ont;
   final UbiquitiStatus? ubnt;
+
+  Map<String, dynamic> toJson() => {
+        'k': deviceKindToString(kind),
+        'ip': ip,
+        if (ont != null) 'ont': ont!.toJson(),
+        if (ubnt != null) 'ubnt': ubnt!.toJson(),
+      };
+
+  static DeviceHealthSnapshot? fromJson(Map<String, dynamic> j) {
+    final k = deviceKindFromString(j['k']?.toString());
+    if (k == null) return null;
+    final ip = (j['ip'] ?? '').toString();
+    if (ip.isEmpty) return null;
+    OntOpticalInfo? ont;
+    UbiquitiStatus? ubnt;
+    if (j['ont'] is Map) {
+      ont = OntOpticalInfo.fromJson(Map<String, dynamic>.from(j['ont']));
+    }
+    if (j['ubnt'] is Map) {
+      ubnt = UbiquitiStatus.fromJson(Map<String, dynamic>.from(j['ubnt']));
+    }
+    return DeviceHealthSnapshot(kind: k, ip: ip, ont: ont, ubnt: ubnt);
+  }
 }

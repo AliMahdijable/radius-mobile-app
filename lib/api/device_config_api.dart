@@ -133,6 +133,59 @@ class DeviceConfigApi {
     _cache.clear();
   }
 
+  /// مطلب المستخدم 2026-07-12: batch prime قبل probe wave. يجلب configs
+  /// كل الـusernames بـcall واحد ويعبّئ الكاش. لو الـbackend ما يدعم
+  /// الـbatch endpoint، يفشل بصمت (fallback على الـfetchConfig الفردي).
+  ///
+  /// آمن للاستدعاء المتكرّر: يتخطّى الـusernames اللي في الكاش أصلاً.
+  static Future<void> warmBatch(List<String> usernames) async {
+    if (usernames.isEmpty) return;
+    final now = DateTime.now();
+    final needed = <String>[];
+    for (final u in usernames) {
+      final key = u.trim();
+      if (key.isEmpty) continue;
+      final cached = _cache[key];
+      if (cached != null && now.difference(cached.at) < _cacheTtl) continue;
+      needed.add(key);
+    }
+    if (needed.isEmpty) return;
+    try {
+      // نُقسّم لدفعات صغيرة (100/دفعة) لتفادي URL/body ضخم.
+      for (var i = 0; i < needed.length; i += 100) {
+        final chunk = needed.skip(i).take(100).toList();
+        final r = await ApiClient.dio.post<Map<String, dynamic>>(
+          '/api/v2/subscribers/device-batch',
+          data: {'usernames': chunk},
+        );
+        final body = r.data ?? const {};
+        if (body['success'] != true) return; // backend لا يدعم أو رفض
+        final configs = body['configs'];
+        if (configs is! Map) return;
+        for (final entry in configs.entries) {
+          final key = entry.key.toString();
+          final val = entry.value;
+          DeviceConfig cfg = const DeviceConfig();
+          if (val is Map) {
+            cfg = DeviceConfig.fromJson(Map<String, dynamic>.from(val));
+          }
+          _cache[key] = _CachedConfig(cfg, now);
+        }
+        // usernames اللي لم يرجعوا في الـconfigs = ما عندهم override.
+        // نُخزّن DeviceConfig() فارغ لهم حتى ما نعيد fetch لاحقاً.
+        final returned = (configs as Map).keys.map((k) => k.toString()).toSet();
+        for (final u in chunk) {
+          if (!returned.contains(u)) {
+            _cache[u] = _CachedConfig(const DeviceConfig(), now);
+          }
+        }
+      }
+    } catch (_) {
+      // Backend endpoint غير موجود أو خطأ شبكة — تجاهل، الـfetchConfig
+      // الفردي يبقى الطريق الاحتياطي.
+    }
+  }
+
   /// PUT /api/subscribers/:username/device — saves override.
   static Future<bool> saveConfig(String username, DeviceConfig cfg) async {
     try {

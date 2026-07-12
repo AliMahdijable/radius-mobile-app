@@ -79,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // admin السابق (45s TTL على الـsubscribers list كان كافياً
     // لتسريب الأرقام بين الجلستين).
     SubscribersApi.clearAllCaches();
-    DeviceProbeApi.clearAllCaches();
+    await DeviceProbeApi.clearAllCaches();
     DeviceConfigApi.clearAllCaches();
     AlertsService.reset();
     // نُلغي تسجيل الـFCM token قبل مسح الجلسة — عشان الحساب الجديد

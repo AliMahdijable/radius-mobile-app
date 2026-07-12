@@ -1,40 +1,45 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../models/device_health.dart';
 import 'device_config_api.dart';
 
-/// One probe per subscriber. v1's three-tier credential chain applies:
-///   1. per-subscriber override (DeviceConfig)
-///   2. admin-wide defaults (AdminDeviceDefaults)
-///   3. library hardcoded (telecomadmin/admintelecom, ubnt/ubnt)
+/// Device probe API — 3-tier credential fallback (per-sub → admin → library)
+/// with a stack of caches:
 ///
-/// Two caches:
-///   _snapCache  — IP → DeviceHealthSnapshot, 5-min TTL. The probe wave
-///                 on the list view shares this with the detail screen
-///                 so a card you scroll past doesn't re-hit the router.
-///   _adminDefaults — one fetch per session, used by every probe.
+///   [_snapCache]     IP → snapshot, 5-min TTL. الأساسي.
+///   [_snapByUser]    username → snapshot (نفس entry، فهرس ثاني للـUI).
+///   [_kindByIp]      IP → آخر kind ناجح (ONT/UBNT). يجعل الـprobe التالي
+///                    يذهب مباشرة للنوع الصحيح بدلاً من parallel race.
+///                    مطلب المستخدم 2026-07-12 (تسريع ~50%).
+///   [_deadCache]     IP → آخر وقت فشل. IPs الميتة تُتَجاهل 2 دقيقة قبل
+///                    إعادة المحاولة (مطلب 2026-07-12، توفير bandwidth
+///                    على silent refresh).
+///   [_persistPrefs]  SharedPreferences يحفظ _snapCache على القرص بين
+///                    الجلسات (مطلب 2026-07-12، "instant load").
+///
+/// Waves تدعم priority queue: الـpriorityUsernames تُفحص أوّلاً، الباقي
+/// يلحق. يُستعمل مع viewport-visible subs في list view.
 class DeviceProbeApi {
   static final _snapCache = <String, _Cached>{};
-  /// مطلب 2026-07-12: index موازي بالـusername. يخدم الحالة حيث المشترك
-  /// oفلاين وما عنده SAS IP معروف، لكن أدمن ضبط customIp في DeviceConfig.
-  /// الـcache الأصلي يفهرس بـeffectiveIp؛ هذا يجد الآخر بالـusername.
   static final _snapByUser = <String, _Cached>{};
+  static final _kindByIp = <String, DeviceKind>{};
+  static final _deadCache = <String, DateTime>{};
   static Future<AdminDeviceDefaults>? _adminFetch;
 
-  /// مطلب 2026-06-11: مسح كل الـcaches عند تسجيل الخروج. الـadmin
-  /// الجديد قد يكون له defaults مختلفة (telecomadmin/ubnt) وما نريد
-  /// نلصق snapshots على IPs قد تنتمي لشبكة admin سابق.
-  static void clearAllCaches() {
-    _snapCache.clear();
-    _snapByUser.clear();
-    _adminFetch = null;
-  }
   static const _ttl = Duration(minutes: 5);
-  // مطلب المستخدم 2026-07-12: يطابق v1. الـ6 ثواني كانت تُعدم Huawei
-  // ONTs البطيئة قبل ما ترجع (login=4s + fetch=4s = 8s > 6s cap).
+  // يطابق v1: 15s cap على probe واحد.
   static const _probeCap = Duration(seconds: 15);
+  // IPs الميتة نتجاهلها 2د قبل إعادة المحاولة (يُلغى بـforce أو نجاح جديد).
+  static const _deadTtl = Duration(minutes: 2);
+
+  static const _prefsKey = 'device_probe.cache.v1';
+  static bool _hydrated = false;
+  static Timer? _persistDebounce;
 
   // Library defaults — last-resort. Matches v1.
   static const _kOntUser = 'telecomadmin';
@@ -42,36 +47,97 @@ class DeviceProbeApi {
   static const _kUbntUser = 'ubnt';
   static const _kUbntPass = 'ubnt';
 
-  /// Resolves credentials + probes the device. `subscriberUsername`
-  /// is OPTIONAL — pass it to consult the per-subscriber override
-  /// (worth ~50ms extra on first read, cached after). Pass null for
-  /// list-view probes that want minimal latency.
+  /// يُستدعى مرّة واحدة عند boot لاستعادة snapshots من الجلسة السابقة.
+  /// آمن للاستدعاء المتكرّر (idempotent).
+  static Future<void> hydrateFromPrefs() async {
+    if (_hydrated) return;
+    _hydrated = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefsKey);
+      if (raw == null || raw.isEmpty) return;
+      final data = jsonDecode(raw);
+      if (data is! Map) return;
+      final now = DateTime.now();
+      for (final entry in data.entries) {
+        final v = entry.value;
+        if (v is! Map) continue;
+        final at = DateTime.tryParse(v['at']?.toString() ?? '');
+        if (at == null) continue;
+        // نتجاهل entries أقدم من TTL — بيانات بائتة ما تفيد.
+        if (now.difference(at) >= _ttl) continue;
+        final snapJson = v['snap'];
+        if (snapJson is! Map) continue;
+        final snap = DeviceHealthSnapshot.fromJson(
+            Map<String, dynamic>.from(snapJson));
+        if (snap == null) continue;
+        _snapCache[entry.key.toString()] = _Cached(snap, at);
+        _kindByIp[entry.key.toString()] = snap.kind;
+        // ملاحظة: _snapByUser لا يُستعاد لأن key الـpersist بـIP فقط.
+        // الجلسة الجديدة رح تُعبّئ _snapByUser مع أوّل probe.
+      }
+    } catch (_) {
+      // Corrupt data — امسحه بدل ما نبقى نفشل كل boot.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefsKey);
+      } catch (_) {}
+    }
+  }
+
+  /// مسح كل الـcaches عند logout. Admin جديد قد يكون له defaults مختلفة
+  /// وما نريد نلصق snapshots على IPs قد تنتمي لشبكة admin سابق.
+  static Future<void> clearAllCaches() async {
+    _snapCache.clear();
+    _snapByUser.clear();
+    _kindByIp.clear();
+    _deadCache.clear();
+    _adminFetch = null;
+    _persistDebounce?.cancel();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefsKey);
+    } catch (_) {}
+  }
+
+  /// Resolves credentials + probes the device.
   ///
-  /// `fallbackIp` is the IP from SAS4 (sub.ipAddress); used when the
-  /// per-subscriber config doesn't pin a customIp.
-  ///
-  /// `force=true` bypasses the snapshot cache (manual refresh button).
+  /// * [fallbackIp] — SAS4 IP لو موجود.
+  /// * [subscriberUsername] — يُستعمل لجلب DeviceConfig (customIp override).
+  /// * [force=true] — يتخطّى snapshot + dead caches (زر تحديث يدوي).
   static Future<DeviceHealthSnapshot?> probe({
     required String fallbackIp,
     String? subscriberUsername,
     bool force = false,
   }) async {
     final ip = fallbackIp.trim();
-    // We may overwrite `ip` with customIp from the per-sub config
-    // after we've fetched it. Cache key keys off the FINAL ip used.
     DeviceConfig? cfg;
     String effectiveIp = ip;
 
-    if (subscriberUsername != null) {
+    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
       cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
       final custom = cfg?.customIp?.trim();
       if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
     if (effectiveIp.isEmpty) return null;
 
+    // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
+    if (!force) {
+      final deadAt = _deadCache[effectiveIp];
+      if (deadAt != null &&
+          DateTime.now().difference(deadAt) < _deadTtl) {
+        return null;
+      }
+    }
+
+    // Snapshot cache
     if (!force) {
       final cached = _snapCache[effectiveIp];
       if (cached != null && DateTime.now().difference(cached.at) < _ttl) {
+        // كمان نُثبّت _snapByUser لو مو موجود (hydrate case).
+        if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
+          _snapByUser[subscriberUsername] ??= cached;
+        }
         return cached.snap;
       }
     }
@@ -79,23 +145,37 @@ class DeviceProbeApi {
     final defaults = await _loadAdminDefaults();
     final snap = await _runProbe(effectiveIp, cfg, defaults)
         .timeout(_probeCap, onTimeout: () => null);
-    final entry = _Cached(snap, DateTime.now());
+    final now = DateTime.now();
+    final entry = _Cached(snap, now);
     _snapCache[effectiveIp] = entry;
-    // مطلب 2026-07-12: نُخزّن كمان بمفتاح الـusername حتى الـUI (كارت
-    // المشترك) يقدر يستدعي cachedForUser بدون معرفة الـeffectiveIp.
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
       _snapByUser[subscriberUsername] = entry;
     }
+    if (snap != null) {
+      _kindByIp[effectiveIp] = snap.kind;
+      _deadCache.remove(effectiveIp); // نجاح → ما هو ميت
+    } else {
+      // فشل — نضيف لـdead cache حتى نوفّر محاولات متكرّرة قريبة.
+      _deadCache[effectiveIp] = now;
+      // Kind cache قد يكون قديم ونحن جربنا الـkind المخزّن وفشل — نمسحه
+      // حتى المحاولة القادمة تفجّر parallel وتلقّط لو الجهاز اتبدّل.
+      _kindByIp.remove(effectiveIp);
+    }
+    _schedulePersist();
     return snap;
   }
 
   /// Drop one IP's cached snapshot — call after editing per-sub
   /// config so the next render re-probes with new credentials.
-  static void invalidateIp(String ip) => _snapCache.remove(ip.trim());
+  static void invalidateIp(String ip) {
+    final k = ip.trim();
+    _snapCache.remove(k);
+    _kindByIp.remove(k);
+    _deadCache.remove(k);
+    _schedulePersist();
+  }
 
-  /// Read-only peek into the cache. Used by list-view chips so they
-  /// can light up the moment a wave finishes without re-fetching.
-  /// Returns null if no entry OR the entry expired.
+  /// Read-only peek بالـIP.
   static DeviceHealthSnapshot? cached(String ip) {
     final c = _snapCache[ip.trim()];
     if (c == null) return null;
@@ -103,9 +183,7 @@ class DeviceProbeApi {
     return c.snap;
   }
 
-  /// نفس cached لكن بالـusername. مطلب 2026-07-12: كارت المشترك ما يعرف
-  /// دائماً الـeffectiveIp (بالأخص للـoffline اللي عندهم customIp)، فيسأل
-  /// بالـusername مباشرة.
+  /// Read-only peek بالـusername.
   static DeviceHealthSnapshot? cachedForUser(String username) {
     if (username.isEmpty) return null;
     final c = _snapByUser[username];
@@ -114,19 +192,14 @@ class DeviceProbeApi {
     return c.snap;
   }
 
-  /// Batched probe wave for the visible subscriber list. v1 fans out 25
-  /// at a time so dead IPs (capped at 1.2s reachability + 6s probe cap)
-  /// don't stall the queue. Each individual sub goes through the same
-  /// `probe()` flow so the 5-min snapshot cache stays warm afterward.
+  /// Wave batched probe.
   ///
-  /// `onProgress(done, total)` fires after each batch so the screen can
-  /// surface "يفحص N/M" while running. Pass null to skip.
-  ///
-  /// `runId` lets the caller invalidate an in-flight wave when the list
-  /// changes — pass a fresh int per call, then check it equals the
-  /// caller's stored id before consuming results.
+  /// * [priorityUsernames] — تُفحص أوّلاً. للـviewport-visible subs،
+  ///   يمنح إحساس بأن الفحص "فوري" حتى مع قوائم كبيرة.
+  /// * [concurrency=25] — عدد probes متزامنة.
   static Future<void> warmProbe(
     List<({String username, String ip})> targets, {
+    Set<String>? priorityUsernames,
     int concurrency = 25,
     void Function(int done, int total)? onProgress,
     bool Function()? isCanceled,
@@ -135,27 +208,51 @@ class DeviceProbeApi {
       onProgress?.call(0, 0);
       return;
     }
+    // Priority ordering — الـpriority أوّلاً، الباقي بعده.
+    List<({String username, String ip})> ordered;
+    if (priorityUsernames != null && priorityUsernames.isNotEmpty) {
+      final priority = <({String username, String ip})>[];
+      final rest = <({String username, String ip})>[];
+      for (final t in targets) {
+        if (priorityUsernames.contains(t.username)) {
+          priority.add(t);
+        } else {
+          rest.add(t);
+        }
+      }
+      ordered = [...priority, ...rest];
+    } else {
+      ordered = targets;
+    }
+
+    // Prime DeviceConfig cache بـbatch endpoint (لو الـbackend يدعمه).
+    // يمنع 500 fetch منفصلة عند أوّل wave.
+    try {
+      final usernames = ordered.map((t) => t.username).toList();
+      await DeviceConfigApi.warmBatch(usernames);
+    } catch (_) {}
+
     var done = 0;
-    for (var i = 0; i < targets.length; i += concurrency) {
+    for (var i = 0; i < ordered.length; i += concurrency) {
       if (isCanceled?.call() ?? false) return;
-      final batch = targets.skip(i).take(concurrency).toList();
+      final batch = ordered.skip(i).take(concurrency).toList();
       await Future.wait(batch.map((t) async {
         try {
           await probe(fallbackIp: t.ip, subscriberUsername: t.username);
         } catch (_) {}
       }));
       done += batch.length;
-      onProgress?.call(done, targets.length);
+      onProgress?.call(done, ordered.length);
     }
   }
 
-  /// Drop the admin-defaults cache — call after saving them so the
-  /// next probe picks up the new values.
   static void invalidateAdminDefaults() {
     _adminFetch = null;
-    // Cached snapshots used the old defaults; invalidate them too so
-    // the next probe re-runs against the fresh creds.
     _snapCache.clear();
+    _snapByUser.clear();
+    _kindByIp.clear();
+    _deadCache.clear();
+    _schedulePersist();
   }
 
   static Future<AdminDeviceDefaults> _loadAdminDefaults() {
@@ -167,16 +264,8 @@ class DeviceProbeApi {
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) async {
-    // مطلب المستخدم 2026-07-12: يطابق v1 — لا TCP precheck. v1 يفجّر
-    // ONT+UBNT مباشرة على أمل نجاح واحد منهم داخل _probeCap. الـTCP
-    // check كان يعطي false negatives (firewall يبلوك 80/443/8080 لكن
-    // الجهاز موجود على منفذ آخر). الـ_probeCap 15s يحمي من IPs ميتة.
-    // تحقّق فقط من empty string.
     if (ip.isEmpty) return null;
 
-    // Per-tier creds. Subscriber override applies ONLY when the
-    // admin pinned that exact kind on this subscriber — otherwise we
-    // treat username/password as auxiliary, matching v1.
     final overridesOnt = cfg?.deviceType == DeviceKind.ont;
     final overridesUbnt = cfg?.deviceType == DeviceKind.ubiquiti;
 
@@ -201,9 +290,23 @@ class DeviceProbeApi {
             ? defaults.ubntPassword!
             : _kUbntPass);
 
+    // Admin pinned kind → probe واحد فقط.
     if (overridesOnt) return _probeOnt(ip, ontUser, ontPass);
     if (overridesUbnt) return _probeUbnt(ip, ubntUser, ubntPass);
 
+    // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
+    // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
+    // احتياط: لو الـkind المخزّن فشل، نمسحه (فوق) والمحاولة القادمة
+    // ترجع parallel لتتلاقط تغيير الجهاز.
+    final knownKind = _kindByIp[ip];
+    if (knownKind == DeviceKind.ont) {
+      return _probeOnt(ip, ontUser, ontPass);
+    }
+    if (knownKind == DeviceKind.ubiquiti) {
+      return _probeUbnt(ip, ubntUser, ubntPass);
+    }
+
+    // First-time أو kind cache cleared — parallel race.
     final ont = _probeOnt(ip, ontUser, ontPass);
     final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
@@ -245,6 +348,37 @@ class DeviceProbeApi {
       });
     }
     return completer.future;
+  }
+
+  /// Debounced persist — نكتب على القرص كل ~3s بدل بعد كل probe.
+  /// يمنع I/O ثقيل أثناء waves كبيرة.
+  static void _schedulePersist() {
+    _persistDebounce?.cancel();
+    _persistDebounce = Timer(const Duration(seconds: 3), _persist);
+  }
+
+  static Future<void> _persist() async {
+    try {
+      final now = DateTime.now();
+      final map = <String, Map<String, dynamic>>{};
+      for (final e in _snapCache.entries) {
+        final snap = e.value.snap;
+        if (snap == null) continue;
+        if (now.difference(e.value.at) >= _ttl) continue;
+        map[e.key] = {
+          'at': e.value.at.toIso8601String(),
+          'snap': snap.toJson(),
+        };
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (map.isEmpty) {
+        await prefs.remove(_prefsKey);
+      } else {
+        await prefs.setString(_prefsKey, jsonEncode(map));
+      }
+    } catch (_) {
+      // فشل الكتابة على القرص لا يجب أن يعطّل الـUI. تجاهل.
+    }
   }
 }
 
