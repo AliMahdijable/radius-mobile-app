@@ -51,6 +51,11 @@ class _Row extends StatelessWidget {
     IconData icon,
     Color color,
     String title,
+    // مطلب المستخدم 2026-07-12: نمرّر الاسم واليوزر منفصلين للـUI حتى
+    // يمنح كل واحد لون منفصل (name = brand، username = رمادي). الـ
+    // title القديم يبقى للحالات اللي فيها اسم واحد فقط (fallback).
+    String? subscriberFullName,
+    String? subscriberUsername,
     String? subLabel,
     String? detail,
     int amount,
@@ -107,6 +112,9 @@ class _Row extends StatelessWidget {
       icon: visual.$1,
       color: visual.$2,
       title: title,
+      // نمرّر السـtwo parts منفصلتين لتلوينهما بشكل مستقل في الـUI.
+      subscriberFullName: fullName.isEmpty ? null : fullName,
+      subscriberUsername: username.isEmpty ? null : username,
       subLabel: details.label,
       detail: details.detail,
       amount: amount,
@@ -339,22 +347,57 @@ class _Row extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Primary line: subscriber name (username) — admin
-                    // sees the readable Arabic name first and the
-                    // technical username in parentheses for fast cross-
-                    // reference with v1's flow. Single line keeps the
-                    // row compact; the action type is conveyed by the
-                    // tinted icon + the short label below.
-                    Text(
-                      n.title,
-                      style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        height: 1.3,
+                    // Primary line: subscriber name (username).
+                    // مطلب المستخدم 2026-07-12: الاسم العربي بلون brand
+                    // مميّز، اليوزر رمادي. Text.rich تفصل التلوين مع
+                    // الحفاظ على السطر الواحد. لو ما فيه اسم عربي،
+                    // نعرض title الأصلي بلون textHi (يجي username صرف
+                    // أو fallback لـaction).
+                    if (n.subscriberFullName != null &&
+                        n.subscriberFullName!.isNotEmpty)
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: n.subscriberFullName!,
+                              style: TextStyle(
+                                color: AppColors.isDark
+                                    ? AppColors.brandLight
+                                    : AppColors.brand,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                height: 1.3,
+                                letterSpacing: -0.1,
+                              ),
+                            ),
+                            if (n.subscriberUsername != null &&
+                                n.subscriberUsername!.isNotEmpty)
+                              TextSpan(
+                                text: '  (${n.subscriberUsername})',
+                                style: TextStyle(
+                                  color: AppColors.textLow,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.3,
+                                ),
+                              ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else
+                      Text(
+                        n.title,
+                        style:
+                            AppType.label(color: AppColors.textHi).copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          height: 1.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                     const SizedBox(height: 3),
                     Row(
                       children: [
