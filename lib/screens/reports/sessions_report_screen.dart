@@ -124,16 +124,16 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
               child: Column(
                 children: [
                   SegmentedButton<bool>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: true,
                         label: Text('reports.online_now'.tr()),
-                        icon: Icon(LucideIcons.wifi, size: 14),
+                        icon: const Icon(LucideIcons.wifi, size: 14),
                       ),
                       ButtonSegment(
                         value: false,
                         label: Text('common.all'.tr()),
-                        icon: Icon(LucideIcons.history, size: 14),
+                        icon: const Icon(LucideIcons.history, size: 14),
                       ),
                     ],
                     selected: {_onlineOnly},
