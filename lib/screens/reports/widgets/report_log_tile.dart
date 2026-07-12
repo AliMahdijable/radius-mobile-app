@@ -105,45 +105,56 @@ class ReportLogTile extends StatelessWidget {
                     (subscriberUsername != null &&
                         subscriberUsername!.isNotEmpty)) ...[
                   const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(LucideIcons.user,
-                          size: 11, color: AppColors.textMid),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          subscriberFullName?.isNotEmpty == true
-                              ? subscriberFullName!
-                              : (subscriberUsername ?? ''),
-                          style: TextStyle(
-                            color: AppColors.textHi,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (subscriberFullName?.isNotEmpty == true &&
-                          subscriberUsername?.isNotEmpty == true) ...[
-                        const SizedBox(width: 6),
+                  Builder(builder: (_) {
+                    // مطلب المستخدم 2026-07-12: الاسم العربي يميّز عن
+                    // اليوزر بلون واضح في الوضعين.
+                    // • Light: أخضر برند غامق #2D5F47 على خلفية بيضاء.
+                    // • Dark:  أخضر برند فاتح #4A8B6E على خلفية داكنة.
+                    // اليوزر يبقى بلون textLow لتباين قوي معه.
+                    final nameColor = AppColors.isDark
+                        ? AppColors.brandLight
+                        : AppColors.brand;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.user, size: 11, color: nameColor),
+                        const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            subscriberUsername!,
-                            style: AppType.muted().copyWith(
-                              fontSize: 10.5,
-                              height: 1.2,
-                              color: AppColors.textLow,
+                            subscriberFullName?.isNotEmpty == true
+                                ? subscriberFullName!
+                                : (subscriberUsername ?? ''),
+                            style: TextStyle(
+                              color: nameColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                              letterSpacing: -0.1,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        if (subscriberFullName?.isNotEmpty == true &&
+                            subscriberUsername?.isNotEmpty == true) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              subscriberUsername!,
+                              style: AppType.muted().copyWith(
+                                fontSize: 10.5,
+                                height: 1.2,
+                                color: AppColors.textLow,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
+                    );
+                  }),
                 ],
                 const SizedBox(height: 3),
                 Text(
