@@ -414,11 +414,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     }
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
-      final digits = q.replaceAll(RegExp(r'\D'), '');
+      // مطابقة الهاتف بتجريد غير-الأرقام فقط للـqueries اللي تشبه رقم
+      // (أرقام + رموز فورمات: + سبيس - قوسين). لو فيها أي حرف Latin/Arabic،
+      // ما نستعملها — كان `user2020` يخلي digits="2020" ويطابق كل هاتف
+      // فيه "2020" (عشرات المشتركين لا علاقة لهم بالاسم — bug 2026-07-13).
+      final phoneLike = RegExp(r'^[\d\s+\-()]+$').hasMatch(q);
+      final digits = phoneLike ? q.replaceAll(RegExp(r'\D'), '') : '';
       it = it.where((s) {
         if (s.username.toLowerCase().contains(q)) return true;
         if (s.fullName.toLowerCase().contains(q)) return true;
-        if (digits.isNotEmpty && s.displayPhone.contains(digits)) return true;
+        if (digits.length >= 3 && s.displayPhone.contains(digits)) return true;
         return false;
       });
     }
