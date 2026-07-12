@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -62,7 +63,7 @@ class SubscribersCard extends StatelessWidget {
                     _RingStatRow(
                       color: AppColors.brand,
                       icon: LucideIcons.circleCheck,
-                      label: 'الفعالين',
+                      label: 'dashboard.active'.tr(),
                       value: s.active,
                       onTap: onOpen == null
                           ? null
@@ -72,7 +73,7 @@ class SubscribersCard extends StatelessWidget {
                     _RingStatRow(
                       color: const Color(0xFF26A69A),
                       icon: LucideIcons.wifi,
-                      label: 'متصل الآن',
+                      label: 'dashboard.online'.tr(),
                       value: s.online,
                       onTap: onOpen == null
                           ? null
@@ -82,7 +83,7 @@ class SubscribersCard extends StatelessWidget {
                     _RingStatRow(
                       color: const Color(0xFF90A4AE),
                       icon: LucideIcons.wifiOff,
-                      label: 'غير متصل',
+                      label: 'dashboard.offline'.tr(),
                       value: s.offline,
                       onTap: onOpen == null
                           ? null
@@ -92,7 +93,7 @@ class SubscribersCard extends StatelessWidget {
                     _RingStatRow(
                       color: const Color(0xFFEF5350),
                       icon: LucideIcons.timerOff,
-                      label: 'منتهي',
+                      label: 'dashboard.expired'.tr(),
                       value: s.expired,
                       onTap: onOpen == null
                           ? null
@@ -102,7 +103,7 @@ class SubscribersCard extends StatelessWidget {
                     _RingStatRow(
                       color: Colors.deepOrange,
                       icon: LucideIcons.triangleAlert,
-                      label: 'قريب الانتهاء',
+                      label: 'dashboard.near_expiry'.tr(),
                       value: s.nearExpiry,
                       onTap: onOpen == null
                           ? null
@@ -235,7 +236,7 @@ class _Ring extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'مشترك',
+                  'dashboard.subscriber_singular'.tr(),
                   style: AppType.muted(
                     color: AppColors.textHi.withValues(alpha: 0.45),
                   ).copyWith(fontSize: 10, fontWeight: FontWeight.w600),

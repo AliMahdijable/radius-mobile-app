@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -155,10 +156,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _greeting() {
     final h = DateTime.now().hour;
-    if (h < 5) return 'مساء الخير';
-    if (h < 12) return 'صباح الخير';
-    if (h < 17) return 'مساء النور';
-    return 'مساء الخير';
+    if (h < 5) return 'dashboard.welcome_evening'.tr();
+    if (h < 12) return 'dashboard.welcome_morning'.tr();
+    if (h < 17) return 'dashboard.welcome_evening_light'.tr();
+    return 'dashboard.welcome_evening'.tr();
   }
 
   SubscribersStats? get _subscribersStats {
@@ -255,7 +256,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : _activationsLive == null
                             ? 'آخر النشاطات (تعذّر الجلب)'
                             : 'آخر النشاطات',
-                    trailingLabel: 'اعرض الكل',
+                    trailingLabel: 'dashboard.view_all'.tr(),
                     onTrailingTap: () {},
                   ),
                   if (!_activationsLoaded)
@@ -326,11 +327,11 @@ class _ActivitiesError extends StatelessWidget {
           const Icon(LucideIcons.triangleAlert,
               color: AppColors.error, size: 28),
           const SizedBox(height: Sp.sm),
-          Text('تعذّر جلب آخر النشاطات',
+          Text('dashboard.recent_fetch_failed'.tr(),
               style: AppType.label(color: AppColors.error)
                   .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('اسحب للأسفل لإعادة المحاولة',
+          Text('dashboard.pull_to_retry'.tr(),
               style: AppType.muted(color: AppColors.textLow)
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w500)),
         ],
@@ -357,11 +358,11 @@ class _NoActivitiesYet extends StatelessWidget {
         children: [
           Icon(LucideIcons.inbox, color: AppColors.textLow, size: 32),
           const SizedBox(height: Sp.sm),
-          Text('لا توجد نشاطات اليوم',
+          Text('dashboard.no_activity_today'.tr(),
               style: AppType.label(color: AppColors.textMid)
                   .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('سيظهر هنا أي تفعيل أو تمديد بمجرد حدوثه',
+          Text('dashboard.activity_will_show'.tr(),
               style: AppType.muted(color: AppColors.textLow)
                   .copyWith(fontSize: 12, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center),
@@ -423,7 +424,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  displayName.isEmpty ? 'مرحباً' : displayName,
+                  displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
                   style: AppType.title(color: AppColors.textHi).copyWith(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -498,13 +499,13 @@ class _WAStatusChip extends StatelessWidget {
     final String label;
     if (!loaded) {
       c = AppColors.textMid;
-      label = 'جارٍ التحقق…';
+      label = 'dashboard.wa_checking'.tr();
     } else if (status?.connected == true) {
       c = AppColors.brand;
-      label = 'واتساب متصل';
+      label = 'dashboard.wa_connected'.tr();
     } else {
       c = AppColors.error;
-      label = 'واتساب منقطع';
+      label = 'dashboard.wa_disconnected'.tr();
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),

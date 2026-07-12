@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -60,7 +61,7 @@ class _MainShellState extends State<MainShell> {
     // 2026-06-14: signal من api_client.dart حين empToken الموظف انتهى
     // (refresh مرفوض بقصد). نمسح أي حالة محلية ونرجع لشاشة الدخول.
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('انتهت الجلسة — سجّل دخول من جديد')),
+      SnackBar(content: Text('common.session_expired'.tr())),
     );
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -136,7 +137,7 @@ class _MainShellState extends State<MainShell> {
     _lastBackPress = now;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('اضغط مرة أخرى للخروج'),
+        content: Text('common.back_to_exit'.tr()),
         backgroundColor: AppColors.textHi,
         duration: _backExitWindow,
         behavior: SnackBarBehavior.floating,
@@ -254,14 +255,14 @@ class _PillBar extends StatelessWidget {
             children: [
               _TabSlot(
                 icon: Icons.home_rounded,
-                label: 'الرئيسية',
+                label: 'nav.home'.tr(),
                 slotWidth: slotWidth,
                 selected: current == 0,
                 onTap: () => _select(0),
               ),
               _TabSlot(
                 icon: Icons.people_alt_rounded,
-                label: 'المشتركون',
+                label: 'nav.subscribers'.tr(),
                 slotWidth: slotWidth,
                 selected: current == 1,
                 onTap: () => _select(1),
@@ -269,7 +270,7 @@ class _PillBar extends StatelessWidget {
               _FabSlot(slotWidth: slotWidth, onTap: onFabTap),
               _TabSlot(
                 icon: Icons.insert_chart_rounded,
-                label: 'التقارير',
+                label: 'nav.reports'.tr(),
                 slotWidth: slotWidth,
                 selected: current == 2,
                 onTap: () => _select(2),
@@ -279,7 +280,7 @@ class _PillBar extends StatelessWidget {
                 // الـtab صار يعرض المديولات الإضافية لا الإعدادات.
                 // الإعدادات الفعلية انتقلت لزر الـgear بالشريط العلوي.
                 icon: Icons.apps_rounded,
-                label: 'قوائم أخرى',
+                label: 'nav.more'.tr(),
                 slotWidth: slotWidth,
                 selected: current == 3,
                 onTap: () => _select(3),
@@ -476,7 +477,7 @@ class _QuickAddSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('إضافة سريعة',
+          Text('dashboard.quick_add'.tr(),
               style: AppType.title(color: AppColors.textHi)
                   .copyWith(fontSize: 18)),
           const SizedBox(height: Sp.lg),
@@ -485,7 +486,7 @@ class _QuickAddSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: Sp.lg),
               child: Center(
                 child: Text(
-                  'ليس لديك صلاحيات لأي عملية سريعة',
+                  'dashboard.quick_add_empty'.tr(),
                   style: AppType.muted().copyWith(fontSize: 13),
                 ),
               ),
@@ -498,20 +499,20 @@ class _QuickAddSheet extends StatelessWidget {
             _QuickItem(
               icon: Icons.person_add_rounded,
               color: const Color(0xFF3B82F6),
-              title: 'إضافة مشترك',
-              subtitle: 'إنشاء مشترك جديد في النظام',
+              title: 'dashboard.add_subscriber'.tr(),
+              subtitle: 'dashboard.add_subscriber_hint'.tr(),
               onTap: () => showAddSubscriberSheet(rootContext),
             ),
           if (Perms.hasAny(['subscribers.activate', 'subscribers.extend']))
             _QuickItem(
               icon: Icons.bolt_rounded,
               color: AppColors.brand,
-              title: 'تجديد اشتراك',
-              subtitle: 'تجديد اشتراك مشترك موجود',
+              title: 'dashboard.renew_sub'.tr(),
+              subtitle: 'dashboard.renew_sub_hint'.tr(),
               onTap: () async {
                 final picked = await showSubscriberPickerSheet(
                   rootContext,
-                  title: 'تجديد اشتراك',
+                  title: 'dashboard.renew_sub'.tr(),
                 );
                 if (picked != null && rootContext.mounted) {
                   await showActivateSheet(rootContext, picked);
@@ -522,12 +523,12 @@ class _QuickAddSheet extends StatelessWidget {
             _QuickItem(
               icon: Icons.payments_rounded,
               color: const Color(0xFF14B8A6),
-              title: 'تسديد دين',
-              subtitle: 'استلام دفعة من مشترك',
+              title: 'dashboard.pay_debt'.tr(),
+              subtitle: 'dashboard.pay_debt_hint'.tr(),
               onTap: () async {
                 final picked = await showSubscriberPickerSheet(
                   rootContext,
-                  title: 'تسديد دين',
+                  title: 'dashboard.pay_debt'.tr(),
                   debtorsOnly: true,
                 );
                 if (picked != null && rootContext.mounted) {
@@ -539,12 +540,12 @@ class _QuickAddSheet extends StatelessWidget {
             _QuickItem(
               icon: Icons.account_balance_wallet_rounded,
               color: const Color(0xFFE08F2D),
-              title: 'إضافة دين',
-              subtitle: 'إضافة دين على مشترك',
+              title: 'dashboard.add_debt'.tr(),
+              subtitle: 'dashboard.add_debt_hint'.tr(),
               onTap: () async {
                 final picked = await showSubscriberPickerSheet(
                   rootContext,
-                  title: 'إضافة دين',
+                  title: 'dashboard.add_debt'.tr(),
                 );
                 if (picked != null && rootContext.mounted) {
                   await showAddDebtSheet(rootContext, picked);
@@ -555,8 +556,8 @@ class _QuickAddSheet extends StatelessWidget {
             _QuickItem(
               icon: Icons.receipt_long_rounded,
               color: const Color(0xFF8B5CF6),
-              title: 'إضافة صرفية',
-              subtitle: 'تسجيل مصروف جديد',
+              title: 'dashboard.add_expense'.tr(),
+              subtitle: 'dashboard.add_expense_hint'.tr(),
               onTap: () => showAddExpenseSheet(rootContext),
             ),
         ],

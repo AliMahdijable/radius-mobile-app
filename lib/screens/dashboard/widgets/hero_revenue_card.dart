@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -92,9 +93,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   int? get _amount => _amounts[_period];
 
   String get _periodLabel => switch (_period) {
-        RevenuePeriod.day => 'اليوم',
-        RevenuePeriod.week => 'هذا الأسبوع',
-        RevenuePeriod.month => 'هذا الشهر',
+        RevenuePeriod.day => 'reports.today'.tr(),
+        RevenuePeriod.week => 'reports.this_week'.tr(),
+        RevenuePeriod.month => 'reports.this_month'.tr(),
       };
 
   void _select(RevenuePeriod p) {
@@ -129,7 +130,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ),
               const SizedBox(width: Sp.sm),
               Text(
-                'الإيرادات • $_periodLabel',
+                '${'dashboard.revenue'.tr()} • $_periodLabel',
                 style: AppType.label(color: AppColors.textMid)
                     .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
               ),
@@ -157,7 +158,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                         color: AppColors.error, size: 16),
                     const SizedBox(width: 6),
                     Text(
-                      'تعذّر الجلب — اسحب للتحديث',
+                      'dashboard.fetch_failed_swipe'.tr(),
                       style: AppType.label(color: AppColors.error)
                           .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
@@ -177,7 +178,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
-                    'د.ع',
+                    'common.currency'.tr(),
                     style: AppType.subtitle(color: AppColors.textLow)
                         .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
                   ),
@@ -208,9 +209,9 @@ class _PeriodTabs extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _tab(RevenuePeriod.day, 'يومي'),
-          _tab(RevenuePeriod.week, 'أسبوعي'),
-          _tab(RevenuePeriod.month, 'شهري'),
+          _tab(RevenuePeriod.day, 'dashboard.period_daily'.tr()),
+          _tab(RevenuePeriod.week, 'dashboard.period_weekly'.tr()),
+          _tab(RevenuePeriod.month, 'dashboard.period_monthly'.tr()),
         ],
       ),
     );
