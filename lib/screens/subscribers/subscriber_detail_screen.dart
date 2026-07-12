@@ -155,19 +155,33 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
                   _SubscriberHero(sub: sub),
                   const SizedBox(height: Sp.md),
-                  if (sub.isOnline) ...[
+                  // معلومات الجلسة الحية (IP + مدّة + DL/UL) فقط عند الاتصال
+                  // النشط الفعلي — أي RADIUS session قائم. مشترك online في
+                  // SAS4 بلا session data (عادة تأخّر sync online-users)
+                  // ما نعرض له كارت فارغ.
+                  if (sub.isOnline &&
+                      ((sub.ipAddress ?? '').isNotEmpty ||
+                       (sub.sessionTime ?? 0) > 0 ||
+                       (sub.downloadBytes ?? 0) > 0 ||
+                       (sub.uploadBytes ?? 0) > 0)) ...[
                     _LiveSessionCard(sub: sub),
                     const SizedBox(height: Sp.sm),
-                    // مطلب 2026-06-11: عرض معلومات الاتصال (ONT/UBNT)
-                    // مثل v1 — تظهر بطاقة منفصلة تحت كرت الجلسة الحية
-                    // مع بور/سيغنال/LAN حسب نوع الجهاز.
-                    if ((sub.ipAddress ?? '').isNotEmpty) ...[
-                      DeviceProbeCard(
-                        ip: sub.ipAddress!,
-                        username: sub.username,
-                      ),
-                      const SizedBox(height: Sp.sm),
-                    ],
+                  ],
+                  // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
+                  // ولم ينتهِ اشتراكه. الـcard يجرّب:
+                  //   1) SAS4 IP لو موجود
+                  //   2) customIp من DeviceConfig (يشتغل حتى بدون RADIUS session)
+                  //   3) placeholder "لم يُتمكّن من الوصول" + زر إعدادات
+                  // مطابق v1 (subscriber_details_screen.dart:2666-2685) —
+                  // كان v2 يشترط sub.isOnline + IP نشط، يخفي كل الكارت
+                  // للمشتركين اللي مفروض المدير يفحصهم أو يضبطهم
+                  // (بلاغ 2026-07-13).
+                  if (!sub.isExpired && !sub.isDisabled) ...[
+                    DeviceProbeCard(
+                      ip: sub.ipAddress ?? '',
+                      username: sub.username,
+                    ),
+                    const SizedBox(height: Sp.sm),
                   ],
                   // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)

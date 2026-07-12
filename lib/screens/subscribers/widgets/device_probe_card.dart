@@ -20,9 +20,12 @@ import '../../../theme/typography.dart';
 class DeviceProbeCard extends StatefulWidget {
   const DeviceProbeCard({
     super.key,
-    required this.ip,
+    this.ip = '',
     required this.username,
   });
+  /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
+  /// يجرّب customIp من DeviceConfig أوّلاً، فحتى المشتركون بلا session
+  /// نشط يحصلون على فحص لو المدير خزّن customIp في إعدادات الجهاز.
   final String ip;
   final String username;
 
