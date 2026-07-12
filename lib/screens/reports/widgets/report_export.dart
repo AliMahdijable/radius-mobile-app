@@ -135,26 +135,36 @@ class ReportExportBar extends StatelessWidget {
                       pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
             ],
             pw.SizedBox(height: 12),
-            pw.TableHelper.fromTextArray(
-              headers: columns,
-              data: rows,
-              headerStyle: pw.TextStyle(
-                  font: fontBold, fontSize: 11, color: PdfColors.white),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.teal600),
-              cellStyle: pw.TextStyle(font: font, fontSize: 9),
-              cellAlignment: pw.Alignment.centerRight,
-              headerAlignment: pw.Alignment.centerRight,
-              border: pw.TableBorder.all(
-                  color: PdfColors.grey400, width: 0.4),
-              columnWidths: {
-                for (int i = 0; i < columns.length; i++)
-                  i: pw.FlexColumnWidth(
-                    columnWeights != null && i < columnWeights!.length
-                        ? columnWeights![i]
-                        : 1.0,
-                  ),
-              },
+            // مطلب 2026-07-12: نُلف الجدول بـLTR Directionality عشان
+            // العمود[0] (اسم المشترك) يظهر على أقصى اليسار (Excel
+            // column A) والعمود الأخير (المنفّذ) على أقصى اليمين. الـ
+            // MultiPage RTL كانت تعكس التخطيط الفيزيائي فتصير اسم المشترك
+            // في اليمين والمنفّذ في اليسار — عكس ما يتوقّعه المستخدم من
+            // ملف Excel. النص داخل الخلايا يبقى Arabic bidi يعمل صح
+            // لأنه محتوى الخلية مستقل.
+            pw.Directionality(
+              textDirection: pw.TextDirection.ltr,
+              child: pw.TableHelper.fromTextArray(
+                headers: columns,
+                data: rows,
+                headerStyle: pw.TextStyle(
+                    font: fontBold, fontSize: 11, color: PdfColors.white),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.teal600),
+                cellStyle: pw.TextStyle(font: font, fontSize: 9),
+                cellAlignment: pw.Alignment.centerRight,
+                headerAlignment: pw.Alignment.center,
+                border: pw.TableBorder.all(
+                    color: PdfColors.grey400, width: 0.4),
+                columnWidths: {
+                  for (int i = 0; i < columns.length; i++)
+                    i: pw.FlexColumnWidth(
+                      columnWeights != null && i < columnWeights!.length
+                          ? columnWeights![i]
+                          : 1.0,
+                    ),
+                },
+              ),
             ),
             pw.SizedBox(height: 6),
             pw.Align(
