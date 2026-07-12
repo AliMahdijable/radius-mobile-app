@@ -29,7 +29,10 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   bool _loading = true;
   bool _busy = false;
   bool _savingFeatures = false;
-  Timer? _poll;
+  Timer? _statusPoll;
+  Timer? _qrPoll;
+  int _qrPollElapsed = 0;
+  static const int _qrPollTimeoutSec = 90;
 
   @override
   void initState() {
@@ -39,7 +42,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _statusPoll?.cancel();
+    _qrPoll?.cancel();
     super.dispose();
   }
 
@@ -55,57 +59,125 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
       _features = results[1] as WhatsFeatures?;
       _loading = false;
     });
-    _startPolling();
+    _startStatusPolling();
   }
 
-  void _startPolling() {
-    _poll?.cancel();
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) async {
+  void _startStatusPolling() {
+    _statusPoll?.cancel();
+    _statusPoll = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted) return;
       final s = await WhatsAppApi.connectionStatus();
       if (!mounted) return;
       setState(() => _status = s);
-      // لو ربط نجح، أخفِ QR
-      if (s?.connected == true && _qrData != null) {
-        setState(() => _qrData = null);
+      // لو ربط نجح، أخفِ QR وأوقف الـpolling
+      if (s?.connected == true) {
+        _stopQrPolling();
+        if (_qrData != null) {
+          setState(() => _qrData = null);
+        }
       }
     });
   }
 
-  Future<void> _startQrSession() async {
-    setState(() => _busy = true);
-    await WhatsAppApi.startSession();
-    // ننتظر قليلاً ثم نطلب الـQR
-    await Future.delayed(const Duration(seconds: 2));
-    final qr = await WhatsAppApi.getQr();
-    if (!mounted) return;
+  void _stopQrPolling() {
+    _qrPoll?.cancel();
+    _qrPoll = null;
+    _qrPollElapsed = 0;
+  }
+
+  /// مطابق v1 web (WhatsApp.tsx:handleConnect):
+  /// 1) جرّب reconnect أولاً — لو الجلسة المحفوظة اشتغلت مباشرة، خلصنا.
+  /// 2) وإلا start-session ثم polling على /pending-qr/ كل 3ث حتى 90ث.
+  ///
+  /// زر واحد "اتصال" فقط عند فصل الاتصال (طلب المستخدم 2026-07-12: زر
+  /// إعادة اتصال منفصل لا معنى له بدون جلسة سابقة).
+  Future<void> _connect() async {
     setState(() {
-      _qrData = qr;
-      _busy = false;
+      _busy = true;
+      _qrData = null;
     });
-    if (qr == null) {
+
+    // 1) reconnect silent — لو نجح فوراً بدون QR، خلاص.
+    final rc = await WhatsAppApi.reconnect();
+    if (!mounted) return;
+    // نراجع الحالة الحيّة — الـreconnect ممكن يرجع ok حتى لو المسار لم يصل
+    // للاتصال الكامل، فنعتمد على connection-status.
+    if (rc.ok) {
+      final s = await WhatsAppApi.connectionStatus(live: true);
+      if (!mounted) return;
+      if (s?.connected == true) {
+        setState(() {
+          _status = s;
+          _busy = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('wa.reconnected'.tr()),
+            backgroundColor: AppColors.brand,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    // 2) start-session ثم polling على QR.
+    final ss = await WhatsAppApi.startSession();
+    if (!mounted) return;
+    if (!ss.ok) {
+      setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('wa.qr_not_ready'.tr()),
-          backgroundColor: const Color(0xFFE08F2D),
+          content: Text(ss.message ?? 'common.error'.tr()),
+          backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
+      return;
     }
+
+    // ابدأ polling — كل 3 ثواني، حتى 90 ثانية.
+    _startQrPolling();
   }
 
-  Future<void> _reconnect() async {
-    setState(() => _busy = true);
-    final r = await WhatsAppApi.reconnect();
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'wa.reconnecting'.tr() : (r.message ?? 'common.error'.tr())),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  void _startQrPolling() {
+    _stopQrPolling();
+    _qrPoll = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!mounted) return;
+      _qrPollElapsed += 3;
+      if (_qrPollElapsed > _qrPollTimeoutSec) {
+        _stopQrPolling();
+        if (!mounted) return;
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('wa.qr_timeout'.tr()),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      final res = await WhatsAppApi.pendingQr();
+      if (!mounted) return;
+      if (res.connected) {
+        _stopQrPolling();
+        final s = await WhatsAppApi.connectionStatus(live: true);
+        if (!mounted) return;
+        setState(() {
+          _status = s;
+          _qrData = null;
+          _busy = false;
+        });
+        return;
+      }
+      if (res.qr != null) {
+        setState(() {
+          _qrData = res.qr;
+          _busy = false;
+        });
+      }
+    });
   }
 
   Future<void> _disconnect() async {
@@ -238,10 +310,15 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   const SizedBox(height: Sp.md),
                 ],
                 _actionsBar(accent),
-                const SizedBox(height: Sp.lg),
-                _featuresCard(accent),
-                const SizedBox(height: Sp.md),
-                _templatesLink(accent),
+                // Features + Templates تظهر فقط عند الاتصال — طلب المستخدم
+                // 2026-07-12: لا معنى لعرض toggles إشعارات وقوالب واتساب
+                // إذا الجلسة أصلاً غير مربوطة.
+                if (_status?.connected == true) ...[
+                  const SizedBox(height: Sp.lg),
+                  _featuresCard(accent),
+                  const SizedBox(height: Sp.md),
+                  _templatesLink(accent),
+                ],
               ],
             ],
           ),
@@ -384,45 +461,40 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
 
   Widget _actionsBar(Color accent) {
     final connected = _status?.connected == true;
+    // عند الفصل: زر واحد "اتصال" — يجرّب reconnect صامتاً ثم start-session
+    // + polling للـQR. مطابق v1 web (طلب المستخدم 2026-07-12: زر إعادة
+    // اتصال منفصل بلا جلسة سابقة كان يربك المستخدم).
+    if (!connected) {
+      final labelKey = _busy
+          ? 'wa.connecting'
+          : (_qrData != null ? 'wa.waiting_scan' : 'wa.connect_btn');
+      return _btn(
+        icon: _busy ? LucideIcons.loader : LucideIcons.qrCode,
+        label: labelKey.tr(),
+        color: accent,
+        onTap: _busy ? null : _connect,
+      );
+    }
+    // عند الاتصال: قطع + إعادة تهيئة كاملة
     return Row(
       children: [
-        if (!connected) ...[
-          Expanded(
-            child: _btn(
-              icon: LucideIcons.qrCode,
-              label: 'wa.qr_pair'.tr(),
-              color: accent,
-              onTap: _busy ? null : _startQrSession,
-            ),
+        Expanded(
+          child: _btn(
+            icon: LucideIcons.powerOff,
+            label: 'wa.disconnect_short'.tr(),
+            color: AppColors.error,
+            onTap: _busy ? null : _disconnect,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _btn(
-              icon: LucideIcons.refreshCw,
-              label: 'wa.reconnect'.tr(),
-              color: const Color(0xFF3B82F6),
-              onTap: _busy ? null : _reconnect,
-            ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _btn(
+            icon: LucideIcons.refreshCw,
+            label: 'wa.full_reset_btn'.tr(),
+            color: const Color(0xFFE08F2D),
+            onTap: _busy ? null : _softReset,
           ),
-        ] else ...[
-          Expanded(
-            child: _btn(
-              icon: LucideIcons.powerOff,
-              label: 'wa.disconnect_short'.tr(),
-              color: AppColors.error,
-              onTap: _busy ? null : _disconnect,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _btn(
-              icon: LucideIcons.refreshCw,
-              label: 'wa.full_reset_btn'.tr(),
-              color: const Color(0xFFE08F2D),
-              onTap: _busy ? null : _softReset,
-            ),
-          ),
-        ],
+        ),
       ],
     );
   }

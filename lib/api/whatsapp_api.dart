@@ -300,19 +300,28 @@ class WhatsAppApi {
     }
   }
 
-  /// GET /api/whatsapp/get-qr/:adminId — يجلب الـQR الحالي (data URL).
-  static Future<String?> getQr() async {
+  /// GET /api/whatsapp/pending-qr/:adminId — يجلب الـQR المعلّق من الـ
+  /// clientRouter الحيّ (in-memory). هذا الـendpoint الصحيح للـpolling
+  /// أثناء انتظار المستخدم يمسح — مطابق v1 web (WhatsApp.tsx: startPolling).
+  ///
+  /// يرجّع (qr: null, connected: true) عند الاتصال بين محاولات الـpoll.
+  static Future<({String? qr, bool connected})> pendingQr() async {
     final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) return null;
+    if (adminId == null) return (qr: null, connected: false);
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/whatsapp/get-qr/$adminId',
+        '/api/whatsapp/pending-qr/$adminId',
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return null;
-      return body['qr']?.toString() ?? body['qrCode']?.toString();
+      if (body['alreadyConnected'] == true) {
+        return (qr: null, connected: true);
+      }
+      if (body['success'] == true) {
+        return (qr: body['qrCode']?.toString(), connected: false);
+      }
+      return (qr: null, connected: false);
     } catch (_) {
-      return null;
+      return (qr: null, connected: false);
     }
   }
 
