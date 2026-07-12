@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -84,7 +86,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     if (qr == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('لم يصل الـQR بعد — حاول مجدداً بعد لحظة'),
+          content: Text('wa.qr_not_ready'.tr()),
           backgroundColor: Color(0xFFE08F2D),
           behavior: SnackBarBehavior.floating,
         ),
@@ -99,7 +101,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok ? 'جاري إعادة الاتصال' : (r.message ?? 'فشل')),
+        content: Text(r.ok ? 'wa.reconnecting'.tr() : (r.message ?? 'common.error'.tr())),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -110,19 +112,18 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('قطع الاتصال'),
-        content: const Text(
-            'سيتم قطع جلسة الواتساب الحالية. يمكنك إعادة الاتصال لاحقاً.'),
+        title: Text('wa.disconnect_title'.tr()),
+        content: Text('wa.disconnect_body'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('قطع'),
+            child: Text('wa.disconnect_btn'.tr()),
           ),
         ],
       ),
@@ -137,7 +138,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok ? 'تم القطع' : (r.message ?? 'فشل')),
+        content: Text(r.ok ? 'wa.disconnected'.tr() : (r.message ?? 'common.error'.tr())),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -153,19 +154,18 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('إعادة تهيئة كاملة'),
-        content: const Text(
-            'سيتم حذف بيانات الاعتماد الحالية وستحتاج لمسح QR من جديد.'),
+        title: Text('wa.full_reset_title'.tr()),
+        content: Text('wa.full_reset_body'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFE08F2D)),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('متابعة'),
+            child: Text('common.next'.tr()),
           ),
         ],
       ),
@@ -192,7 +192,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     if (!r.ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(r.message ?? 'تعذّر الحفظ'),
+          content: Text(r.message ?? 'devices.save_failed'.tr()),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -211,7 +211,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'واتساب',
+          'settings.whatsapp'.tr(),
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
@@ -257,8 +257,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
         ? accent
         : (stabilizing ? const Color(0xFFE08F2D) : AppColors.error);
     final label = connected
-        ? 'متصل'
-        : (stabilizing ? 'جاري التثبيت' : 'غير متصل');
+        ? 'subscribers.status_online'.tr()
+        : (stabilizing ? 'wa.stabilizing'.tr() : 'wa.disconnected_state'.tr());
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
@@ -365,13 +365,13 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
       child: Column(
         children: [
           Text(
-            'امسح الرمز من واتساب',
+            'wa.scan_qr'.tr(),
             style: AppType.title(color: AppColors.textHi)
                 .copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
-            'افتح واتساب على هاتفك → الإعدادات → الأجهزة المرتبطة → ربط جهاز',
+            'wa.scan_qr_hint'.tr(),
             style: AppType.muted().copyWith(fontSize: 11),
             textAlign: TextAlign.center,
           ),
@@ -390,7 +390,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           Expanded(
             child: _btn(
               icon: LucideIcons.qrCode,
-              label: 'ربط QR',
+              label: 'wa.qr_pair'.tr(),
               color: accent,
               onTap: _busy ? null : _startQrSession,
             ),
@@ -399,7 +399,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           Expanded(
             child: _btn(
               icon: LucideIcons.refreshCw,
-              label: 'إعادة اتصال',
+              label: 'wa.reconnect'.tr(),
               color: const Color(0xFF3B82F6),
               onTap: _busy ? null : _reconnect,
             ),
@@ -408,7 +408,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           Expanded(
             child: _btn(
               icon: LucideIcons.powerOff,
-              label: 'قطع',
+              label: 'wa.disconnect_short'.tr(),
               color: AppColors.error,
               onTap: _busy ? null : _disconnect,
             ),
@@ -417,7 +417,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           Expanded(
             child: _btn(
               icon: LucideIcons.refreshCw,
-              label: 'تهيئة كاملة',
+              label: 'wa.full_reset_btn'.tr(),
               color: const Color(0xFFE08F2D),
               onTap: _busy ? null : _softReset,
             ),
@@ -490,7 +490,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
               Icon(LucideIcons.settings, color: accent, size: 16),
               const SizedBox(width: 6),
               Text(
-                'الإشعارات التلقائية',
+                'wa.auto_notifs'.tr(),
                 style: AppType.title(color: AppColors.textHi)
                     .copyWith(fontSize: 14),
               ),
@@ -504,54 +504,54 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'مفتاح رئيسي يقفل كل المسارات. لو معطّل، أيّ toggle آخر لا يُرسل.',
+            'wa.master_hint'.tr(),
             style: AppType.muted().copyWith(fontSize: 11, height: 1.4),
           ),
           const SizedBox(height: 8),
           _toggle(
-            label: 'تفعيل الإشعارات (الرئيسي)',
+            label: 'wa.master_switch'.tr(),
             value: masterOn,
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(notificationsEnabled: v)),
           ),
           Divider(color: AppColors.border.withValues(alpha: 0.5), height: 16),
           _toggle(
-            label: 'رسالة الترحيب عند الإضافة',
+            label: 'wa.welcome_msg'.tr(),
             value: f.welcomeMessage,
             enabled: masterOn,
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(welcomeMessage: v)),
           ),
           _toggle(
-            label: 'إشعار التفعيل/التجديد',
+            label: 'wa.activation_notif'.tr(),
             value: f.sendOnActivation,
             enabled: masterOn,
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(sendOnActivation: v)),
           ),
           _toggle(
-            label: 'إشعار التمديد',
+            label: 'wa.extend_notif'.tr(),
             value: f.sendOnExtension,
             enabled: masterOn,
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(sendOnExtension: v)),
           ),
           _toggle(
-            label: 'تذكير قرب الانتهاء',
+            label: 'wa.near_expiry_notif'.tr(),
             value: f.expiryReminder,
             enabled: masterOn,
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(expiryReminder: v)),
           ),
           _toggle(
-            label: 'إشعار الانتهاء الفعلي',
+            label: 'wa.expired_notif'.tr(),
             value: f.serviceEndNotification,
             enabled: masterOn,
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(serviceEndNotification: v)),
           ),
           _toggle(
-            label: 'تذكير الدين',
+            label: 'wa.debt_notif'.tr(),
             value: f.debtReminder,
             enabled: masterOn,
             onChanged: (v) => _updateFeatures(f.copyWith(debtReminder: v)),
@@ -618,12 +618,12 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'قوالب الواتساب',
+                      'settings.whatsapp_templates'.tr(),
                       style: AppType.title(color: AppColors.textHi)
                           .copyWith(fontSize: 14),
                     ),
                     Text(
-                      'تحرير نصوص الإشعارات (ترحيب / تفعيل / تذكير …)',
+                      'wa.templates_hint'.tr(),
                       style: AppType.muted().copyWith(fontSize: 11),
                     ),
                   ],

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -57,7 +58,7 @@ class _NotificationsSettingsScreenState
     if (!r.ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(r.message ?? 'تعذّر حفظ التفضيلات'),
+          content: Text(r.message ?? 'notifs.save_failed'.tr()),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -103,7 +104,7 @@ class _NotificationsSettingsScreenState
         backgroundColor: AppColors.bg,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text('الإشعارات',
+        title: Text('notifications.title'.tr(),
             style: AppType.title(color: AppColors.textHi)
                 .copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -114,39 +115,39 @@ class _NotificationsSettingsScreenState
               padding: const EdgeInsets.fromLTRB(
                   Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
-                _SectionLabel('أنواع الإشعارات'),
+                _SectionLabel('notifs.types_section'.tr()),
                 _Toggle(
                   icon: LucideIcons.clock,
-                  label: 'اقتراب انتهاء اشتراك',
-                  sub: 'تنبيه قبل أيام من انتهاء اشتراك المشترك',
+                  label: 'notifs.near_expiry_label'.tr(),
+                  sub: 'notifs.near_expiry_hint'.tr(),
                   value: p.pushNearExpiry,
                   onChanged: (v) =>
                       _patch((x) => x.copyWith(pushNearExpiry: v)),
                 ),
                 _Toggle(
                   icon: LucideIcons.calendarX,
-                  label: 'انتهاء اشتراك اليوم',
-                  sub: 'إشعار يومي بمشتركين انتهت اشتراكاتهم اليوم',
+                  label: 'notifs.expired_today_label'.tr(),
+                  sub: 'notifs.expired_today_hint'.tr(),
                   value: p.pushExpiredToday,
                   onChanged: (v) =>
                       _patch((x) => x.copyWith(pushExpiredToday: v)),
                 ),
                 _Toggle(
                   icon: LucideIcons.creditCard,
-                  label: 'دين على مدير فرعي',
-                  sub: 'تنبيه عند زيادة دين على مدير تابع لك',
+                  label: 'notifs.mgr_debt_label'.tr(),
+                  sub: 'notifs.mgr_debt_hint'.tr(),
                   value: p.pushManagerDebt,
                   onChanged: (v) =>
                       _patch((x) => x.copyWith(pushManagerDebt: v)),
                 ),
                 const SizedBox(height: Sp.md),
-                _SectionLabel('أوقات السكون (DND)'),
+                _SectionLabel('notifs.dnd_section'.tr()),
                 _Toggle(
                   icon: LucideIcons.moon,
-                  label: 'كتم الإشعارات في نافذة زمنية',
+                  label: 'notifs.mute_window_label'.tr(),
                   sub: p.quietHoursEnabled
-                      ? 'من ${p.quietHoursStart} إلى ${p.quietHoursEnd}'
-                      : 'لا يوجد كتم — الإشعارات تصل في أي وقت',
+                      ? 'notifs.mute_range'.tr(namedArgs: {'from': p.quietHoursStart, 'to': p.quietHoursEnd})
+                      : 'notifs.no_mute_hint'.tr(),
                   value: p.quietHoursEnabled,
                   onChanged: (v) =>
                       _patch((x) => x.copyWith(quietHoursEnabled: v)),
@@ -157,7 +158,7 @@ class _NotificationsSettingsScreenState
                     children: [
                       Expanded(
                         child: _TimePickerTile(
-                          label: 'من',
+                          label: 'notifs.from'.tr(),
                           value: p.quietHoursStart,
                           onTap: () => _pickTime(true),
                         ),
@@ -165,7 +166,7 @@ class _NotificationsSettingsScreenState
                       const SizedBox(width: Sp.sm),
                       Expanded(
                         child: _TimePickerTile(
-                          label: 'إلى',
+                          label: 'notifs.to'.tr(),
                           value: p.quietHoursEnd,
                           onTap: () => _pickTime(false),
                         ),
@@ -174,8 +175,7 @@ class _NotificationsSettingsScreenState
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'الإشعارات المرسلة خلال هذه النافذة تُؤجَّل حتى '
-                    'انتهاء الكتم. لا تُفقد — تصل دفعة واحدة بعد الإغلاق.',
+                    'notifs.mute_deferred_hint'.tr(),
                     style: AppType.muted(color: AppColors.textMid)
                         .copyWith(fontSize: 11, height: 1.5),
                   ),
@@ -193,7 +193,7 @@ class _NotificationsSettingsScreenState
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'جاري الحفظ...',
+                          'notifs.saving'.tr(),
                           style: AppType.muted().copyWith(fontSize: 11),
                         ),
                       ],

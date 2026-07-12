@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -156,7 +157,7 @@ class _InboxScreenState extends State<InboxScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'الإشعارات',
+          'notifications.title'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -171,7 +172,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 icon: Icon(LucideIcons.checkCheck,
                     size: 16, color: AppColors.brand),
                 label: Text(
-                  'الكل مقروء',
+                  'notifications.mark_all_read'.tr(),
                   style: TextStyle(
                     color: AppColors.brand,
                     fontSize: 12,
@@ -202,7 +203,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 children: [
                   if (hasApp) ...[
                     _SectionHeader(
-                      title: 'إشعارات التطبيق',
+                      title: 'notifications.app_notifications'.tr(),
                       count: items.length,
                       color: AppColors.brand,
                       icon: LucideIcons.bell,
@@ -212,7 +213,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   ],
                   if (hasExpiredToday) ...[
                     _SectionHeader(
-                      title: 'انتهى اليوم',
+                      title: 'notifications.expired_today'.tr(),
                       count: _expiredToday.length,
                       color: AppColors.error,
                       icon: LucideIcons.circleAlert,
@@ -220,7 +221,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     for (final s in _expiredToday) ...[
                       _SubscriberAlertRow(
                         sub: s,
-                        detail: 'انتهى الاشتراك اليوم',
+                        detail: 'notifications.sub_expired_today'.tr(),
                         color: AppColors.error,
                         icon: LucideIcons.timerOff,
                         onTap: () => _openSubscriber(s),
@@ -231,7 +232,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   ],
                   if (hasNearExpiry) ...[
                     _SectionHeader(
-                      title: 'قريب الانتهاء',
+                      title: 'notifications.near_expiry_section'.tr(),
                       count: _nearExpiry.length,
                       color: const Color(0xFFE08F2D),
                       icon: LucideIcons.triangleAlert,
@@ -315,10 +316,10 @@ class _InboxScreenState extends State<InboxScreen> {
             children: [
               Icon(LucideIcons.bellOff, size: 40, color: AppColors.textLow),
               const SizedBox(height: 12),
-              Text('لا توجد إشعارات جديدة',
+              Text('notifications.empty_title'.tr(),
                   style: AppType.label(color: AppColors.textMid)),
               const SizedBox(height: 4),
-              Text('ستظهر الرسائل هنا عند وصولها',
+              Text('notifications.empty_hint'.tr(),
                   style: AppType.muted().copyWith(fontSize: 12)),
             ],
           ),
@@ -335,9 +336,9 @@ class _InboxScreenState extends State<InboxScreen> {
       final at = n.receivedAt;
       String label;
       if (at.isAfter(todayStart) || at.isAtSameMomentAs(todayStart)) {
-        label = 'اليوم';
+        label = 'reports.today'.tr();
       } else if (at.isAfter(yStart) || at.isAtSameMomentAs(yStart)) {
-        label = 'أمس';
+        label = 'reports.yesterday'.tr();
       } else {
         label =
             '${at.year}-${at.month.toString().padLeft(2, '0')}-${at.day.toString().padLeft(2, '0')}';
@@ -357,18 +358,25 @@ class _InboxScreenState extends State<InboxScreen> {
 // ────────────────────────────────────────────
 // v1 helper: صياغة "متبقّي X يوم و Y ساعة" لصف قريب الانتهاء.
 String _formatRemaining(DateTime? exp) {
-  if (exp == null) return 'ينتهي قريباً';
+  if (exp == null) return 'notifications.expires_soon'.tr();
   final diff = exp.difference(DateTime.now());
-  if (diff.isNegative) return 'انتهى';
+  if (diff.isNegative) return 'notifications.remaining_expired'.tr();
   final days = diff.inDays;
   final hours = diff.inHours % 24;
   final minutes = diff.inMinutes % 60;
-  if (days > 0) return 'متبقي $days يوم${hours > 0 ? ' و $hours ساعة' : ''}';
-  if (hours > 0) {
-    return 'متبقي $hours ساعة${minutes > 0 ? ' و $minutes دقيقة' : ''}';
+  final remaining = 'notifications.remaining'.tr();
+  final andWord = 'notifications.and'.tr();
+  final dayU = 'subscribers.day_unit'.tr();
+  final hrU = 'subscribers.hour_unit'.tr();
+  final minU = 'subscribers.minute_unit'.tr();
+  if (days > 0) {
+    return '$remaining $days $dayU${hours > 0 ? ' $andWord $hours $hrU' : ''}';
   }
-  if (minutes > 0) return 'متبقي $minutes دقيقة';
-  return 'ينتهي الآن';
+  if (hours > 0) {
+    return '$remaining $hours $hrU${minutes > 0 ? ' $andWord $minutes $minU' : ''}';
+  }
+  if (minutes > 0) return '$remaining $minutes $minU';
+  return 'notifications.expires_now'.tr();
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -620,31 +628,31 @@ class _NotificationRow extends StatelessWidget {
         return _KindMeta(
           icon: LucideIcons.alarmClock,
           color: const Color(0xFFE08F2D),
-          fallbackTitle: 'اقتراب انتهاء اشتراكات',
+          fallbackTitle: 'notifications.digest_near_expiry'.tr(),
         );
       case NotificationKind.expiredTodayDigest:
         return _KindMeta(
           icon: LucideIcons.circleAlert,
           color: AppColors.error,
-          fallbackTitle: 'اشتراكات منتهية اليوم',
+          fallbackTitle: 'notifications.digest_expired_today'.tr(),
         );
       case NotificationKind.managerDebt:
         return _KindMeta(
           icon: LucideIcons.creditCard,
           color: AppColors.error,
-          fallbackTitle: 'دين مدير فرعي',
+          fallbackTitle: 'notifications.mgr_debt'.tr(),
         );
       case NotificationKind.managerBalance:
         return _KindMeta(
           icon: LucideIcons.banknote,
           color: const Color(0xFF14B8A6),
-          fallbackTitle: 'تحديث رصيد مدير',
+          fallbackTitle: 'notifications.mgr_balance_update'.tr(),
         );
       case NotificationKind.other:
         return _KindMeta(
           icon: LucideIcons.bell,
           color: AppColors.brand,
-          fallbackTitle: 'إشعار',
+          fallbackTitle: 'notifications.other'.tr(),
         );
     }
   }

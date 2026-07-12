@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -71,7 +72,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     setState(() => _saving = false);
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر الحفظ')),
+        SnackBar(content: Text('devices.save_failed'.tr())),
       );
       return;
     }
@@ -79,7 +80,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     DeviceProbeApi.invalidateAdminDefaults();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('حُفظت الاعتمادات'),
+        content: Text('devices.creds_saved'.tr()),
         backgroundColor: AppColors.brand,
       ),
     );
@@ -96,7 +97,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'اعتمادات ONU / Ubiquiti',
+          'settings.device_creds'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -113,7 +114,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     icon: LucideIcons.cable,
                     title: 'Huawei ONT',
                     subtitle:
-                        'افتراضي النظام: telecomadmin / admintelecom. اتركها فاضية لتُستخدم.',
+                        'devices.ont_default_hint'.tr(),
                     userController: _ontUser,
                     passController: _ontPass,
                     obscure: _ontObscure,
@@ -125,7 +126,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     icon: LucideIcons.wifi,
                     title: 'Ubiquiti (UBNT)',
                     subtitle:
-                        'افتراضي النظام: ubnt / ubnt. اتركها فاضية لتُستخدم.',
+                        'devices.ubnt_default_hint'.tr(),
                     userController: _ubntUser,
                     passController: _ubntPass,
                     obscure: _ubntObscure,
@@ -147,7 +148,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                               ),
                             )
                           : const Icon(LucideIcons.save, size: 16),
-                      label: const Text('حفظ الاعتمادات'),
+                      label: Text('devices.save_creds'.tr()),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.brand,
                         foregroundColor: Colors.white,
@@ -179,7 +180,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
             const SizedBox(width: Sp.sm),
             Expanded(
               child: Text(
-                'هذه الاعتمادات تُستعمل عند جلب معلومات الأجهزة من كل المشتركين. لو ما حدّدت قيم، يستعمل النظام الافتراضي.',
+                'devices.info_hint'.tr(),
                 style: AppType.muted().copyWith(fontSize: 11.5, height: 1.5),
               ),
             ),
@@ -230,14 +231,14 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
               style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
             ),
             const SizedBox(height: Sp.md),
-            _labelText('اسم المستخدم'),
+            _labelText('login.username'.tr()),
             TextField(
               controller: userController,
               style: const TextStyle(fontSize: 13),
               decoration: _dec(),
             ),
             const SizedBox(height: 10),
-            _labelText('كلمة السر'),
+            _labelText('login.password'.tr()),
             TextField(
               controller: passController,
               obscureText: obscure,

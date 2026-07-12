@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -96,12 +97,12 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'النظام يحظر طلب الإذن — افتح إعدادات النظام لتفعيله',
+              'perms.blocked_open_system'.tr(),
             ),
             backgroundColor: const Color(0xFFE08F2D),
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
-              label: 'الإعدادات',
+              label: 'settings.title'.tr(),
               textColor: Colors.white,
               onPressed: NotificationService.openSettings,
             ),
@@ -126,7 +127,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
       if (!r.ok) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(r.reason ?? 'تعذّر التفعيل'),
+            content: Text(r.reason ?? 'perms.enable_failed'.tr()),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -134,7 +135,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('تم تفعيل القفل بالبصمة'),
+            content: Text('perms.bio_lock_enabled'.tr()),
             backgroundColor: AppColors.brand,
             behavior: SnackBarBehavior.floating,
           ),
@@ -151,14 +152,14 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
   }
 
   String get _bioLabel {
-    if (!_bioCanAuth) return 'غير متاحة على هذا الجهاز';
+    if (!_bioCanAuth) return 'perms.bio_unavailable'.tr();
     if (_bioTypes.contains(BiometricType.face)) return 'Face ID متاح';
     if (_bioTypes.contains(BiometricType.fingerprint) ||
         _bioTypes.contains(BiometricType.strong)) {
-      return 'بصمة الإصبع متاحة';
+      return 'perms.bio_fingerprint_available'.tr();
     }
-    if (_bioTypes.contains(BiometricType.iris)) return 'قزحية متاحة';
-    return 'وحدة بيومترية متاحة';
+    if (_bioTypes.contains(BiometricType.iris)) return 'perms.bio_iris_available'.tr();
+    return 'perms.bio_generic_available'.tr();
   }
 
   IconData get _bioIcon {
@@ -177,7 +178,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         backgroundColor: AppColors.bg,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text('صلاحيات التطبيق',
+        title: Text('settings.permissions'.tr(),
             style: AppType.title(color: AppColors.textHi)
                 .copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -188,27 +189,27 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
               padding: const EdgeInsets.fromLTRB(
                   Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
-                _SectionLabel('الإشعارات'),
+                _SectionLabel('notifications.title'.tr()),
                 _BioCard(
                   icon: LucideIcons.bell,
-                  label: 'إشعارات النظام',
+                  label: 'perms.system_notifs'.tr(),
                   sub: _notifAuthorized
-                      ? 'مفعّلة — تصلك كل التنبيهات'
-                      : 'معطّلة — لن تصلك تنبيهات فوريّة',
+                      ? 'perms.notifs_on_hint'.tr()
+                      : 'perms.notifs_off_hint'.tr(),
                   enabled: _notifAuthorized,
                   canAuth: !_notifBusy,
                   busy: _notifBusy,
                   onChanged: (_) => _toggleNotif(),
                 ),
                 const SizedBox(height: Sp.md),
-                _SectionLabel('القفل'),
+                _SectionLabel('perms.lock_section'.tr()),
                 _BioCard(
                   icon: _bioIcon,
-                  label: 'قفل التطبيق بالبصمة',
+                  label: 'perms.bio_app_lock'.tr(),
                   sub: _bioCanAuth
                       ? (_bioEnabled
-                          ? 'يطلب البصمة عند فتح التطبيق'
-                          : 'فعّل لإضافة طبقة حماية إضافية')
+                          ? 'perms.bio_asks_hint'.tr()
+                          : 'perms.bio_enable_hint'.tr())
                       : _bioLabel,
                   enabled: _bioEnabled,
                   canAuth: _bioCanAuth,
@@ -245,8 +246,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'لم نجد بصمة مسجّلة على الجهاز. سجّل بصمة من '
-                            'إعدادات النظام، ثم عُد لتفعيلها هنا.',
+                            'perms.no_bio_enrolled'.tr(),
                             style:
                                 AppType.muted(color: AppColors.textHi)
                                     .copyWith(

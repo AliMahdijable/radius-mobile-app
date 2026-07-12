@@ -122,23 +122,29 @@ class _AuthInterceptor extends Interceptor {
   Future<Response?> _refreshAndRetry(RequestOptions failed) async {
     final ok = await _runRefresh();
     if (!ok) {
-      // 2026-06-14: لو الـuser موظف، refresh مرفوض بقصد — empToken
-      // لا يُجدّد. الـsession انتهت فعلياً. نمسح المخزن ونطلق إشارة
-      // لـMainShell ليـnavigate إلى LoginScreen. الـadmin العادي
-      // يرى snack وحدها لو refresh فشل (مشكلة شبكة).
-      if (await AuthStorage.isEmployee()) {
+      // 2026-07-12 fix (v1 parity): refresh فشل حقيقي (شبكة/توكن الأب
+      // منتهي). نمسح ونرمي المستخدم لـlogin. سابقاً كان الموظف يمسح
+      // فوراً حتى عند 401 عابر بدون refresh — تم الإصلاح بالسماح للـ
+      // refresh أوّلاً في AuthApi.refreshToken.
+      final isEmp = await AuthStorage.isEmployee();
+      if (isEmp) {
         await AuthStorage.clear();
         await PermissionsService.clear();
         authExpiredSignal.value = authExpiredSignal.value + 1;
       }
       return null;
     }
-    final newToken = await AuthStorage.readToken();
-    if (newToken == null) return null;
     // Prevent infinite loops: tag the retried request and skip refresh
     // if it fails a second time.
     if (failed.extra['__retried_after_refresh'] == true) return null;
     failed.extra['__retried_after_refresh'] = true;
+    // 2026-07-12 fix: الاستدعاءات الداخلية (/api/**) تستعمل token (empJWT
+    // للموظف، admin token للأدمن). الاستدعاءات المباشرة على SAS4 (لو
+    // موجودة) تستعمل sas4Token. حالياً كل الـclient calls تمر عبر
+    // /api/ فنستعمل token — لكن نحتفظ بـsas4Token في التخزين لو تُضاف
+    // استدعاءات مباشرة لاحقاً.
+    final newToken = await AuthStorage.readToken();
+    if (newToken == null) return null;
     failed.headers['Authorization'] = 'Bearer $newToken';
     failed.headers['x-auth-token'] = newToken;
     try {

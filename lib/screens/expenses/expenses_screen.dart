@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -66,9 +67,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       lastDate: DateTime.now().add(const Duration(days: 1)),
       initialDateRange: DateTimeRange(start: _from, end: _to),
       locale: const Locale('ar'),
-      helpText: 'اختر نطاق التواريخ',
-      saveText: 'حفظ',
-      cancelText: 'إلغاء',
+      helpText: 'exp.pick_range'.tr(),
+      saveText: 'common.save'.tr(),
+      cancelText: 'common.cancel'.tr(),
     );
     if (r == null) return;
     setState(() {
@@ -92,20 +93,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف الصرفية'),
+        title: Text('exp.delete_title'.tr()),
         content: Text(
-          'هل تريد حذف صرفية ${formatIQD(row.amount)} د.ع؟',
+          'exp.delete_body'.tr(namedArgs: {'amt': '${formatIQD(row.amount)} ${'common.currency'.tr()}'}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('حذف'),
+            child: Text('common.delete'.tr()),
           ),
         ],
       ),
@@ -116,8 +117,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.ok
-            ? 'تم الحذف'
-            : (result.message ?? 'تعذّر الحذف')),
+            ? 'exp.deleted'.tr()
+            : (result.message ?? 'subscribers.delete_failed'.tr())),
         backgroundColor:
             result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
@@ -137,7 +138,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'الصرفيات',
+          'more.expenses'.tr(),
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
@@ -148,7 +149,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         foregroundColor: Colors.white,
         onPressed: _openAdd,
         icon: const Icon(LucideIcons.plus, size: 16),
-        label: const Text('إضافة'),
+        label: Text('common.add'.tr()),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -226,7 +227,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'إجمالي الصرفيات',
+                      'exp.total_expenses'.tr(),
                       style: AppType.muted().copyWith(fontSize: 11),
                     ),
                     const SizedBox(height: 2),
@@ -298,13 +299,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
-            'لا توجد صرفيات في هذا النطاق',
+'exp.empty_range'.tr(),
             style: AppType.muted(color: AppColors.textHi)
                 .copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
-            'اضغط "إضافة" لتسجيل صرفية جديدة',
+            'exp.empty_hint'.tr(),
             style: AppType.muted().copyWith(fontSize: 11),
           ),
         ],

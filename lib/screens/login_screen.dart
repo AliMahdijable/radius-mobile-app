@@ -91,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
           :final canAccessManagers,
           :final canAccessPackages,
           :final isEmployee,
+          :final sas4Token,
         ):
         await AuthStorage.saveSession(
           token: token,
@@ -103,6 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
           canAccessManagers: canAccessManagers,
           canAccessPackages: canAccessPackages,
           isEmployee: isEmployee,
+          sas4Token: sas4Token,
         );
         if (!mounted) return;
         HapticFeedback.mediumImpact();

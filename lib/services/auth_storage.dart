@@ -42,6 +42,10 @@ class AuthStorage {
   // لكل شي. الفلتر هذا flag يخلي refreshToken() ترفض التجديد للموظف
   // (يستعمل empToken طول مدته 24h، ثم relogin).
   static const _kIsEmployee = 'auth.is_employee';
+  // 2026-07-12 fix: للموظف — sas4Token المخزّن منفصل عن token (empJWT).
+  // token يبقى empJWT للاستدعاءات الداخلية، sas4Token يُحدَّث عند refresh
+  // لاستدعاءات SAS4 المباشرة. لأدمن عادي، الاثنين متطابقان.
+  static const _kSas4Token = 'auth.sas4_token';
 
   static Future<void> saveSession({
     required String token,
@@ -54,6 +58,7 @@ class AuthStorage {
     bool canAccessManagers = false,
     bool canAccessPackages = false,
     bool isEmployee = false,
+    String? sas4Token,
   }) async {
     await Future.wait([
       _storage.write(key: _kToken, value: token),
@@ -67,9 +72,24 @@ class AuthStorage {
       _storage.write(
           key: _kCanAccessPackages, value: canAccessPackages ? '1' : '0'),
       _storage.write(key: _kIsEmployee, value: isEmployee ? '1' : '0'),
+      // sas4Token: للموظف نخزّنه من الـlogin response (توكن الأب). للأدمن
+      // العادي نخزّن نفس token (هو أصلاً توكن SAS4).
+      _storage.write(key: _kSas4Token, value: sas4Token ?? token),
       if (tokenExpiry != null)
         _storage.write(key: _kTokenExpiry, value: tokenExpiry),
     ]);
+  }
+
+  /// توكن SAS4 المستخدم في استدعاءات SAS4 المباشرة. للأدمن العادي هو
+  /// نفس التوكن الرئيسي؛ للموظف هو توكن الأب المحفوظ من الـlogin أو
+  /// المُجدَّد من /api/auth/refresh-token.
+  static Future<String?> readSas4Token() async {
+    return await _storage.read(key: _kSas4Token) ??
+        await _storage.read(key: _kToken);
+  }
+
+  static Future<void> saveSas4Token(String token) async {
+    await _storage.write(key: _kSas4Token, value: token);
   }
 
   /// True إذا الـuser سجل دخول كموظف (empToken). يقرأها

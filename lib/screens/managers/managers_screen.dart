@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -191,21 +192,20 @@ class _ManagersScreenState extends State<ManagersScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف المدير'),
+        title: Text('mgr.delete_title'.tr()),
         content: Text(
-          'هل تريد حذف "${m.fullName.isNotEmpty ? m.fullName : m.username}"؟ '
-          'لا يمكن التراجع.',
+          'mgr.delete_body'.tr(namedArgs: {'name': m.fullName.isNotEmpty ? m.fullName : m.username}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('حذف'),
+            child: Text('common.delete'.tr()),
           ),
         ],
       ),
@@ -216,8 +216,8 @@ class _ManagersScreenState extends State<ManagersScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.ok
-            ? 'تم الحذف'
-            : (result.message ?? 'تعذّر الحذف')),
+            ? 'exp.deleted'.tr()
+            : (result.message ?? 'subscribers.delete_failed'.tr())),
         backgroundColor:
             result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
@@ -241,7 +241,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'المدراء الفرعيون',
+          'mgr.title'.tr(),
           style: AppType.title(color: AppColors.textHi)
               .copyWith(fontSize: 16),
         ),
@@ -253,7 +253,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               foregroundColor: Colors.white,
               onPressed: _openAdd,
               icon: const Icon(LucideIcons.userPlus, size: 16),
-              label: const Text('مدير جديد'),
+              label: Text('mgr.new'.tr()),
             )
           : null,
       body: SafeArea(
@@ -333,7 +333,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                       .copyWith(fontSize: 20, letterSpacing: -0.4),
                 ),
                 Text(
-                  'إجمالي الرصيد ${formatIQD(_totalBalance)} د.ع',
+                  'mgr.total_balance'.tr(namedArgs: {'amt': '${formatIQD(_totalBalance)} ${'common.currency'.tr()}'}),
                   style: AppType.muted().copyWith(fontSize: 11),
                 ),
               ],
@@ -362,7 +362,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               controller: _searchCtrl,
               style: AppType.input(color: AppColors.textHi),
               decoration: InputDecoration(
-                hintText: 'ابحث بالاسم، اليوزر، أو الهاتف…',
+                hintText: 'mgr.search_hint'.tr(),
                 hintStyle: AppType.input(color: AppColors.textLow),
                 border: InputBorder.none,
                 isCollapsed: true,
@@ -476,8 +476,8 @@ class _ManagersScreenState extends State<ManagersScreen> {
           const SizedBox(height: 10),
           Text(
             _query.isEmpty
-                ? 'لا يوجد مدراء فرعيون بعد'
-                : 'لا توجد نتائج لـ "$_query"',
+                ? 'mgr.empty_none'.tr()
+                : 'subscribers.no_search_results'.tr(namedArgs: {'q': _query}),
             style: AppType.muted(color: AppColors.textHi)
                 .copyWith(fontSize: 13),
           ),
@@ -606,7 +606,7 @@ class _ManagerTile extends StatelessWidget {
                       icon: manager.isActive
                           ? LucideIcons.circleCheck
                           : LucideIcons.circleX,
-                      label: manager.isActive ? 'مفعّل' : 'معطّل',
+                      label: manager.isActive ? 'mgr.active'.tr() : 'subscribers.status_disabled'.tr(),
                       color: manager.isActive
                           ? AppColors.brand
                           : AppColors.error,
@@ -640,7 +640,7 @@ class _ManagerTile extends StatelessWidget {
                 children: [
                   _statChip(
                     icon: LucideIcons.wallet,
-                    label: 'رصيد',
+                    label: 'dashboard.balance'.tr(),
                     value: '${formatIQD(balance)} د.ع',
                     color: balance > 0
                         ? AppColors.brand
@@ -648,21 +648,21 @@ class _ManagerTile extends StatelessWidget {
                   ),
                   _statChip(
                     icon: LucideIcons.users,
-                    label: 'مشتركون',
+                    label: 'nav.subscribers'.tr(),
                     value: '${manager.usersCount ?? 0}',
                     color: const Color(0xFF3B82F6),
                   ),
                   if (points > 0)
                     _statChip(
                       icon: LucideIcons.star,
-                      label: 'نقاط',
+                      label: 'sheets.points'.tr(),
                       value: '${points.toInt()}',
                       color: const Color(0xFF8B5CF6),
                     ),
                   if (debt > 0)
                     _statChip(
                       icon: LucideIcons.alertTriangle,
-                      label: 'دين الساس',
+                      label: 'mgr.sas_debt'.tr(),
                       value: '${formatIQD(debt)} د.ع',
                       color: const Color(0xFFE08F2D),
                     ),
@@ -746,13 +746,14 @@ class _ManagerTile extends StatelessWidget {
 /// خيارات الترتيب — مطابق v1 (username, firstname, lastname, balance,
 /// users_count).
 enum _ManagerSort {
-  username('اليوزر', LucideIcons.atSign),
-  firstname('الاسم', LucideIcons.user),
-  lastname('الكنية', LucideIcons.userCheck),
-  balance('الرصيد', LucideIcons.wallet),
-  usersCount('المشتركون', LucideIcons.users);
+  username('sort.username', LucideIcons.atSign),
+  firstname('sort.firstname', LucideIcons.user),
+  lastname('mgr.lastname', LucideIcons.userCheck),
+  balance('dashboard.balance', LucideIcons.wallet),
+  usersCount('nav.subscribers', LucideIcons.users);
 
-  const _ManagerSort(this.label, this.icon);
-  final String label;
+  const _ManagerSort(this._key, this.icon);
+  final String _key;
+  String get label => _key.tr();
   final IconData icon;
 }

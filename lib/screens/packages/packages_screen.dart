@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -181,7 +182,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok ? 'تم حفظ الأسعار' : (r.message ?? 'تعذّر الحفظ')),
+        content: Text(r.ok ? 'pkg.prices_saved'.tr() : (r.message ?? 'devices.save_failed'.tr())),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -209,12 +210,12 @@ class _PackagesScreenState extends State<PackagesScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'الباقات',
+              'pkg.title'.tr(),
               style: AppType.title(color: AppColors.textHi)
                   .copyWith(fontSize: 16),
             ),
             Text(
-              'تعديل أسعار الباقات لكل مدير فرعي',
+              'pkg.subtitle'.tr(),
               style: AppType.muted().copyWith(fontSize: 11),
             ),
           ],
@@ -245,8 +246,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
                   : const Icon(LucideIcons.save, size: 16),
               label: Text(
                 _saving
-                    ? 'جاري الحفظ...'
-                    : 'حفظ التغييرات ($changedCount باقة)',
+                    ? 'notifs.saving'.tr()
+                    : 'pkg.save_changes'.tr(namedArgs: {'n': '$changedCount'}),
                 style: const TextStyle(
                     fontWeight: FontWeight.w700, fontSize: 14),
               ),
@@ -272,7 +273,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               // قسم المدير الفرعي — section بعنوان (مطابق screenshot v1 web)
               _sectionHeader(
                 icon: LucideIcons.users,
-                title: 'المدير الفرعي',
+                title: 'pkg.sub_manager'.tr(),
                 accent: accent,
               ),
               const SizedBox(height: 6),
