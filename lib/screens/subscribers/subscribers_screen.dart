@@ -59,7 +59,8 @@ class SubscribersScreen extends StatefulWidget {
   State<SubscribersScreen> createState() => _SubscribersScreenState();
 }
 
-class _SubscribersScreenState extends State<SubscribersScreen> {
+class _SubscribersScreenState extends State<SubscribersScreen>
+    with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
 
@@ -67,6 +68,13 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   Map<String, Map<String, dynamic>> _lastPayments = {};
   bool _loading = true;
   bool _refreshing = false;
+  /// مطلب المستخدم 2026-07-12: تحديث صامت كل 5 ثواني حتى الحالة
+  /// (online/offline/expiration) تبقى fresh بدون تدخّل الأدمن. الـtimer
+  /// يوقفه AppLifecycle لما التطبيق يروح للـbackground حتى ما يستهلك
+  /// بطارية/data بلا فائدة.
+  Timer? _autoRefreshTimer;
+  static const _autoRefreshInterval = Duration(seconds: 5);
+  bool _appActive = true;
 
   // Probe wave state — set when a wave is running so the AppBar can
   // surface a small spinner. Bumped each call to invalidate any
@@ -101,6 +109,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
     _applyDefaultSortFor(_filter);
     widget.filterCmd?.addListener(_onFilterCmd);
@@ -110,6 +119,46 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
     _load();
     _searchCtrl.addListener(_onSearchChanged);
+    _startAutoRefresh();
+  }
+
+  /// Timer صامت — يفجّر _silentRefresh كل 5 ثواني ما دام التطبيق active.
+  /// نلغي ونعيد التشغيل عند resume، ونوقف تماماً في pause/inactive.
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (!mounted || !_appActive) return;
+      // نتفادى overlap مع pull-to-refresh أو _load الأولي. نستخدم
+      // نافذة زمنية بدل قفل صريح — لو حصل sync أثناء poll، الـpoll
+      // يتخطّى ويأخذ الدور التالي بعد 5 ثواني.
+      if (_refreshing || _loading) return;
+      _silentRefresh();
+    });
+  }
+
+  Future<void> _silentRefresh() async {
+    // لا نُفعّل _refreshing حتى ما تظهر أي مؤشرات UI — تحديث خفي بالكامل.
+    // _fetchAndMerge يستفيد من cache الـ45 ثانية على قائمة المشتركين لكن
+    // يجيب online status حديث في كل مرة (loadOnline لا يُخزَّن).
+    try {
+      await _fetchAndMerge();
+    } catch (_) {
+      // silent — لا نُشوّش المستخدم بأخطاء polling. الـpull-to-refresh
+      // يُعيد المحاولة صريحاً لو الاتصال انقطع.
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appActive = state == AppLifecycleState.resumed;
+    if (_appActive) {
+      // عند الرجوع من الـbackground: refresh فوري + إعادة تشغيل timer.
+      // Timer.periodic لا يُلغى تلقائياً في pause، بس رح يتخطّى بسبب
+      // _appActive check — نُعيد التأكيد بإعادة الإنشاء.
+      _startAutoRefresh();
+      if (!_refreshing && !_loading) _silentRefresh();
+    }
+    super.didChangeAppLifecycleState(state);
   }
 
   void _onDataChanged() {
@@ -140,6 +189,8 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoRefreshTimer?.cancel();
     widget.filterCmd?.removeListener(_onFilterCmd);
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     _debounce?.cancel();
