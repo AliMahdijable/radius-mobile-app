@@ -172,7 +172,10 @@ class Subscriber {
     final idRaw = j['id'] ?? j['idx'];
     return Subscriber(
       idx: idRaw?.toString(),
-      username: (j['username'] ?? '').toString(),
+      // .trim() — دفاع أمامي: SAS4 قد يعطي username مع مسافة زائدة
+      // (حادثة ame@rezz 2026-07-13). backend يُنقّي منها الآن كذلك،
+      // هذا layer إضافي في حال أي مسار جديد يمرّر raw JSON.
+      username: (j['username'] ?? '').toString().trim(),
       firstname: (j['firstname'] ?? '').toString(),
       lastname: (j['lastname'] ?? '').toString(),
       phone: j['phone']?.toString(),

@@ -240,7 +240,12 @@ class SubscribersApi {
       }
       for (final row in rows) {
         if (row is! Map) continue;
-        final u = row['username']?.toString().toLowerCase();
+        // .trim() — defense-in-depth: لو SAS4 رجّع username بمسافة زائدة
+        // ولم يُنقَ في backend، الـmap يستعمل مفتاح مطابق للـsubscribers list
+        // (اللي كذلك يُطبَّق عليه .trim() في backend الآن). حادثة ame@rezz
+        // 2026-07-13 — كان "ame@rezz " مع مسافة يمنع merge كل معلومات
+        // الاتصال حتى للـsubscriber online.
+        final u = row['username']?.toString().trim().toLowerCase();
         if (u == null || u.isEmpty) continue;
         out[u] = OnlineSessionInfo(
           ip: row['ip']?.toString(),
