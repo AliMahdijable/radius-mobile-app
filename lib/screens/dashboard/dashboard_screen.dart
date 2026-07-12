@@ -13,6 +13,7 @@ import '../../services/auth_storage.dart';
 import '../../services/inbox_service.dart';
 import '../../services/subscriber_events.dart';
 import '../notifications/inbox_screen.dart';
+import '../reports/activity_log_report_screen.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -257,7 +258,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ? 'dashboard.recent_activity_fetch_failed'.tr()
                             : 'dashboard.recent_activity_label'.tr(),
                     trailingLabel: 'dashboard.view_all'.tr(),
-                    onTrailingTap: () {},
+                    // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
+                    // لسجل النشاط الكامل. الـPermissionGate يتأكد من
+                    // reports.activity_log؛ لو الموظف بلا صلاحية يرى
+                    // شاشة رفض بدل الشاشة الفارغة.
+                    onTrailingTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ActivityLogReportScreen(),
+                      ),
+                    ),
                   ),
                   if (!_activationsLoaded)
                     const _ActivitiesLoading()
