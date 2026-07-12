@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../api/device_probe_api.dart';
@@ -6,6 +7,7 @@ import '../services/alerts_service.dart';
 import '../services/auth_storage.dart';
 import '../services/fcm_service.dart';
 import '../services/inbox_service.dart';
+import '../services/locale_service.dart';
 import '../services/permissions_service.dart';
 import '../services/theme_service.dart';
 import '../theme/colors.dart';
@@ -49,21 +51,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(R.lg),
         ),
-        title: Text('تأكيد تسجيل الخروج',
+        title: Text('settings.logout_title'.tr(),
             style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 18)),
         content: Text(
-          'سيتم مسح الجلسة المحفوظة وستحتاج لتسجيل الدخول من جديد.',
+          'settings.logout_body'.tr(),
           style: AppType.subtitle(color: AppColors.textMid)
               .copyWith(height: 1.55),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('إلغاء', style: AppType.button(color: AppColors.textMid)),
+            child: Text('common.cancel'.tr(),
+                style: AppType.button(color: AppColors.textMid)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('خروج', style: AppType.button(color: AppColors.error)),
+            child: Text('common.logout'.tr(),
+                style: AppType.button(color: AppColors.error)),
           ),
         ],
       ),
@@ -111,13 +115,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               surfaceTintColor: Colors.transparent,
               foregroundColor: AppColors.textHi,
               title: Text(
-                'الإعدادات',
+                'settings.title'.tr(),
                 style: AppType.title(color: AppColors.textHi)
                     .copyWith(fontSize: 18, fontWeight: FontWeight.w800),
               ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
-                tooltip: 'رجوع',
+                tooltip: 'common.back'.tr(),
                 onPressed: () => Navigator.of(context).maybePop(),
               ),
             )
@@ -135,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (!canPop)
               Padding(
                 padding: const EdgeInsets.only(bottom: Sp.lg),
-                child: Text('الإعدادات',
+                child: Text('settings.title'.tr(),
                     style: AppType.title(color: AppColors.textHi)
                         .copyWith(fontSize: 22)),
               ),
@@ -150,11 +154,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // محمي بمفتاحه.
             if (Perms.hasAny(
                 const ['whatsapp.connect', 'whatsapp.templates'])) ...[
-              _SectionLabel('الواتساب'),
+              _SectionLabel('settings.whatsapp'.tr()),
               if (Perms.has('whatsapp.connect'))
                 _Row(
                   icon: Icons.chat_bubble_outline_rounded,
-                  label: 'حالة الواتساب',
+                  label: 'settings.whatsapp_status'.tr(),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const WhatsAppStatusScreen(),
@@ -167,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (Perms.has('whatsapp.templates'))
                 _Row(
                   icon: Icons.message_outlined,
-                  label: 'قوالب الواتساب',
+                  label: 'settings.whatsapp_templates'.tr(),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const WhatsAppTemplatesScreen(),
@@ -178,10 +182,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
             // اعتمادات الأجهزة = إعدادات حسّاسة، نقفلها بـsettings.edit.
             if (Perms.has('settings.edit')) ...[
-              _SectionLabel('الأجهزة'),
+              _SectionLabel('settings.devices'.tr()),
               _Row(
                 icon: Icons.router_outlined,
-                label: 'اعتمادات ONU / Ubiquiti',
+                label: 'settings.device_creds'.tr(),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const DeviceDefaultsScreen(),
@@ -190,20 +194,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: Sp.md),
             ],
-            _SectionLabel('الطباعة'),
+            _SectionLabel('settings.printing'.tr()),
             _Row(
               icon: Icons.print_outlined,
-              label: 'طابعة الوصولات',
-              onTap: () => _todo(context, 'الطباعة — قيد التطوير'),
+              label: 'settings.receipt_printer'.tr(),
+              onTap: () => _todo(context, 'settings.todo_printer'.tr()),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.receipt_long_outlined,
-              label: 'قوالب الطباعة',
-              onTap: () => _todo(context, 'قوالب الطباعة — قيد التطوير'),
+              label: 'settings.print_templates'.tr(),
+              onTap: () => _todo(context, 'settings.todo_print_templates'.tr()),
             ),
             const SizedBox(height: Sp.md),
-            _SectionLabel('التطبيق'),
+            _SectionLabel('settings.app'.tr()),
             ValueListenableBuilder<ThemeMode>(
               valueListenable: ThemeService.notifier,
               builder: (_, mode, __) => _Row(
@@ -212,15 +216,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : mode == ThemeMode.light
                         ? Icons.light_mode_rounded
                         : Icons.brightness_auto_rounded,
-                label: 'المظهر',
-                trailing: ThemeService.labelFor(mode),
+                label: 'settings.theme'.tr(),
+                trailing: _themeLabel(mode),
                 onTap: () => _openThemePicker(context),
               ),
             ),
             const SizedBox(height: Sp.xs),
+            // مطلب 2026-07-12: صف اللغة يفتح picker (عربي / English).
+            _Row(
+              icon: Icons.language_rounded,
+              label: 'settings.language'.tr(),
+              trailing: LocaleService.labelFor(context.locale),
+              onTap: () => _openLanguagePicker(context),
+            ),
+            const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.lock_outline_rounded,
-              label: 'صلاحيات التطبيق',
+              label: 'settings.permissions'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const AppPermissionsScreen(),
@@ -230,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: Sp.xs),
             _Row(
               icon: Icons.notifications_none_rounded,
-              label: 'الإشعارات وأوقات السكون',
+              label: 'settings.notifications'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const NotificationsSettingsScreen(),
@@ -238,10 +250,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: Sp.md),
-            _SectionLabel('عن التطبيق'),
+            _SectionLabel('settings.about'.tr()),
             _Row(
               icon: Icons.info_outline_rounded,
-              label: 'الإصدار',
+              label: 'settings.version'.tr(),
               trailing: 'V2.0.0',
             ),
             const SizedBox(height: Sp.huge),
@@ -256,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _logout,
                   child: Center(
                     child: Text(
-                      'تسجيل الخروج',
+                      'common.logout'.tr(),
                       style: AppType.button(color: AppColors.error),
                     ),
                   ),
@@ -359,6 +371,104 @@ void _openThemePicker(BuildContext ctx) {
   );
 }
 
+/// النص المعروض على السطر الرئيسي بجانب "المظهر" — يترجم حسب اللغة
+/// الحالية بدل ThemeService.labelFor الثابت العربي.
+String _themeLabel(ThemeMode mode) {
+  switch (mode) {
+    case ThemeMode.light:
+      return 'settings.theme_light'.tr();
+    case ThemeMode.dark:
+      return 'settings.theme_dark'.tr();
+    case ThemeMode.system:
+      return 'settings.theme_system'.tr();
+  }
+}
+
+void _openLanguagePicker(BuildContext ctx) {
+  showModalBottomSheet<void>(
+    context: ctx,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: false,
+    builder: (_) => const _LanguagePickerSheet(),
+  );
+}
+
+class _LanguagePickerSheet extends StatelessWidget {
+  const _LanguagePickerSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final current = context.locale;
+    return Material(
+      color: AppColors.surface,
+      borderRadius:
+          const BorderRadius.vertical(top: Radius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+              Text(
+                'settings.language'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'settings.language_hint'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.subtitle(color: AppColors.textMid)
+                    .copyWith(fontSize: 12, height: 1.5),
+              ),
+              const SizedBox(height: Sp.lg),
+              _ThemeOptionTile(
+                icon: Icons.language_rounded,
+                label: 'settings.language_arabic'.tr(),
+                subtitle: 'العربية · RTL',
+                selected: current.languageCode == 'ar',
+                onTap: () async {
+                  await LocaleService.setLocale(
+                      context, LocaleService.arabic);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+              ),
+              const SizedBox(height: Sp.xs),
+              _ThemeOptionTile(
+                icon: Icons.language_rounded,
+                label: 'settings.language_english'.tr(),
+                subtitle: 'English · LTR',
+                selected: current.languageCode == 'en',
+                onTap: () async {
+                  await LocaleService.setLocale(
+                      context, LocaleService.english);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ThemePickerSheet extends StatelessWidget {
   const _ThemePickerSheet();
 
@@ -390,14 +500,14 @@ class _ThemePickerSheet extends StatelessWidget {
               ),
               const SizedBox(height: Sp.md),
               Text(
-                'المظهر',
+                'settings.theme'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.title(color: AppColors.textHi)
                     .copyWith(fontSize: 18),
               ),
               const SizedBox(height: 4),
               Text(
-                'يحدد ألوان التطبيق — التلقائي يتبع إعدادات النظام.',
+                'settings.theme_desc'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.subtitle(color: AppColors.textMid)
                     .copyWith(fontSize: 12, height: 1.5),
@@ -409,8 +519,8 @@ class _ThemePickerSheet extends StatelessWidget {
                   children: [
                     _ThemeOptionTile(
                       icon: Icons.brightness_auto_rounded,
-                      label: 'تلقائي',
-                      subtitle: 'يتبع إعدادات النظام',
+                      label: 'settings.theme_system'.tr(),
+                      subtitle: 'settings.theme_system_desc'.tr(),
                       selected: current == ThemeMode.system,
                       onTap: () async {
                         await ThemeService.setMode(ThemeMode.system);
@@ -420,8 +530,8 @@ class _ThemePickerSheet extends StatelessWidget {
                     const SizedBox(height: Sp.xs),
                     _ThemeOptionTile(
                       icon: Icons.light_mode_rounded,
-                      label: 'فاتح',
-                      subtitle: 'خلفية بيضاء + ألوان نهارية',
+                      label: 'settings.theme_light'.tr(),
+                      subtitle: 'settings.theme_light_desc'.tr(),
                       selected: current == ThemeMode.light,
                       onTap: () async {
                         await ThemeService.setMode(ThemeMode.light);
@@ -431,8 +541,8 @@ class _ThemePickerSheet extends StatelessWidget {
                     const SizedBox(height: Sp.xs),
                     _ThemeOptionTile(
                       icon: Icons.dark_mode_rounded,
-                      label: 'داكن',
-                      subtitle: 'خلفية داكنة — مريح للعين ليلاً',
+                      label: 'settings.theme_dark'.tr(),
+                      subtitle: 'settings.theme_dark_desc'.tr(),
                       selected: current == ThemeMode.dark,
                       onTap: () async {
                         await ThemeService.setMode(ThemeMode.dark);

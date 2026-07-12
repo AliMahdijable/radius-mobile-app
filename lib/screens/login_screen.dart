@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -69,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final user = _userCtrl.text.trim();
     final pass = _passCtrl.text;
     if (user.isEmpty || pass.isEmpty) {
-      _showSnack('فضلاً أدخل اسم المستخدم وكلمة المرور.', error: true);
+      _showSnack('login.enter_credentials'.tr(), error: true);
       return;
     }
     HapticFeedback.lightImpact();
@@ -106,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
         HapticFeedback.mediumImpact();
         if (requires2fa) {
-          _showSnack('تم الدخول — يحتاج تحقق ثنائي');
+          _showSnack('login.needs_2fa'.tr());
           // TODO[2fa-screen]: route to 2FA when that screen exists.
           return;
         }
@@ -118,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!permsOk) {
           await PermissionsService.clear();
           if (!mounted) return;
-          _showSnack('تعذّر جلب الصلاحيات — حاول مرة أخرى', error: true);
+          _showSnack('login.perms_fetch_failed'.tr(), error: true);
           return;
         }
         // نُسجّل FCM بعد إتمام الجلسة + جلب الصلاحيات. آمنة الفشل —
@@ -137,14 +138,13 @@ class _LoginScreenState extends State<LoginScreen> {
     HapticFeedback.selectionClick();
     final token = await AuthStorage.readToken();
     if (token == null || token.isEmpty) {
-      _showSnack('سجّل الدخول مرة بكلمة المرور أولاً ليتفعّل الدخول السريع.',
-          error: true);
+      _showSnack('login.password_login_first'.tr(), error: true);
       return;
     }
     final auth = LocalAuthentication();
     try {
       final ok = await auth.authenticate(
-        localizedReason: 'استخدم بصمتك أو Face ID للدخول',
+        localizedReason: 'login.biometric_reason'.tr(),
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
@@ -159,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (_) {
       if (!mounted) return;
-      _showSnack('الجهاز لا يدعم البصمة أو لم يتم تفعيلها.', error: true);
+      _showSnack('login.biometric_unavailable'.tr(), error: true);
     }
   }
 
@@ -287,7 +287,7 @@ class _BrandTitle extends StatelessWidget {
         ),
         const SizedBox(height: Sp.xs),
         Text(
-          'إدارة ذكية لمزود الإنترنت',
+          'login.subtitle'.tr(),
           textAlign: TextAlign.center,
           style: AppType.subtitle(color: AppColors.textMid),
         ),
@@ -341,19 +341,19 @@ class _FormCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _LabeledInput(
-            label: 'اسم المستخدم',
+            label: 'login.username'.tr(),
             child: TextField(
               controller: userCtrl,
               focusNode: userFocus,
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => passFocus.requestFocus(),
               style: AppType.input(color: AppColors.textHi),
-              decoration: _decoration(hint: 'مثلاً admin@ali300'),
+              decoration: _decoration(hint: 'login.username_hint'.tr()),
             ),
           ),
           const SizedBox(height: Sp.lg),
           _LabeledInput(
-            label: 'كلمة المرور',
+            label: 'login.password'.tr(),
             child: TextField(
               controller: passCtrl,
               focusNode: passFocus,
@@ -389,7 +389,11 @@ class _FormCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Sp.lg),
-          _PrimaryButton(label: 'دخول', loading: loading, onTap: onLogin),
+          _PrimaryButton(
+            label: 'login.sign_in'.tr(),
+            loading: loading,
+            onTap: onLogin,
+          ),
         ],
       ),
     );
@@ -485,7 +489,7 @@ class _RememberToggle extends StatelessWidget {
                     : null,
               ),
               const SizedBox(width: Sp.sm),
-              Text('تذكرني',
+              Text('login.remember_me'.tr(),
                   style: AppType.link(color: AppColors.textHi)),
             ],
           ),
@@ -555,7 +559,7 @@ class _BiometricButton extends StatelessWidget {
                   color: AppColors.brand, size: 22),
               const SizedBox(width: Sp.sm),
               Text(
-                'دخول بالبصمة أو Face ID',
+                'login.biometric_prompt'.tr(),
                 style: AppType.button(color: AppColors.brand),
               ),
             ],
@@ -573,7 +577,7 @@ class _Footer extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Center(
       child: Text(
-        'v2.0  •  جميع الحقوق محفوظة',
+        'v2.0  •  ${'login.footer_copyright'.tr()}',
         style: AppType.muted(color: AppColors.textLow),
       ),
     );

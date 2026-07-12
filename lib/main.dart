@@ -1,9 +1,9 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
@@ -11,6 +11,7 @@ import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_service.dart';
 import 'services/inbox_service.dart';
+import 'services/locale_service.dart';
 import 'services/notification_service.dart';
 import 'services/permissions_service.dart';
 import 'services/theme_service.dart';
@@ -18,6 +19,11 @@ import 'theme/colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // easy_localization يحتاج init قبل runApp — يحمّل الـcache ويتأكّد إن
+  // الـstorage جاهز حتى الـsaveLocale يشتغل من اللحظة الأولى. مطلب
+  // 2026-07-12: التطبيق يدعم عربي/إنجليزي مع حفظ اختيار المستخدم.
+  await EasyLocalization.ensureInitialized();
 
   // Load the user's saved theme preference BEFORE the first frame so we
   // don't paint a light flash then snap to dark on the next tick. The
@@ -49,7 +55,21 @@ void main() async {
     NotificationService.markFirebaseReady(false);
   }
 
-  runApp(const MyServicesApp());
+  runApp(
+    EasyLocalization(
+      // اللغتان المدعومتان (نتّبع نفس ثوابت LocaleService حتى المكوّنات
+      // الأخرى تعتمد نفس المصدر). Fallback عربي — لغة التطبيق الأصلية.
+      supportedLocales: LocaleService.supported,
+      path: 'assets/translations',
+      fallbackLocale: LocaleService.arabic,
+      // saveLocale: EasyLocalization يحفظ اللغة في SharedPreferences
+      // ويستعيدها عند التشغيل التالي — بدون كود إضافي.
+      saveLocale: true,
+      // startLocale: null → EasyLocalization يستعيد آخر اختيار محفوظ،
+      // وإلا يقع على fallback. المستخدم الجديد يبدأ عربي.
+      child: const MyServicesApp(),
+    ),
+  );
 }
 
 /// المرجع الأساسي للـNavigator — نستعمله لعرض الـInAppNotificationBanner
@@ -135,20 +155,17 @@ class _MyServicesAppState extends State<MyServicesApp>
           themeMode: mode,
           theme: _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),
-          locale: const Locale('ar'),
-          supportedLocales: const [Locale('ar'), Locale('en')],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          builder: (context, child) => Directionality(
-            textDirection: TextDirection.rtl,
-            child: MediaQuery.withClampedTextScaling(
-              minScaleFactor: 0.9,
-              maxScaleFactor: 1.2,
-              child: child ?? const SizedBox.shrink(),
-            ),
+          // مطلب 2026-07-12: اللغة تُقرأ من EasyLocalization لتصبح reactive
+          // على tap زر التبديل. MaterialApp نفسه يحدّد Directionality
+          // تلقائياً من الـlocale (ar → rtl, en → ltr) — أزلنا builder
+          // اليدوي اللي كان يجبر rtl.
+          locale: context.locale,
+          supportedLocales: context.supportedLocales,
+          localizationsDelegates: context.localizationDelegates,
+          builder: (context, child) => MediaQuery.withClampedTextScaling(
+            minScaleFactor: 0.9,
+            maxScaleFactor: 1.2,
+            child: child ?? const SizedBox.shrink(),
           ),
           home: const SplashScreen(),
           navigatorKey: _appNavigatorKey,
@@ -195,10 +212,10 @@ class _MyServicesAppState extends State<MyServicesApp>
               error: AppColors.error,
             ),
       splashFactory: InkSparkle.splashFactory,
-      // Swipe-to-back gesture من الحافة اليمنى في RTL — لأن الـMaterialApp
-      // مضبوطة على Locale('ar') + Directionality.rtl، الـCupertino
-      // page-transition تلقائياً تعكس اتجاه الـswipe. iOS النمط الأصلي،
-      // Android نُطبّقه صراحةً حتى نحصل على نفس السلوك.
+      // Swipe-to-back gesture — Cupertino page-transitions تعكس الاتجاه
+      // تلقائياً حسب Directionality: في RTL يكون Swipe من اليمين، وفي
+      // LTR (إنجليزي) من اليسار. iOS النمط الأصلي، Android نُطبّقه
+      // صراحةً لنفس السلوك.
       pageTransitionsTheme: PageTransitionsTheme(
         builders: {
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),

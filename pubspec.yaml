@@ -69,6 +69,13 @@ dependencies:
   share_plus: ^10.0.0
   path_provider: ^2.1.4
 
+  # Localization — نظام i18n بسيط قائم على JSON. يشتغل جنباً إلى جنب مع
+  # flutter_localizations (الأخير للـMaterial widgets). سبب الاختيار على
+  # ARB: 'button.save'.tr() أقصر بكثير من AppLocalizations.of(context)!.buttonSave.
+  # مطلب 2026-07-12.
+  easy_localization: ^3.0.7
+  shared_preferences: ^2.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -92,3 +99,4 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/translations/
