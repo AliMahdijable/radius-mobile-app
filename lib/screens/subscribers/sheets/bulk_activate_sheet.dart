@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -46,9 +47,9 @@ enum _PayMethod { debt, cash, partial }
 
 extension _PayMethodX on _PayMethod {
   String get label => switch (this) {
-        _PayMethod.debt => 'دين',
-        _PayMethod.cash => 'نقدي',
-        _PayMethod.partial => 'جزئي',
+        _PayMethod.debt => 'sheets.pay_debt'.tr(),
+        _PayMethod.cash => 'sheets.pay_cash'.tr(),
+        _PayMethod.partial => 'sheets.pay_partial'.tr(),
       };
   IconData get icon => switch (this) {
         _PayMethod.debt => LucideIcons.creditCard,
@@ -323,25 +324,29 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          'تأكيد تجديد ${ready.length} اشتراك',
+          'sheets.confirm_bulk_renew'.tr(namedArgs: {'n': '${ready.length}'}),
           style: AppType.label(color: AppColors.textHi)
               .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         content: Text(
-          'دين: ${s.debt} · نقدي: ${s.cash} · جزئي: ${s.partial}\n'
-          'إجمالي المقبوض نقداً: ${formatIQD(s.cashTotal.round())} د.ع\n\n'
-          'هل تريد المتابعة؟',
+          'sheets.bulk_renew_summary'.tr(namedArgs: {
+            'debt': '${s.debt}',
+            'cash': '${s.cash}',
+            'partial': '${s.partial}',
+            'total': formatIQD(s.cashTotal.round()),
+            'currency': 'common.currency'.tr(),
+          }),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('تجديد الآن'),
+            child: Text('sheets.renew_now'.tr()),
           ),
         ],
       ),
@@ -365,7 +370,7 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
     for (final r in ready) {
       if (r.sub.idx == null || r.data == null) {
         r.ok = false;
-        r.err = 'بيانات ناقصة';
+        r.err = 'sheets.missing_data'.tr();
         if (mounted) setState(() => _doneCount++);
         continue;
       }
@@ -393,8 +398,8 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
       SnackBar(
         content: Text(
           failCount == 0
-              ? 'تم تجديد $okCount اشتراك'
-              : 'تم: $okCount — فشل: $failCount',
+              ? 'sheets.renewed_n'.tr(namedArgs: {'n': '$okCount'})
+              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}),
         ),
         backgroundColor:
             failCount == 0 ? AppColors.brand : AppColors.error,
@@ -427,11 +432,11 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
               _SheetHandle(),
               _SheetHeader(
                 icon: LucideIcons.calendarPlus,
-                title: 'تجديد جماعي',
+                title: 'sheets.bulk_renew_title'.tr(),
                 subtitle: _loading
-                    ? 'جلب بيانات التفعيل...'
-                    : '${widget.subs.length} مشترك'
-                        '${s.failed > 0 ? ' (فشل تحميل ${s.failed})' : ''}',
+                    ? 'sheets.loading_activation_data'.tr()
+                    : '${widget.subs.length} ${'dashboard.subscriber_singular'.tr()}'
+                        '${s.failed > 0 ? ' (${'sheets.load_failed_n'.tr(namedArgs: {'n': '${s.failed}'})})' : ''}',
                 color: AppColors.brand,
                 onClose: _submitting
                     ? null
@@ -471,9 +476,16 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
               ),
               _SubmitBar(
                 label: _submitting
-                    ? 'جاري التجديد... $_doneCount/${s.debt + s.cash + s.partial}'
-                    : 'تجديد ${s.debt + s.cash + s.partial} اشتراك'
-                        '${s.cashTotal > 0 ? ' (${formatIQD(s.cashTotal.round())} د.ع نقداً)' : ''}',
+                    ? 'sheets.renewing_progress'.tr(namedArgs: {
+                        'done': '$_doneCount',
+                        'total': '${s.debt + s.cash + s.partial}',
+                      })
+                    : 'sheets.renew_n_subs'.tr(namedArgs: {
+                          'n': '${s.debt + s.cash + s.partial}',
+                        }) +
+                        (s.cashTotal > 0
+                            ? ' (${formatIQD(s.cashTotal.round())} ${'common.currency'.tr()} ${'sheets.cash_word'.tr()})'
+                            : ''),
                 color: AppColors.brand,
                 icon: LucideIcons.calendarPlus,
                 enabled: _canSubmit,
@@ -504,23 +516,23 @@ class _SummaryStrip extends StatelessWidget {
       child: Row(
         children: [
           _SummaryChip(
-              label: 'دين',
+              label: 'sheets.pay_debt'.tr(),
               count: summary.debt,
               color: AppColors.error),
           const SizedBox(width: 6),
           _SummaryChip(
-              label: 'نقدي',
+              label: 'sheets.pay_cash'.tr(),
               count: summary.cash,
               color: AppColors.brand),
           const SizedBox(width: 6),
           _SummaryChip(
-              label: 'جزئي',
+              label: 'sheets.pay_partial'.tr(),
               count: summary.partial,
               color: const Color(0xFF8B5CF6)),
           const Spacer(),
           if (summary.cashTotal > 0)
             Text(
-              '${formatIQD(summary.cashTotal.round())} د.ع',
+              '${formatIQD(summary.cashTotal.round())} ${'common.currency'.tr()}',
               style: AppType.label(color: AppColors.textHi).copyWith(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -578,7 +590,7 @@ class _SetAllRow extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            'تعيين للكل:',
+            'sheets.set_all'.tr(),
             style: AppType.muted(color: AppColors.textMid).copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -753,7 +765,7 @@ class _RenewRowCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  row.currentBalance < 0 ? 'دين حالي ' : 'رصيد حالي ',
+                  row.currentBalance < 0 ? '${'sheets.current_debt'.tr()} ' : '${'sheets.current_credit'.tr()} ',
                   style: AppType.muted(color: AppColors.textMid).copyWith(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -873,7 +885,7 @@ class _FailedRowCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  'تعذّر جلب بيانات التفعيل — لن يُجدَّد',
+                  'sheets.bulk_row_fetch_failed'.tr(),
                   style: AppType.muted(color: AppColors.error).copyWith(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -1028,7 +1040,7 @@ class _PartialField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'المبلغ المدفوع نقداً',
+            'sheets.paid_cash_amount'.tr(),
             style: AppType.label(color: AppColors.textHi).copyWith(
               fontSize: 10,
               fontWeight: FontWeight.w700,
@@ -1086,7 +1098,7 @@ class _PartialField extends StatelessWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'الفائض ${formatIQD((row.partialAmount - price).round())} د.ع سيُسجَّل رصيداً',
+                    'sheets.overpay_becomes_credit'.tr(namedArgs: {'amt': '${formatIQD((row.partialAmount - price).round())} ${'common.currency'.tr()}'}),
                     style:
                         AppType.muted(color: const Color(0xFF14B8A6))
                             .copyWith(
@@ -1145,7 +1157,7 @@ class _PartialTextFieldState extends State<_PartialTextField> {
       keyboardType: TextInputType.number,
       style: AppType.input(color: AppColors.textHi),
       decoration: InputDecoration(
-        hintText: 'مثلاً 10,000',
+        hintText: 'sheets.amount_example_10k'.tr(),
         hintStyle: AppType.input(color: AppColors.textLow),
         filled: true,
         fillColor: AppColors.surface,
@@ -1156,7 +1168,7 @@ class _PartialTextFieldState extends State<_PartialTextField> {
         isDense: true,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        suffixText: 'د.ع',
+        suffixText: 'common.currency'.tr(),
       ),
     );
   }
@@ -1183,7 +1195,7 @@ class _AfterRow extends StatelessWidget {
           Icon(LucideIcons.arrowRight, color: color, size: 12),
           const SizedBox(width: 4),
           Text(
-            'بعد التجديد',
+            'sheets.after_renewal'.tr(),
             style: AppType.label(color: AppColors.textHi).copyWith(
               fontSize: 10,
               fontWeight: FontWeight.w700,
@@ -1191,7 +1203,7 @@ class _AfterRow extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            isDebt ? 'دين ' : 'رصيد ',
+            isDebt ? '${'subscribers.debt_short'.tr()} ' : '${'subscribers.balance_short'.tr()} ',
             style: AppType.muted(color: color).copyWith(
               fontSize: 9,
               fontWeight: FontWeight.w700,

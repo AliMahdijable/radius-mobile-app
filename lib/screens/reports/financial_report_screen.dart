@@ -416,10 +416,20 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     }
   }
 
+  // مطلب المستخدم 2026-07-12: إشعارات الانتهاء الآلية ما تخص التقرير
+  // المالي — نستثنيها قبل أي فلترة إضافية.
+  static const _excludedTypes = {
+    'EXPIRY_NOTIFICATION',
+    'NEAR_EXPIRY_NOTIFICATION',
+    'AUTO_NOTIFICATION',
+  };
+
   List<FinanceLog> _filterLogs(List<FinanceLog> logs) {
+    final base = logs
+        .where((l) => !_excludedTypes.contains(l.actionType.toUpperCase().trim()));
     final types = _filters.actionTypes;
-    if (types == null || types.isEmpty) return logs;
-    return logs
+    if (types == null || types.isEmpty) return base.toList();
+    return base
         .where((l) => types.any((t) => _matchesFinancialType(l, t)))
         .toList();
   }

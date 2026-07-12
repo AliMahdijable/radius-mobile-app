@@ -40,12 +40,23 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
   /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
   ReportFilters _filters = const ReportFilters();
 
+  // مطلب المستخدم 2026-07-12: نستثني الإشعارات الآليّة من كل التقارير
+  // (EXPIRY_NOTIFICATION، AUTO_NOTIFICATION، NEAR_EXPIRY_NOTIFICATION). ما
+  // تخص المدير كحركة يدوية — نبقيها في inbox فقط.
+  static const _excludedTypes = {
+    'EXPIRY_NOTIFICATION',
+    'NEAR_EXPIRY_NOTIFICATION',
+    'AUTO_NOTIFICATION',
+  };
+
   // فلتر النوع القديم استُبدل بـReportFiltersPanel multi-select.
   List<ActivityRow> get _visibleRows {
+    final base = _rows.where(
+        (r) => !_excludedTypes.contains(r.actionType.toUpperCase().trim()));
     final types = _filters.actionTypes;
-    if (types == null || types.isEmpty) return _rows;
+    if (types == null || types.isEmpty) return base.toList();
     final wanted = types.toSet();
-    return _rows
+    return base
         .where((r) => wanted.contains(r.actionType.toUpperCase().trim()))
         .toList();
   }

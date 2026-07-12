@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -188,7 +189,7 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
     for (final r in ready) {
       if (r.sub.idx == null) {
         r.ok = false;
-        r.err = 'بدون idx';
+        r.err = 'sheets.no_idx'.tr();
         if (mounted) setState(() => _doneCount++);
         continue;
       }
@@ -213,8 +214,8 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
       SnackBar(
         content: Text(
           failCount == 0
-              ? 'تم تسديد $okCount مشترك'
-              : 'تم: $okCount — فشل: $failCount',
+              ? 'sheets.paid_n_subs'.tr(namedArgs: {'n': '$okCount'})
+              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}),
         ),
         backgroundColor:
             failCount == 0 ? const Color(0xFF14B8A6) : AppColors.error,
@@ -250,7 +251,7 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
               _SheetHandle(),
               _SheetHeader(
                 icon: LucideIcons.banknote,
-                title: 'تسديد دين جماعي',
+                title: 'sheets.bulk_pay_debt_title'.tr(),
                 subtitle: '${_rows.length} مشترك',
                 color: accent,
                 onClose: _submitting
@@ -291,8 +292,8 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
               ),
               _SubmitBar(
                 label: _submitting
-                    ? 'جاري التسديد... ${_doneCount}/${s.readyCount}'
-                    : 'تسديد ${s.readyCount} مشترك (${formatIQD(s.totalCash.round())} د.ع)',
+                    ? 'sheets.paying_progress'.tr(namedArgs: {'done': '$_doneCount', 'total': '${s.readyCount}'})
+                    : 'sheets.pay_n_subs'.tr(namedArgs: {'n': '${s.readyCount}', 'amt': '${formatIQD(s.totalCash.round())} ${'common.currency'.tr()}'}),
                 color: accent,
                 icon: LucideIcons.banknote,
                 enabled: _canSubmit,
@@ -343,7 +344,7 @@ class _SummaryStrip extends StatelessWidget {
               ),
             ),
             child: Text(
-              'جاهز $readyCount / $totalRows',
+              'sheets.ready_of'.tr(namedArgs: {'ready': '$readyCount', 'total': '$totalRows'}),
               style: AppType.muted(color: const Color(0xFF14B8A6))
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
             ),
@@ -351,7 +352,7 @@ class _SummaryStrip extends StatelessWidget {
           const Spacer(),
           if (submitting)
             Text(
-              'تم $doneCount',
+              'sheets.done_n'.tr(namedArgs: {'n': '$doneCount'}),
               style: AppType.muted(color: AppColors.textMid).copyWith(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -359,7 +360,7 @@ class _SummaryStrip extends StatelessWidget {
             )
           else
             Text(
-              'المجموع: ${formatIQD(totalCash.round())} د.ع',
+              '${'sheets.total_label'.tr()}: ${formatIQD(totalCash.round())} ${'common.currency'.tr()}',
               style: AppType.label(color: AppColors.textHi).copyWith(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -484,7 +485,7 @@ class _PayRowCard extends StatelessWidget {
             keyboardType: TextInputType.number,
             style: AppType.input(color: AppColors.textHi),
             decoration: InputDecoration(
-              hintText: 'المبلغ المسدد',
+              hintText: 'sheets.paid_amount'.tr(),
               hintStyle: AppType.input(color: AppColors.textLow),
               filled: true,
               fillColor: AppColors.surface,
@@ -495,7 +496,7 @@ class _PayRowCard extends StatelessWidget {
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 10, vertical: 10),
-              suffixText: 'د.ع',
+              suffixText: 'common.currency'.tr(),
               suffixIcon: enabled &&
                       !row.payAll &&
                       row.controller.text.isNotEmpty
@@ -578,7 +579,7 @@ class _PayRowCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'كامل الدين',
+                    'sheets.full_debt'.tr(),
                     style:
                         AppType.label(color: AppColors.textHi).copyWith(
                       fontSize: 11,
@@ -664,7 +665,7 @@ class _RowPreview extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            isCredit ? 'بعد التسديد' : 'الدين المتبقي',
+            isCredit ? 'sheets.after_pay'.tr() : 'sheets.remaining_debt'.tr(),
             style: AppType.muted(color: AppColors.textMid).copyWith(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -673,7 +674,7 @@ class _RowPreview extends StatelessWidget {
           const Spacer(),
           if (isCredit)
             Text(
-              'رصيد ',
+              '${'subscribers.balance_short'.tr()} ',
               style: AppType.muted(color: color).copyWith(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
