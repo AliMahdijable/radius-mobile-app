@@ -1542,6 +1542,51 @@ class _BulkActionBar extends StatelessWidget {
     if (!canRenew && !canPayDebt && !canToggle && !canDelete) {
       return const SizedBox.shrink();
     }
+    // مطلب المستخدم 2026-07-12: تصميم مضغوط — صفّان بدل 4:
+    //   Row1 (primary): Renew | Pay debt | Disconnect (كل ما يظهر يتقاسم العرض)
+    //   Row2 (secondary): Disable | Enable | Delete
+    // ارتفاع أقل بـ~40% من التصميم القديم؛ زر Renew يبقى أول+مهيمن.
+    final showPay = debtorCount > 0 && canPayDebt;
+    final showDisconnect = onlineCount > 0 && canToggle;
+    final primaryChildren = <Widget>[];
+    if (canRenew) {
+      primaryChildren.add(Expanded(
+        flex: 2,
+        child: _PrimaryPill(
+          icon: LucideIcons.calendarPlus,
+          label: '${'subscribers.bulk_renew'.tr()} ($selectedCount)',
+          color: AppColors.brand,
+          onTap: onRenew,
+        ),
+      ));
+    }
+    if (showPay) {
+      if (primaryChildren.isNotEmpty) {
+        primaryChildren.add(const SizedBox(width: 6));
+      }
+      primaryChildren.add(Expanded(
+        child: _PrimaryPill(
+          icon: LucideIcons.banknote,
+          label: '${'subscribers.pay_debt'.tr()} ($debtorCount)',
+          color: const Color(0xFF14B8A6),
+          onTap: onPayDebt!,
+        ),
+      ));
+    }
+    if (showDisconnect) {
+      if (primaryChildren.isNotEmpty) {
+        primaryChildren.add(const SizedBox(width: 6));
+      }
+      primaryChildren.add(Expanded(
+        child: _PrimaryPill(
+          icon: LucideIcons.power,
+          label: '${'subscribers.disconnect_online'.tr()} ($onlineCount)',
+          color: AppColors.error,
+          onTap: onDisconnect!,
+        ),
+      ));
+    }
+
     return SafeArea(
       top: false,
       child: Container(
@@ -1551,86 +1596,15 @@ class _BulkActionBar extends StatelessWidget {
             top: BorderSide(color: AppColors.border),
           ),
         ),
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+        padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.sm),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (canRenew)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                  ),
-                  onPressed: onRenew,
-                  icon: const Icon(LucideIcons.calendarPlus, size: 18),
-                  label: Text(
-                    '${'subscribers.bulk_renew'.tr()} ($selectedCount)',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 14),
-                  ),
-                ),
-              ),
-            // Bulk pay-debt — shows only when the selection contains at
-            // least one subscriber with debt. Counter in the label tells
-            // the admin exactly how many rows will participate.
-            if (debtorCount > 0 && canPayDebt) ...[
-              const SizedBox(height: Sp.sm),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF14B8A6),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                  ),
-                  onPressed: onPayDebt,
-                  icon: const Icon(LucideIcons.banknote, size: 16),
-                  label: Text(
-                    '${'subscribers.pay_debt'.tr()} ($debtorCount)',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 13),
-                  ),
-                ),
-              ),
-            ],
-            // Bulk disconnect — kicks online sessions off the network
-            // without touching the enabled flag. Hidden when nobody in
-            // the selection is online (no point showing 'فصل (0)'),
-            // ومخفي لو الموظف ما عنده subscribers.toggle.
-            if (onlineCount > 0 && canToggle) ...[
-              const SizedBox(height: Sp.sm),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.error,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                  ),
-                  onPressed: onDisconnect,
-                  icon: const Icon(LucideIcons.power, size: 16),
-                  label: Text(
-                    '${'subscribers.disconnect_online'.tr()} ($onlineCount)',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 13),
-                  ),
-                ),
-              ),
-            ],
-            // مطلب 2026-06-12: صف العمليات الثانوي. toggle (تعطيل/تفعيل)
-            // يحتاج subscribers.toggle، delete يحتاج subscribers.delete.
-            // لو الاثنين مخفيّين، الصف كله يختفي.
-            if (canToggle || canDelete) ...[
-              const SizedBox(height: Sp.sm),
+            if (primaryChildren.isNotEmpty) Row(children: primaryChildren),
+            if (primaryChildren.isNotEmpty && (canToggle || canDelete))
+              const SizedBox(height: 6),
+            // Secondary row: Disable / Enable / Delete
+            if (canToggle || canDelete)
               Row(
                 children: [
                   if (canToggle) ...[
@@ -1645,7 +1619,7 @@ class _BulkActionBar extends StatelessWidget {
                         onTap: onDisable,
                       ),
                     ),
-                    const SizedBox(width: Sp.sm),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: _SecondaryBtn(
                         icon: LucideIcons.circleCheck,
@@ -1657,7 +1631,7 @@ class _BulkActionBar extends StatelessWidget {
                         onTap: onEnable,
                       ),
                     ),
-                    if (canDelete) const SizedBox(width: Sp.sm),
+                    if (canDelete) const SizedBox(width: 6),
                   ],
                   if (canDelete)
                     Expanded(
@@ -1670,8 +1644,48 @@ class _BulkActionBar extends StatelessWidget {
                     ),
                 ],
               ),
-            ],
-          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// زر أساسي مضغوط للـbulk bar. يحل محل FilledButton.icon الطويل الذي
+/// كان يأخذ ~48px بالارتفاع؛ هذا يعطي ~36px + خط 12.5 + أيقونة 14.
+class _PrimaryPill extends StatelessWidget {
+  const _PrimaryPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return SizedBox(
+      height: 36,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(0, 36),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(R.sm),
+          ),
+        ),
+        onPressed: onTap,
+        icon: Icon(icon, size: 14),
+        label: Text(
+          label,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+          style:
+              const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
         ),
       ),
     );
@@ -1703,16 +1717,18 @@ class _SecondaryBtn extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: color,
         side: BorderSide(color: color.withValues(alpha: 0.4)),
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+        minimumSize: const Size(0, 34),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(R.md),
+          borderRadius: BorderRadius.circular(R.sm),
         ),
       ),
       onPressed: enabled ? onTap : null,
-      icon: Icon(icon, size: 14),
+      icon: Icon(icon, size: 13),
       label: Text(label,
+          overflow: TextOverflow.ellipsis,
           style:
-              const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+              const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5)),
     );
   }
 }
