@@ -168,9 +168,13 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   void _runProbeWave({bool force = false}) {
     _probeRunId += 1;
     final myRun = _probeRunId;
+    // مطلب المستخدم 2026-07-12: الـwave يفحص كل مشترك عنده IP (سواء
+    // متصل حالياً أو منتهي/معطّل). نطابق منطق v1 (!isOffline && hasIP)
+    // لكن نتوسّع أكثر: نشمل حتى الـoffline المسجّلين عندنا IP سابق
+    // (الراوتر قد يظل يجيب استجابة لأجهزة عليها credentials). النتائج
+    // تظهر على كل بطاقة، وليس فقط تاب "متصل".
     final targets = _all
-        .where((s) =>
-            s.isOnline && (s.ipAddress ?? '').trim().isNotEmpty)
+        .where((s) => (s.ipAddress ?? '').trim().isNotEmpty)
         .map((s) => (username: s.username, ip: s.ipAddress!.trim()))
         .toList();
     if (targets.isEmpty) {
@@ -990,17 +994,17 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                               final s = page[i];
                               final isSelected = s.idx != null &&
                                   _selected.contains(s.idx);
-                              final onOnlineTab =
-                                  _filter == SubscriberFilter.online;
                               return SubscriberCardV2(
                                 sub: s,
                                 selected: isSelected,
                                 lastPayment: _lastPayments[s.username],
-                                // مطلب 2026-06-11 (تحديث ثاني):
-                                // معلومات الـSAS (IP/تحميل/رفع/الجهاز)
-                                // تظهر فقط في تاب "متصل" — كانت
-                                // تظهر بكل التابات وتطغى على البطاقات.
-                                showLiveSession: onOnlineTab,
+                                // مطلب 2026-07-12: showLiveSession
+                                // مفتوح لكل التابات — الكرت داخلياً
+                                // يقرّر: يعرض LiveSessionRow لو
+                                // المشترك متصل، ويعرض DeviceChipMicro
+                                // لكل من عنده IP بغضّ النظر عن حالة
+                                // الاتصال (يطابق v1).
+                                showLiveSession: true,
                                 onTap: () {
                                   if (_selectionMode) {
                                     _toggleSelect(s);
@@ -1009,16 +1013,13 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                                   }
                                 },
                                 onLongPress: () => _enterSelectionWith(s),
-                                // مطلب 2026-06-11: الـcallbacks تنزل
-                                // فقط في تاب "متصل" + المشترك فعلاً
-                                // online + ما إحنا في selection mode
-                                // (الـlong-press multi-select له أولوية).
-                                onShowConsumption:
-                                    onOnlineTab && s.isOnline && !_selectionMode
-                                        ? () => showConsumptionSheet(context, s)
-                                        : null,
-                                onDisconnect: onOnlineTab &&
-                                        s.isOnline &&
+                                // الـcallbacks تبقى للمتصلين حقيقياً —
+                                // زر الفصل لا معنى له لمشترك غير متصل،
+                                // والاستهلاك يجيب بيانات session لحظية.
+                                onShowConsumption: s.isOnline && !_selectionMode
+                                    ? () => showConsumptionSheet(context, s)
+                                    : null,
+                                onDisconnect: s.isOnline &&
                                         !_selectionMode &&
                                         s.idx != null
                                     ? () => _confirmDisconnect(s)

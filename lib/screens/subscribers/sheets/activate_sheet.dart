@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -125,7 +126,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (idx == null) {
       setState(() {
         _loading = false;
-        _loadError = 'المشترك بدون idx — لا يمكن التفعيل';
+        _loadError = 'sheets.activate_no_idx'.tr();
       });
       return;
     }
@@ -138,7 +139,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     setState(() {
       _loading = false;
       _data = data;
-      if (data == null) _loadError = 'تعذّر جلب بيانات التفعيل';
+      if (data == null) _loadError = 'sheets.activate_load_failed'.tr();
     });
   }
 
@@ -208,7 +209,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (result.ok) SubscriberEvents.notifyChange();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result.ok ? 'تم التجديد بنجاح' : (result.message ?? 'فشل')),
+        content: Text(result.ok ? 'sheets.renew_ok'.tr() : (result.message ?? 'common.error'.tr())),
         backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -236,7 +237,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               _SheetHandle(),
               _SheetHeader(
                 icon: LucideIcons.zap,
-                title: 'تجديد اشتراك',
+                title: 'dashboard.renew_sub'.tr(),
                 subtitle: widget.sub.fullName,
                 color: AppColors.brand,
                 onClose: () => Navigator.of(context).pop(),
@@ -250,7 +251,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                 ),
               ),
               _SubmitBar(
-                label: _submitting ? 'جاري التجديد...' : 'تجديد الآن',
+                label: _submitting ? 'sheets.renewing'.tr() : 'sheets.renew_now'.tr(),
                 color: AppColors.brand,
                 icon: LucideIcons.zap,
                 enabled: _canSubmit,
@@ -289,7 +290,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               const SizedBox(height: Sp.sm),
               TextButton(
                 onPressed: _load,
-                child: const Text('إعادة المحاولة'),
+                child: Text('common.retry'.tr()),
               ),
             ],
           ),
@@ -299,62 +300,62 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final price = _effectivePrice > 0 ? _effectivePrice : _userPrice;
     return [
       _InfoCard(
-        title: 'تفاصيل الباقة',
+        title: 'sheets.package_details'.tr(),
         rows: [
-          (LucideIcons.package, 'الباقة', _profileName.isEmpty ? '—' : _profileName, null),
+          (LucideIcons.package, 'subscribers.label_package'.tr(), _profileName.isEmpty ? '—' : _profileName, null),
           if (_duration != null && _duration!.isNotEmpty)
-            (LucideIcons.clock, 'المدة', _duration!, null),
+            (LucideIcons.clock, 'sheets.duration'.tr(), _duration!, null),
           (
             LucideIcons.tag,
-            'السعر الأصلي',
-            '${formatIQD(_userPrice.round())} د.ع',
+            'sheets.original_price'.tr(),
+            '${formatIQD(_userPrice.round())} ${'common.currency'.tr()}',
             _discount > 0 ? AppColors.textLow : null,
           ),
           if (_discount > 0)
             (
               LucideIcons.percent,
-              'الخصم',
-              '-${formatIQD(_discount.round())} د.ع',
+              'subscribers.label_discount'.tr(),
+              '-${formatIQD(_discount.round())} ${'common.currency'.tr()}',
               const Color(0xFF14B8A6),
             ),
           if (_discount > 0)
             (
               LucideIcons.tag,
-              'السعر النهائي',
-              '${formatIQD(_effectivePrice.round())} د.ع',
+              'sheets.final_price'.tr(),
+              '${formatIQD(_effectivePrice.round())} ${'common.currency'.tr()}',
               AppColors.brand,
             ),
         ],
       ),
       const SizedBox(height: Sp.sm),
       _InfoCard(
-        title: 'الحالة الحالية',
+        title: 'sheets.current_state'.tr(),
         rows: [
           (
             _currentBalance < 0
                 ? LucideIcons.creditCard
                 : LucideIcons.wallet,
-            _currentBalance < 0 ? 'دين الحالي' : 'رصيد الحالي',
-            '${formatIQD(_currentBalance.abs().round())} د.ع',
+            _currentBalance < 0 ? 'sheets.current_debt'.tr() : 'sheets.current_credit'.tr(),
+            '${formatIQD(_currentBalance.abs().round())} ${'common.currency'.tr()}',
             _currentBalance < 0 ? AppColors.error : AppColors.brand,
           ),
           (
             LucideIcons.wallet,
-            'رصيد المدير',
-            '${formatIQD(_managerBalance.round())} د.ع',
+            'dashboard.manager_balance'.tr(),
+            '${formatIQD(_managerBalance.round())} ${'common.currency'.tr()}',
             AppColors.textHi,
           ),
           if (_rewardPoints > 0)
             (
               LucideIcons.star,
-              'النقاط',
+              'sheets.points'.tr(),
               '${formatIQD(_rewardPoints.round())}',
               const Color(0xFFCD8B00),
             ),
         ],
       ),
       const SizedBox(height: Sp.md),
-      _SectionTitle('طريقة الدفع'),
+      _SectionTitle('sheets.payment_method'.tr()),
       const SizedBox(height: Sp.xs),
       _PayPicker(
         current: _pay,
@@ -463,7 +464,7 @@ class _PayPicker extends StatelessWidget {
       children: [
         Expanded(
           child: _PayBtn(
-            label: 'نقدي',
+            label: 'sheets.pay_cash'.tr(),
             icon: LucideIcons.banknote,
             color: AppColors.brand,
             selected: current == _PayType.cash,
@@ -473,7 +474,7 @@ class _PayPicker extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(
           child: _PayBtn(
-            label: 'دين',
+            label: 'sheets.pay_debt'.tr(),
             icon: LucideIcons.creditCard,
             color: AppColors.error,
             selected: current == _PayType.debt,
@@ -483,7 +484,7 @@ class _PayPicker extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(
           child: _PayBtn(
-            label: 'جزئي',
+            label: 'sheets.pay_partial'.tr(),
             icon: LucideIcons.walletCards,
             color: const Color(0xFF8B5CF6),
             selected: current == _PayType.partial,
@@ -609,7 +610,7 @@ class _PartialAmountField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'المبلغ المدفوع نقداً',
+            'sheets.paid_cash_amount'.tr(),
             style: AppType.label(color: AppColors.textHi).copyWith(
                 fontSize: 11, fontWeight: FontWeight.w700),
           ),
@@ -619,7 +620,7 @@ class _PartialAmountField extends StatelessWidget {
             keyboardType: TextInputType.number,
             style: AppType.input(color: AppColors.textHi),
             decoration: InputDecoration(
-              hintText: 'مثلاً 15,000',
+              hintText: 'sheets.amount_example'.tr(),
               hintStyle: AppType.input(color: AppColors.textLow),
               filled: true,
               fillColor: AppColors.surface,
@@ -630,7 +631,7 @@ class _PartialAmountField extends StatelessWidget {
               isDense: true,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              suffixText: 'د.ع',
+              suffixText: 'common.currency'.tr(),
             ),
           ),
           if (filtered.isNotEmpty) ...[
@@ -694,13 +695,13 @@ class _AfterCard extends StatelessWidget {
           Icon(LucideIcons.arrowRight, color: color, size: 13),
           const SizedBox(width: 6),
           Text(
-            'بعد التفعيل',
+            'sheets.after_activation'.tr(),
             style: AppType.label(color: AppColors.textHi).copyWith(
                 fontSize: 11, fontWeight: FontWeight.w700),
           ),
           const Spacer(),
           Text(
-            isDebt ? 'دين ' : 'رصيد ',
+            isDebt ? '${'subscribers.debt_short'.tr()} ' : '${'subscribers.balance_short'.tr()} ',
             style: AppType.muted(color: color)
                 .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
           ),

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -60,7 +61,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (idx == null) {
       setState(() {
         _loading = false;
-        _loadError = 'المشترك بدون idx — لا يمكن التمديد';
+        _loadError = 'sheets.extend_no_idx'.tr();
       });
       return;
     }
@@ -74,7 +75,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       _loading = false;
       _data = data;
       if (data == null) {
-        _loadError = 'تعذّر جلب خيارات التمديد';
+        _loadError = 'sheets.extend_load_failed'.tr();
       } else {
         final list = (data['packages'] as List?) ?? const [];
         if (list.isNotEmpty) {
@@ -115,11 +116,11 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   String? get _disabledReason {
     if (_selectedPkg == null) return null;
     if (_method == _Method.points) {
-      if (_selectedPoints <= 0) return 'الباقة لا تدعم الدفع بالنقاط';
-      if (_pointsBalance < _selectedPoints) return 'النقاط غير كافية';
+      if (_selectedPoints <= 0) return 'sheets.no_points_support'.tr();
+      if (_pointsBalance < _selectedPoints) return 'sheets.insufficient_points'.tr();
     } else {
-      if (_selectedPrice <= 0) return 'السعر غير متوفر';
-      if (_managerBalance < _selectedPrice) return 'الرصيد غير كافٍ';
+      if (_selectedPrice <= 0) return 'sheets.no_price'.tr();
+      if (_managerBalance < _selectedPrice) return 'sheets.insufficient_balance'.tr();
     }
     return null;
   }
@@ -142,7 +143,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content:
-            Text(result.ok ? 'تم التمديد بنجاح' : (result.message ?? 'فشل')),
+            Text(result.ok ? 'sheets.extend_ok'.tr() : (result.message ?? 'common.error'.tr())),
         backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -170,7 +171,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
               _SheetHandle(),
               _SheetHeader(
                 icon: LucideIcons.repeat,
-                title: 'تمديد المشترك',
+                title: 'sheets.extend_subscriber'.tr(),
                 subtitle: widget.sub.fullName,
                 color: const Color(0xFF3B82F6),
                 onClose: () => Navigator.of(context).pop(),

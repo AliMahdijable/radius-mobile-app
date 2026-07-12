@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -279,7 +280,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
               child: _PackageWithPrice(
                 name: (sub.profileName?.isNotEmpty ?? false)
                     ? sub.profileName!
-                    : 'بدون باقة',
+                    : 'subscribers.label_no_package'.tr(),
                 price: sub.price,
                 discount: sub.discount,
               ),
@@ -297,17 +298,23 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
         const SizedBox(height: 4),
         _MetaRow(
           icon: LucideIcons.calendar,
-          text: 'ينتهي ${_formatExpiration(sub.expiration)}',
+          text: 'subscribers.expires_at'.tr(namedArgs: {'date': _formatExpiration(sub.expiration)}),
           color: AppColors.textLow,
         ),
       ],
     );
   }
 
+  // مطلب 2026-07-12: DeviceChipMicro يظهر لأي مشترك عنده IP (سواء متصل
+  // أو منتهي/معطّل) — قيم الفحص مخزّنة في cache DeviceProbeApi بحسب IP
+  // ولا تتطلّب اتصال حالي بالـRADIUS. هيك يطابق سلوك v1.
+  bool get _hasDeviceInfo =>
+      showLiveSession && (sub.ipAddress ?? '').trim().isNotEmpty;
+
   // Decide if there's any content under the divider — the divider
   // shouldn't draw if we're not going to render anything.
   bool get _hasFinance =>
-      (showLiveSession && sub.isOnline) ||
+      _hasDeviceInfo ||
       sub.balanceAmount != 0 ||
       lastPayment != null;
 
@@ -316,22 +323,21 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Live session row (online subscribers) — IP + duration + DL/UL
-        // + device vendor. Mirrors v1's
-        // mobile-app/lib/widgets/subscriber_card.dart:595-647.
+        // Live session row — IP + duration + DL/UL + device vendor.
+        // يظهر فقط للمشتركين المتصلين حقيقياً (بيانات الجلسة اللحظية
+        // مو متوفّرة لغيرهم).
         if (showLiveSession && sub.isOnline) ...[
           _LiveSessionRow(sub: sub),
-          // مطلب 2026-06-11: سطر معلومات الجهاز كامل تحت السطر الحي —
-          // RX+حرارة للـONT، إشارة+CCQ+LAN للـUBNT — + زر تحديث 36×36
-          // يحرك probe لهذا المشترك فقط. AnimatedSwitcher يضمن
-          // ظهوراً ناعماً لما الـwave يكمل الفحص.
+        ],
+        // DeviceChipMicro يظهر لأي مشترك عنده IP — قيم الفحص (RX/CCQ/
+        // إشارة/حرارة/LAN) تجي من probe مباشر على الجهاز، مو من session.
+        // مطلب المستخدم 2026-07-12: كان مقصور على تاب "متصل" — وسّعناه.
+        if (_hasDeviceInfo) ...[
           DeviceChipMicro(
             ip: sub.ipAddress,
             username: sub.username,
           ),
-          // مطلب 2026-06-11: زرّا الاستهلاك + فصل المستخدم بتصميم
-          // ناعم — نص صغير + أيقونة، شبه شفاف، لا حدود قوية ولا
-          // ملء ملفت. مرتب يمين السطر فما يحجب الـmetrics على شماله.
+          // زرّا الاستهلاك + فصل المستخدم — يظهرا فقط للمتصلين حقيقياً.
           if (onShowConsumption != null || onDisconnect != null) ...[
             const SizedBox(height: 5),
             Row(
@@ -339,7 +345,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                 if (onShowConsumption != null)
                   _GhostAction(
                     icon: LucideIcons.chartLine,
-                    label: 'الاستهلاك',
+                    label: 'subscribers.consumption'.tr(),
                     color: const Color(0xFF3B82F6),
                     onTap: onShowConsumption!,
                   ),
@@ -347,7 +353,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                 if (onDisconnect != null)
                   _GhostAction(
                     icon: LucideIcons.powerOff,
-                    label: 'فصل',
+                    label: 'subscribers.disconnect'.tr(),
                     color: AppColors.error,
                     onTap: onDisconnect!,
                   ),
@@ -388,15 +394,15 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
   }
 
   String _statusLabel() {
-    if (sub.isDisabled) return 'معطّل';
+    if (sub.isDisabled) return 'subscribers.status_disabled'.tr();
     if (sub.isOnline) {
-      if (sub.isExpired) return 'متصل / منتهي';
-      if (sub.isNearExpiry) return 'متصل / قارب';
-      return 'متصل';
+      if (sub.isExpired) return 'subscribers.status_online_expired'.tr();
+      if (sub.isNearExpiry) return 'subscribers.status_online_near'.tr();
+      return 'subscribers.status_online'.tr();
     }
-    if (sub.isExpired) return 'منتهي';
-    if (sub.isNearExpiry) return 'قارب الانتهاء';
-    return 'نشط';
+    if (sub.isExpired) return 'subscribers.status_expired'.tr();
+    if (sub.isNearExpiry) return 'subscribers.status_near_expiry'.tr();
+    return 'subscribers.status_active'.tr();
   }
 
   IconData _statusIcon() {
@@ -467,7 +473,7 @@ class _ExpiryBadge extends StatelessWidget {
       v = (
         color: const Color(0xFF6D4C41),
         big: '—',
-        small: 'معطّل',
+        small: 'subscribers.status_disabled'.tr(),
         icon: LucideIcons.ban,
       );
     } else if (remaining == null) {
@@ -478,18 +484,13 @@ class _ExpiryBadge extends StatelessWidget {
         icon: LucideIcons.clock,
       );
     } else if (remaining! < 0) {
-      // مطلب 2026-06-11: المنتهي يظهر 'منذ X يوم' بدل '0 منتهي'
-      // (المدير يحتاج يعرف كم صار له منتهي عشان يقرر يتابعه أو يحذفه).
       v = (
         color: AppColors.error,
-        big: 'منذ',
-        small: '${remaining!.abs()} يوم',
+        big: 'subscribers.ago_prefix'.tr(),
+        small: '${remaining!.abs()} ${'subscribers.day_unit'.tr()}',
         icon: LucideIcons.timerOff,
       );
     } else if (remaining! == 0) {
-      // Same-day expiry. Check expiration timestamp — if past, this is
-      // actually expired (SAS4 rounds to 0 for any value < 24h). Show
-      // 'منذ ساعة/دقيقة' so the admin distinguishes from 'باقي ساعة'.
       final hm = _hoursMinutesUntil(expiration);
       v = (
         color: AppColors.error,
@@ -501,21 +502,21 @@ class _ExpiryBadge extends StatelessWidget {
       v = (
         color: const Color(0xFFE08F2D),
         big: '${remaining!}',
-        small: 'يوم',
+        small: 'subscribers.day_unit'.tr(),
         icon: LucideIcons.triangleAlert,
       );
     } else if (remaining! <= 7) {
       v = (
         color: const Color(0xFFCD8B00),
         big: '${remaining!}',
-        small: 'يوم',
+        small: 'subscribers.day_unit'.tr(),
         icon: LucideIcons.clock,
       );
     } else {
       v = (
         color: AppColors.brand,
         big: '${remaining!}',
-        small: 'يوم',
+        small: 'subscribers.day_unit'.tr(),
         icon: LucideIcons.clock,
       );
     }
@@ -570,7 +571,7 @@ class _ExpiryBadge extends StatelessWidget {
   ///  hours >= 1               → ('5س', '30د')
   ///  hours == 0               → ('30', 'دقيقة')
   static (String, String) _hoursMinutesUntil(DateTime? exp) {
-    if (exp == null) return ('0', 'اليوم');
+    if (exp == null) return ('0', 'reports.today'.tr());
     final now = DateTime.now();
     final diff = exp.difference(now);
     if (diff.isNegative) {
@@ -579,11 +580,11 @@ class _ExpiryBadge extends StatelessWidget {
       // ولا نريد رقم كبير يكسر التصميم.
       final past = now.difference(exp);
       final pd = past.inDays;
-      if (pd >= 1) return ('منذ', '$pd يوم');
+      if (pd >= 1) return ('subscribers.ago_prefix'.tr(), '$pd ${'subscribers.day_unit'.tr()}');
       final ph = past.inHours;
-      if (ph >= 1) return ('منذ', '$ph ساعة');
+      if (ph >= 1) return ('subscribers.ago_prefix'.tr(), '$ph ${'subscribers.hour_unit'.tr()}');
       final pm = past.inMinutes.clamp(1, 59);
-      return ('منذ', '$pm دقيقة');
+      return ('subscribers.ago_prefix'.tr(), '$pm ${'subscribers.minute_unit'.tr()}');
     }
     final h = diff.inHours;
     final mLeft = diff.inMinutes - h * 60;
@@ -593,7 +594,7 @@ class _ExpiryBadge extends StatelessWidget {
     }
     // Less than an hour — show minutes only.
     final m = diff.inMinutes.clamp(0, 59);
-    return ('$m', 'دقيقة');
+    return ('$m', 'subscribers.minute_unit'.tr());
   }
 }
 
@@ -745,7 +746,7 @@ class _BalanceChip extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            isDebt ? 'دين' : 'رصيد',
+            isDebt ? 'subscribers.debt_short'.tr() : 'subscribers.balance_short'.tr(),
             style: AppType.muted(color: color).copyWith(
               fontSize: 10, // Tiny label tier
               fontWeight: FontWeight.w700,
@@ -753,7 +754,7 @@ class _BalanceChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            '${formatIQD(sub.debtAbs.round())} د.ع',
+            '${formatIQD(sub.debtAbs.round())} ${'common.currency'.tr()}',
             style: AppType.label(color: color).copyWith(
               fontSize: 12, // Card title tier — emphasis for the amount
               fontWeight: FontWeight.w800,
@@ -938,21 +939,20 @@ class _LastPaymentLine extends StatelessWidget {
   }
 
   static String _humanAgo(Duration d) {
-    if (d.inMinutes < 1) return 'الآن';
-    if (d.inHours < 1) return 'قبل ${d.inMinutes} د';
-    if (d.inDays < 1) return 'قبل ${d.inHours} س';
-    if (d.inDays == 1) return 'قبل يوم';
-    return 'قبل ${d.inDays} أيام';
+    if (d.inMinutes < 1) return 'subscribers.now'.tr();
+    if (d.inHours < 1) return 'subscribers.ago_minutes_short'.tr(namedArgs: {'n': '${d.inMinutes}'});
+    if (d.inDays < 1) return 'subscribers.ago_hours_short'.tr(namedArgs: {'n': '${d.inHours}'});
+    if (d.inDays == 1) return 'subscribers.ago_one_day'.tr();
+    return 'subscribers.ago_days_short'.tr(namedArgs: {'n': '${d.inDays}'});
   }
 
-  /// Mirrors v1's subscriber_card._movementLabel.
   static String _humanAction(String action, {String? paymentType}) {
     if (action.toUpperCase() == 'SUBSCRIBER_ACTIVATE') {
       return (paymentType ?? '').contains('جزئي')
-          ? 'تفعيل نقدي جزئي'
-          : 'تفعيل نقدي';
+          ? 'subscribers.activate_cash_partial'.tr()
+          : 'actions.activate_cash'.tr();
     }
-    return 'تسديد دين';
+    return 'actions.debt_pay'.tr();
   }
 }
 
