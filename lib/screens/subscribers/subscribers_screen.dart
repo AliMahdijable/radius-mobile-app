@@ -1644,6 +1644,7 @@ class _BulkActionBar extends StatelessWidget {
                     ),
                 ],
               ),
+          ],
         ),
       ),
     );
