@@ -277,6 +277,17 @@ class _Row extends StatelessWidget {
         detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
       );
     }
+    // مطلب المستخدم 2026-07-12: تشغيل/تعطيل/فصل حساب المشترك ما كانت
+    // تظهر بـلابل في feed آخر الحركات — تُعرض بدون action label.
+    if (lower.contains('subscriber_enable') || lower.contains('enable_subscriber')) {
+      return (label: 'تشغيل', detail: null);
+    }
+    if (lower.contains('subscriber_disable') || lower.contains('disable_subscriber')) {
+      return (label: 'تعطيل', detail: null);
+    }
+    if (lower.contains('subscriber_disconnect') || lower.contains('disconnect_subscriber')) {
+      return (label: 'فصل المستخدم', detail: null);
+    }
     return (label: null, detail: null);
   }
 
@@ -488,6 +499,16 @@ class _Row extends StatelessWidget {
     }
     if (lower.contains('whatsapp') || lower.contains('message')) {
       return (Icons.chat_bubble_rounded, const Color(0xFFE08F2D));
+    }
+    // 2026-07-12: تشغيل/تعطيل/فصل — نُميّزهم بأيقونات + ألوان مناسبة.
+    if (lower.contains('subscriber_enable') || lower.contains('enable_subscriber')) {
+      return (Icons.check_circle_rounded, const Color(0xFF14B8A6));
+    }
+    if (lower.contains('subscriber_disable') || lower.contains('disable_subscriber')) {
+      return (Icons.block_rounded, const Color(0xFFE08F2D));
+    }
+    if (lower.contains('subscriber_disconnect') || lower.contains('disconnect_subscriber')) {
+      return (Icons.power_settings_new_rounded, AppColors.error);
     }
     return (Icons.history_rounded, AppColors.textMid);
   }
