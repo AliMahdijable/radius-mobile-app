@@ -96,7 +96,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
+            content: Text(
               'perms.blocked_open_system'.tr(),
             ),
             backgroundColor: const Color(0xFFE08F2D),

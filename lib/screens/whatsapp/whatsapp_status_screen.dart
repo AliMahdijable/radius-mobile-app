@@ -85,9 +85,9 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     });
     if (qr == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('wa.qr_not_ready'.tr()),
-          backgroundColor: Color(0xFFE08F2D),
+          backgroundColor: const Color(0xFFE08F2D),
           behavior: SnackBarBehavior.floating,
         ),
       );

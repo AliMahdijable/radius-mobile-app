@@ -79,7 +79,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     // Defaults changed → every cached snapshot used the old creds.
     DeviceProbeApi.invalidateAdminDefaults();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text('devices.creds_saved'.tr()),
         backgroundColor: AppColors.brand,
       ),
