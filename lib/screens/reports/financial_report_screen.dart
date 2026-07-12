@@ -496,13 +496,18 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     final pageRows = filtered.isEmpty
         ? const <FinanceLog>[]
         : filtered.sublist(pageStart, pageEnd);
+    // ترتيب أعمدة Excel/PDF المطلوب (2026-07-12): اسم المشترك (بارز
+    // بالعربي) → المبلغ → التاريخ → الوصف → البقية. الاسم العربي أولاً
+    // ويجمع firstname+lastname؛ نضيف عمود username منفصل لتسهيل الفرز
+    // والبحث في الشيت.
     final exportRows = filtered
         .map((l) => [
-              l.createdAt,
-              l.actionType,
-              l.targetName ?? l.userUsername ?? '',
-              (l.actionDescription ?? '').replaceAll('\n', ' '),
+              l.userFullName ?? l.targetName ?? l.userUsername ?? '',
+              l.userUsername ?? '',
               l.amount == 0 ? '' : l.amount.toString(),
+              l.createdAt,
+              (l.actionDescription ?? '').replaceAll('\n', ' '),
+              l.actionType,
               l.actingEmployeeFullName ?? l.adminUsername ?? '',
             ])
         .toList();
@@ -544,11 +549,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
               fileNameBase: 'financial',
               columns: const [
-                'التاريخ',
-                'النوع',
-                'الهدف',
-                'الوصف',
+                'اسم المشترك',
+                'اليوزر',
                 'المبلغ',
+                'التاريخ',
+                'الوصف',
+                'النوع',
                 'المنفّذ',
               ],
               rows: exportRows,
@@ -564,6 +570,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             adminUsername: l.adminUsername,
             employeeFullName: l.actingEmployeeFullName,
             employeeUsername: l.actingEmployeeUsername,
+            subscriberFullName: l.userFullName,
+            subscriberUsername: l.userUsername,
             targetName: l.targetName ?? l.userUsername,
             createdAt: l.createdAt,
           ),

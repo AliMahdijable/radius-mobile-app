@@ -88,6 +88,8 @@ class FinanceLog {
     this.actingEmployeeFullName,
     this.actingEmployeeUsername,
     this.userUsername,
+    this.userFirstname,
+    this.userLastname,
     this.userManager,
     this.targetName,
     required this.createdAt,
@@ -100,9 +102,19 @@ class FinanceLog {
   final String? actingEmployeeFullName;
   final String? actingEmployeeUsername;
   final String? userUsername;
+  /// الاسم الأول (عربي) للمشترك — backend يحقنه في enrichment
+  /// (fetchUserDirectory في FinanceReportController.js).
+  final String? userFirstname;
+  final String? userLastname;
   final String? userManager;
   final String? targetName;
   final String createdAt;
+
+  /// اسم كامل عربي مدمَج (firstname + lastname)، أو null لو أحدهما فارغ.
+  String? get userFullName {
+    final full = '${userFirstname ?? ''} ${userLastname ?? ''}'.trim();
+    return full.isEmpty ? null : full;
+  }
 
   static FinanceLog? fromJson(Map<String, dynamic> j) {
     // backend `/api/reports/finance` يحقن صفوف صناعية بمعرّفات نصّية
@@ -123,6 +135,8 @@ class FinanceLog {
       actingEmployeeFullName: j['acting_employee_full_name']?.toString(),
       actingEmployeeUsername: j['acting_employee_username']?.toString(),
       userUsername: j['user_username']?.toString(),
+      userFirstname: j['user_firstname']?.toString(),
+      userLastname: j['user_lastname']?.toString(),
       userManager: j['user_manager']?.toString(),
       targetName: j['target_name']?.toString(),
       createdAt: ts,
@@ -147,6 +161,8 @@ class ActivityRow {
     this.adminUsername,
     this.actingEmployeeFullName,
     this.userUsername,
+    this.userFirstname,
+    this.userLastname,
     this.targetName,
     required this.createdAt,
   });
@@ -157,8 +173,17 @@ class ActivityRow {
   final String? adminUsername;
   final String? actingEmployeeFullName;
   final String? userUsername;
+  /// backend يُغني `/api/activities` بـuser_firstname/lastname
+  /// (server.js:7526–7557). يمكن نُقدّمها بارزة في UI و export.
+  final String? userFirstname;
+  final String? userLastname;
   final String? targetName;
   final String createdAt;
+
+  String? get userFullName {
+    final full = '${userFirstname ?? ''} ${userLastname ?? ''}'.trim();
+    return full.isEmpty ? null : full;
+  }
 
   static ActivityRow? fromJson(Map<String, dynamic> j) {
     // نتقبّل معرّفات نصّية (مثل "expense_5") ونصنع hash لها. مطابق منطق
@@ -177,6 +202,8 @@ class ActivityRow {
       adminUsername: j['admin_username']?.toString(),
       actingEmployeeFullName: j['acting_employee_full_name']?.toString(),
       userUsername: j['user_username']?.toString(),
+      userFirstname: j['user_firstname']?.toString(),
+      userLastname: j['user_lastname']?.toString(),
       targetName: j['target_name']?.toString(),
       createdAt: ts,
     );

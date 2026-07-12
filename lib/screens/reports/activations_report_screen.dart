@@ -106,13 +106,16 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       }).length;
 
   // صفوف للتصدير — visible (يحترم الفلتر النشط).
+  // ترتيب الأعمدة (2026-07-12): اسم المشترك بارز → يوزر → مبلغ → تاريخ
+  // → وصف → نوع → منفّذ.
   List<List<String>> get _exportRows => _visibleRows
       .map((r) => [
-            r.createdAt,
-            _actionLabel(r),
-            r.targetName ?? r.userUsername ?? '',
-            (r.actionDescription ?? '').replaceAll('\n', ' '),
+            r.userFullName ?? r.targetName ?? r.userUsername ?? '',
+            r.userUsername ?? '',
             r.amount == 0 ? '0' : r.amount.toString(),
+            r.createdAt,
+            (r.actionDescription ?? '').replaceAll('\n', ' '),
+            _actionLabel(r),
             r.actingEmployeeFullName ?? r.adminUsername ?? '',
           ])
       .toList();
@@ -209,11 +212,12 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                           '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                       fileNameBase: 'activations',
                       columns: const [
-                        'التاريخ',
-                        'النوع',
-                        'المشترك',
-                        'الوصف',
+                        'اسم المشترك',
+                        'اليوزر',
                         'المبلغ',
+                        'التاريخ',
+                        'الوصف',
+                        'النوع',
                         'المنفّذ',
                       ],
                       rows: _exportRows,
@@ -228,6 +232,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                     amount: r.amount,
                     adminUsername: r.adminUsername,
                     employeeFullName: r.actingEmployeeFullName,
+                    subscriberFullName: r.userFullName,
+                    subscriberUsername: r.userUsername,
                     targetName: r.targetName ?? r.userUsername,
                     createdAt: r.createdAt,
                   ),

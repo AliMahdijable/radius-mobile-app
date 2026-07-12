@@ -131,13 +131,16 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
 
+  // ترتيب أعمدة Excel/PDF المطلوب (2026-07-12): اسم المشترك بالعربي أولاً
+  // → يوزر → مبلغ → تاريخ → وصف → نوع → منفّذ.
   List<List<String>> get _exportRows => _visibleRows
       .map((r) => [
-            r.createdAt,
-            r.actionType,
-            r.targetName ?? r.userUsername ?? '',
-            (r.actionDescription ?? '').replaceAll('\n', ' '),
+            r.userFullName ?? r.targetName ?? r.userUsername ?? '',
+            r.userUsername ?? '',
             r.amount == 0 ? '' : r.amount.toString(),
+            r.createdAt,
+            (r.actionDescription ?? '').replaceAll('\n', ' '),
+            r.actionType,
             r.actingEmployeeFullName ?? r.adminUsername ?? '',
           ])
       .toList();
@@ -259,11 +262,12 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                             '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                                         fileNameBase: 'activity_log',
                                         columns: const [
-                                          'التاريخ',
-                                          'النوع',
-                                          'الهدف',
-                                          'الوصف',
+                                          'اسم المشترك',
+                                          'اليوزر',
                                           'المبلغ',
+                                          'التاريخ',
+                                          'الوصف',
+                                          'النوع',
                                           'المنفّذ',
                                         ],
                                         rows: _exportRows,
@@ -279,6 +283,8 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                       adminUsername: r.adminUsername,
                                       employeeFullName:
                                           r.actingEmployeeFullName,
+                                      subscriberFullName: r.userFullName,
+                                      subscriberUsername: r.userUsername,
                                       targetName:
                                           r.targetName ?? r.userUsername,
                                       createdAt: r.createdAt,

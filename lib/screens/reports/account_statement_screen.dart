@@ -69,12 +69,17 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
   }
 
   List<List<String>> _exportRows(List<StatementRow> rows) {
+    // كشف الحساب scoped لمشترك واحد — الاسم يُكتب مرّة واحدة بأول عمودين
+    // (اتّساقاً مع بقية التقارير 2026-07-12) ثم مبلغ/تاريخ/وصف/نوع/منفّذ.
+    final displayName = widget.displayName ?? widget.username;
     return rows
         .map((r) => [
-              r.createdAt,
-              r.actionType ?? '',
-              (r.description ?? '').replaceAll('\n', ' '),
+              displayName,
+              widget.username,
               r.amount == 0 ? '' : r.amount.toString(),
+              r.createdAt,
+              (r.description ?? '').replaceAll('\n', ' '),
+              r.actionType ?? '',
               r.adminName ?? '',
             ])
         .toList();
@@ -183,10 +188,12 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                       fileNameBase:
                           'account_statement_${widget.username.replaceAll(RegExp(r"[^a-zA-Z0-9_]"), "_")}',
                       columns: const [
-                        'التاريخ',
-                        'النوع',
-                        'الوصف',
+                        'اسم المشترك',
+                        'اليوزر',
                         'المبلغ',
+                        'التاريخ',
+                        'الوصف',
+                        'النوع',
                         'المنفّذ',
                       ],
                       rows: _exportRows(rows),

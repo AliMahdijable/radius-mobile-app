@@ -18,6 +18,8 @@ class ReportLogTile extends StatelessWidget {
     this.adminUsername,
     this.employeeFullName,
     this.employeeUsername,
+    this.subscriberFullName,
+    this.subscriberUsername,
     this.targetName,
     required this.createdAt,
   });
@@ -28,6 +30,11 @@ class ReportLogTile extends StatelessWidget {
   final String? adminUsername;
   final String? employeeFullName;
   final String? employeeUsername;
+  /// اسم المشترك بالعربي (firstname+lastname) — يُعرض بارزاً فوق الوصف
+  /// مع username تحته. الـbackend يرجّعهم كـuser_firstname/user_lastname في
+  /// finance/activities enrichment.
+  final String? subscriberFullName;
+  final String? subscriberUsername;
   final String? targetName;
   final String createdAt;
 
@@ -90,13 +97,61 @@ class ReportLogTile extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 2),
+                // صف المشترك — الاسم العربي بارز + username مسند إليه.
+                // يُخفى تماماً لو الحركة مو مربوطة بمشترك (منفّذها مدير عام
+                // مثل صرفية أو إضافة موظف).
+                if ((subscriberFullName != null &&
+                        subscriberFullName!.isNotEmpty) ||
+                    (subscriberUsername != null &&
+                        subscriberUsername!.isNotEmpty)) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.user,
+                          size: 11, color: AppColors.textMid),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          subscriberFullName?.isNotEmpty == true
+                              ? subscriberFullName!
+                              : (subscriberUsername ?? ''),
+                          style: TextStyle(
+                            color: AppColors.textHi,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (subscriberFullName?.isNotEmpty == true &&
+                          subscriberUsername?.isNotEmpty == true) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            subscriberUsername!,
+                            style: AppType.muted().copyWith(
+                              fontSize: 10.5,
+                              height: 1.2,
+                              color: AppColors.textLow,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 3),
                 Text(
                   description.isNotEmpty
                       ? description
                       : (targetName ?? '—'),
-                  style: AppType.subtitle(color: AppColors.textHi)
-                      .copyWith(fontSize: 12, height: 1.3),
+                  style: AppType.muted(color: AppColors.textMid)
+                      .copyWith(fontSize: 11.5, height: 1.3),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
