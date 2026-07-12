@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -208,24 +209,23 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-          'فصل المستخدم',
+          'subscribers.disconnect_user'.tr(),
           style: AppType.label(color: AppColors.textHi)
               .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         content: Text(
-          'سيتم قطع جلسة ${sub.fullName} الحالية من الشبكة. سيحتاج '
-          'لإعادة الاتصال يدوياً.',
+          'subscribers.disconnect_session_body'.tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('فصل'),
+            child: Text('subscribers.disconnect'.tr()),
           ),
         ],
       ),
@@ -248,7 +248,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (success) SubscriberEvents.notifyChange();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(success ? 'تم فصل المستخدم' : 'تعذّر الفصل'),
+        content: Text(success ? 'subscribers.disconnect_ok_user'.tr() : 'subscribers.disconnect_failed'.tr()),
         backgroundColor: success ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -257,26 +257,25 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   Future<void> _confirmToggleEnabled() async {
     final wantEnable = sub.isDisabled;
-    final action = wantEnable ? 'تشغيل' : 'تعطيل';
+    final action = wantEnable ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr();
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-          'تأكيد $action',
+          'subscribers.confirm_action'.tr(namedArgs: {'action': action}),
           style: AppType.label(color: AppColors.textHi)
               .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         content: Text(
           wantEnable
-              ? 'هل تريد تفعيل حساب "${sub.fullName}"؟'
-              : 'سيُمنع "${sub.fullName}" من الاتصال، وإن كان متصلاً '
-                  'الآن سيُفصل فوراً. يبقى الحساب في النظام.\n\nهل تريد المتابعة؟',
+              ? 'subscribers.enable_body'.tr(namedArgs: {'name': sub.fullName})
+              : 'subscribers.disable_body'.tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -303,7 +302,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'لا يمكن حذف مشترك عليه دين: ${formatIQD(sub.debtAbs.round())} د.ع',
+            'subscribers.delete_debt_block'.tr(namedArgs: {'amt': formatIQD(sub.debtAbs.round())}),
           ),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
@@ -315,25 +314,24 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-          'تأكيد الحذف',
+          'subscribers.delete_confirm_title'.tr(),
           style: AppType.label(color: AppColors.textHi)
               .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         content: Text(
-          'هل أنت متأكد من حذف المشترك "${sub.fullName}"؟\n'
-          'لا يمكن التراجع عن هذا الإجراء.',
+          'subscribers.delete_confirm_body'.tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('حذف'),
+            child: Text('common.delete'.tr()),
           ),
         ],
       ),
@@ -353,7 +351,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       SubscriberEvents.notifyChange();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('تم حذف المشترك'),
+          content: Text('subscribers.delete_ok'.tr()),
           backgroundColor: AppColors.brand,
           behavior: SnackBarBehavior.floating,
         ),
@@ -364,7 +362,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.message ?? 'تعذّر الحذف'),
+          content: Text(result.message ?? 'subscribers.delete_failed'.tr()),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -379,7 +377,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (sub.displayPhone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('لا يوجد رقم هاتف للمشترك'),
+          content: Text('subscribers.no_phone'.tr()),
           backgroundColor: Color(0xFFE08F2D),
           behavior: SnackBarBehavior.floating,
         ),
@@ -393,7 +391,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       setState(() => _generatingLink = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(linkResult.message ?? 'فشل توليد الرابط'),
+          content: Text(linkResult.message ?? 'subscribers.wa_link_gen_failed'.tr()),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -406,6 +404,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // get a readable greeting.
     final greetName =
         sub.fullName.trim().isNotEmpty ? sub.fullName.trim() : sub.username;
+    // ملاحظة: نص رسالة الواتساب يبقى دائماً عربي — يذهب لعميل المشترك،
+    // لا يتأثر بلغة تطبيق الأدمن.
     final body =
         'مرحباً $greetName 👋\n\n'
         'يمكنك الاطلاع على معلومات اشتراكك من خلال الرابط التالي:\n\n'
@@ -426,8 +426,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       SnackBar(
         content: Text(
           ok
-              ? 'تم إرسال رابط معلومات المشترك'
-              : (sendResult.message ?? 'فشل إرسال الرابط'),
+              ? 'subscribers.wa_link_sent'.tr()
+              : (sendResult.message ?? 'subscribers.wa_link_send_failed'.tr()),
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
@@ -456,17 +456,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             ? const Color(0xFFE08F2D) // warning, not error
             : AppColors.error;
     final defaultOkMsg = switch (templateType) {
-      'debt_reminder' => 'تم إرسال تذكير الدين',
-      'expiry_warning' => 'تم إرسال تذكير الانتهاء',
-      'subscriber_info' => 'تم إرسال معلومات المشترك',
-      _ => 'تم إرسال الرسالة',
+      'debt_reminder' => 'subscribers.wa_debt_reminder_sent'.tr(),
+      'expiry_warning' => 'subscribers.wa_expiry_warning_sent'.tr(),
+      'subscriber_info' => 'subscribers.wa_subscriber_info_sent'.tr(),
+      _ => 'subscribers.wa_message_sent'.tr(),
     };
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           ok
               ? defaultOkMsg
-              : (result.message ?? 'تعذّر إرسال الرسالة'),
+              : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
@@ -496,8 +496,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       SnackBar(
         content: Text(
           success
-              ? (wantEnable ? 'تم تفعيل الحساب' : 'تم تعطيل الحساب')
-              : (wantEnable ? 'تعذّر التفعيل' : 'تعذّر التعطيل'),
+              ? (wantEnable ? 'subscribers.enable_ok'.tr() : 'subscribers.disable_ok'.tr())
+              : (wantEnable ? 'subscribers.enable_failed'.tr() : 'subscribers.disable_failed'.tr()),
         ),
         backgroundColor: success
             ? (wantEnable ? AppColors.brand : const Color(0xFFCD8B00))
@@ -633,15 +633,15 @@ class _Header extends StatelessWidget {
   }
 
   static String _statusLabel(Subscriber s) {
-    if (s.isDisabled) return 'معطّل';
+    if (s.isDisabled) return 'subscribers.status_disabled'.tr();
     if (s.isOnline) {
-      if (s.isExpired) return 'متصل / منتهي';
-      if (s.isNearExpiry) return 'متصل / قارب';
-      return 'متصل';
+      if (s.isExpired) return 'subscribers.status_online_expired'.tr();
+      if (s.isNearExpiry) return 'subscribers.status_online_near'.tr();
+      return 'subscribers.status_online'.tr();
     }
-    if (s.isExpired) return 'منتهي';
-    if (s.isNearExpiry) return 'قارب الانتهاء';
-    return 'نشط';
+    if (s.isExpired) return 'subscribers.status_expired'.tr();
+    if (s.isNearExpiry) return 'subscribers.status_near_expiry'.tr();
+    return 'subscribers.status_active'.tr();
   }
 
   static IconData _statusIcon(Subscriber s) {
@@ -659,7 +659,7 @@ class _LiveSessionCard extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return _SectionCard(
       icon: LucideIcons.wifi,
-      title: 'معلومات الاتصال',
+      title: 'subscribers.section_connection'.tr(),
       accent: const Color(0xFF3B82F6),
       children: [
         if ((sub.ipAddress ?? '').isNotEmpty)
@@ -677,7 +677,7 @@ class _LiveSessionCard extends StatelessWidget {
         if (sub.sessionTime != null && sub.sessionTime! > 0)
           _InfoRow(
             icon: LucideIcons.timer,
-            label: 'مدة الجلسة',
+            label: 'subscribers.label_session_time'.tr(),
             value: _formatDuration(sub.sessionTime!),
           ),
         const SizedBox(height: 4),
@@ -686,7 +686,7 @@ class _LiveSessionCard extends StatelessWidget {
             Expanded(
               child: _BytesCard(
                 icon: LucideIcons.download,
-                label: 'تحميل',
+                label: 'subscribers.label_download'.tr(),
                 bytes: sub.downloadBytes ?? 0,
                 color: AppColors.brand,
               ),
@@ -695,7 +695,7 @@ class _LiveSessionCard extends StatelessWidget {
             Expanded(
               child: _BytesCard(
                 icon: LucideIcons.upload,
-                label: 'رفع',
+                label: 'subscribers.label_upload'.tr(),
                 bytes: sub.uploadBytes ?? 0,
                 color: const Color(0xFF3B82F6),
               ),
@@ -723,20 +723,20 @@ class _SubscriptionCard extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return _SectionCard(
       icon: LucideIcons.package,
-      title: 'معلومات الاشتراك',
+      title: 'subscribers.section_subscription'.tr(),
       accent: AppColors.brand,
       children: [
         _InfoRow(
           icon: LucideIcons.idCard,
-          label: 'الباقة',
+          label: 'subscribers.label_package'.tr(),
           value: (sub.profileName?.isNotEmpty ?? false)
               ? sub.profileName!
-              : 'بدون باقة',
+              : 'subscribers.label_no_package'.tr(),
         ),
         if (sub.price != null)
           _InfoRow(
             icon: LucideIcons.tag,
-            label: 'السعر',
+            label: 'subscribers.label_price'.tr(),
             value: '${formatIQD(sub.price!.round())} د.ع',
             valueColor: const Color(0xFFE08F2D),
           ),
@@ -747,30 +747,30 @@ class _SubscriptionCard extends StatelessWidget {
         if ((sub.discount ?? 0) > 0) ...[
           _InfoRow(
             icon: LucideIcons.percent,
-            label: 'الخصم',
+            label: 'subscribers.label_discount'.tr(),
             value: '-${formatIQD(sub.discount!.round())} د.ع',
             valueColor: const Color(0xFF14B8A6),
           ),
           if (sub.price != null)
             _InfoRow(
               icon: LucideIcons.banknote,
-              label: 'السعر بعد الخصم',
+              label: 'subscribers.label_price_after_discount'.tr(),
               value: '${formatIQD((sub.price! - sub.discount!).round())} د.ع',
               valueColor: AppColors.brand,
             ),
         ],
         _InfoRow(
           icon: LucideIcons.calendar,
-          label: 'تاريخ الانتهاء',
+          label: 'subscribers.label_expiration'.tr(),
           value: _expirationText(sub.expiration),
         ),
         _InfoRow(
           icon: LucideIcons.clock,
-          label: 'الأيام المتبقية',
+          label: 'subscribers.label_remaining_days'.tr(),
           value: sub.remainingDays == null
               ? '—'
               : sub.isExpired
-                  ? 'منتهي'
+                  ? 'subscribers.label_expired_short'.tr()
                   : '${sub.remainingDays} يوم',
           valueColor: sub.isExpired
               ? AppColors.error
@@ -781,13 +781,13 @@ class _SubscriptionCard extends StatelessWidget {
         if ((sub.parentUsername ?? '').isNotEmpty)
           _InfoRow(
             icon: LucideIcons.userCog,
-            label: 'تابع إلى',
+            label: 'subscribers.label_parent_admin'.tr(),
             value: sub.parentUsername!,
           ),
         if (sub.displayPhone.isNotEmpty)
           _InfoRow(
             icon: LucideIcons.phone,
-            label: 'رقم الهاتف',
+            label: 'subscribers.label_phone'.tr(),
             value: sub.displayPhone,
             onTap: () =>
                 Clipboard.setData(ClipboardData(text: sub.displayPhone)),
@@ -815,18 +815,18 @@ class _SubscriptionCard extends StatelessWidget {
     // a coarse signal from the expiration field. If the sub is expired,
     // last contact was at-or-before the expiry; otherwise we don't know
     // precisely and surface 'غير متاح'.
-    if (!s.isExpired) return 'غير متاح';
+    if (!s.isExpired) return 'subscribers.ago_not_available'.tr();
     final raw = s.expiration?.trim();
-    if (raw == null || raw.isEmpty) return 'غير معروف';
+    if (raw == null || raw.isEmpty) return 'subscribers.ago_unknown'.tr();
     final t = DateTime.tryParse(raw) ??
         DateTime.tryParse(raw.split(' ').first);
     if (t == null) return raw.split(' ').first;
     final diff = DateTime.now().difference(t);
-    if (diff.inDays > 365) return 'منذ أكثر من سنة';
-    if (diff.inDays > 30) return 'منذ ${(diff.inDays / 30).round()} شهر';
-    if (diff.inDays > 0) return 'منذ ${diff.inDays} يوم';
-    if (diff.inHours > 0) return 'منذ ${diff.inHours} س';
-    return 'منذ دقائق';
+    if (diff.inDays > 365) return 'subscribers.ago_over_year'.tr();
+    if (diff.inDays > 30) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
+    if (diff.inDays > 0) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
+    if (diff.inHours > 0) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
+    return 'subscribers.ago_minutes'.tr();
   }
 
   static String _expirationText(String? raw) {
@@ -853,7 +853,7 @@ class _BalanceCard extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final isDebt = sub.hasDebt;
     final color = isDebt ? AppColors.error : AppColors.brand;
-    final label = isDebt ? 'دين على المشترك' : 'رصيد للمشترك';
+    final label = isDebt ? 'subscribers.label_debt_on_sub'.tr() : 'subscribers.label_balance_credit'.tr();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -969,32 +969,28 @@ class _OperationsCard extends StatelessWidget {
     // الـactions كثيرة، فنبني list مع شرط لكل عنصر بدل nested if.
     final ops = <_Op>[
       if (Perms.has('subscribers.edit'))
-        _Op(LucideIcons.pencil, 'تعديل', const Color(0xFF2D5F47),
+        _Op(LucideIcons.pencil, 'subscribers.op_edit'.tr(), const Color(0xFF2D5F47),
             () => showEditSubscriberSheet(context, sub)),
-      // 'تجديد اشتراك' — sheet renews the package (same as v1's
-      // _activateSubscriber). The label avoids collision with the
-      // separate 'تعطيل/تفعيل حساب' toggle below which manages the
-      // enabled flag.
       if (Perms.has('subscribers.activate'))
-        _Op(LucideIcons.zap, 'تجديد اشتراك', const Color(0xFF14B8A6),
+        _Op(LucideIcons.zap, 'subscribers.op_activate_sub'.tr(), const Color(0xFF14B8A6),
             () => showActivateSheet(context, sub)),
       if (Perms.has('subscribers.extend'))
-        _Op(LucideIcons.repeat, 'تمديد', const Color(0xFF3B82F6),
+        _Op(LucideIcons.repeat, 'subscribers.op_extend'.tr(), const Color(0xFF3B82F6),
             () => showExtendSheet(context, sub)),
       if (Perms.has('subscribers.add_debt'))
-        _Op(LucideIcons.plus, 'إضافة دين', const Color(0xFFE08F2D),
+        _Op(LucideIcons.plus, 'subscribers.op_add_debt'.tr(), const Color(0xFFE08F2D),
             () => showAddDebtSheet(context, sub)),
       if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
-        _Op(LucideIcons.banknote, 'تسديد دين', const Color(0xFF14B8A6),
+        _Op(LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(), const Color(0xFF14B8A6),
             () => showPayDebtSheet(context, sub)),
       if (Perms.has('discounts.manage'))
-        _Op(LucideIcons.tag, 'خصم سريع', const Color(0xFF14B8A6),
+        _Op(LucideIcons.tag, 'subscribers.op_quick_discount'.tr(), const Color(0xFF14B8A6),
             () => showQuickDiscountSheet(context, sub)),
       if (Perms.has('subscribers.view_activity'))
-        _Op(LucideIcons.history, 'سجل الحركات', const Color(0xFF26A69A),
+        _Op(LucideIcons.history, 'subscribers.op_movements'.tr(), const Color(0xFF26A69A),
             () => showMovementsSheet(context, sub)),
       if (Perms.has('reports.account_statement'))
-        _Op(LucideIcons.fileText, 'كشف الحساب', const Color(0xFF0EA5E9),
+        _Op(LucideIcons.fileText, 'subscribers.account_statement'.tr(), const Color(0xFF0EA5E9),
             () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => AccountStatementScreen(
@@ -1013,8 +1009,8 @@ class _OperationsCard extends StatelessWidget {
         _Op(
           LucideIcons.bellRing,
           sendingTemplate == 'debt_reminder'
-              ? 'جاري الإرسال…'
-              : 'تذكير دين',
+              ? 'subscribers.op_sending'.tr()
+              : 'subscribers.op_debt_reminder'.tr(),
           Colors.orange,
           () => onSendTemplate('debt_reminder'),
         ),
@@ -1022,15 +1018,15 @@ class _OperationsCard extends StatelessWidget {
         _Op(
           LucideIcons.alarmClock,
           sendingTemplate == 'expiry_warning'
-              ? 'جاري الإرسال…'
-              : 'تذكير انتهاء',
+              ? 'subscribers.op_sending'.tr()
+              : 'subscribers.op_expiry_warning'.tr(),
           Colors.deepOrange,
           () => onSendTemplate('expiry_warning'),
         ),
       if (Perms.has('subscribers.generate_link'))
         _Op(
           LucideIcons.link,
-          generatingLink ? 'جاري التوليد…' : 'توليد رابط',
+          generatingLink ? 'subscribers.op_generating'.tr() : 'subscribers.op_gen_link'.tr(),
           Colors.indigo,
           onGenerateLink,
         ),
@@ -1038,8 +1034,8 @@ class _OperationsCard extends StatelessWidget {
         _Op(
           LucideIcons.info,
           sendingTemplate == 'subscriber_info'
-              ? 'جاري الإرسال…'
-              : 'إرسال المعلومات',
+              ? 'subscribers.op_sending'.tr()
+              : 'subscribers.op_send_info'.tr(),
           Colors.blueAccent,
           () => onSendTemplate('subscriber_info'),
         ),
@@ -1047,37 +1043,37 @@ class _OperationsCard extends StatelessWidget {
         _Op(
           sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
           toggling
-              ? 'جاري...'
-              : (sub.isDisabled ? 'تشغيل' : 'تعطيل'),
+              ? 'subscribers.op_busy'.tr()
+              : (sub.isDisabled ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr()),
           sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
           onToggleEnabled ?? () {},
         ),
       if (Perms.has('subscribers.delete'))
         _Op(
           LucideIcons.trash2,
-          deleting ? 'جاري الحذف…' : 'حذف',
+          deleting ? 'subscribers.op_deleting'.tr() : 'common.delete'.tr(),
           AppColors.error,
           onDelete ?? () {},
         ),
       if (phone.isNotEmpty)
-        _Op(LucideIcons.phone, 'اتصال', const Color(0xFF14B8A6),
+        _Op(LucideIcons.phone, 'subscribers.call'.tr(), const Color(0xFF14B8A6),
             () => _launchUri(context, Uri.parse('tel:$phone'))),
       if (phone.isNotEmpty)
         _Op(
           LucideIcons.messageCircle,
-          'واتساب',
+          'subscribers.op_whatsapp'.tr(),
           const Color(0xFF25D366),
           () => _launchUri(
               context, Uri.parse('https://wa.me/${_digits(phone)}')),
         ),
       if (sub.isOnline && sub.idx != null)
-        _Op(LucideIcons.power, disconnecting ? 'جاري الفصل' : 'فصل المستخدم',
+        _Op(LucideIcons.power, disconnecting ? 'subscribers.op_disconnecting'.tr() : 'subscribers.disconnect_user'.tr(),
             AppColors.error, onDisconnect ?? () {}),
     ];
 
     return _SectionCard(
       icon: LucideIcons.layers,
-      title: 'العمليات',
+      title: 'subscribers.actions'.tr(),
       accent: AppColors.brand,
       children: [
         // Thin progress strip while busy — gives the admin an
@@ -1613,25 +1609,25 @@ class _SubscriberHero extends StatelessWidget {
           if ((sub.price ?? 0) > 0)
             _infoRow(
               icon: LucideIcons.dollarSign,
-              label: 'السعر',
+              label: 'subscribers.label_price'.tr(),
               value: '${formatIQD(sub.price!)} د.ع',
             ),
           if ((sub.expiration ?? '').isNotEmpty)
             _infoRow(
               icon: LucideIcons.calendar,
-              label: 'تاريخ الانتهاء',
+              label: 'subscribers.label_expiration'.tr(),
               value: _formatExpiration(sub.expiration),
             ),
           if ((sub.parentUsername ?? '').isNotEmpty)
             _infoRow(
               icon: LucideIcons.shield,
-              label: 'تابع إلى',
+              label: 'subscribers.label_parent_admin'.tr(),
               value: sub.parentUsername!,
             ),
           if (sub.displayPhone.isNotEmpty)
             _infoRow(
               icon: LucideIcons.phone,
-              label: 'رقم الهاتف',
+              label: 'subscribers.label_phone'.tr(),
               value: sub.displayPhone,
               copyable: true,
               context: context,
