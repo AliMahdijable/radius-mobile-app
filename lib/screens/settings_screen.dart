@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
 import '../services/alerts_service.dart';
@@ -79,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // لتسريب الأرقام بين الجلستين).
     SubscribersApi.clearAllCaches();
     DeviceProbeApi.clearAllCaches();
+    DeviceConfigApi.clearAllCaches();
     AlertsService.reset();
     // نُلغي تسجيل الـFCM token قبل مسح الجلسة — عشان الحساب الجديد
     // (لو أحد سجّل بعدك على نفس الجهاز) ما يستلم إشعارات الحساب السابق.

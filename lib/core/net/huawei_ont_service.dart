@@ -13,8 +13,10 @@ class HuaweiOntService {
   static Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 4),
-      receiveTimeout: const Duration(seconds: 4),
+      // مطلب المستخدم 2026-07-12: يطابق v1 (15s كل واحد). Huawei ONTs
+      // بطيئة الاستجابة على SoC ضعيف. 4s كانت تفشل مبكراً.
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
       validateStatus: (_) => true,
       followRedirects: false,
       headers: {'Accept': 'text/html,application/xhtml+xml,*/*'},

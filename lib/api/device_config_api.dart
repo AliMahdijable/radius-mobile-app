@@ -82,23 +82,55 @@ String? _nullIfBlank(String? s) {
 }
 
 class DeviceConfigApi {
+  // مطلب المستخدم 2026-07-12: كاش 5د لـfetchConfig. v1 يستعمل Riverpod
+  // family provider اللي يكاش تلقائياً؛ v2 كان يعمل network call لكل
+  // مشترك في كل wave (500 مشترك × poll 5s = 6000 request/min).
+  // الآن كاش يُلغى عند saveConfig/resetConfig.
+  static final _cache = <String, _CachedConfig>{};
+  static const _cacheTtl = Duration(minutes: 5);
+
   /// GET /api/subscribers/:username/device — per-subscriber override.
   /// Returns an empty DeviceConfig when the subscriber has none pinned.
   /// Returns null on hard errors (network/auth) so the caller can
   /// degrade gracefully.
+  ///
+  /// يستفيد من كاش 5 دقائق للـwaves المتكرّرة (silent refresh).
   static Future<DeviceConfig?> fetchConfig(String username) async {
+    final key = username.trim();
+    if (key.isEmpty) return const DeviceConfig();
+    final now = DateTime.now();
+    final cached = _cache[key];
+    if (cached != null && now.difference(cached.at) < _cacheTtl) {
+      return cached.cfg;
+    }
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/subscribers/$username/device',
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return const DeviceConfig();
-      final dev = body['device'];
-      if (dev is! Map) return const DeviceConfig();
-      return DeviceConfig.fromJson(Map<String, dynamic>.from(dev));
+      DeviceConfig cfg = const DeviceConfig();
+      if (body['success'] == true) {
+        final dev = body['device'];
+        if (dev is Map) {
+          cfg = DeviceConfig.fromJson(Map<String, dynamic>.from(dev));
+        }
+      }
+      _cache[key] = _CachedConfig(cfg, now);
+      return cfg;
     } catch (_) {
       return const DeviceConfig();
     }
+  }
+
+  /// يُستدعى بعد saveConfig/resetConfig حتى الـprobe التالي يستعمل
+  /// الاعتمادات الجديدة بدلاً من الكاش القديم.
+  static void invalidateCache(String username) {
+    _cache.remove(username.trim());
+  }
+
+  /// يُستدعى عند logout حتى admin جديد لا يقرأ رواسب config للأدمن السابق.
+  static void clearAllCaches() {
+    _cache.clear();
   }
 
   /// PUT /api/subscribers/:username/device — saves override.
@@ -108,7 +140,9 @@ class DeviceConfigApi {
         '/api/subscribers/$username/device',
         data: cfg.toPutJson(),
       );
-      return r.data?['success'] == true;
+      final ok = r.data?['success'] == true;
+      if (ok) invalidateCache(username);
+      return ok;
     } catch (_) {
       return false;
     }
@@ -121,11 +155,19 @@ class DeviceConfigApi {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(
         '/api/subscribers/$username/device',
       );
-      return r.data?['success'] == true;
+      final ok = r.data?['success'] == true;
+      if (ok) invalidateCache(username);
+      return ok;
     } catch (_) {
       return false;
     }
   }
+}
+
+class _CachedConfig {
+  const _CachedConfig(this.cfg, this.at);
+  final DeviceConfig cfg;
+  final DateTime at;
 }
 
 class AdminDeviceDefaultsApi {

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import '../core/net/huawei_ont_service.dart';
-import '../core/net/tcp_reachability.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../models/device_health.dart';
 import 'device_config_api.dart';
@@ -33,7 +32,9 @@ class DeviceProbeApi {
     _adminFetch = null;
   }
   static const _ttl = Duration(minutes: 5);
-  static const _probeCap = Duration(seconds: 6);
+  // مطلب المستخدم 2026-07-12: يطابق v1. الـ6 ثواني كانت تُعدم Huawei
+  // ONTs البطيئة قبل ما ترجع (login=4s + fetch=4s = 8s > 6s cap).
+  static const _probeCap = Duration(seconds: 15);
 
   // Library defaults — last-resort. Matches v1.
   static const _kOntUser = 'telecomadmin';
@@ -166,8 +167,12 @@ class DeviceProbeApi {
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) async {
-    final reachable = await TcpReachability.isReachable(ip);
-    if (!reachable) return null;
+    // مطلب المستخدم 2026-07-12: يطابق v1 — لا TCP precheck. v1 يفجّر
+    // ONT+UBNT مباشرة على أمل نجاح واحد منهم داخل _probeCap. الـTCP
+    // check كان يعطي false negatives (firewall يبلوك 80/443/8080 لكن
+    // الجهاز موجود على منفذ آخر). الـ_probeCap 15s يحمي من IPs ميتة.
+    // تحقّق فقط من empty string.
+    if (ip.isEmpty) return null;
 
     // Per-tier creds. Subscriber override applies ONLY when the
     // admin pinned that exact kind on this subscriber — otherwise we
