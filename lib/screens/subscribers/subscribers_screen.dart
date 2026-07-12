@@ -1829,13 +1829,13 @@ class _ClearSortChip extends StatelessWidget {
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(LucideIcons.x, size: 12, color: AppColors.error),
-              SizedBox(width: 3),
+              const Icon(LucideIcons.x, size: 12, color: AppColors.error),
+              const SizedBox(width: 3),
               Text(
                 'subscribers.stop'.tr(),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.error,
@@ -1886,9 +1886,9 @@ class _ScanAllChip extends StatelessWidget {
                     )
                   : const Icon(LucideIcons.refreshCw, size: 12, color: accent),
               const SizedBox(width: 5),
-              const Text(
+              Text(
                 'subscribers.probe_devices'.tr(),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: accent,

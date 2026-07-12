@@ -350,7 +350,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (result.ok) {
       SubscriberEvents.notifyChange();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('subscribers.delete_ok'.tr()),
           backgroundColor: AppColors.brand,
           behavior: SnackBarBehavior.floating,
@@ -376,9 +376,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // WhatsApp. Without a phone we can't deliver it anywhere.
     if (sub.displayPhone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('subscribers.no_phone'.tr()),
-          backgroundColor: Color(0xFFE08F2D),
+          backgroundColor: const Color(0xFFE08F2D),
           behavior: SnackBarBehavior.floating,
         ),
       );
