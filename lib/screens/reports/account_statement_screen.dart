@@ -6,6 +6,7 @@ import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'widgets/action_labels.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
@@ -71,6 +72,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
   List<List<String>> _exportRows(List<StatementRow> rows) {
     // كشف الحساب scoped لمشترك واحد — الاسم يُكتب مرّة واحدة بأول عمودين
     // (اتّساقاً مع بقية التقارير 2026-07-12) ثم مبلغ/تاريخ/وصف/نوع/منفّذ.
+    // النوع يُترجَم لعربي بدل SUBSCRIBER_ACTIVATE الإنجليزي.
     final displayName = widget.displayName ?? widget.username;
     return rows
         .map((r) => [
@@ -79,11 +81,13 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               r.amount == 0 ? '' : r.amount.toString(),
               r.createdAt,
               (r.description ?? '').replaceAll('\n', ' '),
-              r.actionType ?? '',
+              arabicActionLabel(r.actionType ?? '', r.description ?? ''),
               r.adminName ?? '',
             ])
         .toList();
   }
+
+  static const List<double> _pdfWeights = [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3];
 
   @override
   Widget build(BuildContext context) {
@@ -196,6 +200,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                         'النوع',
                         'المنفّذ',
                       ],
+                      columnWeights: _pdfWeights,
                       rows: _exportRows(rows),
                     ),
                   ],

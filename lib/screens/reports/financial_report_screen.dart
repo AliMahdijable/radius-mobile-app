@@ -7,6 +7,7 @@ import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'widgets/action_labels.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
@@ -499,7 +500,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     // ترتيب أعمدة Excel/PDF المطلوب (2026-07-12): اسم المشترك (بارز
     // بالعربي) → المبلغ → التاريخ → الوصف → البقية. الاسم العربي أولاً
     // ويجمع firstname+lastname؛ نضيف عمود username منفصل لتسهيل الفرز
-    // والبحث في الشيت.
+    // والبحث في الشيت. النوع يُترجَم لعربي (arabicActionLabel) بدل
+    // SUBSCRIBER_ACTIVATE الإنجليزي.
     final exportRows = filtered
         .map((l) => [
               l.userFullName ?? l.targetName ?? l.userUsername ?? '',
@@ -507,7 +509,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               l.amount == 0 ? '' : l.amount.toString(),
               l.createdAt,
               (l.actionDescription ?? '').replaceAll('\n', ' '),
-              l.actionType,
+              arabicActionLabel(l.actionType, l.actionDescription ?? ''),
               l.actingEmployeeFullName ?? l.adminUsername ?? '',
             ])
         .toList();
@@ -557,6 +559,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 'النوع',
                 'المنفّذ',
               ],
+              // مطلب 2026-07-12: الاسم/الوصف يأخذون مساحة أوسع، النوع
+              // والمنفّذ أضيق (خصوصاً بعد الترجمة العربية).
+              columnWeights: const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3],
               rows: exportRows,
             ),
           ],

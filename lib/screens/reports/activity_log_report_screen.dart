@@ -6,6 +6,7 @@ import '../../api/reports_api.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'widgets/action_labels.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import 'widgets/report_filters.dart';
@@ -132,7 +133,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
   }
 
   // ترتيب أعمدة Excel/PDF المطلوب (2026-07-12): اسم المشترك بالعربي أولاً
-  // → يوزر → مبلغ → تاريخ → وصف → نوع → منفّذ.
+  // → يوزر → مبلغ → تاريخ → وصف → نوع (عربي) → منفّذ.
   List<List<String>> get _exportRows => _visibleRows
       .map((r) => [
             r.userFullName ?? r.targetName ?? r.userUsername ?? '',
@@ -140,10 +141,12 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
             r.amount == 0 ? '' : r.amount.toString(),
             r.createdAt,
             (r.actionDescription ?? '').replaceAll('\n', ' '),
-            r.actionType,
+            arabicActionLabel(r.actionType, r.actionDescription ?? ''),
             r.actingEmployeeFullName ?? r.adminUsername ?? '',
           ])
       .toList();
+
+  static const List<double> _pdfWeights = [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3];
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +197,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                       _load();
                     },
                     decoration: InputDecoration(
-                      hintText: 'ابحث في الوصف / المشترك / المدير...',
+                      hintText: 'ابحث بالاسم / اليوزر / الوصف...',
                       hintStyle: AppType.input(color: AppColors.textLow),
                       prefixIcon: Icon(LucideIcons.search,
                           size: 18, color: AppColors.textMid),
@@ -270,6 +273,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                           'النوع',
                                           'المنفّذ',
                                         ],
+                                        columnWeights: _pdfWeights,
                                         rows: _exportRows,
                                       ),
                                     ],

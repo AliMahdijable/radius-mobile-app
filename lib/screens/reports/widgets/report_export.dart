@@ -35,6 +35,7 @@ class ReportExportBar extends StatelessWidget {
     required this.rows,
     this.fileNameBase = 'report',
     this.subtitle,
+    this.columnWeights,
   });
 
   /// يُستعمل في رأس PDF + اسم الملف.
@@ -45,6 +46,11 @@ class ReportExportBar extends StatelessWidget {
 
   /// اسم الملف (بدون امتداد + بدون timestamp — نضيفه تلقائياً).
   final String fileNameBase;
+
+  /// أوزان عرض أعمدة PDF (اختياري). طوله يساوي عدد الأعمدة، ومجموعه غير
+  /// ملزَم يتساوى مع أي رقم — الأوزان نسبية. لو null، كل الأعمدة تأخذ
+  /// نفس العرض (flex=1). المطلب 2026-07-12: اسم/يوزر/وصف أوسع، نوع/منفّذ أضيق.
+  final List<double>? columnWeights;
 
   bool get _hasData => rows.isNotEmpty;
 
@@ -143,7 +149,11 @@ class ReportExportBar extends StatelessWidget {
                   color: PdfColors.grey400, width: 0.4),
               columnWidths: {
                 for (int i = 0; i < columns.length; i++)
-                  i: const pw.FlexColumnWidth(1),
+                  i: pw.FlexColumnWidth(
+                    columnWeights != null && i < columnWeights!.length
+                        ? columnWeights![i]
+                        : 1.0,
+                  ),
               },
             ),
             pw.SizedBox(height: 6),

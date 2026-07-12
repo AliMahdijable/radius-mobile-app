@@ -107,7 +107,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
 
   // صفوف للتصدير — visible (يحترم الفلتر النشط).
   // ترتيب الأعمدة (2026-07-12): اسم المشترك بارز → يوزر → مبلغ → تاريخ
-  // → وصف → نوع → منفّذ.
+  // → وصف → نوع (عربي) → منفّذ.
   List<List<String>> get _exportRows => _visibleRows
       .map((r) => [
             r.userFullName ?? r.targetName ?? r.userUsername ?? '',
@@ -119,6 +119,9 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             r.actingEmployeeFullName ?? r.adminUsername ?? '',
           ])
       .toList();
+
+  // أوزان أعمدة PDF — الاسم/الوصف الأوسع، النوع/المنفّذ الأضيق.
+  static const List<double> _pdfWeights = [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3];
 
   String _actionLabel(ActivityRow r) {
     final at = r.actionType.toUpperCase().trim();
@@ -220,6 +223,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                         'النوع',
                         'المنفّذ',
                       ],
+                      columnWeights: _pdfWeights,
                       rows: _exportRows,
                     ),
                   ],
