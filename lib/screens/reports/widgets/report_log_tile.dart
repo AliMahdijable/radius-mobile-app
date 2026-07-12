@@ -273,6 +273,10 @@ _ActionMeta _actionMeta(String at, String desc) {
     case 'SUBSCRIBER_DISABLE':
       return const _ActionMeta(
           'تعطيل', LucideIcons.ban, Color(0xFFE08F2D));
+    case 'SUBSCRIBER_DISCONNECT':
+      // فصل جلسة المشترك من الشبكة — مو مالي، فحيادي رمادي.
+      return const _ActionMeta(
+          'فصل المستخدم', LucideIcons.power, Color(0xFF90A4AE));
     case 'BALANCE_ADD':
       // إضافة دين = سالب أحمر (مبلغ يزيد على المشترك، خسارة للمدير).
       return _ActionMeta('إضافة دين', LucideIcons.plus, AppColors.error,

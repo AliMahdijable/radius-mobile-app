@@ -27,6 +27,8 @@ String arabicActionLabel(String actionType, [String description = '']) {
       return 'تشغيل';
     case 'SUBSCRIBER_DISABLE':
       return 'تعطيل';
+    case 'SUBSCRIBER_DISCONNECT':
+      return 'فصل المستخدم';
     case 'BALANCE_ADD':
       return 'إضافة دين';
     case 'BALANCE_DEDUCT':
