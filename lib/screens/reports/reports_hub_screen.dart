@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -38,8 +39,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.wallet,
               color: const Color(0xFF14B8A6),
-              title: 'التقرير المالي',
-              subtitle: 'الإيرادات + الديون + المصاريف',
+              title: 'reports.financial'.tr(),
+              subtitle: 'reports.financial_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const FinancialReportScreen()),
               ),
@@ -48,8 +49,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.zap,
               color: const Color(0xFF3B82F6),
-              title: 'التفعيلات',
-              subtitle: 'كل تفعيلات الفترة (نقدي/غير نقدي)',
+              title: 'reports.activations'.tr(),
+              subtitle: 'reports.activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ActivationsReportScreen()),
               ),
@@ -58,8 +59,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.calendarDays,
               color: const Color(0xFF8B5CF6),
-              title: 'التفعيلات اليومية',
-              subtitle: 'مجموع يومي + إيراد لكل يوم',
+              title: 'reports.daily_activations'.tr(),
+              subtitle: 'reports.daily_activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DailyActivationsReportScreen()),
               ),
@@ -68,8 +69,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.receipt,
               color: const Color(0xFFE08F2D),
-              title: 'الصرفيات',
-              subtitle: 'سجل + إضافة + تعديل المصاريف',
+              title: 'reports.expenses'.tr(),
+              subtitle: 'reports.expenses_hint'.tr(),
               // ExpensesScreen موجودة فعلاً — نُحوّل لها.
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ExpensesScreen()),
@@ -79,8 +80,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.users,
               color: const Color(0xFF0EA5E9),
-              title: 'ديون المدراء',
-              subtitle: 'ديون مخصّصة على المدراء الفرعيين',
+              title: 'reports.manager_debts'.tr(),
+              subtitle: 'reports.manager_debts_hint'.tr(),
               // CustomDebtsScreen يحتاج managerId — نستعمل null
               // للوضع "الكل" (الـscreen يدعم all-managers mode).
               // ملاحظة: لو الـconstructor تتطلب param، نلف بصفحة
@@ -95,8 +96,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.activity,
               color: const Color(0xFFCD8B00),
-              title: 'الجلسات',
-              subtitle: 'المتصلون + سجل الجلسات',
+              title: 'reports.sessions'.tr(),
+              subtitle: 'reports.sessions_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SessionsReportScreen()),
               ),
@@ -105,8 +106,8 @@ class ReportsHubScreen extends StatelessWidget {
             _ReportCard(
               icon: LucideIcons.history,
               color: const Color(0xFF26A69A),
-              title: 'سجل النشاط',
-              subtitle: 'كل العمليات + من نفّذها',
+              title: 'reports.activity_log'.tr(),
+              subtitle: 'reports.activity_log_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ActivityLogReportScreen()),
               ),
@@ -120,7 +121,7 @@ class ReportsHubScreen extends StatelessWidget {
             elevation: 0,
             scrolledUnderElevation: 0,
             title: Text(
-              'التقارير',
+              'reports.title'.tr(),
               style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
             ),
             iconTheme: IconThemeData(color: AppColors.textHi),
@@ -153,12 +154,12 @@ class ReportsHubScreen extends StatelessWidget {
             Icon(LucideIcons.lock, size: 36, color: AppColors.textLow),
             const SizedBox(height: 10),
             Text(
-              'ليس لديك صلاحيات لأي تقرير',
+              'reports.empty_perms'.tr(),
               style: AppType.label(color: AppColors.textMid),
             ),
             const SizedBox(height: 4),
             Text(
-              'اتصل بالمدير العام لمنحك صلاحيات تقارير',
+              'reports.empty_perms_hint'.tr(),
               style: AppType.muted().copyWith(fontSize: 12),
             ),
           ],
@@ -257,7 +258,7 @@ class _AllManagersDebtsRouter extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        title: Text('ديون المدراء',
+        title: Text('reports.manager_debts'.tr(),
             style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
@@ -270,7 +271,7 @@ class _AllManagersDebtsRouter extends StatelessWidget {
               Icon(LucideIcons.info, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
               Text(
-                'افتح المدير المطلوب من صفحة "المدراء" → "ديون أخرى" لعرض ديونه المخصّصة.',
+                'reports.manager_debts_open_hint'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.subtitle(color: AppColors.textMid)
                     .copyWith(height: 1.6),
@@ -279,7 +280,7 @@ class _AllManagersDebtsRouter extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(LucideIcons.chevronRight, size: 16),
-                label: const Text('رجوع'),
+                label: Text('common.back'.tr()),
               ),
             ],
           ),

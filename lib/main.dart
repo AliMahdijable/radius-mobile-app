@@ -62,11 +62,13 @@ void main() async {
       supportedLocales: LocaleService.supported,
       path: 'assets/translations',
       fallbackLocale: LocaleService.arabic,
+      // startLocale: مطلب المستخدم 2026-07-12 — أوّل تشغيل يبدأ عربي
+      // دائماً حتى لو جهاز الـOS إنجليزي. لو المستخدم بدّل لاحقاً،
+      // saveLocale يحفظ اختياره فتبقى الجلسات التالية على الإنجليزي.
+      startLocale: LocaleService.arabic,
       // saveLocale: EasyLocalization يحفظ اللغة في SharedPreferences
       // ويستعيدها عند التشغيل التالي — بدون كود إضافي.
       saveLocale: true,
-      // startLocale: null → EasyLocalization يستعيد آخر اختيار محفوظ،
-      // وإلا يقع على fallback. المستخدم الجديد يبدأ عربي.
       child: const MyServicesApp(),
     ),
   );

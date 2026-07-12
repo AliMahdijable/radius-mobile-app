@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -556,20 +557,22 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('فصل المستخدم'),
+        title: Text('subscribers.disconnect_user'.tr()),
         content: Text(
-          'سيتم قطع جلسة ${s.fullName.isNotEmpty ? s.fullName : s.username} الآن.',
+          'subscribers.disconnect_user_body'.tr(namedArgs: {
+            'name': s.fullName.isNotEmpty ? s.fullName : s.username,
+          }),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('فصل'),
+            child: Text('subscribers.disconnect'.tr()),
           ),
         ],
       ),
@@ -581,8 +584,8 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.ok
-            ? 'تم الفصل'
-            : (result.message ?? 'تعذّر الفصل')),
+            ? 'subscribers.disconnect_ok'.tr()
+            : (result.message ?? 'subscribers.disconnect_failed'.tr())),
         backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -597,28 +600,27 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('فصل المستخدمين'),
+        title: Text('subscribers.disconnect_users'.tr()),
         content: Text(
-          'سيتم قطع جلسة ${online.length} مشترك الآن. سيحتاجون إلى '
-          'إعادة الاتصال يدوياً.',
+          'subscribers.disconnect_users_body'.tr(namedArgs: {'count': '${online.length}'}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('فصل'),
+            child: Text('subscribers.disconnect'.tr()),
           ),
         ],
       ),
     );
     if (confirm != true || !mounted) return;
 
-    _showProgress('فصل المستخدمين');
+    _showProgress('subscribers.disconnect_users'.tr());
     var ok = 0, fail = 0;
     for (final s in online) {
       final res = await SubscribersApi.disconnect(s.idx!);
@@ -636,7 +638,10 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('تم فصل $ok ${fail > 0 ? '— فشل: $fail' : ''}'),
+        content: Text('subscribers.disconnected_count'.tr(namedArgs: {
+          'ok': '$ok',
+          'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
+        })),
         backgroundColor: fail == 0 ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -716,7 +721,10 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('تم: $ok ${fail > 0 ? '— فشل: $fail' : ''}'),
+        content: Text('subscribers.done_count'.tr(namedArgs: {
+          'ok': '$ok',
+          'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
+        })),
         backgroundColor: fail == 0 ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -727,14 +735,14 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
     final res = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('تأكيد ${action.label} $count مشترك'),
+        title: Text('subscribers.confirm_bulk_action'.tr(namedArgs: {'label': action.label, 'count': '$count'})),
         content: Text(action == _BulkAction.delete
-            ? 'سيتم حذف $count مشترك نهائياً. لا يمكن التراجع.'
-            : 'هل أنت متأكد من ${action.label} $count مشترك؟'),
+            ? 'subscribers.confirm_bulk_delete'.tr(namedArgs: {'count': '$count'})
+            : 'subscribers.confirm_bulk_generic'.tr(namedArgs: {'label': action.label, 'count': '$count'})),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -767,7 +775,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
             children: [
               const CircularProgressIndicator(color: AppColors.brand),
               const SizedBox(height: Sp.md),
-              Text('جارٍ $label...',
+              Text('subscribers.busy_action'.tr(namedArgs: {'label': label}),
                   style: AppType.label(color: AppColors.textHi)),
             ],
           ),
@@ -866,7 +874,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'يفحص الأجهزة $_probeDone/$_probeTotal',
+                      'subscribers.probing_devices'.tr(namedArgs: {'done': '$_probeDone', 'total': '$_probeTotal'}),
                       style: AppType.muted().copyWith(fontSize: 10.5),
                     ),
                   ],
@@ -902,7 +910,7 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
                     const SizedBox(width: 6),
                     _DeviceSortChip(
                       metric: 'sig',
-                      label: 'إشارة',
+                      label: 'subscribers.signal'.tr(),
                       icon: LucideIcons.signal,
                       current: _deviceSort,
                       onTap: () => _toggleDeviceSort('sig'),
@@ -1079,12 +1087,14 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
 }
 
 enum _BulkAction {
-  disable('تعطيل'),
-  enable('تشغيل'),
-  delete('حذف');
+  disable('subscribers.disable'),
+  enable('subscribers.enable'),
+  delete('subscribers.bulk_delete');
 
-  const _BulkAction(this.label);
-  final String label;
+  const _BulkAction(this._key);
+  final String _key;
+  // نُترجم عند الاستدعاء — الـenum ما يستطيع استدعاء tr() في constructor.
+  String get label => _key.tr();
 }
 
 class _SearchHeader extends StatelessWidget {
@@ -1124,7 +1134,7 @@ class _SearchHeader extends StatelessWidget {
                     controller: controller,
                     style: AppType.input(color: AppColors.textHi),
                     decoration: InputDecoration(
-                      hintText: 'ابحث بالاسم أو المعرّف أو رقم الهاتف...',
+                      hintText: 'subscribers.search_hint_full'.tr(),
                       hintStyle: AppType.input(color: AppColors.textLow),
                       border: InputBorder.none,
                       isCollapsed: true,
@@ -1150,7 +1160,7 @@ class _SearchHeader extends StatelessWidget {
         // الوحيد أن الـicon هنا يدور حسب الحالة (chevron up vs down).
         Tooltip(
           message:
-              allCollapsed ? 'توسيع كل المشتركين' : 'تكويل كل المشتركين',
+              allCollapsed ? 'subscribers.expand_all'.tr() : 'subscribers.collapse_all'.tr(),
           child: Material(
             color: AppColors.surface,
             shape: const CircleBorder(),
@@ -1244,7 +1254,7 @@ class _SelectionHeader extends StatelessWidget {
           TextButton(
             onPressed: onSelectAll,
             child: Text(
-              'تحديد الكل ($total)',
+              '${'subscribers.select_all'.tr()} ($total)',
               style: AppType.label(color: AppColors.brand)
                   .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
             ),
@@ -1270,7 +1280,7 @@ class _PageSizePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return PopupMenuButton<int>(
-      tooltip: 'حجم الصفحة',
+      tooltip: 'subscribers.page_size'.tr(),
       onSelected: onChange,
       itemBuilder: (_) => [
         for (final o in options)
@@ -1323,7 +1333,7 @@ class _Pager extends StatelessWidget {
           ),
           const SizedBox(width: Sp.md),
           Text(
-            'صفحة ${page + 1} من $totalPages',
+            'subscribers.page_of'.tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
             style: AppType.label(color: AppColors.textHi).copyWith(
               fontSize: 12, // Card title tier — secondary nav text
               fontWeight: FontWeight.w700,
@@ -1406,7 +1416,7 @@ class _ManagerFilterBar extends StatelessWidget {
               child: Row(
                 children: [
                   _ManagerChip(
-                    label: 'كل المدراء',
+                    label: 'subscribers.all_managers'.tr(),
                     selected: current == null,
                     onTap: () => onSelect(null),
                   ),
@@ -1553,7 +1563,7 @@ class _BulkActionBar extends StatelessWidget {
                   onPressed: onRenew,
                   icon: const Icon(LucideIcons.calendarPlus, size: 18),
                   label: Text(
-                    'تجديد الاشتراك ($selectedCount)',
+                    '${'subscribers.bulk_renew'.tr()} ($selectedCount)',
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 14),
                   ),
@@ -1577,7 +1587,7 @@ class _BulkActionBar extends StatelessWidget {
                   onPressed: onPayDebt,
                   icon: const Icon(LucideIcons.banknote, size: 16),
                   label: Text(
-                    'تسديد دين ($debtorCount)',
+                    '${'subscribers.pay_debt'.tr()} ($debtorCount)',
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 13),
                   ),
@@ -1603,7 +1613,7 @@ class _BulkActionBar extends StatelessWidget {
                   onPressed: onDisconnect,
                   icon: const Icon(LucideIcons.power, size: 16),
                   label: Text(
-                    'فصل المتصلين ($onlineCount)',
+                    '${'subscribers.disconnect_online'.tr()} ($onlineCount)',
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 13),
                   ),
@@ -1622,8 +1632,8 @@ class _BulkActionBar extends StatelessWidget {
                       child: _SecondaryBtn(
                         icon: LucideIcons.ban,
                         label: enabledCount > 0
-                            ? 'تعطيل ($enabledCount)'
-                            : 'تعطيل',
+                            ? '${'subscribers.disable'.tr()} ($enabledCount)'
+                            : 'subscribers.disable'.tr(),
                         color: const Color(0xFFCD8B00),
                         enabled: enabledCount > 0,
                         onTap: onDisable,
@@ -1634,8 +1644,8 @@ class _BulkActionBar extends StatelessWidget {
                       child: _SecondaryBtn(
                         icon: LucideIcons.circleCheck,
                         label: disabledCount > 0
-                            ? 'تشغيل ($disabledCount)'
-                            : 'تشغيل',
+                            ? '${'subscribers.enable'.tr()} ($disabledCount)'
+                            : 'subscribers.enable'.tr(),
                         color: AppColors.brand,
                         enabled: disabledCount > 0,
                         onTap: onEnable,
@@ -1647,7 +1657,7 @@ class _BulkActionBar extends StatelessWidget {
                     Expanded(
                       child: _SecondaryBtn(
                         icon: LucideIcons.trash2,
-                        label: 'حذف',
+                        label: 'subscribers.bulk_delete'.tr(),
                         color: AppColors.error,
                         onTap: onDelete,
                       ),
@@ -1710,8 +1720,8 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final msg = query.isNotEmpty
-        ? 'لا توجد نتائج بحث "$query"'
-        : 'لا يوجد مشترك في هذا الفلتر';
+        ? 'subscribers.no_search_results'.tr(namedArgs: {'q': query})
+        : 'subscribers.empty_filter'.tr();
     return ListView(
       // ListView so RefreshIndicator can still pull-to-refresh.
       physics: const AlwaysScrollableScrollPhysics(),
@@ -1824,7 +1834,7 @@ class _ClearSortChip extends StatelessWidget {
               Icon(LucideIcons.x, size: 12, color: AppColors.error),
               SizedBox(width: 3),
               Text(
-                'إيقاف',
+                'subscribers.stop'.tr(),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -1877,7 +1887,7 @@ class _ScanAllChip extends StatelessWidget {
                   : const Icon(LucideIcons.refreshCw, size: 12, color: accent),
               const SizedBox(width: 5),
               const Text(
-                'فحص الأجهزة',
+                'subscribers.probe_devices'.tr(),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
