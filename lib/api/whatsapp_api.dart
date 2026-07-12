@@ -234,15 +234,19 @@ class WhatsAppApi {
 
   /// POST /api/whatsapp/start-session — يطلق session جديد ينتج QR.
   /// الـQR يُجلب لاحقاً عبر pending-qr / get-qr.
+  ///
+  /// Backend requires BOTH adminId and adminUsername (server.js line 2309).
+  /// Sending adminId alone was returning 400 "Admin ID and username are required".
   static Future<({bool ok, String? message})> startSession() async {
     final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) {
+    final adminUsername = await AuthStorage.readAdminUsername();
+    if (adminId == null || adminUsername == null) {
       return (ok: false, message: 'لا توجد جلسة دخول');
     }
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/whatsapp/start-session',
-        data: {'adminId': adminId},
+        data: {'adminId': adminId, 'adminUsername': adminUsername},
       );
       final body = r.data ?? const {};
       return (
@@ -266,11 +270,18 @@ class WhatsAppApi {
     required String phone,
   }) async {
     final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) return (ok: false, code: null, message: 'لا توجد جلسة دخول');
+    final adminUsername = await AuthStorage.readAdminUsername();
+    if (adminId == null || adminUsername == null) {
+      return (ok: false, code: null, message: 'لا توجد جلسة دخول');
+    }
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/whatsapp/start-session-code',
-        data: {'adminId': adminId, 'phone': phone},
+        data: {
+          'adminId': adminId,
+          'adminUsername': adminUsername,
+          'phone': phone,
+        },
       );
       final body = r.data ?? const {};
       return (
@@ -306,13 +317,20 @@ class WhatsAppApi {
   }
 
   /// POST /api/whatsapp/reconnect
+  ///
+  /// Backend accepts adminId alone, but resolveWhatsAppAdminContext needs
+  /// adminUsername to route sub-admins correctly. We pass it when available.
   static Future<({bool ok, String? message})> reconnect() async {
     final adminId = await AuthStorage.readAdminId();
+    final adminUsername = await AuthStorage.readAdminUsername();
     if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/whatsapp/reconnect',
-        data: {'adminId': adminId},
+        data: {
+          'adminId': adminId,
+          if (adminUsername != null) 'adminUsername': adminUsername,
+        },
       );
       final body = r.data ?? const {};
       return (
@@ -390,11 +408,14 @@ class WhatsAppApi {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
     try {
+      // Backend expects `{ adminId, features }` — nested. v1 web sends the
+      // same shape (client-v2/src/pages/WhatsApp.tsx). Spreading toJson()
+      // at the top level was returning 400 "adminId and features are required".
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/whatsapp/save-features',
         data: {
           'adminId': adminId,
-          ...features.toJson(),
+          'features': features.toJson(),
         },
       );
       final body = r.data ?? const {};
@@ -409,8 +430,14 @@ class WhatsAppApi {
   }
 
   /// POST /api/whatsapp/save-template — جديد أو تعديل قالب.
+  ///
+  /// Backend requires `templateName` (server.js line 3445). v1 web sends
+  /// it too (client-v2/src/pages/WhatsAppTemplates.tsx). Omitting it was
+  /// returning 400 "جميع الحقول مطلوبة". `isActive` is passed for parity
+  /// but the backend save endpoint currently ignores it.
   static Future<({bool ok, String? message})> saveTemplate({
     required String templateType,
+    required String templateName,
     required String messageContent,
     required bool isActive,
   }) async {
@@ -422,6 +449,7 @@ class WhatsAppApi {
         data: {
           'adminId': adminId,
           'templateType': templateType,
+          'templateName': templateName,
           'messageContent': messageContent,
           'isActive': isActive,
         },

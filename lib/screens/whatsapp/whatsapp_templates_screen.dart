@@ -423,6 +423,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     setState(() => _saving = true);
     final r = await WhatsAppApi.saveTemplate(
       templateType: widget.def.type,
+      templateName: widget.def.label,
       messageContent: _bodyCtrl.text,
       isActive: _isActive,
     );
