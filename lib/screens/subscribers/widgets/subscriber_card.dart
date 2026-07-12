@@ -305,11 +305,12 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
     );
   }
 
-  // مطلب 2026-07-12: DeviceChipMicro يظهر لأي مشترك عنده IP (سواء متصل
-  // أو منتهي/معطّل) — قيم الفحص مخزّنة في cache DeviceProbeApi بحسب IP
-  // ولا تتطلّب اتصال حالي بالـRADIUS. هيك يطابق سلوك v1.
-  bool get _hasDeviceInfo =>
-      showLiveSession && (sub.ipAddress ?? '').trim().isNotEmpty;
+  // مطلب 2026-07-12: DeviceChipMicro يظهر لأي مشترك — قد يكون له IP
+  // (من session سابق) أو customIp في DeviceConfig (للـoffline).
+  // DeviceChipMicro داخلياً يستمع DeviceProbeBus؛ إذا ما في snapshot،
+  // يظهر عابراً ثم يختفي (SizedBox.shrink). فآمن نُظهر الـwidget حتى
+  // للمشتركين اللي بلا IP معروف — بمجرد ما يوصلهم wave يظهر عندهم.
+  bool get _hasDeviceInfo => showLiveSession;
 
   // Decide if there's any content under the divider — the divider
   // shouldn't draw if we're not going to render anything.

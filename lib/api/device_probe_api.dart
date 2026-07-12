@@ -18,6 +18,10 @@ import 'device_config_api.dart';
 ///   _adminDefaults — one fetch per session, used by every probe.
 class DeviceProbeApi {
   static final _snapCache = <String, _Cached>{};
+  /// مطلب 2026-07-12: index موازي بالـusername. يخدم الحالة حيث المشترك
+  /// oفلاين وما عنده SAS IP معروف، لكن أدمن ضبط customIp في DeviceConfig.
+  /// الـcache الأصلي يفهرس بـeffectiveIp؛ هذا يجد الآخر بالـusername.
+  static final _snapByUser = <String, _Cached>{};
   static Future<AdminDeviceDefaults>? _adminFetch;
 
   /// مطلب 2026-06-11: مسح كل الـcaches عند تسجيل الخروج. الـadmin
@@ -25,6 +29,7 @@ class DeviceProbeApi {
   /// نلصق snapshots على IPs قد تنتمي لشبكة admin سابق.
   static void clearAllCaches() {
     _snapCache.clear();
+    _snapByUser.clear();
     _adminFetch = null;
   }
   static const _ttl = Duration(minutes: 5);
@@ -73,7 +78,13 @@ class DeviceProbeApi {
     final defaults = await _loadAdminDefaults();
     final snap = await _runProbe(effectiveIp, cfg, defaults)
         .timeout(_probeCap, onTimeout: () => null);
-    _snapCache[effectiveIp] = _Cached(snap, DateTime.now());
+    final entry = _Cached(snap, DateTime.now());
+    _snapCache[effectiveIp] = entry;
+    // مطلب 2026-07-12: نُخزّن كمان بمفتاح الـusername حتى الـUI (كارت
+    // المشترك) يقدر يستدعي cachedForUser بدون معرفة الـeffectiveIp.
+    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
+      _snapByUser[subscriberUsername] = entry;
+    }
     return snap;
   }
 
@@ -86,6 +97,17 @@ class DeviceProbeApi {
   /// Returns null if no entry OR the entry expired.
   static DeviceHealthSnapshot? cached(String ip) {
     final c = _snapCache[ip.trim()];
+    if (c == null) return null;
+    if (DateTime.now().difference(c.at) >= _ttl) return null;
+    return c.snap;
+  }
+
+  /// نفس cached لكن بالـusername. مطلب 2026-07-12: كارت المشترك ما يعرف
+  /// دائماً الـeffectiveIp (بالأخص للـoffline اللي عندهم customIp)، فيسأل
+  /// بالـusername مباشرة.
+  static DeviceHealthSnapshot? cachedForUser(String username) {
+    if (username.isEmpty) return null;
+    final c = _snapByUser[username];
     if (c == null) return null;
     if (DateTime.now().difference(c.at) >= _ttl) return null;
     return c.snap;

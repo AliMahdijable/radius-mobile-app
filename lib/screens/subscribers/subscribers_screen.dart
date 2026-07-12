@@ -168,14 +168,19 @@ class _SubscribersScreenState extends State<SubscribersScreen> {
   void _runProbeWave({bool force = false}) {
     _probeRunId += 1;
     final myRun = _probeRunId;
-    // مطلب المستخدم 2026-07-12: الـwave يفحص كل مشترك عنده IP (سواء
-    // متصل حالياً أو منتهي/معطّل). نطابق منطق v1 (!isOffline && hasIP)
-    // لكن نتوسّع أكثر: نشمل حتى الـoffline المسجّلين عندنا IP سابق
-    // (الراوتر قد يظل يجيب استجابة لأجهزة عليها credentials). النتائج
-    // تظهر على كل بطاقة، وليس فقط تاب "متصل".
+    // مطلب المستخدم 2026-07-12: الـwave يفحص كل مشترك — لأن المدير
+    // ممكن يخزّن customIp + username + password في DeviceConfig لجهاز
+    // الوصول (ONT/UBNT) حتى مع خط RADIUS مقطوع. الجهاز نفسه online.
+    //
+    // DeviceProbeApi.probe() داخلياً يستدعي fetchConfig ويستعمل
+    // customIp لو موجود؛ لو الاثنين (fallbackIp + customIp) فارغين
+    // يرجع null بلا cost شبكي.
+    //
+    // تكلفة: ~1 GET /api/subscribers/:username/device لكل مشترك ما
+    // له IP، يُنفَّذ merci وiplevel cache 5د بعد أول wave.
     final targets = _all
-        .where((s) => (s.ipAddress ?? '').trim().isNotEmpty)
-        .map((s) => (username: s.username, ip: s.ipAddress!.trim()))
+        .where((s) => s.username.isNotEmpty)
+        .map((s) => (username: s.username, ip: (s.ipAddress ?? '').trim()))
         .toList();
     if (targets.isEmpty) {
       setState(() {

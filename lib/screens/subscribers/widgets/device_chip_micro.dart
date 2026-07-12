@@ -63,11 +63,14 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final clean = widget.ip?.trim() ?? '';
-    if (clean.isEmpty) return const SizedBox.shrink();
+    // مطلب 2026-07-12: لا نُخفي الـwidget لو IP فارغ — المشترك ممكن
+    // يكون له customIp في DeviceConfig (offline case). نبحث بالـusername
+    // أوّلاً؛ لو ما لقينا نجرّب بالـSAS IP.
     return ValueListenableBuilder<int>(
       valueListenable: DeviceProbeBus.tick,
       builder: (_, __, ___) {
-        final snap = DeviceProbeApi.cached(clean);
+        final snap = DeviceProbeApi.cachedForUser(widget.username) ??
+            (clean.isEmpty ? null : DeviceProbeApi.cached(clean));
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
           switchInCurve: Curves.easeOut,
