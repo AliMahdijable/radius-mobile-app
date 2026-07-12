@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -19,16 +20,17 @@ enum SortField {
 
 enum SortDirection { asc, desc }
 
+// النصوص هنا مفاتيح ترجمة — تُترجم عند الاستخدام.
 const _fieldDefs = <(SortField, String, IconData)>[
-  (SortField.username, 'اسم المستخدم', LucideIcons.user),
-  (SortField.firstname, 'الاسم', LucideIcons.badgeCheck),
-  (SortField.profileName, 'الباقة', LucideIcons.package),
-  (SortField.phone, 'رقم الهاتف', LucideIcons.phone),
-  (SortField.expiration, 'تاريخ الانتهاء', LucideIcons.calendar),
-  (SortField.remainingDays, 'الأيام المتبقية', LucideIcons.clock),
-  (SortField.sessionTime, 'مدة الجلسة', LucideIcons.timer),
-  (SortField.notes, 'الديون', LucideIcons.wallet),
-  (SortField.parentUsername, 'تابع إلى', LucideIcons.userCog),
+  (SortField.username, 'sort.username', LucideIcons.user),
+  (SortField.firstname, 'sort.firstname', LucideIcons.badgeCheck),
+  (SortField.profileName, 'sort.package', LucideIcons.package),
+  (SortField.phone, 'sort.phone', LucideIcons.phone),
+  (SortField.expiration, 'sort.expiration', LucideIcons.calendar),
+  (SortField.remainingDays, 'sort.remaining_days', LucideIcons.clock),
+  (SortField.sessionTime, 'sort.session_time', LucideIcons.timer),
+  (SortField.notes, 'sort.debts', LucideIcons.wallet),
+  (SortField.parentUsername, 'sort.parent', LucideIcons.userCog),
 ];
 
 Future<({SortField field, SortDirection direction})?> showSortSheet(
@@ -80,7 +82,7 @@ class _SortSheetState extends State<_SortSheet> {
               children: [
                 const Icon(LucideIcons.arrowDownUp, color: AppColors.brand),
                 const SizedBox(width: Sp.sm),
-                Text('ترتيب القائمة',
+                Text('sort.title'.tr(),
                     style: AppType.title(color: AppColors.textHi)
                         .copyWith(fontSize: 16, fontWeight: FontWeight.w800)),
               ],
@@ -91,7 +93,7 @@ class _SortSheetState extends State<_SortSheet> {
               children: [
                 Expanded(
                   child: _DirBtn(
-                    label: 'تصاعدي',
+                    label: 'sort.asc'.tr(),
                     icon: LucideIcons.arrowUp,
                     selected: _direction == SortDirection.asc,
                     onTap: () => setState(() => _direction = SortDirection.asc),
@@ -100,7 +102,7 @@ class _SortSheetState extends State<_SortSheet> {
                 const SizedBox(width: Sp.sm),
                 Expanded(
                   child: _DirBtn(
-                    label: 'تنازلي',
+                    label: 'sort.desc'.tr(),
                     icon: LucideIcons.arrowDown,
                     selected: _direction == SortDirection.desc,
                     onTap: () => setState(() => _direction = SortDirection.desc),
@@ -116,7 +118,7 @@ class _SortSheetState extends State<_SortSheet> {
               children: [
                 for (final d in _fieldDefs)
                   _FieldChip(
-                    label: d.$2,
+                    label: d.$2.tr(),
                     icon: d.$3,
                     selected: _field == d.$1,
                     onTap: () => setState(() => _field = d.$1),
@@ -136,7 +138,7 @@ class _SortSheetState extends State<_SortSheet> {
                 ),
                 onPressed: () => Navigator.of(context)
                     .pop((field: _field, direction: _direction)),
-                child: const Text('تطبيق'),
+                child: Text('common.apply'.tr()),
               ),
             ),
           ],

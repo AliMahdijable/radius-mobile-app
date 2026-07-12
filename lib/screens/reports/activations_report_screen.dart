@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -143,7 +144,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
 
     return ReportPermissionGate(
       permission: 'reports.activations',
-      title: 'التفعيلات والتمديدات',
+      title: 'reports.activations'.tr(),
       child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -151,7 +152,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'التفعيلات والتمديدات',
+          'reports.activations'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -210,7 +211,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                       ),
                     ),
                     ReportExportBar(
-                      title: 'التفعيلات والتمديدات',
+                      title: 'reports.activations'.tr(),
                       subtitle:
                           '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                       fileNameBase: 'activations',

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -162,7 +163,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
 
     return ReportPermissionGate(
       permission: 'reports.activity_log',
-      title: 'سجل النشاط',
+      title: 'reports.activity_log'.tr(),
       child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -170,7 +171,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'سجل النشاط',
+          'reports.activity_log'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -260,7 +261,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                         ),
                                       ),
                                       ReportExportBar(
-                                        title: 'سجل النشاط',
+                                        title: 'reports.activity_log'.tr(),
                                         subtitle:
                                             '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                                         fileNameBase: 'activity_log',

@@ -252,10 +252,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       .slideY(begin: 0.03, end: 0),
                   SectionHeader(
                     label: !_activationsLoaded
-                        ? 'آخر النشاطات'
+                        ? 'dashboard.recent_activity_label'.tr()
                         : _activationsLive == null
-                            ? 'آخر النشاطات (تعذّر الجلب)'
-                            : 'آخر النشاطات',
+                            ? 'dashboard.recent_activity_fetch_failed'.tr()
+                            : 'dashboard.recent_activity_label'.tr(),
                     trailingLabel: 'dashboard.view_all'.tr(),
                     onTrailingTap: () {},
                   ),

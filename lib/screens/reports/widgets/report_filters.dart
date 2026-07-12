@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -74,55 +75,60 @@ class ReportFilters {
 class ReportActionTypeOption {
   const ReportActionTypeOption({required this.key, required this.label});
   final String key;
+  /// النص المخزّن هنا هو translation key بشكل 'actions.<name>'. يمرّ
+  /// عبر displayLabel لاسترجاع النص المُترجم.
   final String label;
+
+  /// نص العرض النهائي بحسب اللغة النشطة — نستدعي .tr() على الـkey.
+  String get displayLabel => label.tr();
 }
 
 /// نفس قائمة web Financial.tsx (ACTION_TYPE_OPTIONS).
 /// SUBSCRIBER_ACTIVATE_CASH و_NON_CASH virtual types يفهمها الـbackend
 /// (FinanceReportController.js) بحيث يفلتر SUBSCRIBER_ACTIVATE + description.
 const List<ReportActionTypeOption> kFinancialActionTypes = [
-  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'تسديد دين'),
+  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'actions.debt_pay'),
   ReportActionTypeOption(
-      key: 'SUBSCRIBER_ACTIVATE_CASH', label: 'تفعيل نقدي'),
+      key: 'SUBSCRIBER_ACTIVATE_CASH', label: 'actions.activate_cash'),
   ReportActionTypeOption(
-      key: 'SUBSCRIBER_ACTIVATE_NON_CASH', label: 'تفعيل غير نقدي'),
-  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'إضافة دين'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد اشتراك'),
-  ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'صرفية'),
+      key: 'SUBSCRIBER_ACTIVATE_NON_CASH', label: 'actions.activate_non_cash'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend_sub'),
+  ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'actions.expense'),
 ];
 
 const List<ReportActionTypeOption> kActivationsActionTypes = [
-  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'actions.activate'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend'),
 ];
 
 /// الأنواع المسموحة في كشف حساب مشترك (مطابق backend ACCOUNT_ACTIONS
 /// في server.js:15021).
 const List<ReportActionTypeOption> kAccountStatementActionTypes = [
-  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
-  ReportActionTypeOption(key: 'DEBT_PAY', label: 'تسديد دين'),
-  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'استقطاع رصيد'),
-  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'إضافة دين'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'actions.activate'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend'),
+  ReportActionTypeOption(key: 'DEBT_PAY', label: 'actions.debt_pay'),
+  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
 ];
 
 const List<ReportActionTypeOption> kAllActionTypes = [
-  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'تفعيل'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'تمديد'),
-  ReportActionTypeOption(key: 'DEBT_PAY', label: 'تسديد دين'),
-  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'استقطاع رصيد'),
-  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'إضافة دين'),
-  ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'صرفية'),
-  ReportActionTypeOption(key: 'EXPENSE_ADD', label: 'صرفية يدوي'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_ADD', label: 'إضافة مشترك'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_EDIT', label: 'تعديل مشترك'),
-  ReportActionTypeOption(key: 'SUBSCRIBER_DELETE', label: 'حذف مشترك'),
-  ReportActionTypeOption(key: 'MANAGER_ADD', label: 'إضافة مدير'),
-  ReportActionTypeOption(key: 'MANAGER_EDIT', label: 'تعديل مدير'),
-  ReportActionTypeOption(key: 'MANAGER_DELETE', label: 'حذف مدير'),
-  ReportActionTypeOption(key: 'PACKAGE_EDIT', label: 'تعديل باقة'),
-  ReportActionTypeOption(key: 'DISCOUNT_SET', label: 'تطبيق خصم'),
-  ReportActionTypeOption(key: 'DISCOUNT_REMOVE', label: 'إزالة خصم'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'actions.activate'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend'),
+  ReportActionTypeOption(key: 'DEBT_PAY', label: 'actions.debt_pay'),
+  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
+  ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
+  ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'actions.expense'),
+  ReportActionTypeOption(key: 'EXPENSE_ADD', label: 'actions.expense_manual'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_ADD', label: 'actions.sub_add'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_EDIT', label: 'actions.sub_edit'),
+  ReportActionTypeOption(key: 'SUBSCRIBER_DELETE', label: 'actions.sub_delete'),
+  ReportActionTypeOption(key: 'MANAGER_ADD', label: 'actions.mgr_add'),
+  ReportActionTypeOption(key: 'MANAGER_EDIT', label: 'actions.mgr_edit'),
+  ReportActionTypeOption(key: 'MANAGER_DELETE', label: 'actions.mgr_delete'),
+  ReportActionTypeOption(key: 'PACKAGE_EDIT', label: 'actions.pkg_edit'),
+  ReportActionTypeOption(key: 'DISCOUNT_SET', label: 'actions.discount_set'),
+  ReportActionTypeOption(key: 'DISCOUNT_REMOVE', label: 'actions.discount_remove'),
 ];
 
 /// لوحة فلاتر أفقية inline — دائماً ظاهرة على أعلى الشاشة (مطابق web).
@@ -218,7 +224,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                     Icon(LucideIcons.filter,
                         size: 14, color: AppColors.brand),
                     const SizedBox(width: 6),
-                    Text('الفلاتر',
+                    Text('filters.title'.tr(),
                         style: AppType.label(color: AppColors.textHi)
                             .copyWith(
                                 fontSize: 12, fontWeight: FontWeight.w800)),
@@ -235,7 +241,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               Icon(LucideIcons.x,
                                   size: 12, color: AppColors.error),
                               const SizedBox(width: 3),
-                              Text('مسح',
+                              Text('common.clear'.tr(),
                                   style: TextStyle(
                                       color: AppColors.error,
                                       fontSize: 10.5,
@@ -285,10 +291,10 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   Widget _actionTypesSelect() {
     final selected = widget.value.actionTypes ?? const <String>[];
     final label = selected.isEmpty
-        ? 'كل الحركات'
+        ? 'filters.all_actions'.tr()
         : selected.length == 1
             ? _labelFor(selected.first)
-            : '${selected.length} أنواع';
+            : 'filters.n_types'.tr(namedArgs: {'n': '${selected.length}'});
     return _dropdownField(
       label: label,
       onTap: () async {
@@ -327,7 +333,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                       Icon(LucideIcons.filter,
                           size: 15, color: AppColors.brand),
                       const SizedBox(width: 6),
-                      Text('أنواع الحركات',
+                      Text('filters.action_types_title'.tr(),
                           style: AppType.title(color: AppColors.textHi)
                               .copyWith(
                                   fontSize: 14,
@@ -340,7 +346,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               minimumSize: Size.zero,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4)),
-                          child: Text('مسح',
+                          child: Text('common.clear'.tr(),
                               style: TextStyle(
                                   color: AppColors.error,
                                   fontSize: 11,
@@ -394,7 +400,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               ),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Text(o.label,
+                                child: Text(o.displayLabel,
                                     style: TextStyle(
                                         fontSize: 13,
                                         color: AppColors.textHi,
@@ -422,7 +428,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                             padding:
                                 const EdgeInsets.symmetric(vertical: 10),
                           ),
-                          child: Text('إلغاء',
+                          child: Text('common.cancel'.tr(),
                               style: TextStyle(
                                   color: AppColors.textMid,
                                   fontWeight: FontWeight.w700)),
@@ -441,8 +447,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                           ),
                           child: Text(
                               set.isEmpty
-                                  ? 'تطبيق'
-                                  : 'تطبيق (${set.length})',
+                                  ? 'common.apply'.tr()
+                                  : '${'common.apply'.tr()} (${set.length})',
                               style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 13)),
@@ -461,7 +467,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
 
   String _labelFor(String key) {
     for (final o in widget.actionTypeOptions) {
-      if (o.key == key) return o.label;
+      if (o.key == key) return o.displayLabel;
     }
     return key;
   }
@@ -471,7 +477,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   Widget _actionManagerSelect() {
     final selected = widget.value.actionManagerId;
     final label = selected == null
-        ? 'مدير الحركة'
+        ? 'filters.action_manager'.tr()
         : _managerLabel(selected, byId: true);
     return _dropdownField(
       label: label,
@@ -490,7 +496,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   Widget _userManagerSelect() {
     final selected = widget.value.userManager;
     final label = selected == null
-        ? 'مدير المستخدم'
+        ? 'filters.user_manager'.tr()
         : _managerLabel(selected, byId: false);
     return _dropdownField(
       label: label,
@@ -523,9 +529,9 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       context: context,
       builder: (dctx) {
         return SimpleDialog(
-          title: Text(byId ? 'اختر مدير الحركة' : 'اختر مدير المستخدم'),
+          title: Text(byId ? 'filters.pick_action_manager'.tr() : 'filters.pick_user_manager'.tr()),
           children: [
-            _dialogTile(dctx, 'الكل', current == null, () {
+            _dialogTile(dctx, 'common.all'.tr(), current == null, () {
               onPick(null);
               Navigator.pop(dctx);
             }),
@@ -533,7 +539,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
               _dialogTile(
                 dctx,
                 byId && _currentAdminId == m.id.toString()
-                    ? '${m.displayName} (أنا)'
+                    ? '${m.displayName} (${'common.me'.tr()})'
                     : m.displayName,
                 byId
                     ? current == m.id.toString()
@@ -575,7 +581,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   Widget _employeeSelect() {
     final selected = widget.value.employeeId;
     final employees = _employees ?? const [];
-    String label = 'الموظف';
+    String label = 'filters.employee'.tr();
     if (selected != null) {
       for (final e in employees) {
         if (e.id == selected) {
@@ -592,9 +598,9 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
           context: context,
           builder: (dctx) {
             return SimpleDialog(
-              title: const Text('اختر الموظف'),
+              title: Text('filters.pick_employee'.tr()),
               children: [
-                _dialogTile(dctx, 'الكل', selected == null, () {
+                _dialogTile(dctx, 'common.all'.tr(), selected == null, () {
                   widget.onChanged(
                       widget.value.copyWith(employeeId: null));
                   Navigator.pop(dctx);

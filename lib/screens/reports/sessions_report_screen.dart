@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -102,7 +103,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
 
     return ReportPermissionGate(
       permission: 'reports.sessions',
-      title: 'الجلسات',
+      title: 'reports.sessions'.tr(),
       child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -110,7 +111,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'الجلسات',
+          'reports.sessions'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),

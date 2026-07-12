@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -63,13 +64,13 @@ class ReportPermissionGate extends StatelessWidget {
                     ),
                     const SizedBox(height: Sp.md),
                     Text(
-                      'لا تملك صلاحية لهذا التقرير',
+                      'reports.no_permission'.tr(),
                       style: AppType.title(color: AppColors.textHi)
                           .copyWith(fontSize: 14),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'اتصل بالمدير العام لمنحك صلاحية "$permission"',
+                      'reports.no_permission_hint'.tr(namedArgs: {'perm': permission}),
                       textAlign: TextAlign.center,
                       style: AppType.muted().copyWith(fontSize: 12, height: 1.6),
                     ),
@@ -78,7 +79,7 @@ class ReportPermissionGate extends StatelessWidget {
                       onPressed: () => Navigator.of(context).pop(),
                       icon:
                           const Icon(LucideIcons.chevronRight, size: 16),
-                      label: const Text('رجوع'),
+                      label: Text('common.back'.tr()),
                     ),
                   ],
                 ),

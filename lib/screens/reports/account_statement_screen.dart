@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -103,7 +104,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
 
     return ReportPermissionGate(
       permission: 'reports.account_statement',
-      title: 'كشف الحساب',
+      title: 'reports.account_statement'.tr(),
       child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -114,7 +115,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'كشف الحساب',
+              'reports.account_statement'.tr(),
               style: AppType.title(color: AppColors.textHi)
                   .copyWith(fontSize: 15, fontWeight: FontWeight.w800),
             ),

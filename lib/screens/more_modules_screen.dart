@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -37,8 +38,8 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.receipt,
               color: const Color(0xFFE08F2D),
-              title: 'الصرفيات',
-              subtitle: 'تسجيل ومتابعة المصاريف',
+              title: 'more.expenses'.tr(),
+              subtitle: 'more.expenses_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const ExpensesScreen(),
@@ -49,8 +50,8 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.userCog,
               color: const Color(0xFF3B82F6),
-              title: 'المدراء',
-              subtitle: 'إدارة المدراء الفرعيين',
+              title: 'more.managers'.tr(),
+              subtitle: 'more.managers_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const ManagersScreen(),
@@ -61,8 +62,8 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.package,
               color: const Color(0xFF8B5CF6),
-              title: 'تسعير الباقات',
-              subtitle: 'تعديل أسعار البيع لكل باقة',
+              title: 'more.packages'.tr(),
+              subtitle: 'more.packages_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const PackagesScreen(),
@@ -73,8 +74,8 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.percent,
               color: const Color(0xFF14B8A6),
-              title: 'الخصومات',
-              subtitle: 'إدارة الخصومات لكل مشترك',
+              title: 'more.discounts'.tr(),
+              subtitle: 'more.discounts_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const DiscountsScreen(),
@@ -85,8 +86,8 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.users,
               color: const Color(0xFF8B5CF6),
-              title: 'الموظفون',
-              subtitle: 'إدارة موظفي الفرع وصلاحياتهم',
+              title: 'more.employees'.tr(),
+              subtitle: 'more.employees_hint'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const EmployeesScreen(),
@@ -103,7 +104,7 @@ class MoreModulesScreen extends StatelessWidget {
                   Sp.lg, Sp.lg, Sp.lg, Sp.huge),
               children: [
                 Text(
-                  'قوائم أخرى',
+                  'more.title'.tr(),
                   style: AppType.title(color: AppColors.textHi).copyWith(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -112,7 +113,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'المديولات الإضافية للنظام',
+                  'more.subtitle'.tr(),
                   style: AppType.subtitle(color: AppColors.textMid),
                 ),
                 const SizedBox(height: Sp.lg),
@@ -126,12 +127,12 @@ class MoreModulesScreen extends StatelessWidget {
                               size: 36, color: AppColors.textLow),
                           const SizedBox(height: 10),
                           Text(
-                            'ليس لديك صلاحيات لأي قسم هنا',
+                            'more.empty_perms'.tr(),
                             style: AppType.label(color: AppColors.textMid),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'اتصل بالمدير العام لمنحك صلاحيات',
+                            'more.empty_perms_hint'.tr(),
                             style: AppType.muted().copyWith(fontSize: 12),
                           ),
                         ],

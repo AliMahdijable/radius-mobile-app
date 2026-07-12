@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -86,7 +87,7 @@ class ReportPager extends StatelessWidget {
           ),
           const SizedBox(width: Sp.md),
           Text(
-            'صفحة ${page + 1} من $totalPages',
+            'subscribers.page_of'.tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
             style: AppType.label(color: AppColors.textHi).copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -118,7 +119,7 @@ class _PageSizePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context);
     return PopupMenuButton<int>(
-      tooltip: 'حجم الصفحة',
+      tooltip: 'subscribers.page_size'.tr(),
       onSelected: onChange,
       itemBuilder: (_) => [
         for (final o in options)

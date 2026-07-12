@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -116,7 +117,7 @@ class _DailyActivationsReportScreenState
         : visible.sublist(pageStart, pageEnd);
     return ReportPermissionGate(
       permission: 'reports.daily_activations',
-      title: 'التفعيلات اليومية',
+      title: 'reports.daily_activations'.tr(),
       child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -124,7 +125,7 @@ class _DailyActivationsReportScreenState
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'التفعيلات اليومية',
+          'reports.daily_activations'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -181,7 +182,7 @@ class _DailyActivationsReportScreenState
                       ),
                     ),
                     ReportExportBar(
-                      title: 'التفعيلات اليومية',
+                      title: 'reports.daily_activations'.tr(),
                       subtitle:
                           '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                       fileNameBase: 'daily_activations',

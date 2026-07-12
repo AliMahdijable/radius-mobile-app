@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -19,7 +20,7 @@ class DateRange {
     return DateRange(
       DateTime(n.year, n.month, n.day),
       DateTime(n.year, n.month, n.day, 23, 59, 59),
-      label: 'اليوم',
+      label: 'reports.today'.tr(),
     );
   }
 
@@ -28,7 +29,7 @@ class DateRange {
     return DateRange(
       DateTime(n.year, n.month, n.day),
       DateTime(n.year, n.month, n.day, 23, 59, 59),
-      label: 'أمس',
+      label: 'reports.yesterday'.tr(),
     );
   }
 
@@ -38,7 +39,7 @@ class DateRange {
     return DateRange(
       DateTime(start.year, start.month, start.day),
       DateTime(n.year, n.month, n.day, 23, 59, 59),
-      label: 'هذا الأسبوع',
+      label: 'reports.this_week'.tr(),
     );
   }
 
@@ -47,7 +48,7 @@ class DateRange {
     return DateRange(
       DateTime(n.year, n.month, 1),
       DateTime(n.year, n.month, n.day, 23, 59, 59),
-      label: 'هذا الشهر',
+      label: 'reports.this_month'.tr(),
     );
   }
 
@@ -58,7 +59,7 @@ class DateRange {
     return DateRange(
       DateTime(start.year, start.month, start.day),
       DateTime(n.year, n.month, n.day, 23, 59, 59),
-      label: '3 شهور',
+      label: 'reports.last_3_months'.tr(),
     );
   }
 
@@ -111,7 +112,7 @@ class DateRangeChipBar extends StatelessWidget {
         _chip(
           context,
           icon: LucideIcons.calendar,
-          label: isCustom ? value.label : 'تخصيص',
+          label: isCustom ? value.label : 'reports.custom_range'.tr(),
           selected: isCustom,
           onTap: () => _openCustomPicker(context),
         ),

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -68,7 +69,7 @@ class _BalancePointsCard extends StatelessWidget {
     return _ShellCard(
       icon: LucideIcons.wallet,
       iconAccent: _accent,
-      title: 'الرصيد',
+      title: 'dashboard.balance'.tr(),
       body: wallet == null
           ? const _Spinner(color: _accent)
           : Column(
@@ -87,7 +88,7 @@ class _BalancePointsCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        '${formatIQD(wallet!.points.round())} نقطة',
+                        '${formatIQD(wallet!.points.round())} ${'dashboard.points_singular'.tr()}',
                         style: AppType.muted(color: AppColors.textMid)
                             .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
                         maxLines: 1,
@@ -115,7 +116,7 @@ class _DebtCard extends StatelessWidget {
     return _ShellCard(
       icon: LucideIcons.creditCard,
       iconAccent: _accent,
-      title: 'المدينون',
+      title: 'dashboard.debtors'.tr(),
       onTap: onTap,
       body: debtors == null
           ? const _Spinner(color: _accent)
@@ -134,7 +135,7 @@ class _DebtCard extends StatelessWidget {
                         color: AppColors.textMid, size: 12),
                     const SizedBox(width: 4),
                     Text(
-                      '${debtors!.count} مشترك',
+                      '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',
                       style: AppType.muted(color: AppColors.textMid)
                           .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
                     ),

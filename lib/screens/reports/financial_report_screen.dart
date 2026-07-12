@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -83,7 +84,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return ReportPermissionGate(
       permission: 'reports.financial',
-      title: 'التقرير المالي',
+      title: 'reports.financial'.tr(),
       child: Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -91,7 +92,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'التقرير المالي',
+          'reports.financial'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -547,7 +548,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               ),
             ),
             ReportExportBar(
-              title: 'التقرير المالي',
+              title: 'reports.financial'.tr(),
               subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
               fileNameBase: 'financial',
               columns: const [

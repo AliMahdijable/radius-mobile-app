@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -24,15 +25,16 @@ class FilterChipsBar extends StatelessWidget {
   final Map<SubscriberFilter, int> counts;
   final ValueChanged<SubscriberFilter> onSelect;
 
+  /// الـlabel هنا مفتاح ترجمة — الـ_Chip يستدعي .tr() عند البناء.
   static const _defs = <_ChipDef>[
-    _ChipDef(SubscriberFilter.all, 'الكل', LucideIcons.users, AppColors.brand),
-    _ChipDef(SubscriberFilter.active, 'نشط', LucideIcons.circleCheck, Color(0xFF14B8A6)),
-    _ChipDef(SubscriberFilter.online, 'متصل', LucideIcons.wifi, Color(0xFF3B82F6)),
-    _ChipDef(SubscriberFilter.offline, 'غير متصل', LucideIcons.wifiOff, Color(0xFF90A4AE)),
-    _ChipDef(SubscriberFilter.disabled, 'معطّل', LucideIcons.ban, Color(0xFF6D4C41)),
-    _ChipDef(SubscriberFilter.expired, 'منتهي', LucideIcons.timerOff, Color(0xFFC62828)),
-    _ChipDef(SubscriberFilter.debtors, 'مدين', LucideIcons.creditCard, Color(0xFFF57F17)),
-    _ChipDef(SubscriberFilter.nearExpiry, 'قارب', LucideIcons.triangleAlert, Color(0xFFE08F2D)),
+    _ChipDef(SubscriberFilter.all, 'subscribers.filter_all', LucideIcons.users, AppColors.brand),
+    _ChipDef(SubscriberFilter.active, 'subscribers.filter_active', LucideIcons.circleCheck, Color(0xFF14B8A6)),
+    _ChipDef(SubscriberFilter.online, 'subscribers.filter_online', LucideIcons.wifi, Color(0xFF3B82F6)),
+    _ChipDef(SubscriberFilter.offline, 'subscribers.filter_offline', LucideIcons.wifiOff, Color(0xFF90A4AE)),
+    _ChipDef(SubscriberFilter.disabled, 'subscribers.filter_disabled', LucideIcons.ban, Color(0xFF6D4C41)),
+    _ChipDef(SubscriberFilter.expired, 'subscribers.filter_expired', LucideIcons.timerOff, Color(0xFFC62828)),
+    _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors', LucideIcons.creditCard, Color(0xFFF57F17)),
+    _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry', LucideIcons.triangleAlert, Color(0xFFE08F2D)),
   ];
 
   @override
@@ -50,7 +52,7 @@ class FilterChipsBar extends StatelessWidget {
           final selected = current == d.key;
           final count = counts[d.key] ?? 0;
           return _Chip(
-            label: d.label,
+            label: d.label.tr(),
             icon: d.icon,
             color: d.color,
             count: count,
