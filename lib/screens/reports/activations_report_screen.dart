@@ -81,7 +81,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     setState(() {
       _loading = false;
       _rows = filtered;
-      _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _page = 0;
     });
   }
@@ -126,8 +126,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
 
   String _actionLabel(ActivityRow r) {
     final at = r.actionType.toUpperCase().trim();
-    if (at == 'SUBSCRIBER_EXTEND') return 'تمديد';
-    return 'تفعيل';
+    if (at == 'SUBSCRIBER_EXTEND') return 'actions.extend'.tr();
+    return 'actions.activate'.tr();
   }
 
   @override
@@ -215,14 +215,14 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                       subtitle:
                           '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                       fileNameBase: 'activations',
-                      columns: const [
-                        'اسم المشترك',
-                        'اليوزر',
-                        'المبلغ',
-                        'التاريخ',
-                        'الوصف',
-                        'النوع',
-                        'المنفّذ',
+                      columns: [
+                        'reports.col_subscriber'.tr(),
+                        'reports.col_username'.tr(),
+                        'reports.col_amount'.tr(),
+                        'reports.col_date'.tr(),
+                        'reports.col_description'.tr(),
+                        'reports.col_type'.tr(),
+                        'reports.col_executor'.tr(),
                       ],
                       columnWeights: _pdfWeights,
                       rows: _exportRows,
@@ -273,7 +273,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           Expanded(
             child: _stat(
               icon: LucideIcons.zap,
-              label: 'إجمالي',
+              label: 'reports.total'.tr(),
               value: '${_visibleRows.length}',
               color: const Color(0xFF14B8A6),
             ),
@@ -282,7 +282,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           Expanded(
             child: _stat(
               icon: LucideIcons.userCheck,
-              label: 'تفعيلات',
+              label: 'reports.activations_count'.tr(),
               value: '$_activateCount',
               color: const Color(0xFF14B8A6),
             ),
@@ -291,7 +291,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           Expanded(
             child: _stat(
               icon: LucideIcons.repeat,
-              label: 'تمديدات',
+              label: 'reports.extensions_count'.tr(),
               value: '$_extendCount',
               color: const Color(0xFF26A69A),
             ),
@@ -300,7 +300,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
           Expanded(
             child: _stat(
               icon: LucideIcons.dollarSign,
-              label: 'إيراد',
+              label: 'dashboard.revenue'.tr(),
               value: formatIQD(_totalCash),
               color: AppColors.brand,
             ),
@@ -342,7 +342,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             children: [
               Icon(LucideIcons.zap, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
-              Text('لا توجد تفعيلات أو تمديدات في هذه الفترة',
+              Text('reports.no_activations_extensions'.tr(),
                   style: AppType.label(color: AppColors.textMid)),
             ],
           ),
@@ -362,7 +362,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               ElevatedButton.icon(
                 onPressed: _load,
                 icon: const Icon(LucideIcons.refreshCw, size: 16),
-                label: const Text('إعادة المحاولة'),
+                label: Text('common.retry'.tr()),
               ),
             ],
           ),

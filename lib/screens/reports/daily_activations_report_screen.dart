@@ -83,7 +83,7 @@ class _DailyActivationsReportScreenState
     setState(() {
       _loading = false;
       _rows = r.rows;
-      _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _page = 0;
     });
   }
@@ -186,11 +186,11 @@ class _DailyActivationsReportScreenState
                       subtitle:
                           '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                       fileNameBase: 'daily_activations',
-                      columns: const [
-                        'اليوم',
-                        'نقدي',
-                        'غير نقدي',
-                        'إيراد',
+                      columns: [
+                        'reports.col_day'.tr(),
+                        'sheets.pay_cash'.tr(),
+                        'actions.activate_non_cash'.tr(),
+                        'dashboard.revenue'.tr(),
                       ],
                       rows: _exportRows,
                     ),
@@ -230,7 +230,7 @@ class _DailyActivationsReportScreenState
           Expanded(
             child: _kpi(
               icon: LucideIcons.zap,
-              label: 'إجمالي التفعيلات',
+              label: 'reports.total_activations'.tr(),
               value: '$_totalCount',
               color: const Color(0xFF14B8A6),
             ),

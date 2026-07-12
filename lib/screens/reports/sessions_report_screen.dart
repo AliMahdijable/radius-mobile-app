@@ -69,7 +69,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     setState(() {
       _loading = false;
       _rows = r.rows;
-      _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _page = 0;
     });
   }
@@ -85,7 +85,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
             _humanBytes(s.bytesOut),
             s.startedAt ?? '',
             s.endedAt ?? '',
-            s.isOnline ? 'متصل' : 'منتهي',
+            s.isOnline ? 'subscribers.status_online'.tr() : 'subscribers.status_expired'.tr(),
           ])
       .toList();
 
@@ -127,12 +127,12 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                     segments: const [
                       ButtonSegment(
                         value: true,
-                        label: Text('متصلون الآن'),
+                        label: Text('reports.online_now'.tr()),
                         icon: Icon(LucideIcons.wifi, size: 14),
                       ),
                       ButtonSegment(
                         value: false,
-                        label: Text('الكل'),
+                        label: Text('common.all'.tr()),
                         icon: Icon(LucideIcons.history, size: 14),
                       ),
                     ],
@@ -157,10 +157,10 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                           },
                           decoration: InputDecoration(
                             hintText: _searchField == 'username'
-                                ? 'بحث باسم المستخدم…'
+                                ? 'reports.search_by_username'.tr()
                                 : _searchField == 'ip'
-                                    ? 'بحث بـIP…'
-                                    : 'بحث بـMAC…',
+                                    ? 'reports.search_by_ip'.tr()
+                                    : 'reports.search_by_mac'.tr(),
                             hintStyle: AppType.input(color: AppColors.textLow),
                             prefixIcon: Icon(LucideIcons.search,
                                 size: 18, color: AppColors.textMid),
@@ -239,7 +239,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       Text(
                         _loading
                             ? '...'
-                            : '${visible.length} ${_onlineOnly ? 'مستخدم متصل' : 'جلسة'}',
+                            : '${visible.length} ${_onlineOnly ? 'reports.online_users'.tr() : 'reports.session_singular'.tr()}',
                         style: AppType.muted().copyWith(fontSize: 12),
                       ),
                     ],
@@ -278,23 +278,23 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                       ),
                                       ReportExportBar(
                                         title: _onlineOnly
-                                            ? 'الجلسات المتصلة'
-                                            : 'كل الجلسات',
+                                            ? 'reports.online_sessions'.tr()
+                                            : 'reports.all_sessions'.tr(),
                                         subtitle:
-                                            'عدد الصفوف: ${visible.length}',
+                                            '${'reports.row_count'.tr()}: ${visible.length}',
                                         fileNameBase: _onlineOnly
                                             ? 'sessions_online'
                                             : 'sessions_all',
-                                        columns: const [
-                                          'المستخدم',
+                                        columns: [
+                                          'reports.col_username'.tr(),
                                           'IP',
                                           'MAC',
-                                          'المدير',
-                                          'تنزيل',
-                                          'رفع',
-                                          'بدء',
-                                          'انتهاء',
-                                          'الحالة',
+                                          'reports.col_manager'.tr(),
+                                          'subscribers.label_download'.tr(),
+                                          'subscribers.label_upload'.tr(),
+                                          'reports.col_start'.tr(),
+                                          'reports.col_end'.tr(),
+                                          'subscribers.status'.tr(),
                                         ],
                                         rows: _exportRows,
                                       ),
@@ -444,7 +444,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
               children: [
                 Icon(LucideIcons.wifiOff, size: 36, color: AppColors.textLow),
                 const SizedBox(height: 10),
-                Text(_onlineOnly ? 'لا يوجد متصلون الآن' : 'لا توجد جلسات',
+                Text(_onlineOnly ? 'reports.no_online'.tr() : 'reports.no_sessions'.tr(),
                     style: AppType.label(color: AppColors.textMid)),
               ],
             ),
@@ -467,7 +467,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                 ElevatedButton.icon(
                   onPressed: _load,
                   icon: const Icon(LucideIcons.refreshCw, size: 16),
-                  label: const Text('إعادة المحاولة'),
+                  label: Text('common.retry'.tr()),
                 ),
               ],
             ),
@@ -482,8 +482,9 @@ class _SearchFieldPicker extends StatelessWidget {
   final String current;
   final ValueChanged<String> onChange;
 
+  // ملاحظة: اسم الحقل هنا مفتاح ترجمة، نستدعي .tr() عند العرض في itemBuilder.
   static const _fields = [
-    ('username', 'اسم', LucideIcons.user),
+    ('username', 'reports.field_name', LucideIcons.user),
     ('ip', 'IP', LucideIcons.globe),
     ('mac', 'MAC', LucideIcons.wifi),
   ];
@@ -492,7 +493,7 @@ class _SearchFieldPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context);
     return PopupMenuButton<String>(
-      tooltip: 'حقل البحث',
+      tooltip: 'reports.search_field'.tr(),
       onSelected: onChange,
       itemBuilder: (_) => [
         for (final f in _fields)
@@ -502,7 +503,7 @@ class _SearchFieldPicker extends StatelessWidget {
               children: [
                 Icon(f.$3, size: 14, color: AppColors.textMid),
                 const SizedBox(width: 8),
-                Text(f.$2),
+                Text(f.$2.startsWith('reports.') ? f.$2.tr() : f.$2),
               ],
             ),
           ),

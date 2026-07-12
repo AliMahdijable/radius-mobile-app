@@ -106,7 +106,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
         .map((e) => ActivityRow(
               id: 900000000 + e.id,
               actionType: 'EXPENSE_ADD',
-              actionDescription: e.note ?? 'صرفية',
+              actionDescription: e.note ?? 'actions.expense'.tr(),
               amount: e.amount,
               adminUsername: null,
               actingEmployeeFullName: e.actingEmployeeUsername,
@@ -122,7 +122,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     setState(() {
       _loading = false;
       _rows = merged;
-      _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _page = 0;
     });
   }
@@ -198,7 +198,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                       _load();
                     },
                     decoration: InputDecoration(
-                      hintText: 'ابحث بالاسم / اليوزر / الوصف...',
+                      hintText: 'reports.search_hint'.tr(),
                       hintStyle: AppType.input(color: AppColors.textLow),
                       prefixIcon: Icon(LucideIcons.search,
                           size: 18, color: AppColors.textMid),
@@ -265,14 +265,14 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                         subtitle:
                                             '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                                         fileNameBase: 'activity_log',
-                                        columns: const [
-                                          'اسم المشترك',
-                                          'اليوزر',
-                                          'المبلغ',
-                                          'التاريخ',
-                                          'الوصف',
-                                          'النوع',
-                                          'المنفّذ',
+                                        columns: [
+                                          'reports.col_subscriber'.tr(),
+                                          'reports.col_username'.tr(),
+                                          'reports.col_amount'.tr(),
+                                          'reports.col_date'.tr(),
+                                          'reports.col_description'.tr(),
+                                          'reports.col_type'.tr(),
+                                          'reports.col_executor'.tr(),
                                         ],
                                         columnWeights: _pdfWeights,
                                         rows: _exportRows,
@@ -322,7 +322,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
               children: [
                 Icon(LucideIcons.fileText, size: 36, color: AppColors.textLow),
                 const SizedBox(height: 10),
-                Text('لا توجد نشاطات في هذه الفترة',
+                Text('reports.no_activities_period'.tr(),
                     style: AppType.label(color: AppColors.textMid)),
               ],
             ),
@@ -345,7 +345,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                 ElevatedButton.icon(
                   onPressed: _load,
                   icon: const Icon(LucideIcons.refreshCw, size: 16),
-                  label: const Text('إعادة المحاولة'),
+                  label: Text('common.retry'.tr()),
                 ),
               ],
             ),

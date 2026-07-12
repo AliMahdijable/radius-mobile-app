@@ -74,7 +74,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     setState(() {
       _loading = false;
       _data = r.data;
-      _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _page = 0;
     });
   }
@@ -173,7 +173,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             ElevatedButton.icon(
               onPressed: _load,
               icon: const Icon(LucideIcons.refreshCw, size: 16),
-              label: const Text('إعادة المحاولة'),
+              label: Text('common.retry'.tr()),
             ),
           ],
         ),
@@ -210,14 +210,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                     size: 14, color: brand),
               ),
               const SizedBox(width: 8),
-              Text('الإيراد النقدي الإجمالي',
+              Text('reports.total_cash_revenue'.tr(),
                   style: AppType.muted().copyWith(
                       fontSize: 11, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            '${formatIQD(k.totalCashRevenue)} د.ع',
+            '${formatIQD(k.totalCashRevenue)} ${'common.currency'.tr()}',
             style: AppType.title(color: brand).copyWith(
               fontSize: 24,
               fontWeight: FontWeight.w900,
@@ -235,7 +235,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               Expanded(
                 child: _heroMini(
                   icon: LucideIcons.receipt,
-                  label: 'المصاريف',
+                  label: 'reports.expenses'.tr(),
                   value: '-${formatIQD(k.expensesSum)}',
                   color: AppColors.error,
                 ),
@@ -244,7 +244,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               Expanded(
                 child: _heroMini(
                   icon: LucideIcons.plus,
-                  label: 'إضافة دين',
+                  label: 'actions.debt_add'.tr(),
                   value: '-${formatIQD(k.balanceAddSum)}',
                   color: AppColors.error,
                 ),
@@ -257,7 +257,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             icon: k.netCash < 0
                 ? LucideIcons.trendingDown
                 : LucideIcons.trendingUp,
-            label: 'الصافي',
+            label: 'reports.kpi_net'.tr(),
             value: k.netCash < 0
                 ? '-${formatIQD(k.netCash)}'
                 : formatIQD(k.netCash),
@@ -317,10 +317,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     // description "تسديد دين …" هو تسديد دين فعلياً — مطابق web _shared.tsx).
     final debtPayTotal = k.debtPaySum + k.balanceDeductSum;
     final items = <_KpiItem>[
-      _KpiItem('تفعيل نقدي', formatIQD(k.activateCashSum), const Color(0xFF14B8A6), LucideIcons.zap),
-      _KpiItem('تسديد دين', formatIQD(debtPayTotal), const Color(0xFF14B8A6), LucideIcons.banknote),
-      _KpiItem('تفعيل غير نقدي', formatIQD(k.activateNonCashSum), AppColors.error, LucideIcons.creditCard, isDebit: true),
-      _KpiItem('إضافة دين', formatIQD(k.balanceAddSum), AppColors.error, LucideIcons.plus, isDebit: true),
+      _KpiItem('actions.activate_cash'.tr(), formatIQD(k.activateCashSum), const Color(0xFF14B8A6), LucideIcons.zap),
+      _KpiItem('actions.debt_pay'.tr(), formatIQD(debtPayTotal), const Color(0xFF14B8A6), LucideIcons.banknote),
+      _KpiItem('actions.activate_non_cash'.tr(), formatIQD(k.activateNonCashSum), AppColors.error, LucideIcons.creditCard, isDebit: true),
+      _KpiItem('actions.debt_add'.tr(), formatIQD(k.balanceAddSum), AppColors.error, LucideIcons.plus, isDebit: true),
       _KpiItem('# تفعيلات', '${k.activationsCount}', const Color(0xFF8B5CF6), LucideIcons.userCheck, isCount: true),
       _KpiItem('# تمديدات', '${k.extendCount}', const Color(0xFF26A69A), LucideIcons.repeat, isCount: true),
       _KpiItem('# مصاريف', '${k.expensesCount}', AppColors.error, LucideIcons.receipt, isCount: true),
@@ -483,7 +483,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             children: [
               Icon(LucideIcons.fileText, size: 32, color: AppColors.textLow),
               const SizedBox(height: 8),
-              Text('لا توجد حركات مالية في هذه الفترة',
+              Text('reports.no_financial_movements'.tr(),
                   style: AppType.muted().copyWith(fontSize: 12)),
             ],
           ),
@@ -551,14 +551,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               title: 'reports.financial'.tr(),
               subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
               fileNameBase: 'financial',
-              columns: const [
-                'اسم المشترك',
-                'اليوزر',
-                'المبلغ',
-                'التاريخ',
-                'الوصف',
-                'النوع',
-                'المنفّذ',
+              columns: [
+                'reports.col_subscriber'.tr(),
+                'reports.col_username'.tr(),
+                'reports.col_amount'.tr(),
+                'reports.col_date'.tr(),
+                'reports.col_description'.tr(),
+                'reports.col_type'.tr(),
+                'reports.col_executor'.tr(),
               ],
               // مطلب 2026-07-12: الاسم/الوصف يأخذون مساحة أوسع، النوع
               // والمنفّذ أضيق (خصوصاً بعد الترجمة العربية).

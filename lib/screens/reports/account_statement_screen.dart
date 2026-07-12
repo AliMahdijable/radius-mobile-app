@@ -65,7 +65,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
     setState(() {
       _loading = false;
       _data = r.data;
-      _error = r.ok ? null : (r.error ?? 'تعذّر التحميل');
+      _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _page = 0;
     });
   }
@@ -187,19 +187,19 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                       ),
                     ),
                     ReportExportBar(
-                      title: 'كشف حساب ${widget.displayName ?? widget.username}',
+                      title: '${'reports.account_statement'.tr()} — ${widget.displayName ?? widget.username}',
                       subtitle:
                           '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                       fileNameBase:
                           'account_statement_${widget.username.replaceAll(RegExp(r"[^a-zA-Z0-9_]"), "_")}',
-                      columns: const [
-                        'اسم المشترك',
-                        'اليوزر',
-                        'المبلغ',
-                        'التاريخ',
-                        'الوصف',
-                        'النوع',
-                        'المنفّذ',
+                      columns: [
+                        'reports.col_subscriber'.tr(),
+                        'reports.col_username'.tr(),
+                        'reports.col_amount'.tr(),
+                        'reports.col_date'.tr(),
+                        'reports.col_description'.tr(),
+                        'reports.col_type'.tr(),
+                        'reports.col_executor'.tr(),
                       ],
                       columnWeights: _pdfWeights,
                       rows: _exportRows(rows),
@@ -271,7 +271,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      balance < 0 ? 'مدين للمدير' : 'رصيد له',
+                      balance < 0 ? 'reports.owes_manager'.tr() : 'reports.has_credit'.tr(),
                       style: AppType.muted().copyWith(
                           fontSize: 10.5, fontWeight: FontWeight.w700),
                     ),
@@ -299,7 +299,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               Expanded(
                 child: _miniStat(
                   icon: LucideIcons.banknote,
-                  label: 'مدفوع',
+                  label: 'reports.paid'.tr(),
                   value: formatIQD(s.totalPayments),
                   color: AppColors.brand,
                 ),
@@ -308,7 +308,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               Expanded(
                 child: _miniStat(
                   icon: LucideIcons.plus,
-                  label: 'دين',
+                  label: 'subscribers.debt_short'.tr(),
                   value: formatIQD(s.totalDebt),
                   color: AppColors.error,
                 ),
@@ -317,7 +317,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               Expanded(
                 child: _miniStat(
                   icon: LucideIcons.zap,
-                  label: 'تفعيلات',
+                  label: 'reports.activations_count'.tr(),
                   value: '${s.totalActivations}',
                   color: const Color(0xFF14B8A6),
                 ),
@@ -326,7 +326,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               Expanded(
                 child: _miniStat(
                   icon: LucideIcons.list,
-                  label: 'حركات',
+                  label: 'reports.movements_count'.tr(),
                   value: '${s.totalTransactions}',
                   color: AppColors.textMid,
                 ),
@@ -370,7 +370,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
             children: [
               Icon(LucideIcons.fileText, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
-              Text('لا توجد حركات في هذه الفترة',
+              Text('reports.no_movements_period'.tr(),
                   style: AppType.label(color: AppColors.textMid)),
             ],
           ),
@@ -391,7 +391,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               ElevatedButton.icon(
                 onPressed: _load,
                 icon: const Icon(LucideIcons.refreshCw, size: 16),
-                label: const Text('إعادة المحاولة'),
+                label: Text('common.retry'.tr()),
               ),
             ],
           ),
