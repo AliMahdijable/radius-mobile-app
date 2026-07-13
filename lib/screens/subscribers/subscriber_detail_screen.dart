@@ -1120,15 +1120,14 @@ class _OperationsCard extends StatelessWidget {
             child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              // 2026-07-13 (تكرار): تقليل المسافات مرة ثانية بعد شكوى
-              // "المسافات بين الصفوف كبيرة". mainAxis من 8 → 2،
-              // childAspectRatio من 0.85 → 1.05 (كل خلية أقصر عمودياً).
+              // 2026-07-13 (تكرار ٣): مسافات near-zero + أزرار أكبر قليلاً.
+              // شكوى: "بعدها المسافات كبيرة، صغّرها وكبّر الأزرار بدرجة".
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
-                mainAxisSpacing: 2,
-                crossAxisSpacing: 4,
-                childAspectRatio: 1.05,
+                mainAxisSpacing: 0,
+                crossAxisSpacing: 2,
+                childAspectRatio: 0.95,
               ),
               itemCount: ops.length,
               itemBuilder: (_, i) => _OpCard(op: ops[i]),
@@ -1194,25 +1193,25 @@ class _OpCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 2026-07-13: تصغير مضاعف الأزرار → 40dp + خفض المسافة تحتها لـ3
+          // 2026-07-13 (v3): كبّر لـ46dp + قلّل المسافة تحتها لـ2
           Container(
-            width: 40,
-            height: 40,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
               color: op.color,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: op.color.withValues(alpha: 0.25),
-                  blurRadius: 6,
+                  color: op.color.withValues(alpha: 0.28),
+                  blurRadius: 7,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             alignment: Alignment.center,
-            child: Icon(op.icon, color: Colors.white, size: 18),
+            child: Icon(op.icon, color: Colors.white, size: 21),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           Flexible(
             child: Text(
               op.label,
