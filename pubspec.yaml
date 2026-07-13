@@ -69,6 +69,9 @@ dependencies:
   share_plus: ^10.0.0
   path_provider: ^2.1.4
 
+  # QR generation — لتوليد صور QR دخول للمشترك (30 يوم).
+  qr_flutter: ^4.1.0
+
   # Localization — نظام i18n بسيط قائم على JSON. يشتغل جنباً إلى جنب مع
   # flutter_localizations (الأخير للـMaterial widgets). سبب الاختيار على
   # ARB: 'button.save'.tr() أقصر بكثير من AppLocalizations.of(context)!.buttonSave.

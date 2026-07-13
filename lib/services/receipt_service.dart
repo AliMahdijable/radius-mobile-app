@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart' as intl;
 
+import '../api/print_templates_api.dart';
 import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import 'print_prefs.dart';
@@ -66,7 +67,13 @@ class ReceiptService {
 
   // ─── internal ──────────────────────────────────
 
-  /// يفتح system print dialog ببناء PDF مباشرة (بدون WebView).
+  /// يفتح system print dialog. الاستراتيجيّة:
+  /// 1. جيب قالب المدير المحفوظ من الويب (PrintTemplatesApi.byType).
+  /// 2. لو موجود + فعّال: املأ placeholders في HTML وحاول convertHtml
+  ///    (WebView-based) — يُعطي أفضل شكل مطابق تصميم الويب بالضبط.
+  /// 3. لو convertHtml فشل (WebView crash) أو لا قالب: نلجأ لـPDF مبني
+  ///    مباشرة بـpw widgets (يعمل على كل جهاز).
+  ///
   /// اسم الشركة يُقرأ من AuthStorage (المدير حفظه عند login).
   static Future<bool> _emitReceipt({
     required Map<String, String> data,
@@ -76,9 +83,30 @@ class ReceiptService {
     try {
       final type = PrintPrefs.currentTemplateType; // 'a4' | 'pos'
       final companyName = await AuthStorage.readDisplayName();
+      final format = PrintService.formatForType(type);
+
+      // Step 1: جيب قالب المدير المحفوظ (لو موجود + فعّال).
+      final template = await PrintTemplatesApi.byType(type);
+      if (template != null &&
+          template.isActive &&
+          template.content.trim().isNotEmpty) {
+        // Step 2: املأ placeholders + جرّب convertHtml (يحترم تصميم الأدمن).
+        final filled = PrintService.fillTemplate(template.content, data);
+        final htmlOk = await PrintService.printHtml(
+          html: filled,
+          format: format,
+          documentName: documentName,
+        );
+        if (htmlOk) return true;
+        if (kDebugMode) {
+          debugPrint(
+              '[ReceiptService] HTML template فشل (WebView crash?) — fallback لـPDF مبني.');
+        }
+      }
+      // Step 3: fallback — PDF مبني مباشرة (يعمل بلا WebView).
       return await PrintService.printReceipt(
         data: data,
-        format: PrintService.formatForType(type),
+        format: format,
         title: title,
         documentName: documentName,
         companyName: companyName?.trim().isNotEmpty == true ? companyName : null,

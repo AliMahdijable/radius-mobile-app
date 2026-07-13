@@ -47,16 +47,29 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
   }
 
   Future<void> _testPrint(PrintTemplate t) async {
-    // 2026-07-13: نستعمل printReceipt (PDF مباشر) بدل printHtml
-    // لأن WebView chromium يتعطّل على الإيموليتر:
-    //   E/chromium: Renderer process crash detected
-    // النتيجة سابقاً: زر المعاينة ما يظهر شي.
-    final ok = await PrintService.printReceipt(
-      data: PrintService.sampleData,
-      format: PrintService.formatForType(t.templateType),
-      title: t.templateType == 'a4' ? 'فاتورة A4' : 'إيصال POS',
-      documentName: t.templateName,
-    );
+    // 2026-07-13: نجرّب HTML template أوّلاً (تصميم الأدمن من الويب)،
+    // وإذا فشل WebView (chromium crash على الإيموليتر) نلجأ لـprintReceipt
+    // (PDF مبني بـpw widgets — يعمل بلا WebView).
+    final format = PrintService.formatForType(t.templateType);
+    final data = PrintService.sampleData;
+    bool ok = false;
+    if (t.content.trim().isNotEmpty) {
+      final filled = PrintService.fillTemplate(t.content, data);
+      ok = await PrintService.printHtml(
+        html: filled,
+        format: format,
+        documentName: t.templateName,
+      );
+    }
+    if (!ok) {
+      // fallback: PDF مباشر
+      ok = await PrintService.printReceipt(
+        data: data,
+        format: format,
+        title: t.templateType == 'a4' ? 'فاتورة A4' : 'إيصال POS',
+        documentName: t.templateName,
+      );
+    }
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(

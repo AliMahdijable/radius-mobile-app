@@ -940,6 +940,69 @@ class SubscribersApi {
   /// The legacy /api/subscribers/{id} path used here previously
   /// doesn't exist on this backend — the call silently failed which
   /// is why bulk delete worked half the time at best.
+  /// POST /api/v2/subscribers/:idx/portal-qr-token
+  /// يولّد token طويل الأمد (30 يوم، multi-use) لدخول المشترك عبر QR.
+  /// الرابط بشكل: https://rad.mysvcs.net/user-info/<token> — يُشفَّر
+  /// كـQR code.
+  static Future<({bool ok, String? linkUrl, int? expiresAt, String? message})>
+      generatePortalQrToken({required String idx}) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/portal-qr-token',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          ok: false,
+          linkUrl: null,
+          expiresAt: null,
+          message: body['message']?.toString() ?? 'فشل توليد رمز الدخول',
+        );
+      }
+      final data = body['data'];
+      if (data is! Map) {
+        return (
+          ok: false,
+          linkUrl: null,
+          expiresAt: null,
+          message: 'استجابة غير متوقّعة من السيرفر',
+        );
+      }
+      final m = Map<String, dynamic>.from(data);
+      final linkUrl = m['linkUrl']?.toString();
+      final expiresAtRaw = m['expiresAt'];
+      final expiresAt = expiresAtRaw is int
+          ? expiresAtRaw
+          : int.tryParse(expiresAtRaw?.toString() ?? '');
+      if (linkUrl == null || linkUrl.isEmpty) {
+        return (
+          ok: false,
+          linkUrl: null,
+          expiresAt: null,
+          message: 'الرابط ناقص',
+        );
+      }
+      return (ok: true, linkUrl: linkUrl, expiresAt: expiresAt, message: null);
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString()
+          : null;
+      return (
+        ok: false,
+        linkUrl: null,
+        expiresAt: null,
+        message: msg ?? 'خطأ في الشبكة',
+      );
+    } catch (e) {
+      return (
+        ok: false,
+        linkUrl: null,
+        expiresAt: null,
+        message: e.toString(),
+      );
+    }
+  }
+
   static Future<({bool ok, String? message})> delete(String idx) async {
     try {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(

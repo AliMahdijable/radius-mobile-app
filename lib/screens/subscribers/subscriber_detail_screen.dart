@@ -20,6 +20,7 @@ import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
 import 'sheets/movements_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
+import 'sheets/qr_login_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
 import 'widgets/device_probe_card.dart';
 
@@ -205,6 +206,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     onSendTemplate: _sendTemplate,
                     generatingLink: _generatingLink,
                     onGenerateLink: _generateInfoLink,
+                    onQrLogin: () => showQrLoginSheet(context, sub),
                     deleting: _deleting,
                     onDelete: sub.idx != null ? _confirmDelete : null,
                     busy: _isBusy,
@@ -936,6 +938,7 @@ class _OperationsCard extends StatelessWidget {
     required this.onSendTemplate,
     required this.generatingLink,
     required this.onGenerateLink,
+    this.onQrLogin,
     required this.deleting,
     required this.onDelete,
     required this.busy,
@@ -961,6 +964,7 @@ class _OperationsCard extends StatelessWidget {
   /// are in flight. Flips the link chip's label to 'جاري التوليد…'.
   final bool generatingLink;
   final VoidCallback onGenerateLink;
+  final VoidCallback? onQrLogin;
   /// True while the DELETE round-trip is in flight. Flips the
   /// chip to 'جاري الحذف…'.
   final bool deleting;
@@ -1043,6 +1047,15 @@ class _OperationsCard extends StatelessWidget {
           generatingLink ? 'subscribers.op_generating'.tr() : 'subscribers.op_gen_link'.tr(),
           Colors.indigo,
           onGenerateLink,
+        ),
+      // 2026-07-13: QR دخول 30 يوم — يُعرض للأدمن ليعطي المشترك رمز
+      // دخول سريع للتطبيق البورتال بلا كتابة username/password.
+      if (Perms.has('subscribers.send_whatsapp') && onQrLogin != null)
+        _Op(
+          LucideIcons.qrCode,
+          'subscribers.op_qr_login'.tr(),
+          const Color(0xFF7C3AED),
+          onQrLogin!,
         ),
       if (Perms.has('subscribers.send_whatsapp'))
         _Op(

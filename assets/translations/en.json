@@ -143,6 +143,21 @@
     "preview_hint": "Preview the final receipt — you can print from the preview screen if you want",
     "print_cancelled": "Print cancelled"
   },
+  "qr_login": {
+    "title": "Subscriber QR login",
+    "generating": "Generating token...",
+    "gen_failed": "Failed to generate token",
+    "no_idx": "Subscriber id is missing",
+    "valid_30d": "Valid for 30 days",
+    "valid_for_days": "Valid for {d} day(s)",
+    "expired": "Expired",
+    "share_or_save": "Save / Share",
+    "send_wa": "Send via WhatsApp",
+    "wa_sent": "QR sent via WhatsApp",
+    "wa_send_failed": "Failed to send WhatsApp",
+    "share_failed": "Share failed",
+    "capture_failed": "Failed to capture QR image"
+  },
   "portal": {
     "title": "Subscriber Portal",
     "subtitle_more": "Your brand info and package descriptions as subscribers see them",
@@ -375,6 +390,7 @@
     "op_expiry_warning": "Expiry warning",
     "op_generating": "Generating…",
     "op_gen_link": "Generate link",
+    "op_qr_login": "QR login",
     "op_send_info": "Send info",
     "op_busy": "Working…",
     "op_deleting": "Deleting…",
