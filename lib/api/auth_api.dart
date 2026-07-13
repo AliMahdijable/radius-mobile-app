@@ -220,6 +220,8 @@ class AuthApi {
   }
 
   static String _friendlyDioError(DioException e) {
+    // 2026-07-13: dio 5.10+ أضاف DioExceptionType.transformTimeout. نستعمل
+    // default بدل تعداد الحالات صراحةً — مقاومة لإضافات dio المستقبلية.
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -232,9 +234,8 @@ class AuthApi {
         if (code == 401) return 'اسم المستخدم أو كلمة المرور غير صحيحة.';
         if (code == 429) return 'محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.';
         return 'استجابة غير متوقعة من السيرفر (HTTP $code).';
-      case DioExceptionType.cancel:
-      case DioExceptionType.badCertificate:
-      case DioExceptionType.unknown:
+      default:
+        // cancel / badCertificate / unknown / transformTimeout / أي جديد
         return 'حدث خطأ في الشبكة. حاول مجدداً.';
     }
   }
