@@ -10,6 +10,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '_print_receipt_dialog.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -155,39 +156,20 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    if (result.ok) SubscriberEvents.notifyChange();
     final messenger = ScaffoldMessenger.of(context);
-    // 2026-07-13: عند النجاح نضع زر "طباعة الوصل" في الـSnackBar
-    // كخيار (بدون AUTO print). المدير يضغط لو أراد فيفتح النظام
-    // معاينة + خيار طباعة (يستعمل قالب الويب المحفوظ). الافتراضي = لا طبع.
-    final paidAmount = _effectiveAmount;
-    final remainingDebt = (_currentDebt - paidAmount).clamp(0, double.infinity);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok ? 'تم التسديد بنجاح' : (result.message ?? 'فشل التسديد'),
+    if (!result.ok) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'فشل التسديد'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
-        backgroundColor:
-            result.ok ? const Color(0xFF14B8A6) : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: result.ok ? 8 : 4),
-        action: result.ok
-            ? SnackBarAction(
-                label: 'طباعة الوصل',
-                textColor: Colors.white,
-                onPressed: () => ReceiptService.printDebtPaymentReceipt(
-                  sub: widget.sub,
-                  paidAmount: paidAmount,
-                  remainingDebt: remainingDebt,
-                ),
-              )
-            : null,
-      ),
-    );
-    // مطلب 2026-06-11: لو الإرسال فشل لسبب فني (واتساب فاصل / لا
-    // رقم) أظهر السبب للمدير. الإسكات يحصل تلقائياً للأسباب اللي
-    // المدير يقصدها (feature_off / notifications_disabled / لا قالب).
-    if (result.ok && result.wa != null && result.wa!.shouldShowFailure) {
+      );
+      return;
+    }
+    SubscriberEvents.notifyChange();
+    // مطلب 2026-06-11: لو الإرسال فشل لسبب فني، أظهر تحذير قبل الـdialog.
+    if (result.wa != null && result.wa!.shouldShowFailure) {
       messenger.showSnackBar(
         SnackBar(
           content: Text('لم يُرسل واتساب: ${result.wa!.arabicReason}'),
@@ -196,7 +178,24 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         ),
       );
     }
-    if (result.ok) Navigator.of(context).pop(true);
+    // 2026-07-13: dialog صريح لسؤال المدير عن الطباعة.
+    final paidAmount = _effectiveAmount;
+    final remainingDebt = (_currentDebt - paidAmount).clamp(0, double.infinity);
+    final shouldPrint = await showPrintReceiptDialog(
+      context,
+      title: 'تم التسديد بنجاح',
+      message: 'sheets.print_receipt_prompt'.tr(),
+      accentColor: const Color(0xFF14B8A6),
+    );
+    if (shouldPrint) {
+      await ReceiptService.printDebtPaymentReceipt(
+        sub: widget.sub,
+        paidAmount: paidAmount,
+        remainingDebt: remainingDebt,
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   @override

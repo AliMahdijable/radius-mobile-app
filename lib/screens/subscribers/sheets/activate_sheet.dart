@@ -11,6 +11,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '_print_receipt_dialog.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -207,9 +208,19 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    if (result.ok) SubscriberEvents.notifyChange();
-    // 2026-07-13: عند النجاح نضع زر "طباعة الوصل" في الـSnackBar
-    // كخيار (بدون AUTO print). يستعمل قالب الويب المحفوظ.
+    if (!result.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'common.error'.tr()),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    SubscriberEvents.notifyChange();
+    // 2026-07-13: dialog صريح — يعطي المدير خيار طباعة الوصل قبل الإغلاق.
+    // بدل SnackBarAction الذي كان يُفوَّت أو يُستبدَل بـsnackbar آخر.
     final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
     final num paidNow = switch (_pay) {
       _PayType.cash => effPrice,
@@ -217,27 +228,21 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _PayType.debt => 0,
     };
     final durationDays = int.tryParse(_duration ?? '');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.ok ? 'sheets.renew_ok'.tr() : (result.message ?? 'common.error'.tr())),
-        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: result.ok ? 8 : 4),
-        action: result.ok
-            ? SnackBarAction(
-                label: 'sheets.print_receipt'.tr(),
-                textColor: Colors.white,
-                onPressed: () => ReceiptService.printActivationReceipt(
-                  sub: widget.sub,
-                  packagePrice: effPrice,
-                  paidAmount: paidNow,
-                  durationDays: durationDays,
-                ),
-              )
-            : null,
-      ),
+    final shouldPrint = await showPrintReceiptDialog(
+      context,
+      title: 'sheets.renew_ok'.tr(),
+      message: 'sheets.print_receipt_prompt'.tr(),
     );
-    if (result.ok) Navigator.of(context).pop(true);
+    if (shouldPrint) {
+      await ReceiptService.printActivationReceipt(
+        sub: widget.sub,
+        packagePrice: effPrice,
+        paidAmount: paidNow,
+        durationDays: durationDays,
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   @override

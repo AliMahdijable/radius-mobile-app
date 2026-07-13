@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart' as intl;
 
-import '../api/print_templates_api.dart';
 import '../models/subscriber.dart';
+import '../services/auth_storage.dart';
 import 'print_prefs.dart';
 import 'print_service.dart';
 
@@ -28,15 +28,17 @@ class ReceiptService {
     int? durationDays,
   }) async {
     final remaining = (packagePrice - paidAmount).clamp(0, double.infinity);
-    return _printFilled(
-      buildData: () => _buildActivationData(
-        sub: sub,
-        packagePrice: packagePrice,
-        paidAmount: paidAmount,
-        remainingAmount: remaining,
-        newExpiration: newExpiration,
-        durationDays: durationDays,
-      ),
+    final data = _buildActivationData(
+      sub: sub,
+      packagePrice: packagePrice,
+      paidAmount: paidAmount,
+      remainingAmount: remaining,
+      newExpiration: newExpiration,
+      durationDays: durationDays,
+    );
+    return _emitReceipt(
+      data: data,
+      title: 'فاتورة تفعيل',
       documentName: 'Activation-${sub.username}',
     );
   }
@@ -50,38 +52,36 @@ class ReceiptService {
     required num paidAmount,
     required num remainingDebt,
   }) async {
-    return _printFilled(
-      buildData: () => _buildDebtPaymentData(
-        sub: sub,
-        paidAmount: paidAmount,
-        remainingDebt: remainingDebt,
-      ),
+    final data = _buildDebtPaymentData(
+      sub: sub,
+      paidAmount: paidAmount,
+      remainingDebt: remainingDebt,
+    );
+    return _emitReceipt(
+      data: data,
+      title: 'وصل تسديد دين',
       documentName: 'DebtPayment-${sub.username}',
     );
   }
 
   // ─── internal ──────────────────────────────────
 
-  static Future<bool> _printFilled({
-    required Map<String, String> Function() buildData,
+  /// يفتح system print dialog ببناء PDF مباشرة (بدون WebView).
+  /// اسم الشركة يُقرأ من AuthStorage (المدير حفظه عند login).
+  static Future<bool> _emitReceipt({
+    required Map<String, String> data,
+    required String title,
     required String documentName,
   }) async {
     try {
       final type = PrintPrefs.currentTemplateType; // 'a4' | 'pos'
-      final template = await PrintTemplatesApi.byType(type);
-      if (template == null || template.content.trim().isEmpty) {
-        if (kDebugMode) {
-          debugPrint(
-              '[ReceiptService] لا يوجد قالب $type — يجب حفظه من الويب أوّلاً');
-        }
-        return false;
-      }
-      final filled =
-          PrintService.fillTemplate(template.content, buildData());
-      return await PrintService.printHtml(
-        html: filled,
+      final companyName = await AuthStorage.readDisplayName();
+      return await PrintService.printReceipt(
+        data: data,
         format: PrintService.formatForType(type),
+        title: title,
         documentName: documentName,
+        companyName: companyName?.trim().isNotEmpty == true ? companyName : null,
       );
     } catch (e) {
       if (kDebugMode) debugPrint('[ReceiptService] error: $e');

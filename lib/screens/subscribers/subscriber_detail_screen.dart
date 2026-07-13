@@ -1120,12 +1120,15 @@ class _OperationsCard extends StatelessWidget {
             child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
+              // 2026-07-13: تصغير أزرار العمليات + تقليل المسافات
+              // (كانت 12/8 → 8/6). childAspectRatio 0.78 → 0.85 يضغط
+              // الارتفاع فتصير الأزرار أقرب لبعض عمودياً.
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 8,
-                childAspectRatio: 0.78,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 6,
+                childAspectRatio: 0.85,
               ),
               itemCount: ops.length,
               itemBuilder: (_, i) => _OpCard(op: ops[i]),
@@ -1191,29 +1194,30 @@ class _OpCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // 2026-07-13: تصغير الأزرار من 52 → 44 (ثلث درجة تقريباً)
           Container(
-            width: 52,
-            height: 52,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: op.color,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: op.color.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: op.color.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
             alignment: Alignment.center,
-            child: Icon(op.icon, color: Colors.white, size: 22),
+            child: Icon(op.icon, color: Colors.white, size: 19),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 5),
           Flexible(
             child: Text(
               op.label,
               style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 11.5,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 height: 1.1,
               ),
