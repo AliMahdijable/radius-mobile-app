@@ -12,6 +12,7 @@ import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
+import 'portal_settings/portal_settings_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -91,6 +92,19 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const EmployeesScreen(),
+                ),
+              ),
+            ),
+          // بوابة المشترك — 2026-07-13: branding + وصف الباقات (نُقلت من client-v2)
+          if (Perms.has('settings.edit'))
+            _ModuleCard(
+              icon: LucideIcons.smartphone,
+              color: AppColors.brand,
+              title: 'portal.title'.tr(),
+              subtitle: 'portal.subtitle_more'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PortalSettingsScreen(),
                 ),
               ),
             ),
