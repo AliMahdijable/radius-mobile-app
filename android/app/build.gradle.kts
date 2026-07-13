@@ -16,11 +16,12 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.mysvcs.rad_mysvcs"
-    // 2026-07-13: نستهدف Android 15 (API 35) ونثبّت NDK 27+ لدعم
-    // Google Play 16 KB memory page size (متطلَّب لكل رفع جديد منذ 2025).
-    // بدون هذا يظهر خطأ: "لا يتوافق تطبيقك مع صفحات الذاكرة بحجم 16 KB".
-    compileSdk = 35
-    ndkVersion = "27.0.12077973"
+    // 2026-07-13 (v2): plugins الجديدة (url_launcher, local_auth,
+    // speech_to_text, shared_preferences، إلخ) صارت تتطلّب compileSdk 36
+    // و NDK 28+. Google Play 16 KB page size مدعوم تلقائياً من NDK 27+
+    // فـ28 يغطّيه أيضاً.
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -46,9 +47,9 @@ android {
     defaultConfig {
         applicationId = "com.mysvcs.rad_mysvcs"
         minSdk = flutter.minSdkVersion
-        // targetSdk 35 = Android 15 (متطلَّب Play Store لكل تطبيق منشور
-        // بعد أغسطس 2025). يفعّل تلقائياً 16 KB page size compat.
-        targetSdk = 35
+        // targetSdk 36 = Android 16 (متطلَّب Play بعد أغسطس 2026 للتطبيقات
+        // الجديدة). التحديثات الحاليّة لا تزال 35 لكن نستبق لضمان لا رفض.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
