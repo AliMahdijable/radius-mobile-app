@@ -40,4 +40,32 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  # 2026-07-14: Apple ITMS-91056 رفض Build 93 لأن PrivacyInfo.xcprivacy
+  # الموجود داخل flutter_app_badger_plus 1.0.1 معطوب (keys/values غير
+  # صالحة). الـplugin ما يستعمل أي Required Reason API فعلياً — بس بحاجة
+  # لملف valid حتى Apple تقبله. نستبدله بمانيفست فارغ صحيح بعد كل pod
+  # install. عند تحديث الـplugin مستقبلاً وإصلاح المشكلة عندهم، احذف
+  # هذا الـblock.
+  privacy_manifest_content = <<~PRIVACY_XML
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>NSPrivacyTracking</key>
+        <false/>
+        <key>NSPrivacyTrackingDomains</key>
+        <array/>
+        <key>NSPrivacyCollectedDataTypes</key>
+        <array/>
+        <key>NSPrivacyAccessedAPITypes</key>
+        <array/>
+    </dict>
+    </plist>
+  PRIVACY_XML
+
+  Dir.glob('Pods/**/flutter_app_badger_plus_privacy.bundle/PrivacyInfo.xcprivacy').each do |path|
+    File.write(path, privacy_manifest_content)
+    puts "🛡️ patched malformed PrivacyInfo: #{path}"
+  end
 end
