@@ -11,7 +11,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
-import '_print_receipt_dialog.dart';
+import '_print_receipt_checkbox.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -49,6 +49,8 @@ class _PayDebtSheet extends StatefulWidget {
 class _PayDebtSheetState extends State<_PayDebtSheet> {
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  // 2026-07-13: checkbox داخل المودل — الافتراضي false
+  bool _printReceiptChecked = false;
   int _amount = 0;
   bool _payAll = false;
   bool _submitting = false;
@@ -169,7 +171,14 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       return;
     }
     SubscriberEvents.notifyChange();
-    // مطلب 2026-06-11: لو الإرسال فشل لسبب فني، أظهر تحذير قبل الـdialog.
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('تم التسديد بنجاح'),
+        backgroundColor: const Color(0xFF14B8A6),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    // مطلب 2026-06-11: لو الإرسال فشل لسبب فني، أظهر تحذير.
     if (result.wa != null && result.wa!.shouldShowFailure) {
       messenger.showSnackBar(
         SnackBar(
@@ -179,16 +188,11 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         ),
       );
     }
-    // 2026-07-13: dialog صريح لسؤال المدير عن الطباعة.
-    final paidAmount = _effectiveAmount;
-    final remainingDebt = (_currentDebt - paidAmount).clamp(0, double.infinity);
-    final shouldPrint = await showPrintReceiptDialog(
-      context,
-      title: 'تم التسديد بنجاح',
-      message: 'sheets.print_receipt_prompt'.tr(),
-      accentColor: const Color(0xFF14B8A6),
-    );
-    if (shouldPrint) {
+    // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox داخل المودل مُفعَّل.
+    if (_printReceiptChecked) {
+      final paidAmount = _effectiveAmount;
+      final remainingDebt =
+          (_currentDebt - paidAmount).clamp(0, double.infinity);
       await ReceiptService.printDebtPaymentReceipt(
         sub: widget.sub,
         paidAmount: paidAmount,
@@ -231,6 +235,16 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                   padding: const EdgeInsets.fromLTRB(
                       Sp.lg, Sp.sm, Sp.lg, Sp.huge),
                   children: _buildBody(accent),
+                ),
+              ),
+              // Print receipt checkbox — قبل زر التسديد مباشرة
+              Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                child: PrintReceiptCheckbox(
+                  value: _printReceiptChecked,
+                  onChanged: (v) =>
+                      setState(() => _printReceiptChecked = v),
                 ),
               ),
               _SubmitBar(

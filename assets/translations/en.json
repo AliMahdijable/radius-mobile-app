@@ -633,6 +633,7 @@
     "renewing": "Renewing…",
     "renew_ok": "Renewed successfully",
     "print_receipt": "Print receipt",
+    "print_receipt_after": "Print receipt after confirmation",
     "print_receipt_prompt": "Do you want to print a receipt for this operation?",
     "extend_subscriber": "Extend subscriber",
     "extend_load_failed": "Couldn't load extend options",

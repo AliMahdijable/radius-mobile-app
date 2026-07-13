@@ -11,7 +11,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
-import '_print_receipt_dialog.dart';
+import '_print_receipt_checkbox.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -51,6 +51,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
 
   Map<String, dynamic>? _selectedPkg;
   _Method _method = _Method.balance;
+  bool _printReceiptChecked = false;
 
   @override
   void initState() {
@@ -152,15 +153,18 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       return;
     }
     SubscriberEvents.notifyChange();
-    // 2026-07-13: dialog صريح لسؤال المدير عن طباعة الوصل بعد التجديد.
-    final price = _method == _Method.points ? 0 : _selectedPrice;
-    final durationDays = int.tryParse(pkg['duration_days']?.toString() ?? '');
-    final shouldPrint = await showPrintReceiptDialog(
-      context,
-      title: 'sheets.extend_ok'.tr(),
-      message: 'sheets.print_receipt_prompt'.tr(),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('sheets.extend_ok'.tr()),
+        backgroundColor: AppColors.brand,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
-    if (shouldPrint) {
+    // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
+    if (_printReceiptChecked) {
+      final price = _method == _Method.points ? 0 : _selectedPrice;
+      final durationDays =
+          int.tryParse(pkg['duration_days']?.toString() ?? '');
       await ReceiptService.printActivationReceipt(
         sub: widget.sub,
         packagePrice: price,
@@ -203,6 +207,15 @@ class _ExtendSheetState extends State<_ExtendSheet> {
                   padding: const EdgeInsets.fromLTRB(
                       Sp.lg, Sp.sm, Sp.lg, Sp.huge),
                   children: _buildBody(),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                child: PrintReceiptCheckbox(
+                  value: _printReceiptChecked,
+                  onChanged: (v) =>
+                      setState(() => _printReceiptChecked = v),
                 ),
               ),
               _SubmitBar(

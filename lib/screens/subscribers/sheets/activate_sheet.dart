@@ -11,7 +11,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
-import '_print_receipt_dialog.dart';
+import '_print_receipt_checkbox.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -62,6 +62,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // Default = آجل (dept/deferred). المستخدم صرّح 2026-07-11: أغلب
   // التفعيلات تكون آجلة، فنجعله الافتراضي بدل نقدي.
   _PayType _pay = _PayType.debt;
+  bool _printReceiptChecked = false;
   final _partialCtrl = TextEditingController();
   int _partialAmount = 0;
   // True while the controller text is being rewritten by us (e.g. when
@@ -219,21 +220,22 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       return;
     }
     SubscriberEvents.notifyChange();
-    // 2026-07-13: dialog صريح — يعطي المدير خيار طباعة الوصل قبل الإغلاق.
-    // بدل SnackBarAction الذي كان يُفوَّت أو يُستبدَل بـsnackbar آخر.
-    final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
-    final num paidNow = switch (_pay) {
-      _PayType.cash => effPrice,
-      _PayType.partial => _partialAmount,
-      _PayType.debt => 0,
-    };
-    final durationDays = int.tryParse(_duration ?? '');
-    final shouldPrint = await showPrintReceiptDialog(
-      context,
-      title: 'sheets.renew_ok'.tr(),
-      message: 'sheets.print_receipt_prompt'.tr(),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('sheets.renew_ok'.tr()),
+        backgroundColor: AppColors.brand,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
-    if (shouldPrint) {
+    // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
+    if (_printReceiptChecked) {
+      final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
+      final num paidNow = switch (_pay) {
+        _PayType.cash => effPrice,
+        _PayType.partial => _partialAmount,
+        _PayType.debt => 0,
+      };
+      final durationDays = int.tryParse(_duration ?? '');
       await ReceiptService.printActivationReceipt(
         sub: widget.sub,
         packagePrice: effPrice,
@@ -276,6 +278,15 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                   padding: const EdgeInsets.fromLTRB(
                       Sp.lg, Sp.sm, Sp.lg, Sp.huge),
                   children: _buildBody(),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                child: PrintReceiptCheckbox(
+                  value: _printReceiptChecked,
+                  onChanged: (v) =>
+                      setState(() => _printReceiptChecked = v),
                 ),
               ),
               _SubmitBar(

@@ -633,6 +633,7 @@
     "renewing": "جاري التجديد...",
     "renew_ok": "تم التجديد بنجاح",
     "print_receipt": "طباعة الوصل",
+    "print_receipt_after": "طباعة وصل بعد التأكيد",
     "print_receipt_prompt": "هل تريد طباعة وصل هذه العملية؟",
     "extend_subscriber": "تمديد المشترك",
     "extend_load_failed": "تعذّر جلب خيارات التمديد",
