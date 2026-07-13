@@ -38,6 +38,14 @@ class Subscriber {
   /// endpoint doesn't carry it. null = unknown / no price loaded.
   final num? price;
 
+  /// SAS4 daily_traffic_details — استهلاك يومي إجمالي (traffic + upload +
+  /// download) بالبايت. الـbackend يمرّرها كما هي في حقل `daily_traffic`.
+  /// شكلها عادة: { traffic: N, upload: N, download: N } لكن قد تكون null
+  /// لو المشترك بلا جلسات في اليوم الحالي. مطلب المستخدم 2026-07-13.
+  final int? dailyTrafficTotal;
+  final int? dailyUpload;
+  final int? dailyDownload;
+
   const Subscriber({
     this.idx,
     required this.username,
@@ -63,6 +71,9 @@ class Subscriber {
     this.deviceVendor,
     this.discount,
     this.price,
+    this.dailyTrafficTotal,
+    this.dailyUpload,
+    this.dailyDownload,
   });
 
   String get fullName {
@@ -218,6 +229,14 @@ class Subscriber {
       price: toDouble(j['user_price']) ??
           toDouble(j['sale_price']) ??
           toDouble(j['price']),
+      // 2026-07-13: daily_traffic_details يمرّه backend كـdaily_traffic.
+      // شكل السجل: { traffic: N, upload: N, download: N } من SAS4.
+      dailyTrafficTotal:
+          toInt((j['daily_traffic'] is Map ? j['daily_traffic']['traffic'] : null)),
+      dailyUpload:
+          toInt((j['daily_traffic'] is Map ? j['daily_traffic']['upload'] : null)),
+      dailyDownload:
+          toInt((j['daily_traffic'] is Map ? j['daily_traffic']['download'] : null)),
     );
   }
 
@@ -295,6 +314,9 @@ class Subscriber {
       deviceVendor: device ?? deviceVendor,
       discount: discount,
       price: price,
+      dailyTrafficTotal: dailyTrafficTotal,
+      dailyUpload: dailyUpload,
+      dailyDownload: dailyDownload,
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'colors.dart';
+
 /// Cairo via google_fonts (runtime download + cache). Returns TextStyles
 /// from static methods because GoogleFonts.cairo() can't be const-evaluated.
 ///
@@ -22,20 +24,24 @@ import 'package:google_fonts/google_fonts.dart';
 class AppType {
   AppType._();
 
+  // 2026-07-13: كل style يستعمل AppColors.textHi/Mid/Low افتراضياً
+  // حتى النصوص في dark mode تنقلب تلقائياً بلا تعديل يدوي في كل callsite.
+  // الـcaller يقدر يتجاوز باللون الذي يريده.
+
   // Logo title
   static TextStyle title({Color? color}) => GoogleFonts.cairo(
         fontSize: 22,
         fontWeight: FontWeight.w700,
         height: 1.25,
         letterSpacing: -0.3,
-        color: color,
+        color: color ?? AppColors.textHi,
       );
 
   static TextStyle subtitle({Color? color}) => GoogleFonts.cairo(
         fontSize: 13,
         fontWeight: FontWeight.w400,
         height: 1.5,
-        color: color,
+        color: color ?? AppColors.textMid,
       );
 
   // Input label (above each field)
@@ -43,7 +49,7 @@ class AppType {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         height: 1.3,
-        color: color,
+        color: color ?? AppColors.textMid,
       );
 
   // Input text + body
@@ -51,7 +57,7 @@ class AppType {
         fontSize: 15,
         fontWeight: FontWeight.w500,
         height: 1.4,
-        color: color,
+        color: color ?? AppColors.textHi,
       );
 
   // Button text
@@ -59,7 +65,7 @@ class AppType {
         fontSize: 15,
         fontWeight: FontWeight.w600,
         height: 1.2,
-        color: color,
+        color: color ?? AppColors.textHi,
       );
 
   // Link / tertiary text
@@ -67,7 +73,7 @@ class AppType {
         fontSize: 13,
         fontWeight: FontWeight.w500,
         height: 1.3,
-        color: color,
+        color: color ?? AppColors.brand,
       );
 
   // Footer / muted small
@@ -75,6 +81,6 @@ class AppType {
         fontSize: 11,
         fontWeight: FontWeight.w400,
         height: 1.3,
-        color: color,
+        color: color ?? AppColors.textLow,
       );
 }

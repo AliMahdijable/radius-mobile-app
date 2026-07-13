@@ -139,7 +139,67 @@ class _ConsumptionSheet extends StatelessWidget {
                   ),
                 ),
               ],
+              // 2026-07-13: قسم "الاستهلاك اليومي" الجديد — يعرض إجمالي
+              // المشترك خلال اليوم (من SAS4 daily_traffic_details).
+              // يظهر فقط لو backend رجّع البيانات (لبعض الجلسات null).
+              if (_hasDailyTraffic) ...[
+                const SizedBox(height: Sp.md),
+                _sectionLabel('الاستهلاك اليومي', LucideIcons.calendar),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _bigStat(
+                        icon: LucideIcons.download,
+                        label: 'تحميل اليوم',
+                        value: _fmtBytes(sub.dailyDownload ?? 0),
+                        color: const Color(0xFF10B981),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _bigStat(
+                        icon: LucideIcons.upload,
+                        label: 'رفع اليوم',
+                        value: _fmtBytes(sub.dailyUpload ?? 0),
+                        color: const Color(0xFF6366F1),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.brand.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(R.md),
+                    border: Border.all(
+                      color: AppColors.brand.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.activity,
+                          size: 14, color: AppColors.brand),
+                      const SizedBox(width: 6),
+                      Text(
+                        'إجمالي اليوم:',
+                        style: AppType.muted().copyWith(fontSize: 12),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _fmtBytes(sub.dailyTrafficTotal ?? 0),
+                        style: AppType.title(color: AppColors.brand)
+                            .copyWith(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: Sp.md),
+              _sectionLabel('معلومات الجلسة الحاليّة', LucideIcons.info),
+              const SizedBox(height: 6),
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.surfaceInput,
@@ -196,6 +256,27 @@ class _ConsumptionSheet extends StatelessWidget {
       ),
     );
   }
+
+  /// true لو backend رجّع أي قيمة داخل daily_traffic_details.
+  bool get _hasDailyTraffic =>
+      (sub.dailyTrafficTotal ?? 0) > 0 ||
+      (sub.dailyUpload ?? 0) > 0 ||
+      (sub.dailyDownload ?? 0) > 0;
+
+  Widget _sectionLabel(String text, IconData icon) => Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Row(
+          children: [
+            Icon(icon, size: 13, color: AppColors.brand),
+            const SizedBox(width: 5),
+            Text(
+              text,
+              style: AppType.title(color: AppColors.textHi)
+                  .copyWith(fontSize: 12.5),
+            ),
+          ],
+        ),
+      );
 
   Widget _bigStat({
     required IconData icon,
