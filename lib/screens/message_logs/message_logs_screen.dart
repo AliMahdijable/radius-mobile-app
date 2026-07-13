@@ -602,7 +602,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       case 'general':
       case 'broadcast':
       case 'manual':
-        return 'عامة';
+        return 'تبليغ';
       case 'debtors':
       case 'debt_reminder':
         return 'تذكير دين';
@@ -614,15 +614,19 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
         return 'قرب انتهاء';
       case 'activation':
       case 'activation_direct':
+      case 'activation_notice':
         return 'تفعيل';
       case 'renewal':
       case 'extension':
         return 'تمديد';
       case 'payment_receipt':
       case 'payment':
+      case 'payment_confirmation':
         return 'دفع';
       case 'welcome_message':
         return 'ترحيب';
+      case 'subscriber_info':
+        return 'معلومات';
       default:
         return t;
     }
