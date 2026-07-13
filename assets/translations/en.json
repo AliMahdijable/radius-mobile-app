@@ -150,6 +150,8 @@
     "delete_title": "Delete template",
     "delete_body": "This cannot be undone. Prints will fall back to the default template.",
     "err_empty": "Template name and content are required",
+    "test_print": "Test print",
+    "print_cancelled": "Print cancelled",
     "saved": "Saved",
     "save_failed": "Save failed",
     "deleted": "Deleted",

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/print_templates_api.dart';
+import '../../services/print_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -180,6 +181,30 @@ class _PrintTemplateEditorScreenState extends State<PrintTemplateEditorScreen> {
     _contentFocus.requestFocus();
   }
 
+  Future<void> _testPrint() async {
+    // نستبدل الـplaceholders ببيانات وهمية ثم نفتح system print dialog.
+    // النظام يكتشف طابعات الشبكة تلقائياً + AirPrint.
+    final filled =
+        PrintService.fillTemplate(_content.text, PrintService.sampleData);
+    final format = PrintService.formatForType(widget.templateType);
+    final ok = await PrintService.printHtml(
+      html: filled,
+      format: format,
+      documentName: _name.text.trim().isEmpty
+          ? (widget.templateType == 'a4' ? 'A4 Receipt' : 'POS Receipt')
+          : _name.text.trim(),
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('print_templates.print_cancelled'.tr()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _previewSheet() async {
     // معاينة بسيطة: نستخرج النصوص من الـHTML (بدون webview) بحيث المدير
     // يرى الشكل التقريبي + المتغيّرات كما هي.
@@ -206,6 +231,11 @@ class _PrintTemplateEditorScreenState extends State<PrintTemplateEditorScreen> {
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
         actions: [
+          IconButton(
+            tooltip: 'print_templates.test_print'.tr(),
+            icon: Icon(LucideIcons.printer, size: 18, color: AppColors.brand),
+            onPressed: _saving ? null : _testPrint,
+          ),
           IconButton(
             tooltip: 'print_templates.preview'.tr(),
             icon: Icon(LucideIcons.eye, size: 18, color: AppColors.textHi),

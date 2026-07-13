@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/print_templates_api.dart';
+import '../../services/print_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -58,6 +59,24 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
     if (result == true) await _load();
   }
 
+  Future<void> _testPrint(PrintTemplate t) async {
+    final filled = PrintService.fillTemplate(t.content, PrintService.sampleData);
+    final ok = await PrintService.printHtml(
+      html: filled,
+      format: PrintService.formatForType(t.templateType),
+      documentName: t.templateName,
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('print_templates.print_cancelled'.tr()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final a4 = _byType('a4');
@@ -91,6 +110,7 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
                     type: 'a4',
                     template: a4,
                     onTap: () => _editOrCreate('a4', existing: a4),
+                    onTestPrint: a4 == null ? null : () => _testPrint(a4),
                   ),
                   const SizedBox(height: Sp.lg),
                   _sectionLabel(
@@ -102,6 +122,7 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
                     type: 'pos',
                     template: pos,
                     onTap: () => _editOrCreate('pos', existing: pos),
+                    onTestPrint: pos == null ? null : () => _testPrint(pos),
                   ),
                   const SizedBox(height: Sp.lg),
                   Container(
@@ -150,10 +171,12 @@ class _TemplateCard extends StatelessWidget {
     required this.type,
     required this.template,
     required this.onTap,
+    this.onTestPrint,
   });
   final String type;
   final PrintTemplate? template;
   final VoidCallback onTap;
+  final VoidCallback? onTestPrint;
 
   @override
   Widget build(BuildContext context) {
@@ -245,6 +268,13 @@ class _TemplateCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (exists && onTestPrint != null)
+                IconButton(
+                  tooltip: 'print_templates.test_print'.tr(),
+                  icon: Icon(LucideIcons.printer,
+                      color: AppColors.brand, size: 18),
+                  onPressed: onTestPrint,
+                ),
               Icon(
                 exists ? LucideIcons.pencil : LucideIcons.plus,
                 color: AppColors.textLow,
