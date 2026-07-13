@@ -403,13 +403,15 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  _linkUrl!,
-                  style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 10),
-                  textDirection: TextDirection.ltr,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Directionality(
+                  textDirection: ui.TextDirection.ltr,
+                  child: Text(
+                    _linkUrl!,
+                    style: AppType.subtitle(color: AppColors.textMid)
+                        .copyWith(fontSize: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
               InkWell(
