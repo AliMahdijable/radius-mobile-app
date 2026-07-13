@@ -6,10 +6,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '_print_receipt_dialog.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -139,16 +141,35 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    if (result.ok) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text(result.ok ? 'sheets.extend_ok'.tr() : (result.message ?? 'common.error'.tr())),
-        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    if (!result.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'common.error'.tr()),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    SubscriberEvents.notifyChange();
+    // 2026-07-13: dialog صريح لسؤال المدير عن طباعة الوصل بعد التجديد.
+    final price = _method == _Method.points ? 0 : _selectedPrice;
+    final durationDays = int.tryParse(pkg['duration_days']?.toString() ?? '');
+    final shouldPrint = await showPrintReceiptDialog(
+      context,
+      title: 'sheets.extend_ok'.tr(),
+      message: 'sheets.print_receipt_prompt'.tr(),
     );
-    if (result.ok) Navigator.of(context).pop(true);
+    if (shouldPrint) {
+      await ReceiptService.printActivationReceipt(
+        sub: widget.sub,
+        packagePrice: price,
+        paidAmount: price, // التجديد = دفع كامل من الرصيد
+        durationDays: durationDays,
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   @override

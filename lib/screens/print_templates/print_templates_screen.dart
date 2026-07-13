@@ -47,10 +47,14 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
   }
 
   Future<void> _testPrint(PrintTemplate t) async {
-    final filled = PrintService.fillTemplate(t.content, PrintService.sampleData);
-    final ok = await PrintService.printHtml(
-      html: filled,
+    // 2026-07-13: نستعمل printReceipt (PDF مباشر) بدل printHtml
+    // لأن WebView chromium يتعطّل على الإيموليتر:
+    //   E/chromium: Renderer process crash detected
+    // النتيجة سابقاً: زر المعاينة ما يظهر شي.
+    final ok = await PrintService.printReceipt(
+      data: PrintService.sampleData,
       format: PrintService.formatForType(t.templateType),
+      title: t.templateType == 'a4' ? 'فاتورة A4' : 'إيصال POS',
       documentName: t.templateName,
     );
     if (!mounted) return;
