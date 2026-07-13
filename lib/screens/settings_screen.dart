@@ -10,6 +10,7 @@ import '../services/fcm_service.dart';
 import '../services/inbox_service.dart';
 import '../services/locale_service.dart';
 import '../services/permissions_service.dart';
+import '../services/print_prefs.dart';
 import '../services/theme_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -198,10 +199,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: Sp.md),
             ],
             _SectionLabel('settings.printing'.tr()),
-            _Row(
-              icon: Icons.print_outlined,
-              label: 'settings.receipt_printer'.tr(),
-              onTap: () => _todo(context, 'settings.todo_printer'.tr()),
+            // 2026-07-13: بدل الـstub، صار يفتح picker لنوع الطابعة
+            // (A4 / POS 80mm). الاختيار محفوظ ويُستعمل لأزرار "طباعة
+            // الوصل" بعد التفعيل/التسديد.
+            ValueListenableBuilder<PrintFormatChoice>(
+              valueListenable: PrintPrefs.notifier,
+              builder: (_, choice, __) => _Row(
+                icon: Icons.print_outlined,
+                label: 'settings.default_printer'.tr(),
+                trailing: choice == PrintFormatChoice.a4
+                    ? 'A4'
+                    : 'POS 80mm',
+                onTap: () => _openPrinterFormatPicker(context),
+              ),
             ),
             const SizedBox(height: Sp.xs),
             _Row(
@@ -375,6 +385,15 @@ void _openThemePicker(BuildContext ctx) {
     backgroundColor: Colors.transparent,
     isScrollControlled: false,
     builder: (_) => const _ThemePickerSheet(),
+  );
+}
+
+void _openPrinterFormatPicker(BuildContext ctx) {
+  showModalBottomSheet<void>(
+    context: ctx,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: false,
+    builder: (_) => const _PrinterFormatPickerSheet(),
   );
 }
 
@@ -553,6 +572,86 @@ class _ThemePickerSheet extends StatelessWidget {
                       selected: current == ThemeMode.dark,
                       onTap: () async {
                         await ThemeService.setMode(ThemeMode.dark);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrinterFormatPickerSheet extends StatelessWidget {
+  const _PrinterFormatPickerSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      color: AppColors.surface,
+      borderRadius:
+          const BorderRadius.vertical(top: Radius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+              Text(
+                'settings.default_printer'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'settings.default_printer_desc'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.subtitle(color: AppColors.textMid)
+                    .copyWith(fontSize: 12, height: 1.5),
+              ),
+              const SizedBox(height: Sp.lg),
+              ValueListenableBuilder<PrintFormatChoice>(
+                valueListenable: PrintPrefs.notifier,
+                builder: (_, current, __) => Column(
+                  children: [
+                    _ThemeOptionTile(
+                      icon: Icons.receipt_outlined,
+                      label: 'settings.printer_pos'.tr(),
+                      subtitle: 'settings.printer_pos_desc'.tr(),
+                      selected: current == PrintFormatChoice.pos,
+                      onTap: () async {
+                        await PrintPrefs.setFormat(PrintFormatChoice.pos);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                    ),
+                    const SizedBox(height: Sp.xs),
+                    _ThemeOptionTile(
+                      icon: Icons.description_outlined,
+                      label: 'settings.printer_a4'.tr(),
+                      subtitle: 'settings.printer_a4_desc'.tr(),
+                      selected: current == PrintFormatChoice.a4,
+                      onTap: () async {
+                        await PrintPrefs.setFormat(PrintFormatChoice.a4);
                         if (context.mounted) Navigator.of(context).pop();
                       },
                     ),

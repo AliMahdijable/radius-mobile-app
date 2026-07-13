@@ -15,6 +15,7 @@ import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
 import 'services/notification_service.dart';
 import 'services/permissions_service.dart';
+import 'services/print_prefs.dart';
 import 'services/theme_service.dart';
 import 'theme/colors.dart';
 
@@ -31,6 +32,9 @@ void main() async {
   // notifier is read synchronously below; this `await` guarantees it
   // already holds the persisted value by the time runApp fires.
   await ThemeService.load();
+  // Print prefs — يحدّد نوع القالب الافتراضي (a4/pos) لأزرار "طباعة الوصل"
+  // بعد التفعيل/التسديد. يُقرأ قبل أي زر يظهر.
+  await PrintPrefs.load();
   // Permissions service يعيد تحميل الـcache المخزّن من الجلسة السابقة
   // قبل أول frame عشان الـgating يشتغل صح.
   await PermissionsService.init();

@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -207,11 +208,33 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();
+    // 2026-07-13: عند النجاح نضع زر "طباعة الوصل" في الـSnackBar
+    // كخيار (بدون AUTO print). يستعمل قالب الويب المحفوظ.
+    final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
+    final num paidNow = switch (_pay) {
+      _PayType.cash => effPrice,
+      _PayType.partial => _partialAmount,
+      _PayType.debt => 0,
+    };
+    final durationDays = int.tryParse(_duration ?? '');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.ok ? 'sheets.renew_ok'.tr() : (result.message ?? 'common.error'.tr())),
         backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: result.ok ? 8 : 4),
+        action: result.ok
+            ? SnackBarAction(
+                label: 'sheets.print_receipt'.tr(),
+                textColor: Colors.white,
+                onPressed: () => ReceiptService.printActivationReceipt(
+                  sub: widget.sub,
+                  packagePrice: effPrice,
+                  paidAmount: paidNow,
+                  durationDays: durationDays,
+                ),
+              )
+            : null,
       ),
     );
     if (result.ok) Navigator.of(context).pop(true);
