@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_app_badger/flutter_app_badger.dart';
+import 'package:flutter_app_badger_plus/flutter_app_badger_plus.dart';
 
 import 'inbox_service.dart';
 
@@ -23,7 +23,7 @@ class BadgeService {
     if (_initialized) return;
     _initialized = true;
     try {
-      _supported = await FlutterAppBadger.isAppBadgeSupported();
+      _supported = await FlutterAppBadgerPlus.isAppBadgeSupported();
     } catch (e) {
       _supported = false;
       if (kDebugMode) debugPrint('[BadgeService] isSupported check: $e');
@@ -42,9 +42,9 @@ class BadgeService {
     final count = InboxService.unreadCount;
     try {
       if (count == 0) {
-        await FlutterAppBadger.removeBadge();
+        await FlutterAppBadgerPlus.removeBadge();
       } else {
-        await FlutterAppBadger.updateBadgeCount(count);
+        await FlutterAppBadgerPlus.updateBadgeCount(count);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[BadgeService] sync failed: $e');
@@ -55,7 +55,7 @@ class BadgeService {
   static Future<void> clear() async {
     if (!_supported) return;
     try {
-      await FlutterAppBadger.removeBadge();
+      await FlutterAppBadgerPlus.removeBadge();
     } catch (_) {}
   }
 }

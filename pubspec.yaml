@@ -76,10 +76,10 @@ dependencies:
   # حتى شاشة الإعدادات "الإصدار" تُحدَّث تلقائياً بلا تعديل يدوي.
   package_info_plus: ^8.0.0
 
-  # App badge — لمزامنة عدد الإشعارات على أيقونة التطبيق (iOS badge +
-  # Android launchers) مع InboxService.unreadCount. يمنع تراكم العدد
-  # الخارجي بينما داخل التطبيق دقيق.
-  flutter_app_badger: ^1.5.0
+  # App badge — flutter_app_badger 1.5.0 مهجور + ماكو namespace/يستعمل
+  # package= في manifestه (يفشل مع AGP 8+). بدّلنا لـplus (fork نشط،
+  # نفس API — FlutterAppBadger class name محفوظ).
+  flutter_app_badger_plus: ^1.5.1
 
   # Localization — نظام i18n بسيط قائم على JSON. يشتغل جنباً إلى جنب مع
   # flutter_localizations (الأخير للـMaterial widgets). سبب الاختيار على
