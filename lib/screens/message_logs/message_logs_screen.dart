@@ -348,6 +348,10 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
   }
 
   Widget _typeFilters() {
+    // 2026-07-13: حذفنا "تمديد" (renewal) من الفلاتر بطلب المستخدم.
+    // "دفع" → "تسديد" — يعرض فقط رسائل تأكيد تسديد المشترك لدينه
+    // (💳 تأكيد تسديد الاشتراك). backend type=payment أصلاً محدود على
+    // (%تأكيد تسديد%, %تم تسديد دفعة%) فالنتيجة دقيقة.
     const filters = <(String, String)>[
       ('all', 'كل الأنواع'),
       ('broadcast', 'تبليغ'),
@@ -355,8 +359,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       ('expiry_warning', 'قرب انتهاء'),
       ('service_end', 'انتهاء الخدمة'),
       ('activation', 'تفعيل'),
-      ('renewal', 'تمديد'),
-      ('payment', 'دفع'),
+      ('payment', 'تسديد'),
     ];
     return SizedBox(
       height: 30,
@@ -631,7 +634,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       case 'payment_receipt':
       case 'payment':
       case 'payment_confirmation':
-        return 'دفع';
+        return 'تسديد';
       case 'welcome_message':
         return 'ترحيب';
       case 'subscriber_info':
