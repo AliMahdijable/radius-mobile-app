@@ -29,10 +29,11 @@ subprojects {
 // afterEvaluate الذي يتأخّر أحياناً. الـreflection يتفادى الاعتماد
 // المباشر على AGP classpath في هذا السكربت.
 subprojects {
+    // plugins.withId يشتغل فوراً لما يُطبَّق الـplugin — لا نحتاج
+    // afterEvaluate (يرمي "already evaluated" لبعض الـsubprojects
+    // التي انتهت مبكراً بسبب evaluationDependsOn(":app") أعلاه).
     plugins.withId("com.android.library") { fixNamespace() }
     plugins.withId("com.android.application") { fixNamespace() }
-    // احتياطي — لو الأوّل ما نفّذ لأي سبب
-    afterEvaluate { fixNamespace() }
 }
 
 fun Project.fixNamespace() {
