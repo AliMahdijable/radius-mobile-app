@@ -698,8 +698,8 @@ class _MessageDetailSheet extends StatelessWidget {
               _row('اسم المستخدم', message.recipientUsername!, mono: true),
             _row('الحالة', _statusText(message.status)),
             if ((message.messageType ?? '').isNotEmpty)
-              _row('النوع', message.messageType!),
-            _row('التاريخ', message.createdAt),
+              _row('النوع', _typeLabel(message.messageType!)),
+            _row('التاريخ', _formatFullDateTime(message.createdAt)),
             if (message.isFailed &&
                 (message.errorMessage ?? '').isNotEmpty)
               Container(
@@ -841,5 +841,57 @@ class _MessageDetailSheet extends StatelessWidget {
       default:
         return s;
     }
+  }
+
+  // نسخة مطابقة لـ _MessageLogsScreenState._typeLabel — نُكرّرها هنا لأن
+  // الأخرى private. تعرض label بدل message_type الخام (payment_confirmation
+  // → "تسديد" مثلاً).
+  String _typeLabel(String t) {
+    switch (t) {
+      case 'general':
+      case 'broadcast':
+      case 'manual':
+        return 'تبليغ';
+      case 'debtors':
+      case 'debt_reminder':
+        return 'تذكير دين';
+      case 'expired':
+      case 'service_end':
+        return 'انتهاء الخدمة';
+      case 'expiring':
+      case 'expiry_warning':
+        return 'قرب انتهاء';
+      case 'activation':
+      case 'activation_direct':
+      case 'activation_notice':
+        return 'تفعيل';
+      case 'renewal':
+      case 'extension':
+        return 'تمديد';
+      case 'payment_receipt':
+      case 'payment':
+      case 'payment_confirmation':
+        return 'تسديد';
+      case 'welcome_message':
+        return 'ترحيب';
+      case 'subscriber_info':
+        return 'معلومات';
+      default:
+        return t;
+    }
+  }
+
+  /// ISO string → "YYYY/MM/DD HH:mm صباحاً/مساءً" بتوقيت الجهاز.
+  /// الـbackend يرسل createdAt بصيغة `2026-07-08T19:08:42.000Z` — العرض
+  /// الخام غير مفهوم للمستخدم فنحوّله لتاريخ محلي مع 12h + إشارة ص/م.
+  String _formatFullDateTime(String raw) {
+    final dt = DateTime.tryParse(raw)?.toLocal();
+    if (dt == null) return raw;
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h24 = dt.hour;
+    final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
+    final ampm = h24 >= 12 ? 'مساءً' : 'صباحاً';
+    return '${dt.year}/${two(dt.month)}/${two(dt.day)} '
+        '${two(h12)}:${two(dt.minute)} $ampm';
   }
 }
