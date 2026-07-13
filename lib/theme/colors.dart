@@ -49,17 +49,18 @@ class AppColors {
   static const Color _lightTextMid = Color(0xFF6B7280);
   static const Color _lightTextLow = Color(0xFF9CA3AF);
 
-  // -------- Dark palette (new 2026-06-13) --------
-  // Tuned for OLED-friendly contrast without being pure-black; brand
-  // green stays readable on these surfaces (tested via WCAG AA pairs).
+  // -------- Dark palette --------
+  // 2026-07-13: كل الـmid/low خُفّت جداً — النصوص الفرعية على الكرت
+  // (باقة/هاتف/انتهاء) غير مقروءة. رفعنا mid إلى #D3D7DE
+  // و low إلى #9AA1AE ليتوفر contrast AA + هرم بصري واضح مع hi.
   static const Color _darkBg = Color(0xFF0F1419);
-  static const Color _darkSurface = Color(0xFF1A1F2A);
-  static const Color _darkSurfaceInput = Color(0xFF232936);
-  static const Color _darkBorder = Color(0xFF2C3340);
-  static const Color _darkBorderStrong = Color(0xFF3D475A);
+  static const Color _darkSurface = Color(0xFF1B2130);
+  static const Color _darkSurfaceInput = Color(0xFF262D3C);
+  static const Color _darkBorder = Color(0xFF323A4A);
+  static const Color _darkBorderStrong = Color(0xFF454F63);
   static const Color _darkTextHi = Color(0xFFF3F4F6);
-  static const Color _darkTextMid = Color(0xFFB0B7C3);
-  static const Color _darkTextLow = Color(0xFF6E7787);
+  static const Color _darkTextMid = Color(0xFFD3D7DE);
+  static const Color _darkTextLow = Color(0xFF9AA1AE);
 
   // -------- Theme-aware getters --------
   static Color get bg => _isDark ? _darkBg : _lightBg;

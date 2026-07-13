@@ -284,10 +284,18 @@ class _AddSheetState extends State<_AddSheet> {
                         onPressed: _saving
                             ? null
                             : () async {
-                                final picked =
-                                    await ContactPicker.pickPhone();
-                                if (picked != null && mounted) {
-                                  setState(() => _phone.text = picked);
+                                final r = await ContactPicker.pickPhone();
+                                if (!mounted) return;
+                                if (r.phone != null) {
+                                  setState(() => _phone.text = r.phone!);
+                                } else if (r.error != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(r.error!),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
                                 }
                               },
                       ),

@@ -109,5 +109,16 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="http"/>
         </intent>
+        <!-- 2026-07-13: Android 11+ package visibility لـflutter_contacts
+             openExternalPick — بدون هذا يفشل الـIntent صامتاً على بعض
+             الأجهزة (Xiaomi/Oppo) وقد يسبب crash. -->
+        <intent>
+            <action android:name="android.intent.action.PICK"/>
+            <data android:mimeType="vnd.android.cursor.dir/contact"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PICK"/>
+            <data android:mimeType="vnd.android.cursor.dir/phone_v2"/>
+        </intent>
     </queries>
 </manifest>

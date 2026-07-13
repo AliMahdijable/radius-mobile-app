@@ -237,9 +237,8 @@ class _Ring extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   'dashboard.subscriber_singular'.tr(),
-                  style: AppType.muted(
-                    color: AppColors.textHi.withValues(alpha: 0.45),
-                  ).copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                  style: AppType.muted(color: AppColors.textLow)
+                      .copyWith(fontSize: 10, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -289,9 +288,8 @@ class _RingStatRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: AppType.label(
-                color: AppColors.textHi.withValues(alpha: 0.6),
-              ).copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+              style: AppType.label(color: AppColors.textMid)
+                  .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
           Text(
@@ -306,7 +304,7 @@ class _RingStatRow extends StatelessWidget {
           Icon(
             LucideIcons.chevronLeft,
             size: 16,
-            color: AppColors.textHi.withValues(alpha: 0.2),
+            color: AppColors.textLow,
           ),
         ],
       ),
