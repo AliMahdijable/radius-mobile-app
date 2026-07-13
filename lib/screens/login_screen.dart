@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../api/auth_api.dart';
+import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/fcm_service.dart';
 import '../services/permissions_service.dart';
@@ -579,7 +580,7 @@ class _Footer extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Center(
       child: Text(
-        'v2.0  •  ${'login.footer_copyright'.tr()}',
+        '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
         style: AppType.muted(color: AppColors.textLow),
       ),
     );

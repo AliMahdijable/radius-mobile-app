@@ -14,6 +14,7 @@ import 'services/fcm_service.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
 import 'services/notification_service.dart';
+import 'services/app_version.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/theme_service.dart';
@@ -35,6 +36,9 @@ void main() async {
   // Print prefs — يحدّد نوع القالب الافتراضي (a4/pos) لأزرار "طباعة الوصل"
   // بعد التفعيل/التسديد. يُقرأ قبل أي زر يظهر.
   await PrintPrefs.load();
+  // Version — يُحمَّل مرّة من pubspec.yaml (عبر manifest) حتى الشاشات تعرضه
+  // synchronously بدون كل واحدة تعمل PackageInfo.fromPlatform().
+  await AppVersion.load();
   // Permissions service يعيد تحميل الـcache المخزّن من الجلسة السابقة
   // قبل أول frame عشان الـgating يشتغل صح.
   await PermissionsService.init();

@@ -5,6 +5,7 @@ import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
 import '../services/alerts_service.dart';
+import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/fcm_service.dart';
 import '../services/inbox_service.dart';
@@ -271,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.info_outline_rounded,
               label: 'settings.version'.tr(),
-              trailing: 'V2.0.0',
+              trailing: AppVersion.displayVersion,
             ),
             const SizedBox(height: Sp.huge),
             SizedBox(

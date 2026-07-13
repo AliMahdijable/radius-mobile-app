@@ -72,6 +72,10 @@ dependencies:
   # QR generation — لتوليد صور QR دخول للمشترك (30 يوم).
   qr_flutter: ^4.1.0
 
+  # App info — قراءة version + buildNumber ديناميكياً من pubspec/manifest
+  # حتى شاشة الإعدادات "الإصدار" تُحدَّث تلقائياً بلا تعديل يدوي.
+  package_info_plus: ^8.0.0
+
   # Localization — نظام i18n بسيط قائم على JSON. يشتغل جنباً إلى جنب مع
   # flutter_localizations (الأخير للـMaterial widgets). سبب الاختيار على
   # ARB: 'button.save'.tr() أقصر بكثير من AppLocalizations.of(context)!.buttonSave.
