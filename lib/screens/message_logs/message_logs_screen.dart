@@ -74,7 +74,16 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
 
   Future<void> _load({bool refresh = false}) async {
     if (_loading) return;
-    setState(() => _loading = true);
+    // 2026-07-13: عند refresh (تغيير فلتر/بحث) امسح القائمة القديمة فوراً
+    // — إبقاؤها ظاهرة يوهم المستخدم أن هذه نتائج الفلتر الجديد بينما هي
+    // للفلتر السابق. تفريغ + spinner = feedback صريح "جاري الجلب".
+    setState(() {
+      _loading = true;
+      if (refresh) {
+        _messages = const [];
+        _hasMore = false;
+      }
+    });
     final page = refresh ? 1 : _page;
     final r = await BroadcastApi.messageLogs(
       statusFilter: _statusFilter,
