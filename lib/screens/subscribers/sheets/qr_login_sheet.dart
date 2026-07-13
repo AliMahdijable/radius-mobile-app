@@ -132,13 +132,17 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         }
       }
 
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          text:
-              'مرحباً $greet 👋\n\nهذا رمز QR لتسجيل دخولك في تطبيق بوابة المشترك:\n\n${_linkUrl!}\n\nالرمز صالح لمدة 30 يوم.',
-          sharePositionOrigin: origin,
-        ),
+      // 2026-07-14: رجعنا لـShare.shareXFiles (deprecated في 10.x بس يشتغل)
+      // بعد فشل build على Mac رغم share_plus 10.1.4 مثبَّت. الـAPI الجديد
+      // (SharePlus.instance.share + ShareParams) كان يعطي "getter isn't
+      // defined" في kernel snapshot بسبب Flutter tools cache stale.
+      // الـAPI القديم يشتغل على كل الإصدارات (7.x → 10.x).
+      // ignore: deprecated_member_use
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text:
+            'مرحباً $greet 👋\n\nهذا رمز QR لتسجيل دخولك في تطبيق بوابة المشترك:\n\n${_linkUrl!}\n\nالرمز صالح لمدة 30 يوم.',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {
