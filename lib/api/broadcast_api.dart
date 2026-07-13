@@ -113,13 +113,24 @@ class LogsStats {
   final int processing;
 
   static LogsStats fromJson(Map<String, dynamic> j) => LogsStats(
-        total: (j['total'] as num?)?.toInt() ?? 0,
-        sent: (j['sent'] as num?)?.toInt() ?? 0,
-        pending: (j['pending'] as num?)?.toInt() ?? 0,
-        failed: (j['failed'] as num?)?.toInt() ?? 0,
-        cancelled: (j['cancelled'] as num?)?.toInt() ?? 0,
-        processing: (j['processing'] as num?)?.toInt() ?? 0,
+        total: _toInt(j['total']),
+        sent: _toInt(j['sent']),
+        pending: _toInt(j['pending']),
+        failed: _toInt(j['failed']),
+        cancelled: _toInt(j['cancelled']),
+        processing: _toInt(j['processing']),
       );
+}
+
+// 2026-07-13: الـbackend (server.js:5228) يرجع stats كنصوص لأن SUM على
+// tinyint في MySQL يجيء كـchar. `x as num?` يرمي TypeError على String —
+// كان يخلي fromJson يفشل صامتاً في الـcatch، فتظهر الشاشة فارغة رغم أن
+// الـrows موجودة. `_toInt` يقبل int/num/String/null.
+int _toInt(dynamic v) {
+  if (v == null) return 0;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString()) ?? 0;
 }
 
 /// Broadcast API — يستهلك backend `/api/whatsapp/*`.
@@ -153,13 +164,8 @@ class BroadcastApi {
           message: data['message']?.toString() ?? 'فشل الإرسال',
         );
       }
-      final queued = (data['queued'] ?? data['totalQueued'] ?? data['count']);
-      final queuedInt = queued is int
-          ? queued
-          : (queued is num
-              ? queued.toInt()
-              : int.tryParse(queued?.toString() ?? ''));
-      return (ok: true, queued: queuedInt, message: null);
+      final queued = data['queued'] ?? data['totalQueued'] ?? data['count'];
+      return (ok: true, queued: queued == null ? null : _toInt(queued), message: null);
     } on DioException catch (e) {
       _log('broadcast', e);
       final m = e.response?.data is Map
@@ -273,8 +279,9 @@ class BroadcastApi {
       final stats = statsRaw is Map
           ? LogsStats.fromJson(Map<String, dynamic>.from(statsRaw))
           : null;
-      final total = (data['total'] as num?)?.toInt() ??
-          stats?.total ?? messages.length;
+      final total = _toInt(data['total']) == 0
+          ? (stats?.total ?? messages.length)
+          : _toInt(data['total']);
       return (
         ok: data['success'] != false,
         messages: messages,
