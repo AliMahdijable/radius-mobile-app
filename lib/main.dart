@@ -15,6 +15,7 @@ import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
 import 'services/notification_service.dart';
 import 'services/app_version.dart';
+import 'services/badge_service.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/theme_service.dart';
@@ -46,6 +47,10 @@ void main() async {
   // startup (الـinit idempotent فآمن). الـFCM registration نفسه يصير
   // بعد login (في fcm_service.initAfterLogin).
   await InboxService.init();
+  // Badge — يزامن عدد الإشعارات على أيقونة التطبيق (iOS badge + Android
+  // launchers) مع InboxService.unreadCount. لولاه iOS badge يتراكم للأبد
+  // بينما داخل التطبيق العدد دقيق (شكوى مستخدم 2026-07-13: 12 خارجي، 4 داخلي).
+  await BadgeService.init();
   // Device probe snapshot cache — نستعيد من SharedPreferences حتى قائمة
   // المشتركين تعرض آخر حالة معروفة فوراً بلا انتظار wave جديد. مطلب
   // المستخدم 2026-07-12 "instant load".
@@ -119,6 +124,17 @@ class _MyServicesAppState extends State<MyServicesApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// عند رجوع التطبيق من الخلفيّة (foreground)، نُعيد مزامنة badge
+  /// الأيقونة مع InboxService.unreadCount. iOS badge يتراكم أحياناً لو
+  /// وصلت push notifications متعدّدة والمدير ما دخل التطبيق بينها.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      BadgeService.sync();
+    }
   }
 
   /// Triggered when the OS-level light/dark setting changes. We only
