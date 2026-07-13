@@ -26,6 +26,7 @@ class SubscriberCardV2 extends StatefulWidget {
     required this.onLongPress,
     this.onShowConsumption,
     this.onDisconnect,
+    this.onSendDebtReminder,
     this.collapsedAll = false,
   });
 
@@ -42,6 +43,11 @@ class SubscriberCardV2 extends StatefulWidget {
   /// "متصل". null = الزر يختفي (مستخدم في كل التابات الأخرى).
   final VoidCallback? onShowConsumption;
   final VoidCallback? onDisconnect;
+  /// طلب المستخدم 2026-07-13: زر "تذكير دين" جنب زرَّي الاستهلاك/فصل
+  /// لكل مشترك عليه دين. null = مخفي. المسار عبر
+  /// /api/v2/subscribers/:idx/send-debt-reminder (نفس زر الديون في شاشة
+  /// التفاصيل، ونفس مسار v1 web).
+  final VoidCallback? onSendDebtReminder;
   /// مطلب 2026-06-11: زر تكويل عام في الـtoolbar فوق القائمة يطبّق
   /// حالة "مكوّل" على كل البطاقات معاً. didUpdateWidget يعيد سنكروز
   /// _expanded عند تغيّر القيمة فالكل ينطبق فوراً. الـchevron الفردي
@@ -79,6 +85,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
   VoidCallback get onLongPress => widget.onLongPress;
   VoidCallback? get onShowConsumption => widget.onShowConsumption;
   VoidCallback? get onDisconnect => widget.onDisconnect;
+  VoidCallback? get onSendDebtReminder => widget.onSendDebtReminder;
 
   @override
   Widget build(BuildContext context) {
@@ -338,33 +345,46 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
             ip: sub.ipAddress,
             username: sub.username,
           ),
-          // زرّا الاستهلاك + فصل المستخدم — يظهرا فقط للمتصلين حقيقياً.
-          if (onShowConsumption != null || onDisconnect != null) ...[
-            const SizedBox(height: 5),
-            Row(
-              children: [
-                if (onShowConsumption != null)
-                  _GhostAction(
-                    icon: LucideIcons.chartLine,
-                    label: 'subscribers.consumption'.tr(),
-                    color: const Color(0xFF3B82F6),
-                    onTap: onShowConsumption!,
-                  ),
-                const SizedBox(width: 4),
-                if (onDisconnect != null)
-                  _GhostAction(
-                    icon: LucideIcons.powerOff,
-                    label: 'subscribers.disconnect'.tr(),
-                    color: AppColors.error,
-                    onTap: onDisconnect!,
-                  ),
-                const Spacer(),
-              ],
-            ),
-          ],
-          if (sub.balanceAmount != 0 || lastPayment != null)
-            const SizedBox(height: 4),
         ],
+        // Actions row — الاستهلاك + فصل (للمتصلين) + تذكير الدين (لكل
+        // مدين). طلب 2026-07-13: زر تذكير الدين يظهر جنب زرَّي المتصل،
+        // وإذا المشترك offline+مدين يظهر بمفرده. كل زر مستقل بالـcallback.
+        if (onShowConsumption != null || onDisconnect != null || onSendDebtReminder != null) ...[
+          const SizedBox(height: 5),
+          Row(
+            children: [
+              if (onShowConsumption != null) ...[
+                _GhostAction(
+                  icon: LucideIcons.chartLine,
+                  label: 'subscribers.consumption'.tr(),
+                  color: const Color(0xFF3B82F6),
+                  onTap: onShowConsumption!,
+                ),
+                const SizedBox(width: 4),
+              ],
+              if (onDisconnect != null) ...[
+                _GhostAction(
+                  icon: LucideIcons.powerOff,
+                  label: 'subscribers.disconnect'.tr(),
+                  color: AppColors.error,
+                  onTap: onDisconnect!,
+                ),
+                const SizedBox(width: 4),
+              ],
+              if (onSendDebtReminder != null)
+                _GhostAction(
+                  icon: LucideIcons.bellRing,
+                  label: 'subscribers.action_debt_reminder'.tr(),
+                  color: const Color(0xFFE08F2D),
+                  onTap: onSendDebtReminder!,
+                ),
+              const Spacer(),
+            ],
+          ),
+        ],
+        if (_hasDeviceInfo &&
+            (sub.balanceAmount != 0 || lastPayment != null))
+          const SizedBox(height: 4),
         if (sub.balanceAmount != 0) _BalanceChip(sub: sub),
         if (sub.balanceAmount != 0 && lastPayment != null)
           const SizedBox(height: 4),

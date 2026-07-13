@@ -323,6 +323,7 @@
     "op_disconnecting": "Disconnecting…",
     "expires_at": "Expires {date}",
     "consumption": "Usage",
+    "action_debt_reminder": "Debt reminder",
     "ago_prefix": "-",
     "day_unit": "day",
     "hour_unit": "hr",

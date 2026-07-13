@@ -323,6 +323,7 @@
     "op_disconnecting": "جاري الفصل",
     "expires_at": "ينتهي {date}",
     "consumption": "الاستهلاك",
+    "action_debt_reminder": "تذكير دين",
     "ago_prefix": "منذ",
     "day_unit": "يوم",
     "hour_unit": "ساعة",

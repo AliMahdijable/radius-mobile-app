@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
+import '../../api/whatsapp_api.dart';
 import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -678,6 +679,46 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
+  /// إرسال تذكير دين من زر الكرت مباشرة. طلب 2026-07-13: يظهر لكل مدين
+  /// بغض النظر عن حالة الاتصال. يستعمل نفس مسار زر الديون في شاشة
+  /// التفاصيل — WhatsAppApi.sendTemplateForSubscriber → قالب debt_reminder
+  /// المعرّف للمدير + إرسال عبر جلسة الواتساب النشطة.
+  final Set<String> _debtReminderInFlight = {};
+  Future<void> _sendDebtReminderFromList(Subscriber s) async {
+    if (_debtReminderInFlight.contains(s.username)) return;
+    setState(() => _debtReminderInFlight.add(s.username));
+    try {
+      final result = await WhatsAppApi.sendTemplateForSubscriber(
+        sub: s,
+        templateType: 'debt_reminder',
+      );
+      if (!mounted) return;
+      final ok = result.ok;
+      final color = ok
+          ? const Color(0xFF25D366)
+          : (result.reason == 'no_template' ||
+                  result.reason == 'inactive' ||
+                  result.reason == 'no_phone')
+              ? const Color(0xFFE08F2D)
+              : AppColors.error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'subscribers.wa_debt_reminder_sent'.tr()
+                : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
+          ),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _debtReminderInFlight.remove(s.username));
+      }
+    }
+  }
+
   Future<void> _openBulkDisconnect() async {
     final online = _filteredSubscribersForBulk()
         .where((s) => s.isOnline && s.idx != null)
@@ -1105,6 +1146,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                         !_selectionMode &&
                                         s.idx != null
                                     ? () => _confirmDisconnect(s)
+                                    : null,
+                                // تذكير دين — لكل مدين بغض النظر عن حالة
+                                // الاتصال. طلب 2026-07-13. مسار
+                                // /api/v2/subscribers/:idx/send-debt-reminder
+                                onSendDebtReminder: s.hasDebt &&
+                                        !_selectionMode &&
+                                        s.idx != null
+                                    ? () => _sendDebtReminderFromList(s)
                                     : null,
                                 collapsedAll: _allCollapsed,
                               );
