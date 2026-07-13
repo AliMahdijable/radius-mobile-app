@@ -8,11 +8,10 @@ import '../../services/print_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import 'print_template_editor_screen.dart';
 
-/// شاشة "قوالب الطباعة" — يعرض القالبين (A4 + POS) للأدمن الحالي.
-/// backend يضمن أن كل type له سطر واحد فقط (UNIQUE KEY على admin_id+type).
-/// لو مو موجود يظهر placeholder + زر إنشاء بمحتوى افتراضي.
+/// شاشة "قوالب الطباعة" — **read-only** على الموبايل.
+/// التحرير من الويب (rad.mysvcs.net/v2/print-templates). الموبايل يعرض
+/// القوالب المحفوظة + زر طباعة تجريبية للتحقّق من الاتصال بالطابعة.
 class PrintTemplatesScreen extends StatefulWidget {
   const PrintTemplatesScreen({super.key});
 
@@ -45,18 +44,6 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
       if (t.templateType == type) return t;
     }
     return null;
-  }
-
-  Future<void> _editOrCreate(String type, {PrintTemplate? existing}) async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => PrintTemplateEditorScreen(
-          templateType: type,
-          existing: existing,
-        ),
-      ),
-    );
-    if (result == true) await _load();
   }
 
   Future<void> _testPrint(PrintTemplate t) async {
@@ -92,6 +79,13 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
+        actions: [
+          IconButton(
+            tooltip: 'common.refresh'.tr(),
+            icon: Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textHi),
+            onPressed: _loading ? null : _load,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -101,15 +95,17 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
                 children: [
+                  // Banner: التحرير من الويب فقط
+                  _WebOnlyBanner(),
+                  const SizedBox(height: Sp.lg),
                   _sectionLabel(
                     'print_templates.a4_section'.tr(),
                     LucideIcons.fileText,
                   ),
                   const SizedBox(height: Sp.sm),
-                  _TemplateCard(
+                  _TemplateViewCard(
                     type: 'a4',
                     template: a4,
-                    onTap: () => _editOrCreate('a4', existing: a4),
                     onTestPrint: a4 == null ? null : () => _testPrint(a4),
                   ),
                   const SizedBox(height: Sp.lg),
@@ -118,36 +114,10 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
                     LucideIcons.receipt,
                   ),
                   const SizedBox(height: Sp.sm),
-                  _TemplateCard(
+                  _TemplateViewCard(
                     type: 'pos',
                     template: pos,
-                    onTap: () => _editOrCreate('pos', existing: pos),
                     onTestPrint: pos == null ? null : () => _testPrint(pos),
-                  ),
-                  const SizedBox(height: Sp.lg),
-                  Container(
-                    padding: const EdgeInsets.all(Sp.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.brand.withOpacity(0.05),
-                      border: Border.all(
-                          color: AppColors.brand.withOpacity(0.15)),
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(LucideIcons.info,
-                            size: 14, color: AppColors.brand),
-                        const SizedBox(width: Sp.sm),
-                        Expanded(
-                          child: Text(
-                            'print_templates.info_body'.tr(),
-                            style: AppType.subtitle(color: AppColors.textMid)
-                                .copyWith(fontSize: 11.5, height: 1.6),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -166,16 +136,94 @@ Widget _sectionLabel(String text, IconData icon) => Row(
       ],
     );
 
-class _TemplateCard extends StatelessWidget {
-  const _TemplateCard({
+class _WebOnlyBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.brand.withOpacity(0.06),
+        border: Border.all(color: AppColors.brand.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.info, size: 14, color: AppColors.brand),
+              const SizedBox(width: Sp.sm),
+              Text(
+                'print_templates.web_only_title'.tr(),
+                style: AppType.title(color: AppColors.brand)
+                    .copyWith(fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: Sp.sm),
+          Text(
+            'print_templates.web_only_body'.tr(),
+            style: AppType.subtitle(color: AppColors.textMid)
+                .copyWith(fontSize: 11.5, height: 1.6),
+          ),
+          const SizedBox(height: Sp.sm),
+          GestureDetector(
+            onTap: () async {
+              await Clipboard.setData(const ClipboardData(
+                  text: 'https://rad.mysvcs.net/v2/portal-settings'));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('common.copied'.tr()),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Sp.md, vertical: Sp.sm),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                border: Border.all(color: AppColors.brand.withOpacity(0.25)),
+                borderRadius: BorderRadius.circular(R.sm),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.link,
+                      size: 12, color: AppColors.brand),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: Text(
+                      'rad.mysvcs.net/v2',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.brand,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                  Icon(LucideIcons.copy,
+                      size: 12, color: AppColors.brand.withOpacity(0.6)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TemplateViewCard extends StatelessWidget {
+  const _TemplateViewCard({
     required this.type,
     required this.template,
-    required this.onTap,
-    this.onTestPrint,
+    required this.onTestPrint,
   });
   final String type;
   final PrintTemplate? template;
-  final VoidCallback onTap;
   final VoidCallback? onTestPrint;
 
   @override
@@ -183,121 +231,99 @@ class _TemplateCard extends StatelessWidget {
     final exists = template != null;
     final IconData typeIcon =
         type == 'a4' ? LucideIcons.fileText : LucideIcons.receipt;
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: Container(
-          padding: const EdgeInsets.all(Sp.md),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(R.md),
+
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.brand.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+            child: Icon(typeIcon, color: AppColors.brand, size: 22),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.brand.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(R.sm),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  exists
+                      ? template!.templateName
+                      : (type == 'a4'
+                          ? 'print_templates.a4_default_name'.tr()
+                          : 'print_templates.pos_default_name'.tr()),
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Icon(typeIcon, color: AppColors.brand, size: 22),
-              ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      exists
-                          ? template!.templateName
-                          : (type == 'a4'
-                              ? 'print_templates.a4_default_name'.tr()
-                              : 'print_templates.pos_default_name'.tr()),
-                      style: AppType.title(color: AppColors.textHi)
-                          .copyWith(fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: Sp.sm, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: (exists && template!.isActive)
-                                ? AppColors.brand.withOpacity(0.1)
-                                : AppColors.textMid.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(R.pill),
-                          ),
-                          child: Text(
-                            exists
-                                ? (template!.isActive
-                                    ? 'print_templates.active'.tr()
-                                    : 'print_templates.inactive'.tr())
-                                : 'print_templates.not_created'.tr(),
-                            style: AppType.button(
-                              color: (exists && template!.isActive)
-                                  ? AppColors.brand
-                                  : AppColors.textMid,
-                            ).copyWith(fontSize: 10),
-                          ),
-                        ),
-                        const SizedBox(width: Sp.sm),
-                        if (exists && template!.updatedAt != null)
-                          Expanded(
-                            child: Text(
-                              _formatDate(template!.updatedAt!),
-                              style:
-                                  AppType.subtitle(color: AppColors.textMid)
-                                      .copyWith(fontSize: 10),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: Sp.sm, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (exists && template!.isActive)
+                        ? AppColors.brand.withOpacity(0.1)
+                        : AppColors.textMid.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                  child: Text(
+                    exists
+                        ? (template!.isActive
+                            ? 'print_templates.active'.tr()
+                            : 'print_templates.inactive'.tr())
+                        : 'print_templates.not_created'.tr(),
+                    style: AppType.button(
+                      color: (exists && template!.isActive)
+                          ? AppColors.brand
+                          : AppColors.textMid,
+                    ).copyWith(fontSize: 10),
+                  ),
                 ),
-              ),
-              if (exists && onTestPrint != null)
-                IconButton(
-                  tooltip: 'print_templates.test_print'.tr(),
-                  icon: Icon(LucideIcons.printer,
-                      color: AppColors.brand, size: 18),
-                  onPressed: onTestPrint,
-                ),
-              Icon(
-                exists ? LucideIcons.pencil : LucideIcons.plus,
-                color: AppColors.textLow,
-                size: 18,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          if (exists && onTestPrint != null)
+            Material(
+              color: AppColors.brand.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(R.sm),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTestPrint!();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: Sp.md, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.printer,
+                          size: 14, color: AppColors.brand),
+                      const SizedBox(width: 4),
+                      Text(
+                        'print_templates.test_print_short'.tr(),
+                        style: AppType.button(color: AppColors.brand)
+                            .copyWith(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
-  }
-
-  String _formatDate(String iso) {
-    try {
-      final d = DateTime.tryParse(iso);
-      if (d == null) return iso;
-      final l = d.toLocal();
-      final y = l.year.toString().padLeft(4, '0');
-      final m = l.month.toString().padLeft(2, '0');
-      final dd = l.day.toString().padLeft(2, '0');
-      return '$y-$m-$dd';
-    } catch (_) {
-      return iso;
-    }
   }
 }

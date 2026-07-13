@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 
-/// نموذج قالب طباعة — a4 أو pos.
+/// نموذج قالب طباعة — a4 أو pos. **read-only على الموبايل**.
+/// التحرير يتم من الويب فقط (client-v2). الموبايل يستهلكه عند الطباعة.
 class PrintTemplate {
   const PrintTemplate({
     this.id,
@@ -12,7 +13,6 @@ class PrintTemplate {
     required this.templateType,
     required this.templateName,
     required this.content,
-    this.templateData,
     this.isActive = true,
     this.createdAt,
     this.updatedAt,
@@ -23,7 +23,6 @@ class PrintTemplate {
   final String templateType; // 'a4' | 'pos'
   final String templateName;
   final String content; // HTML مع placeholders {var}
-  final String? templateData; // JSON اختياري لحفظ الـbuilder state
   final bool isActive;
   final String? createdAt;
   final String? updatedAt;
@@ -36,55 +35,18 @@ class PrintTemplate {
         templateType: j['template_type']?.toString() ?? 'pos',
         templateName: j['template_name']?.toString() ?? '',
         content: j['content']?.toString() ?? '',
-        templateData: j['template_data']?.toString(),
         isActive: j['is_active'] == 1 || j['is_active'] == true,
         createdAt: j['created_at']?.toString(),
         updatedAt: j['updated_at']?.toString(),
       );
-
-  PrintTemplate copyWith({
-    String? templateName,
-    String? content,
-    bool? isActive,
-  }) =>
-      PrintTemplate(
-        id: id,
-        adminId: adminId,
-        templateType: templateType,
-        templateName: templateName ?? this.templateName,
-        content: content ?? this.content,
-        templateData: templateData,
-        isActive: isActive ?? this.isActive,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
-
-  /// المتغيّرات المتاحة داخل القالب — للـpicker في المحرّر.
-  static const List<VariableInfo> availableVariables = [
-    VariableInfo('{invoice_number}', 'رقم الفاتورة'),
-    VariableInfo('{date}', 'التاريخ'),
-    VariableInfo('{subscriber_name}', 'اسم المشترك'),
-    VariableInfo('{phone_number}', 'رقم الهاتف'),
-    VariableInfo('{package_name}', 'اسم الباقة'),
-    VariableInfo('{package_price}', 'سعر الباقة'),
-    VariableInfo('{paid_amount}', 'المبلغ المدفوع'),
-    VariableInfo('{remaining_amount}', 'المبلغ المتبقي'),
-    VariableInfo('{expiry_date}', 'تاريخ الانتهاء'),
-    VariableInfo('{debt_amount}', 'مبلغ الدين'),
-  ];
 }
 
-class VariableInfo {
-  const VariableInfo(this.token, this.label);
-  final String token;
-  final String label;
-}
-
-/// Print templates API — يستهلك backend `/api/print-templates/*`.
+/// Print templates API — يجيب قوالب الأدمن الحالي فقط. التحرير من الويب.
 class PrintTemplatesApi {
   PrintTemplatesApi._();
 
   /// GET /api/print-templates/templates/:adminId
+  /// يرجع قائمة القوالب (عادة a4 + pos، UNIQUE key على السيرفر).
   static Future<List<PrintTemplate>> list() async {
     try {
       final adminId = await AuthStorage.readAdminId();
@@ -108,80 +70,14 @@ class PrintTemplatesApi {
     }
   }
 
-  /// POST /api/print-templates/create — إنشاء قالب جديد.
-  static Future<PrintTemplate?> create({
-    required String templateType,
-    required String templateName,
-    required String content,
-    bool isActive = true,
-  }) async {
-    try {
-      final adminId = await AuthStorage.readAdminId();
-      if (adminId == null || adminId.isEmpty) return null;
-      final r = await ApiClient.dio.post<Map<String, dynamic>>(
-        '/api/print-templates/create',
-        data: {
-          'adminId': adminId,
-          'templateType': templateType,
-          'templateName': templateName,
-          'content': content,
-          'isActive': isActive,
-        },
-      );
-      final body = r.data ?? const {};
-      if (body['success'] != true) return null;
-      final t = body['template'];
-      if (t is Map) return PrintTemplate.fromJson(Map<String, dynamic>.from(t));
-      return null;
-    } on DioException catch (e) {
-      _log('create', e);
-      return null;
-    } catch (e) {
-      _log('create', e);
-      return null;
+  /// أرجع القالب لنوع معيّن ('a4' أو 'pos'). null لو ما موجود.
+  /// يُستدعى وقت الطباعة الفعليّة لاستخراج content.
+  static Future<PrintTemplate?> byType(String type) async {
+    final all = await list();
+    for (final t in all) {
+      if (t.templateType == type) return t;
     }
-  }
-
-  /// PUT /api/print-templates/update/:id
-  static Future<bool> update(
-    int id, {
-    String? templateName,
-    String? content,
-    bool? isActive,
-  }) async {
-    try {
-      final body = <String, dynamic>{};
-      if (templateName != null) body['templateName'] = templateName;
-      if (content != null) body['content'] = content;
-      if (isActive != null) body['isActive'] = isActive;
-      if (body.isEmpty) return true;
-      final r = await ApiClient.dio.put<Map<String, dynamic>>(
-        '/api/print-templates/update/$id',
-        data: body,
-      );
-      return r.data?['success'] == true;
-    } on DioException catch (e) {
-      _log('update $id', e);
-      return false;
-    } catch (e) {
-      _log('update $id', e);
-      return false;
-    }
-  }
-
-  /// DELETE /api/print-templates/delete/:id
-  static Future<bool> delete(int id) async {
-    try {
-      final r = await ApiClient.dio
-          .delete<Map<String, dynamic>>('/api/print-templates/delete/$id');
-      return r.data?['success'] == true;
-    } on DioException catch (e) {
-      _log('delete $id', e);
-      return false;
-    } catch (e) {
-      _log('delete $id', e);
-      return false;
-    }
+    return null;
   }
 }
 
