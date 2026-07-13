@@ -272,7 +272,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.info_outline_rounded,
               label: 'settings.version'.tr(),
-              trailing: AppVersion.displayVersion,
+              // بلا buildNumber (نُخفيه — طلب المستخدم). الـshortVersion = 'v2.0.1'
+              trailing: AppVersion.shortVersion,
             ),
             const SizedBox(height: Sp.huge),
             SizedBox(
