@@ -9,7 +9,7 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import 'widgets/message_logs_sheet.dart';
+import '../message_logs/message_logs_screen.dart';
 
 /// شاشة "التبليغات" (Broadcast) — نقل حرفي من client-v2/Notifications.tsx.
 /// يسمح للمدير بإرسال رسائل واتساب جماعيّة للمشتركين حسب فلتر (كل/مدينون/
@@ -250,7 +250,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   void _openLogs() {
-    showMessageLogsSheet(context);
+    // نفتح الشاشة الكاملة بدل الورقة السفلية — تدعم كل الأنواع + بحث +
+    // فلاتر + auto-refresh للـpending، وأي رسالة بعثتها الآن رح تظهر
+    // مباشرةً بحالة "انتظار" ثم تتحول لـ"أُرسلت" تلقائياً.
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const MessageLogsScreen(),
+      ),
+    );
   }
 
   Future<bool?> _confirmDialog(

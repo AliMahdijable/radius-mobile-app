@@ -70,13 +70,23 @@ class MessageLog {
     final id = j['id'];
     final idInt = id is int ? id : int.tryParse(id?.toString() ?? '');
     if (idInt == null) return null;
+    // recipient_firstname/lastname يجيان من إثراء SAS4 على backend — نبني
+    // recipientName منهما، وإلا نأخذ recipient_name المستخرَج من body.
+    final fn = j['recipient_firstname']?.toString().trim();
+    final ln = j['recipient_lastname']?.toString().trim();
+    final arabicName = [fn, ln]
+        .where((p) => p != null && p!.isNotEmpty)
+        .map((p) => p!)
+        .join(' ');
     return MessageLog(
       id: idInt,
       status: (j['status'] ?? 'pending').toString(),
       createdAt: (j['created_at'] ?? '').toString(),
       recipientPhone: j['recipient_phone']?.toString(),
       recipientUsername: j['recipient_username']?.toString(),
-      recipientName: j['recipient_name']?.toString(),
+      recipientName: arabicName.isNotEmpty
+          ? arabicName
+          : j['recipient_name']?.toString(),
       errorMessage: j['error_message']?.toString(),
       messageType: j['message_type']?.toString(),
       messagePreview: j['message_preview']?.toString(),
@@ -193,28 +203,56 @@ class BroadcastApi {
     }
   }
 
-  /// GET /api/whatsapp/message-logs/:adminId — سجل رسائل آخر 24 ساعة.
-  static Future<({bool ok, List<MessageLog> messages, LogsStats? stats})>
-      messageLogs({
+  /// GET /api/whatsapp/message-logs/:adminId — سجل موحّد
+  /// (whatsapp_message_queue + whatsapp_send_logs). يدعم:
+  ///  - فلتر الحالة (all/sent/pending/processing/failed/cancelled)
+  ///  - فلتر النوع (all/broadcast/debt_reminder/expiry_warning/…)
+  ///  - بحث نصّي (username | phone | body)
+  ///  - نافذة تاريخ (dateFrom/dateTo — YYYY-MM-DD)
+  ///  - pagination عبر page/limit
+  static Future<
+      ({
+        bool ok,
+        List<MessageLog> messages,
+        LogsStats? stats,
+        int total,
+        bool hasMore,
+      })> messageLogs({
+    String? statusFilter,
     String? typeFilter,
-    int limit = 100,
+    String? search,
+    String? dateFrom,
+    String? dateTo,
+    int page = 1,
+    int limit = 50,
   }) async {
     try {
       final adminId = await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) {
-        return (ok: false, messages: <MessageLog>[], stats: null);
+        return (
+          ok: false,
+          messages: <MessageLog>[],
+          stats: null,
+          total: 0,
+          hasMore: false,
+        );
       }
-      final now = DateTime.now();
-      final yesterday = now.subtract(const Duration(days: 1));
-      String fmt(DateTime d) => d.toIso8601String().substring(0, 10);
       final params = <String, dynamic>{
-        'dateFrom': fmt(yesterday),
-        'dateTo': fmt(now),
+        'page': '$page',
         'limit': '$limit',
       };
+      if (statusFilter != null && statusFilter != 'all') {
+        params['status'] = statusFilter;
+      }
       if (typeFilter != null && typeFilter != 'all') {
         params['type'] = typeFilter;
       }
+      if (search != null && search.trim().isNotEmpty) {
+        params['search'] = search.trim();
+      }
+      if (dateFrom != null) params['dateFrom'] = dateFrom;
+      if (dateTo != null) params['dateTo'] = dateTo;
+
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/whatsapp/message-logs/$adminId',
         queryParameters: params,
@@ -235,17 +273,33 @@ class BroadcastApi {
       final stats = statsRaw is Map
           ? LogsStats.fromJson(Map<String, dynamic>.from(statsRaw))
           : null;
+      final total = (data['total'] as num?)?.toInt() ??
+          stats?.total ?? messages.length;
       return (
         ok: data['success'] != false,
         messages: messages,
         stats: stats,
+        total: total,
+        hasMore: messages.length >= limit,
       );
     } on DioException catch (e) {
       _log('messageLogs', e);
-      return (ok: false, messages: <MessageLog>[], stats: null);
+      return (
+        ok: false,
+        messages: <MessageLog>[],
+        stats: null,
+        total: 0,
+        hasMore: false,
+      );
     } catch (e) {
       _log('messageLogs', e);
-      return (ok: false, messages: <MessageLog>[], stats: null);
+      return (
+        ok: false,
+        messages: <MessageLog>[],
+        stats: null,
+        total: 0,
+        hasMore: false,
+      );
     }
   }
 }

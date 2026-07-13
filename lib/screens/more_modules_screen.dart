@@ -9,6 +9,7 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
 import 'discounts/discounts_screen.dart';
+import 'message_logs/message_logs_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
@@ -59,6 +60,21 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const BroadcastScreen(),
+                ),
+              ),
+            ),
+          // حالة الرسائل — نُقلت من v1 mobile-app/message_logs_screen. تعرض
+          // كل رسائل WhatsApp بأنواعها (broadcast/activation/expiry/…) مع
+          // فلاتر + بحث + retry + auto-refresh للـpending.
+          if (Perms.hasAny(['whatsapp.broadcast', 'whatsapp.send']))
+            _ModuleCard(
+              icon: LucideIcons.messageSquare,
+              color: const Color(0xFF3B82F6),
+              title: 'more.message_logs'.tr(),
+              subtitle: 'more.message_logs_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const MessageLogsScreen(),
                 ),
               ),
             ),
