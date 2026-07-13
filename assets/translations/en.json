@@ -554,6 +554,21 @@
     "empty_perms": "You don't have permission for any section here",
     "empty_perms_hint": "Contact the main admin to grant you permissions"
   },
+  "managers": {
+    "operations": "Operations",
+    "action_edit": "Edit",
+    "action_deposit": "Top up",
+    "action_withdraw": "Withdraw",
+    "action_pay_debt": "Pay debt",
+    "action_add_points": "Points",
+    "action_other_debts": "Other debts",
+    "action_movements": "History",
+    "action_send_info": "Send info",
+    "action_delete": "Delete",
+    "chip_balance": "Balance {amount}",
+    "chip_debt": "Debt {amount}",
+    "chip_subs": "{n} subs"
+  },
   "devices": {
     "save_failed": "Save failed",
     "creds_saved": "Credentials saved",

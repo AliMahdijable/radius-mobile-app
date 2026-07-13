@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -12,21 +13,26 @@ import '../../../theme/typography.dart';
 /// نوع العملية المختارة من actions sheet. الـcaller (managers_screen)
 /// يفتح الـsheet المناسب بناءً على القيمة المرجعة. مطابق v1
 /// _ManagerActionType.
+///
+/// 2026-07-13: `labelKey` بدل `label` — النص يُترجم عند العرض عبر
+/// `.tr()` (easy_localization) حتى يتبدّل مع اللغة.
 enum ManagerAction {
-  edit('تعديل', LucideIcons.pencil, Color(0xFF3B82F6)),
-  deposit('شحن', LucideIcons.plus, Color(0xFF14B8A6)),
-  withdraw('سحب', LucideIcons.circleMinus, Color(0xFFE08F2D)),
-  payDebt('تسديد دين', LucideIcons.banknote, Color(0xFF0EA5E9)),
-  addPoints('نقاط', LucideIcons.star, Color(0xFF8B5CF6)),
-  otherDebts('ديون أخرى', LucideIcons.receipt, Color(0xFF0EA5E9)),
-  movements('حركات', LucideIcons.activity, Color(0xFF14B8A6)),
-  sendInfo('إرسال معلومات', LucideIcons.smartphone, Color(0xFF25D366)),
-  delete('حذف', LucideIcons.trash2, Color(0xFFDC2626));
+  edit('managers.action_edit', LucideIcons.pencil, Color(0xFF3B82F6)),
+  deposit('managers.action_deposit', LucideIcons.plus, Color(0xFF14B8A6)),
+  withdraw('managers.action_withdraw', LucideIcons.circleMinus, Color(0xFFE08F2D)),
+  payDebt('managers.action_pay_debt', LucideIcons.banknote, Color(0xFF0EA5E9)),
+  addPoints('managers.action_add_points', LucideIcons.star, Color(0xFF8B5CF6)),
+  otherDebts('managers.action_other_debts', LucideIcons.receipt, Color(0xFF0EA5E9)),
+  movements('managers.action_movements', LucideIcons.activity, Color(0xFF14B8A6)),
+  sendInfo('managers.action_send_info', LucideIcons.smartphone, Color(0xFF25D366)),
+  delete('managers.action_delete', LucideIcons.trash2, Color(0xFFDC2626));
 
-  const ManagerAction(this.label, this.icon, this.color);
-  final String label;
+  const ManagerAction(this.labelKey, this.icon, this.color);
+  final String labelKey;
   final IconData icon;
   final Color color;
+
+  String get label => labelKey.tr();
 }
 
 /// مطلب 2026-06-12: actions sheet مطابق v1 (managers_screen.dart:880).
@@ -119,7 +125,7 @@ class _ActionsSheet extends StatelessWidget {
                               .copyWith(fontSize: 15),
                         ),
                         Text(
-                          'العمليات',
+                          'managers.operations'.tr(),
                           style: AppType.muted().copyWith(fontSize: 11),
                         ),
                       ],
@@ -137,18 +143,21 @@ class _ActionsSheet extends StatelessWidget {
                 children: [
                   _summaryChip(
                     LucideIcons.wallet,
-                    'رصيد ${formatIQD(manager.balance ?? 0)}',
+                    'managers.chip_balance'.tr(
+                        namedArgs: {'amount': formatIQD(manager.balance ?? 0)}),
                     AppColors.brand,
                   ),
                   if (hasDebt)
                     _summaryChip(
                       LucideIcons.alertTriangle,
-                      'دين ${formatIQD(manager.debt!)}',
+                      'managers.chip_debt'.tr(
+                          namedArgs: {'amount': formatIQD(manager.debt!)}),
                       const Color(0xFFE08F2D),
                     ),
                   _summaryChip(
                     LucideIcons.users,
-                    '${manager.usersCount ?? 0} مشترك',
+                    'managers.chip_subs'
+                        .tr(namedArgs: {'n': '${manager.usersCount ?? 0}'}),
                     const Color(0xFF3B82F6),
                   ),
                 ],

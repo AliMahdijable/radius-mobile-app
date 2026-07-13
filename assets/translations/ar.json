@@ -554,6 +554,21 @@
     "empty_perms": "ليس لديك صلاحيات لأي قسم هنا",
     "empty_perms_hint": "اتصل بالمدير العام لمنحك صلاحيات"
   },
+  "managers": {
+    "operations": "العمليات",
+    "action_edit": "تعديل",
+    "action_deposit": "شحن",
+    "action_withdraw": "سحب",
+    "action_pay_debt": "تسديد دين",
+    "action_add_points": "نقاط",
+    "action_other_debts": "ديون أخرى",
+    "action_movements": "حركات",
+    "action_send_info": "إرسال معلومات",
+    "action_delete": "حذف",
+    "chip_balance": "رصيد {amount}",
+    "chip_debt": "دين {amount}",
+    "chip_subs": "{n} مشترك"
+  },
   "devices": {
     "save_failed": "تعذّر الحفظ",
     "creds_saved": "حُفظت الاعتمادات",
