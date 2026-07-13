@@ -26,6 +26,8 @@
 	<string>تنبيهات عند قرب انتهاء اشتراك المشتركين أو انتهائه اليوم.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>يستخدم التطبيق مكتبة الصور لاختيار ومشاركة الملفات والتقارير المتعلقة بخدمة المشتركين.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>يستخدم التطبيق مكتبة الصور لحفظ صور رمز QR الخاص بدخول المشتركين.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>يستخدم التطبيق الكاميرا لتصوير المستندات والمعلومات المتعلقة بالاشتراكات والأجهزة.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

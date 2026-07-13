@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -94,8 +95,38 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     }
   }
 
+  /// يطلب صلاحيّة الوصول للتخزين قبل حفظ/مشاركة صورة QR.
+  /// - iOS: NSPhotoLibraryAddUsage
+  /// - Android 13+: Permission.photos (READ_MEDIA_IMAGES)
+  /// - Android <13: Permission.storage (WRITE_EXTERNAL_STORAGE)
+  Future<bool> _ensureStoragePermission() async {
+    // نجرّب photos أوّلاً (يعمل على iOS + Android 13+)، وإلا نتراجع لـstorage.
+    var status = await Permission.photos.status;
+    if (!status.isGranted && !status.isLimited) {
+      status = await Permission.photos.request();
+    }
+    if (status.isGranted || status.isLimited) return true;
+    // fallback لـstorage (Android <13)
+    var s = await Permission.storage.status;
+    if (!s.isGranted) s = await Permission.storage.request();
+    if (s.isGranted) return true;
+    // كل المحاولات فشلت
+    if (mounted) {
+      _snack('qr_login.permission_required'.tr(), isError: true);
+      if (status.isPermanentlyDenied || s.isPermanentlyDenied) {
+        // نعرض زر يفتح إعدادات النظام لتفعيل الصلاحيّة يدوياً
+        Future.delayed(const Duration(milliseconds: 300),
+            () => openAppSettings());
+      }
+    }
+    return false;
+  }
+
   Future<void> _shareQr() async {
     if (_sharing || _linkUrl == null) return;
+    // 1) تأكّد من الصلاحيّة أوّلاً
+    final ok = await _ensureStoragePermission();
+    if (!ok) return;
     setState(() => _sharing = true);
     try {
       final bytes = await _captureQr();
@@ -374,11 +405,9 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
               Expanded(
                 child: Text(
                   _linkUrl!,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.textMid,
-                    fontFamily: 'monospace',
-                  ),
+                  style: AppType.subtitle(color: AppColors.textMid)
+                      .copyWith(fontSize: 10),
+                  textDirection: TextDirection.ltr,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -421,10 +450,8 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                     : const Icon(LucideIcons.share2, size: 14),
                 label: Text(
                   'qr_login.share_or_save'.tr(),
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800),
+                  style: AppType.button(color: AppColors.brand)
+                      .copyWith(fontSize: 12),
                 ),
                 style: OutlinedButton.styleFrom(
                   padding:
@@ -451,10 +478,8 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                     : const Icon(LucideIcons.messageCircle, size: 14),
                 label: Text(
                   'qr_login.send_wa'.tr(),
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800),
+                  style: AppType.button(color: Colors.white)
+                      .copyWith(fontSize: 12),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF25D366),

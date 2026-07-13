@@ -156,7 +156,8 @@
     "wa_sent": "QR sent via WhatsApp",
     "wa_send_failed": "Failed to send WhatsApp",
     "share_failed": "Share failed",
-    "capture_failed": "Failed to capture QR image"
+    "capture_failed": "Failed to capture QR image",
+    "permission_required": "Storage access permission is required — please enable it"
   },
   "portal": {
     "title": "Subscriber Portal",
