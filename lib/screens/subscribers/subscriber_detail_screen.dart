@@ -1120,15 +1120,15 @@ class _OperationsCard extends StatelessWidget {
             child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              // 2026-07-13: تصغير أزرار العمليات + تقليل المسافات
-              // (كانت 12/8 → 8/6). childAspectRatio 0.78 → 0.85 يضغط
-              // الارتفاع فتصير الأزرار أقرب لبعض عمودياً.
+              // 2026-07-13 (تكرار): تقليل المسافات مرة ثانية بعد شكوى
+              // "المسافات بين الصفوف كبيرة". mainAxis من 8 → 2،
+              // childAspectRatio من 0.85 → 1.05 (كل خلية أقصر عمودياً).
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 6,
-                childAspectRatio: 0.85,
+                mainAxisSpacing: 2,
+                crossAxisSpacing: 4,
+                childAspectRatio: 1.05,
               ),
               itemCount: ops.length,
               itemBuilder: (_, i) => _OpCard(op: ops[i]),
@@ -1194,25 +1194,25 @@ class _OpCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 2026-07-13: تصغير الأزرار من 52 → 44 (ثلث درجة تقريباً)
+          // 2026-07-13: تصغير مضاعف الأزرار → 40dp + خفض المسافة تحتها لـ3
           Container(
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: op.color,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: op.color.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+                  color: op.color.withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             alignment: Alignment.center,
-            child: Icon(op.icon, color: Colors.white, size: 19),
+            child: Icon(op.icon, color: Colors.white, size: 18),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 3),
           Flexible(
             child: Text(
               op.label,
