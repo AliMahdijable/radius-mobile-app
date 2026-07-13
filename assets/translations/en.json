@@ -547,6 +547,8 @@
     "discounts_hint": "Manage per-subscriber discounts",
     "employees": "Employees",
     "employees_hint": "Manage branch employees and their permissions",
+    "broadcast": "Broadcast",
+    "broadcast_hint": "Send bulk WhatsApp messages to subscribers",
     "empty_perms": "You don't have permission for any section here",
     "empty_perms_hint": "Contact the main admin to grant you permissions"
   },

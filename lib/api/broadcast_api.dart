@@ -1,0 +1,270 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
+import '../services/auth_storage.dart';
+import 'api_client.dart';
+
+/// نوع رسالة (intent) — مطابق للـweb + backend.
+enum MessageIntent {
+  general,
+  debtors,
+  expired,
+  expiring,
+}
+
+extension MessageIntentX on MessageIntent {
+  String get apiValue {
+    switch (this) {
+      case MessageIntent.general:
+        return 'general';
+      case MessageIntent.debtors:
+        return 'debtors';
+      case MessageIntent.expired:
+        return 'expired';
+      case MessageIntent.expiring:
+        return 'expiring';
+    }
+  }
+
+  /// الرسالة اختياريّة لهذا النوع (backend يستعمل قالب افتراضي).
+  bool get messageOptional =>
+      this == MessageIntent.debtors || this == MessageIntent.expiring;
+}
+
+/// سجل رسالة من whatsapp_message_queue أو whatsapp_send_logs.
+class MessageLog {
+  const MessageLog({
+    required this.id,
+    required this.status,
+    required this.createdAt,
+    this.recipientPhone,
+    this.recipientUsername,
+    this.recipientName,
+    this.errorMessage,
+    this.messageType,
+    this.messagePreview,
+    this.source,
+  });
+
+  final int id;
+
+  /// sent | pending | failed | cancelled | processing
+  final String status;
+  final String createdAt;
+  final String? recipientPhone;
+  final String? recipientUsername;
+  final String? recipientName;
+  final String? errorMessage;
+  final String? messageType;
+  final String? messagePreview;
+
+  /// queue | send_logs
+  final String? source;
+
+  bool get isSent => status == 'sent';
+  bool get isPending => status == 'pending' || status == 'processing';
+  bool get isFailed => status == 'failed';
+  bool get isCancelled => status == 'cancelled';
+
+  static MessageLog? fromJson(Map<String, dynamic> j) {
+    final id = j['id'];
+    final idInt = id is int ? id : int.tryParse(id?.toString() ?? '');
+    if (idInt == null) return null;
+    return MessageLog(
+      id: idInt,
+      status: (j['status'] ?? 'pending').toString(),
+      createdAt: (j['created_at'] ?? '').toString(),
+      recipientPhone: j['recipient_phone']?.toString(),
+      recipientUsername: j['recipient_username']?.toString(),
+      recipientName: j['recipient_name']?.toString(),
+      errorMessage: j['error_message']?.toString(),
+      messageType: j['message_type']?.toString(),
+      messagePreview: j['message_preview']?.toString(),
+      source: j['source']?.toString(),
+    );
+  }
+}
+
+class LogsStats {
+  const LogsStats({
+    required this.total,
+    required this.sent,
+    required this.pending,
+    required this.failed,
+    this.cancelled = 0,
+    this.processing = 0,
+  });
+
+  final int total;
+  final int sent;
+  final int pending;
+  final int failed;
+  final int cancelled;
+  final int processing;
+
+  static LogsStats fromJson(Map<String, dynamic> j) => LogsStats(
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        sent: (j['sent'] as num?)?.toInt() ?? 0,
+        pending: (j['pending'] as num?)?.toInt() ?? 0,
+        failed: (j['failed'] as num?)?.toInt() ?? 0,
+        cancelled: (j['cancelled'] as num?)?.toInt() ?? 0,
+        processing: (j['processing'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Broadcast API — يستهلك backend `/api/whatsapp/*`.
+class BroadcastApi {
+  BroadcastApi._();
+
+  /// POST /api/whatsapp/broadcast
+  /// نتيجة: عدد الرسائل التي دخلت الطابور.
+  static Future<({bool ok, int? queued, String? message})> broadcast({
+    required MessageIntent intent,
+    required String message,
+    List<String>? targetUsernames,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'message': message,
+        'type': intent.apiValue,
+      };
+      if (targetUsernames != null && targetUsernames.isNotEmpty) {
+        body['targetUsernames'] = targetUsernames;
+      }
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/broadcast',
+        data: body,
+      );
+      final data = r.data ?? const {};
+      if (data['success'] == false) {
+        return (
+          ok: false,
+          queued: null,
+          message: data['message']?.toString() ?? 'فشل الإرسال',
+        );
+      }
+      final queued = (data['queued'] ?? data['totalQueued'] ?? data['count']);
+      final queuedInt = queued is int
+          ? queued
+          : (queued is num
+              ? queued.toInt()
+              : int.tryParse(queued?.toString() ?? ''));
+      return (ok: true, queued: queuedInt, message: null);
+    } on DioException catch (e) {
+      _log('broadcast', e);
+      final m = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString()
+          : null;
+      return (ok: false, queued: null, message: m ?? 'خطأ في الشبكة');
+    } catch (e) {
+      _log('broadcast', e);
+      return (ok: false, queued: null, message: e.toString());
+    }
+  }
+
+  /// POST /api/whatsapp/broadcast/retry-failed
+  /// يعيد جدولة الرسائل الفاشلة من آخر [sinceHours] ساعة.
+  static Future<({bool ok, String? message})> retryFailed({
+    int sinceHours = 24,
+    bool includeSuppressed = false,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/broadcast/retry-failed',
+        data: {
+          'sinceHours': sinceHours,
+          'includeSuppressed': includeSuppressed,
+        },
+      );
+      final data = r.data ?? const {};
+      return (
+        ok: data['success'] != false,
+        message: data['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('retryFailed', e);
+      final m = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString()
+          : null;
+      return (ok: false, message: m ?? 'خطأ في الشبكة');
+    } catch (e) {
+      _log('retryFailed', e);
+      return (ok: false, message: e.toString());
+    }
+  }
+
+  /// GET /api/whatsapp/message-logs/:adminId — سجل رسائل آخر 24 ساعة.
+  static Future<({bool ok, List<MessageLog> messages, LogsStats? stats})>
+      messageLogs({
+    String? typeFilter,
+    int limit = 100,
+  }) async {
+    try {
+      final adminId = await AuthStorage.readAdminId();
+      if (adminId == null || adminId.isEmpty) {
+        return (ok: false, messages: <MessageLog>[], stats: null);
+      }
+      final now = DateTime.now();
+      final yesterday = now.subtract(const Duration(days: 1));
+      String fmt(DateTime d) => d.toIso8601String().substring(0, 10);
+      final params = <String, dynamic>{
+        'dateFrom': fmt(yesterday),
+        'dateTo': fmt(now),
+        'limit': '$limit',
+      };
+      if (typeFilter != null && typeFilter != 'all') {
+        params['type'] = typeFilter;
+      }
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/whatsapp/message-logs/$adminId',
+        queryParameters: params,
+      );
+      final data = r.data ?? const {};
+      final list = data['messages'];
+      final statsRaw = data['stats'];
+      final messages = <MessageLog>[];
+      if (list is List) {
+        for (final m in list) {
+          if (m is Map) {
+            final parsed =
+                MessageLog.fromJson(Map<String, dynamic>.from(m));
+            if (parsed != null) messages.add(parsed);
+          }
+        }
+      }
+      final stats = statsRaw is Map
+          ? LogsStats.fromJson(Map<String, dynamic>.from(statsRaw))
+          : null;
+      return (
+        ok: data['success'] != false,
+        messages: messages,
+        stats: stats,
+      );
+    } on DioException catch (e) {
+      _log('messageLogs', e);
+      return (ok: false, messages: <MessageLog>[], stats: null);
+    } catch (e) {
+      _log('messageLogs', e);
+      return (ok: false, messages: <MessageLog>[], stats: null);
+    }
+  }
+}
+
+/// المتغيّرات المتاحة في محرّر الرسالة — تُستبدَل server-side.
+class BroadcastVariables {
+  BroadcastVariables._();
+  static const List<({String token, String label})> all = [
+    (token: '{subscriber_name}', label: 'اسم المشترك'),
+    (token: '{firstname}', label: 'الاسم الأول'),
+    (token: '{username}', label: 'اسم المستخدم'),
+    (token: '{package_name}', label: 'الباقة'),
+    (token: '{expiry_date}', label: 'تاريخ الانتهاء'),
+    (token: '{days_remaining}', label: 'الأيام المتبقّية'),
+    (token: '{debt_amount}', label: 'مبلغ الدين'),
+    (token: '{phone}', label: 'الهاتف'),
+  ];
+}
+
+void _log(String tag, Object e) {
+  if (kDebugMode) debugPrint('[BroadcastApi] $tag: $e');
+}

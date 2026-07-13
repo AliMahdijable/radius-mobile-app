@@ -7,6 +7,7 @@ import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'broadcast/broadcast_screen.dart';
 import 'discounts/discounts_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
@@ -44,6 +45,20 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const ExpensesScreen(),
+                ),
+              ),
+            ),
+          // التبليغات (broadcast) — نُقلت من client-v2/Notifications.tsx.
+          // إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء + محرّر متغيّرات.
+          if (Perms.has('whatsapp.broadcast'))
+            _ModuleCard(
+              icon: LucideIcons.bell,
+              color: const Color(0xFF25D366),
+              title: 'more.broadcast'.tr(),
+              subtitle: 'more.broadcast_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const BroadcastScreen(),
                 ),
               ),
             ),
