@@ -18,6 +18,7 @@ import 'app_permissions_screen.dart';
 import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
 import 'notifications_settings_screen.dart';
+import 'print_templates/print_templates_screen.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
 
@@ -206,7 +207,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.receipt_long_outlined,
               label: 'settings.print_templates'.tr(),
-              onTap: () => _todo(context, 'settings.todo_print_templates'.tr()),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PrintTemplatesScreen(),
+                ),
+              ),
             ),
             const SizedBox(height: Sp.md),
             _SectionLabel('settings.app'.tr()),
