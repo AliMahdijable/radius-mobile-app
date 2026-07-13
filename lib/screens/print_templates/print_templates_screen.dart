@@ -106,7 +106,10 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
                   _TemplateViewCard(
                     type: 'a4',
                     template: a4,
-                    onTestPrint: a4 == null ? null : () => _testPrint(a4),
+                    // زر المعاينة يظهر فقط للقالب الفعّال (طلب المستخدم)
+                    onPreview: (a4 != null && a4.isActive)
+                        ? () => _testPrint(a4)
+                        : null,
                   ),
                   const SizedBox(height: Sp.lg),
                   _sectionLabel(
@@ -117,7 +120,9 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
                   _TemplateViewCard(
                     type: 'pos',
                     template: pos,
-                    onTestPrint: pos == null ? null : () => _testPrint(pos),
+                    onPreview: (pos != null && pos.isActive)
+                        ? () => _testPrint(pos)
+                        : null,
                   ),
                 ],
               ),
@@ -220,11 +225,11 @@ class _TemplateViewCard extends StatelessWidget {
   const _TemplateViewCard({
     required this.type,
     required this.template,
-    required this.onTestPrint,
+    required this.onPreview,
   });
   final String type;
   final PrintTemplate? template;
-  final VoidCallback? onTestPrint;
+  final VoidCallback? onPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +298,7 @@ class _TemplateViewCard extends StatelessWidget {
               ],
             ),
           ),
-          if (exists && onTestPrint != null)
+          if (exists && onPreview != null)
             Material(
               color: AppColors.brand.withOpacity(0.1),
               borderRadius: BorderRadius.circular(R.sm),
@@ -301,7 +306,7 @@ class _TemplateViewCard extends StatelessWidget {
               child: InkWell(
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  onTestPrint!();
+                  onPreview!();
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -309,11 +314,11 @@ class _TemplateViewCard extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.printer,
+                      Icon(LucideIcons.eye,
                           size: 14, color: AppColors.brand),
                       const SizedBox(width: 4),
                       Text(
-                        'print_templates.test_print_short'.tr(),
+                        'print_templates.preview'.tr(),
                         style: AppType.button(color: AppColors.brand)
                             .copyWith(fontSize: 11),
                       ),

@@ -135,8 +135,8 @@
     "not_created": "Not created yet",
     "web_only_title": "Editing is web-only",
     "web_only_body": "To customize your receipt/invoice (company name, logo, fields, colors) use the web dashboard on desktop. The mobile app automatically uses the saved template when printing.",
-    "test_print": "Test print",
-    "test_print_short": "Print",
+    "preview": "Preview",
+    "preview_hint": "Preview the final receipt — you can print from the preview screen if you want",
     "print_cancelled": "Print cancelled"
   },
   "portal": {
