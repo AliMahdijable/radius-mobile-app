@@ -8,7 +8,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -95,38 +94,11 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
     }
   }
 
-  /// يطلب صلاحيّة الوصول للتخزين قبل حفظ/مشاركة صورة QR.
-  /// - iOS: NSPhotoLibraryAddUsage
-  /// - Android 13+: Permission.photos (READ_MEDIA_IMAGES)
-  /// - Android <13: Permission.storage (WRITE_EXTERNAL_STORAGE)
-  Future<bool> _ensureStoragePermission() async {
-    // نجرّب photos أوّلاً (يعمل على iOS + Android 13+)، وإلا نتراجع لـstorage.
-    var status = await Permission.photos.status;
-    if (!status.isGranted && !status.isLimited) {
-      status = await Permission.photos.request();
-    }
-    if (status.isGranted || status.isLimited) return true;
-    // fallback لـstorage (Android <13)
-    var s = await Permission.storage.status;
-    if (!s.isGranted) s = await Permission.storage.request();
-    if (s.isGranted) return true;
-    // كل المحاولات فشلت
-    if (mounted) {
-      _snack('qr_login.permission_required'.tr(), isError: true);
-      if (status.isPermanentlyDenied || s.isPermanentlyDenied) {
-        // نعرض زر يفتح إعدادات النظام لتفعيل الصلاحيّة يدوياً
-        Future.delayed(const Duration(milliseconds: 300),
-            () => openAppSettings());
-      }
-    }
-    return false;
-  }
-
   Future<void> _shareQr() async {
     if (_sharing || _linkUrl == null) return;
-    // 1) تأكّد من الصلاحيّة أوّلاً
-    final ok = await _ensureStoragePermission();
-    if (!ok) return;
+    // 2026-07-13: لا نطلب صلاحيّة تخزين — Share sheet يتعامل مع كل شيء
+    // (المستخدم يختار "حفظ في المعرض" أو "إرسال" وOS يتكفّل بالوصول).
+    // هذا يتجنّب متطلّبات Google Play لنموذج "أذونات الصور والفيديوهات".
     setState(() => _sharing = true);
     try {
       final bytes = await _captureQr();
