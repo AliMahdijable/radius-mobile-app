@@ -96,10 +96,17 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
 
   Future<void> _shareQr() async {
     if (_sharing || _linkUrl == null) return;
-    // 2026-07-13: لا نطلب صلاحيّة تخزين — Share sheet يتعامل مع كل شيء
-    // (المستخدم يختار "حفظ في المعرض" أو "إرسال" وOS يتكفّل بالوصول).
-    // هذا يتجنّب متطلّبات Google Play لنموذج "أذونات الصور والفيديوهات".
+    // 2026-07-13: crash تقارير على Android+iOS. السبب:
+    //   1) Share.shareXFiles القديم deprecated في share_plus 10+ ويسبب
+    //      native crashes على Android 14+ و iOS 17+.
+    //   2) على iPad، عدم تمرير sharePositionOrigin = crash فوري.
+    //   3) toImage قد يفشل لو الـwidget ما اترسم بعد.
+    // الحلّ: SharePlus.instance.share(ShareParams(...)) الحديث +
+    // sharePositionOrigin مبني من الـcontext + انتظار frame واحد قبل
+    // التقاط الصورة لضمان الرسم.
     setState(() => _sharing = true);
+    // انتظار frame واحد لضمان أن الـRepaintBoundary أُنشئ + رُسِم
+    await WidgetsBinding.instance.endOfFrame;
     try {
       final bytes = await _captureQr();
       if (bytes == null) {
@@ -114,13 +121,29 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       final greet = widget.sub.fullName.trim().isNotEmpty
           ? widget.sub.fullName.trim()
           : widget.sub.username;
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text:
-            'مرحباً $greet 👋\n\nهذا رمز QR لتسجيل دخولك في تطبيق بوابة المشترك:\n\n${_linkUrl!}\n\nالرمز صالح لمدة 30 يوم.',
+
+      // sharePositionOrigin: مطلوب لـiPad — بدونه UIActivityViewController
+      // يرمي NSInvalidArgumentException. على iPhone/Android مُتجاهَل.
+      Rect origin = Rect.zero;
+      if (mounted) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null && box.hasSize) {
+          origin = box.localToGlobal(Offset.zero) & box.size;
+        }
+      }
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text:
+              'مرحباً $greet 👋\n\nهذا رمز QR لتسجيل دخولك في تطبيق بوابة المشترك:\n\n${_linkUrl!}\n\nالرمز صالح لمدة 30 يوم.',
+          sharePositionOrigin: origin,
+        ),
       );
     } catch (e) {
-      _snack('${'qr_login.share_failed'.tr()}: $e', isError: true);
+      if (mounted) {
+        _snack('${'qr_login.share_failed'.tr()}: $e', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
