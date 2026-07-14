@@ -326,29 +326,11 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   // ─── actions ───────────────────────────────
 
-  Future<void> _openEvent(_MgrEvent e) async {
-    // 2026-07-14: كنّا نفتح شاشة "حركات المدير" — المستخدم قال إنها
-    // تخصّ صفحة المدراء (زر الحركات هناك). الآن نفتح sheet تسديد الدين
-    // فقط للأنواع المدينة، وبقيّة الأنواع تعطي تلميحاً.
-    if (e.movement.subKind == 'sas_pay_debt' ||
-        (e.movement.rowType == 'debt_created' && e.manager.totalDebt >= 0)) {
-      if (e.manager.totalDebt > 0) {
-        final changed = await showPayDebtSheet(context, e.manager);
-        if (changed == true) _load();
-        return;
-      }
-    }
-    // لا فعل — البطاقة عرض فقط. Snackbar اختياري:
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'للتفاعل مع هذا المدير، افتح: قوائم أخرى → المدراء → ${e.manager.username}'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
+  // 2026-07-14: البطاقة عرض فقط — لا فعل عند النقر. المستخدم قال:
+  // "الحركات كتلك بالمدراء، ديون المدراء ما أريد النقر عليه يظهر تسديد
+  // أو شي، وقف هلشي فقط تقرير هو". أي تسديد/تفاعل يجب أن يجري من:
+  //   قوائم أخرى → المدراء → [المدير] → الإجراءات
+  // نلغي InkWell بتمرير null لـonTap (تحت في _eventTile).
 
   Future<void> _pickDateRange() async {
     final now = DateTime.now();
@@ -884,14 +866,13 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openEvent(e),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(R.md),
-          ),
+      // 2026-07-14: البطاقة عرض فقط (لا InkWell / onTap).
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(R.md),
+        ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1042,7 +1023,6 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
