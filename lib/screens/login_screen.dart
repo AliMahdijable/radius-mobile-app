@@ -11,6 +11,7 @@ import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/fcm_service.dart';
 import '../services/permissions_service.dart';
+import '../services/session_manager.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -94,6 +95,16 @@ class _LoginScreenState extends State<LoginScreen> {
           :final isEmployee,
           :final sas4Token,
         ):
+        // 2026-07-14: مسح كل caches الجلسة السابقة قبل تفعيل الجديدة —
+        // يحمي من رواسب admin سابق (لو 401 kick شغّل واحد ما مسح
+        // الا AuthStorage + Perms). unregisterFcm=false لأن ما في
+        // token لنستعمله وقت الاستدعاء + FcmService.initAfterLogin
+        // بعد قليل يسجّل الحساب الجديد. clearAuth=false لأن saveSession
+        // فوراً بعده يكتب الجديد.
+        await SessionManager.clearAllSessionData(
+          unregisterFcm: false,
+          clearAuth: false,
+        );
         await AuthStorage.saveSession(
           token: token,
           adminId: adminId,

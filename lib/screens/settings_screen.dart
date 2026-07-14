@@ -1,16 +1,10 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
-import '../api/device_config_api.dart';
-import '../api/device_probe_api.dart';
-import '../api/subscribers_api.dart';
-import '../services/alerts_service.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
-import '../services/fcm_service.dart';
-import '../services/inbox_service.dart';
 import '../services/locale_service.dart';
-import '../services/permissions_service.dart';
+import '../services/session_manager.dart';
 import '../services/print_prefs.dart';
 import '../services/theme_service.dart';
 import '../theme/colors.dart';
@@ -77,22 +71,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (ok != true) return;
-    // مطلب 2026-06-11: امسح كل in-memory caches قبل الـauth wipe
-    // عشان أوّل dashboard للـadmin الجديد ما يلصق على بقايا
-    // admin السابق (45s TTL على الـsubscribers list كان كافياً
-    // لتسريب الأرقام بين الجلستين).
-    SubscribersApi.clearAllCaches();
-    await DeviceProbeApi.clearAllCaches();
-    DeviceConfigApi.clearAllCaches();
-    AlertsService.reset();
-    // نُلغي تسجيل الـFCM token قبل مسح الجلسة — عشان الحساب الجديد
-    // (لو أحد سجّل بعدك على نفس الجهاز) ما يستلم إشعارات الحساب السابق.
-    // آمنة الفشل — لا تعطّل الـlogout.
-    await FcmService.unregister();
-    // إفراغ inbox للحساب الحالي (الإشعارات لحساب سابق).
-    await InboxService.clear();
-    await PermissionsService.clear();
-    await AuthStorage.clear();
+    // 2026-07-14: كل التنظيف عبر SessionManager الموحّد — يضمن أن
+    // كل مسار للخروج (logout يدوي، 401 kick، login جديد) يستعمل نفس
+    // الروتين ولا ينسى caches جديدة تُضاف لاحقاً.
+    await SessionManager.clearAllSessionData();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),

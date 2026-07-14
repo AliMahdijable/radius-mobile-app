@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
-import '../services/permissions_service.dart';
+import '../services/session_manager.dart';
 import 'auth_api.dart';
 
 /// تنبيه عام لِلوصول 401 + فشل refresh — تستمع له الـMainShell/Splash
@@ -128,8 +128,10 @@ class _AuthInterceptor extends Interceptor {
       // refresh أوّلاً في AuthApi.refreshToken.
       final isEmp = await AuthStorage.isEmployee();
       if (isEmp) {
-        await AuthStorage.clear();
-        await PermissionsService.clear();
+        // 2026-07-14: نمسح كل caches الجلسة عبر SessionManager بدلاً
+        // من Auth + Perms فقط — سابقاً كان الأدمن التالي يشوف رواسب
+        // (subscribers list، device snapshots) من الجلسة السابقة.
+        await SessionManager.clearAllSessionData(unregisterFcm: false);
         authExpiredSignal.value = authExpiredSignal.value + 1;
       }
       return null;
