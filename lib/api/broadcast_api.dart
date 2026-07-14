@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -137,12 +140,25 @@ int _toInt(dynamic v) {
 class BroadcastApi {
   BroadcastApi._();
 
+  /// أقصى حجم صورة نسمح به قبل تحويلها لـbase64. الصورة تُنسخ
+  /// لكل مستقبل في `whatsapp_message_queue.media_data` (LONGTEXT)،
+  /// فرفع 500 مستقبل بصورة 3MB = 1.5GB بالطابور. نضغطها للحدود
+  /// ونرفض الأكبر.
+  static const int maxImageBytes = 300 * 1024; // 300KB binary
+
   /// POST /api/whatsapp/broadcast
   /// نتيجة: عدد الرسائل التي دخلت الطابور.
+  ///
+  /// [imageBytes] اختياريّة — صورة تُرسل كمرفق (caption = نص الرسالة).
+  /// يجب أن تكون ≤ [maxImageBytes] بعد الضغط، وإلا نرمي [ArgumentError]
+  /// قبل الشبكة (توفيراً للـbandwidth). Backend عنده نفس السقف كحارس ثانٍ.
   static Future<({bool ok, int? queued, String? message})> broadcast({
     required MessageIntent intent,
     required String message,
     List<String>? targetUsernames,
+    Uint8List? imageBytes,
+    String? imageMime,
+    String? imageFilename,
   }) async {
     try {
       final body = <String, dynamic>{
@@ -151,6 +167,19 @@ class BroadcastApi {
       };
       if (targetUsernames != null && targetUsernames.isNotEmpty) {
         body['targetUsernames'] = targetUsernames;
+      }
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        if (imageBytes.length > maxImageBytes) {
+          return (
+            ok: false,
+            queued: null,
+            message:
+                'الصورة أكبر من الحدّ (${(maxImageBytes / 1024).round()}KB).',
+          );
+        }
+        body['imageBase64'] = base64Encode(imageBytes);
+        body['imageMime'] = imageMime ?? 'image/jpeg';
+        body['imageFilename'] = imageFilename ?? 'broadcast.jpg';
       }
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/whatsapp/broadcast',

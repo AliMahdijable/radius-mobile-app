@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/broadcast_api.dart';
@@ -45,6 +48,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   /// selectedSubManagers = null أو فارغة → "الكل" (بدون فلترة).
   /// خلاف ذلك = فقط مشتركو هؤلاء المدراء.
   final Set<String> _managerFilter = <String>{};
+
+  /// صورة مرفقة (اختياريّة) — تُرسل كـcaption مع نص الرسالة. نضغطها
+  /// عند الاختيار (maxWidth=1024, imageQuality=60) وإذا مازالت > الحدّ
+  /// نرفضها. تُنسخ لكل مستقبل في `whatsapp_message_queue.media_data`،
+  /// فحدّ 300KB مقصود.
+  Uint8List? _imageBytes;
+  String? _imageName;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -168,7 +179,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   bool get _canSend =>
       !_sending &&
       _targets.isNotEmpty &&
-      (_messageOptional || _msg.text.trim().isNotEmpty) &&
+      // مع وجود صورة، الرسالة النصّية اختياريّة (تصبح caption).
+      (_messageOptional ||
+          _msg.text.trim().isNotEmpty ||
+          _imageBytes != null) &&
       Perms.has('whatsapp.broadcast');
 
   // ─── actions ─────────────────────────────────────
@@ -242,6 +256,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       targetUsernames: _scope == _Scope.specific
           ? targets.map((t) => t.username).toList()
           : null,
+      imageBytes: _imageBytes,
+      imageMime: 'image/jpeg',
+      imageFilename: _imageName ?? 'broadcast.jpg',
     );
     if (!mounted) return;
     setState(() => _sending = false);
@@ -253,10 +270,50 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       setState(() {
         _msg.clear();
         _selected.clear();
+        _imageBytes = null;
+        _imageName = null;
       });
     } else {
       _snack(r.message ?? 'فشل الإرسال', isError: true);
     }
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      // imageQuality: 60 + maxWidth: 1024 يضغطها لصورة ~50-200KB في
+      // الغالب. الحدّ النهائي محسوم في BroadcastApi.maxImageBytes.
+      final XFile? file = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 60,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      if (bytes.length > BroadcastApi.maxImageBytes) {
+        _snack(
+          'الصورة أكبر من ${(BroadcastApi.maxImageBytes / 1024).round()}KB '
+          '(الحجم الحالي ~${(bytes.length / 1024).round()}KB). اختر صورة أصغر.',
+          isError: true,
+        );
+        return;
+      }
+      setState(() {
+        _imageBytes = bytes;
+        _imageName = file.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _snack('تعذّر اختيار الصورة: $e', isError: true);
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _imageBytes = null;
+      _imageName = null;
+    });
   }
 
   Future<void> _retryFailed() async {
@@ -953,6 +1010,81 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     fontFamily: 'monospace'),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          _buildImageAttachment(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageAttachment() {
+    if (_imageBytes == null) {
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: OutlinedButton.icon(
+          onPressed: _sending ? null : _pickImage,
+          icon: Icon(LucideIcons.image, size: 16, color: AppColors.brand),
+          label: Text(
+            'إرفاق صورة (اختياري)',
+            style: AppType.button(color: AppColors.brand)
+                .copyWith(fontSize: 12),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: AppColors.brand.withValues(alpha: 0.35)),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(R.sm)),
+          ),
+        ),
+      );
+    }
+    final sizeKb = (_imageBytes!.length / 1024).round();
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInput,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Image.memory(
+              _imageBytes!,
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _imageName ?? 'صورة مرفقة',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.subtitle(color: AppColors.textHi)
+                      .copyWith(fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$sizeKb KB',
+                  style: AppType.muted().copyWith(fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'حذف الصورة',
+            icon: Icon(LucideIcons.x,
+                size: 18, color: AppColors.textMid),
+            onPressed: _sending ? null : _removeImage,
           ),
         ],
       ),

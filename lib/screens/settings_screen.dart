@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/locale_service.dart';
+import '../services/permissions_service.dart';
 import '../services/session_manager.dart';
 import '../services/print_prefs.dart';
 import '../services/theme_service.dart';

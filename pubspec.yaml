@@ -88,6 +88,10 @@ dependencies:
   easy_localization: ^3.0.7
   shared_preferences: ^2.3.2
 
+  # اختيار صورة للتبليغات العامة (2026-07-14). يضغطها قبل الرفع
+  # لتجنّب حفظ ميغابايتات لكل مستقبل في الطابور.
+  image_picker: ^1.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
