@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'whatsapp_templates_screen.dart';
+import 'widgets/send_scope_panel.dart';
 
 /// شاشة حالة WhatsApp — تعرض حالة الاتصال + QR للربط + قائمة
 /// الـtoggles لكل المسارات التلقائية + رابط لقوالب الواتساب.
@@ -316,6 +317,10 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                 if (_status?.connected == true) ...[
                   const SizedBox(height: Sp.lg),
                   _featuresCard(accent),
+                  const SizedBox(height: Sp.md),
+                  // نطاق الإرسال — يظهر فقط لمن عنده مدراء فرعيون
+                  // (SendScopePanel داخلياً يُخفي نفسه لو subManagers فارغة).
+                  const SendScopePanel(),
                   const SizedBox(height: Sp.md),
                   _templatesLink(accent),
                 ],

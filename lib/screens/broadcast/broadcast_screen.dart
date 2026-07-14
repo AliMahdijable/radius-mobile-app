@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/broadcast_api.dart';
+import '../../api/send_scope_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -37,10 +38,25 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   bool _sending = false;
   bool _retrying = false;
 
+  /// المدراء الفرعيون المتاحون للفلترة (من SendScopeApi.fetch).
+  /// null = لم يُحمَّل بعد. فارغة = المدير ما عنده مدراء فرعيون —
+  /// فلتر المدير يُخفى.
+  List<String>? _subManagers;
+  /// selectedSubManagers = null أو فارغة → "الكل" (بدون فلترة).
+  /// خلاف ذلك = فقط مشتركو هؤلاء المدراء.
+  final Set<String> _managerFilter = <String>{};
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadScope();
+  }
+
+  Future<void> _loadScope() async {
+    final s = await SendScopeApi.fetch();
+    if (!mounted) return;
+    setState(() => _subManagers = s?.subManagers ?? const []);
   }
 
   @override
@@ -68,7 +84,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           (s.phone?.length ?? 0) >= 10 || (s.mobile?.length ?? 0) >= 10)
       .toList();
 
-  List<Subscriber> get _candidates {
+  /// المشتركون بعد فلتر الفئة (all/debtors/expired/expiring).
+  List<Subscriber> get _byCategory {
     switch (_filter) {
       case _Filter.all:
         return _withPhone;
@@ -84,6 +101,17 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       case _Filter.expiring:
         return _withPhone.where((s) => s.isNearExpiry).toList();
     }
+  }
+
+  /// المرشّحون النهائيون = فلتر الفئة + (اختياراً) فلتر مدير الأب.
+  /// لو _managerFilter فارغة = بدون قيود مدير.
+  List<Subscriber> get _candidates {
+    if (_managerFilter.isEmpty) return _byCategory;
+    final allowedLower = _managerFilter.map((m) => m.toLowerCase()).toSet();
+    return _byCategory.where((s) {
+      final p = (s.parentUsername ?? '').toLowerCase();
+      return allowedLower.contains(p);
+    }).toList();
   }
 
   List<Subscriber> get _visibleCandidates {
@@ -338,6 +366,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                           Sp.lg, Sp.md, Sp.lg, Sp.huge),
                       children: [
                         _buildFilterCard(),
+                        // فلتر مدير فرعي — يظهر فقط لو المدير الرئيسي
+                        // عنده مدراء تحته (matches SendScopePanel visibility).
+                        if ((_subManagers ?? const []).isNotEmpty) ...[
+                          const SizedBox(height: Sp.md),
+                          _buildManagerFilterCard(),
+                        ],
                         const SizedBox(height: Sp.md),
                         _buildScopeCard(),
                         if (_scope == _Scope.specific &&
@@ -465,6 +499,117 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     color: active ? color : AppColors.textMid),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// كارت فلتر المدير الفرعي — يظهر فقط لمن عنده مدراء فرعيون.
+  /// التحديد فارغ = بدون قيد (كل المدراء).
+  Widget _buildManagerFilterCard() {
+    final mgrs = _subManagers ?? const <String>[];
+    final allSelected = _managerFilter.isEmpty;
+    return _sectionCard(
+      icon: LucideIcons.userCog,
+      title: allSelected
+          ? 'الفلترة حسب المدير (الكل)'
+          : 'الفلترة حسب المدير (${_managerFilter.length}/${mgrs.length})',
+      trailing: allSelected
+          ? null
+          : TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _managerFilter.clear();
+                  _selected.clear();
+                });
+              },
+              icon: Icon(LucideIcons.x, size: 12, color: AppColors.textMid),
+              label: Text(
+                'مسح',
+                style: AppType.button(color: AppColors.textMid)
+                    .copyWith(fontSize: 11),
+              ),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'اختر مدراء لإرسال الرسائل لمشتركيهم فقط',
+            style: AppType.muted().copyWith(fontSize: 10.5),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final u in mgrs)
+                _managerFilterChip(
+                  username: u,
+                  checked: _managerFilter.contains(u),
+                  onToggle: (nowChecked) {
+                    setState(() {
+                      if (nowChecked) {
+                        _managerFilter.add(u);
+                      } else {
+                        _managerFilter.remove(u);
+                      }
+                      _selected.clear(); // تنظيف الاختيار المحدَّد اليدوي
+                    });
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _managerFilterChip({
+    required String username,
+    required bool checked,
+    required ValueChanged<bool> onToggle,
+  }) {
+    return Material(
+      color: checked
+          ? AppColors.brand.withValues(alpha: 0.1)
+          : AppColors.surfaceInput,
+      borderRadius: BorderRadius.circular(R.sm),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => onToggle(!checked),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: checked
+                  ? AppColors.brand.withValues(alpha: 0.4)
+                  : AppColors.border,
+              width: checked ? 1.4 : 1,
+            ),
+            borderRadius: BorderRadius.circular(R.sm),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                checked ? LucideIcons.squareCheck : LucideIcons.square,
+                size: 12,
+                color: checked ? AppColors.brand : AppColors.textLow,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                username,
+                style: AppType.button(
+                  color: checked ? AppColors.brand : AppColors.textMid,
+                ).copyWith(fontSize: 10.5, fontFamily: 'monospace'),
+                textDirection: TextDirection.ltr,
               ),
             ],
           ),
