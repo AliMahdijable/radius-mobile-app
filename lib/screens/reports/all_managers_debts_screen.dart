@@ -472,23 +472,18 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       (_SourceFilter.sas, 'SAS', Color(0xFF0EA5E9)),
       (_SourceFilter.custom, 'ديون أخرى', Color(0xFF8B5CF6)),
     ];
-    return SizedBox(
-      height: 32,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 4),
-        children: [
-          for (final (k, label, color) in filters) ...[
-            _chip(
-              active: _sourceFilter == k,
-              label: label,
-              color: color,
-              onTap: () => setState(() => _sourceFilter = k),
-            ),
-            const SizedBox(width: 6),
-          ],
+    return _filterStrip(
+      children: [
+        for (final (k, label, color) in filters) ...[
+          _chip(
+            active: _sourceFilter == k,
+            label: label,
+            color: color,
+            onTap: () => setState(() => _sourceFilter = k),
+          ),
+          const SizedBox(width: 6),
         ],
-      ),
+      ],
     );
   }
 
@@ -501,21 +496,34 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       (_StatusFilter.partial, 'جزئي', Color(0xFFE08F2D)),
       (_StatusFilter.paid, 'مسدّد', Color(0xFF14B8A6)),
     ];
+    return _filterStrip(
+      children: [
+        for (final (k, label, color) in filters) ...[
+          _chip(
+            active: _statusFilter == k,
+            label: label,
+            color: color,
+            onTap: () => setState(() => _statusFilter = k),
+          ),
+          const SizedBox(width: 6),
+        ],
+      ],
+    );
+  }
+
+  /// 2026-07-14: كانت SizedBox(height:32) بـpadding vertical:4 → المحتوى
+  /// الفعلي 24 فقط، النص ينقصّ من الأسفل (السالفات + الـchip padding عادةً
+  /// يحتاج 32-34). رفعنا الارتفاع لـ44 وشلنا الـvertical padding من الـ
+  /// ListView (يذهب على الـchip نفسه) — الآن النص يظهر كامل بلا قصّ.
+  Widget _filterStrip({required List<Widget> children}) {
     return SizedBox(
-      height: 32,
+      height: 44,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
         children: [
-          for (final (k, label, color) in filters) ...[
-            _chip(
-              active: _statusFilter == k,
-              label: label,
-              color: color,
-              onTap: () => setState(() => _statusFilter = k),
-            ),
-            const SizedBox(width: 6),
-          ],
+          for (final child in children)
+            Center(child: child),
         ],
       ),
     );
@@ -534,11 +542,11 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           child: Text(
             label,
             style: AppType.button(color: active ? color : AppColors.textMid)
-                .copyWith(fontSize: 12),
+                .copyWith(fontSize: 12, height: 1.2),
           ),
         ),
       ),
@@ -626,173 +634,239 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   // ─── Row card ──────────────────────────────
 
   Widget _debtCard(_DebtRow row) {
-    final (color, statusText) = _statusVisual(row.status);
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
+    final (statusColor, statusText) = _statusVisual(row.status);
+    final sourceColor = row.isSas
+        ? const Color(0xFF0EA5E9)
+        : const Color(0xFF8B5CF6);
+    final sourceLabel = row.isSas ? 'دين SAS' : 'دين أخرى';
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(R.lg),
+      ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openRow(row),
-        child: Container(
-          padding: const EdgeInsets.all(Sp.md),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(R.md),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(LucideIcons.userCog, size: 14, color: color),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                row.manager.username,
-                                style: AppType.title(color: AppColors.textHi)
-                                    .copyWith(fontSize: 13),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            _sourceBadge(row.source),
-                          ],
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          row.date != null
-                              ? _fmtDateShort(row.date!)
-                              : (row.isSas ? 'دين SAS مستمر' : '—'),
-                          style: AppType.muted().copyWith(fontSize: 10.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(R.sm),
-                      border: Border.all(
-                          color: color.withValues(alpha: 0.25), width: 0.5),
-                    ),
-                    child: Text(statusText,
-                        style:
-                            AppType.button(color: color).copyWith(fontSize: 10)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              row.isSas
-                  ? _sasAmountRow(row)
-                  : _customAmountRow(row),
-              if (row.isCustom && (row.custom?.note ?? '').isNotEmpty) ...[
-                const SizedBox(height: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ─── Header: colored strip + username + status pill ───
+          Container(
+            padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 5),
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceInput,
-                    borderRadius: BorderRadius.circular(R.sm),
+                    color: sourceColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(R.md),
+                    border:
+                        Border.all(color: sourceColor.withValues(alpha: 0.25)),
                   ),
-                  child: Row(
+                  alignment: Alignment.center,
+                  child: Icon(LucideIcons.userCog,
+                      size: 18, color: sourceColor),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.stickyNote,
-                          size: 11, color: AppColors.textLow),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          row.custom!.note!,
-                          style: AppType.muted(color: AppColors.textMid)
-                              .copyWith(fontSize: 11),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      Text(
+                        row.manager.username,
+                        style: AppType.title(color: AppColors.textHi).copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: sourceColor,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            sourceLabel,
+                            style: AppType.muted(color: sourceColor).copyWith(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (row.date != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                                width: 2,
+                                height: 10,
+                                color: AppColors.border),
+                            const SizedBox(width: 6),
+                            Text(
+                              _fmtDateShort(row.date!),
+                              style: AppType.muted().copyWith(fontSize: 10.5),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ],
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () => _openMovements(row),
-                    icon: Icon(LucideIcons.activity,
-                        size: 12, color: AppColors.brand),
-                    label: Text(
-                      'الحركات',
-                      style: AppType.button(color: AppColors.brand)
-                          .copyWith(fontSize: 11),
-                    ),
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(0, 28),
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(R.pill),
+                    border: Border.all(
+                        color: statusColor.withValues(alpha: 0.3), width: 0.6),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: AppType.button(color: statusColor).copyWith(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const Spacer(),
-                  Icon(LucideIcons.chevronLeft,
-                      size: 14, color: AppColors.textLow),
+                ),
+              ],
+            ),
+          ),
+          // ─── Amounts area (light-tint background) ───
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(Sp.md, 10, Sp.md, 10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceInput.withValues(alpha: 0.5),
+              border: Border(
+                top: BorderSide(color: AppColors.border, width: 0.6),
+                bottom: BorderSide(color: AppColors.border, width: 0.6),
+              ),
+            ),
+            child: row.isSas
+                ? _heroAmount(
+                    label: 'مبلغ الدين',
+                    amount: row.remaining,
+                    color: AppColors.error,
+                  )
+                : _threeAmountBlocks(row),
+          ),
+          // ─── Note (optional) ───
+          if (row.isCustom && (row.custom?.note ?? '').trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Sp.md, 8, Sp.md, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(LucideIcons.stickyNote,
+                      size: 12, color: AppColors.textLow),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      row.custom!.note!.trim(),
+                      style: AppType.muted(color: AppColors.textMid)
+                          .copyWith(fontSize: 11.5, height: 1.4),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
-            ],
+            ),
+          // ─── Actions row ───
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.md, 10, Sp.md, Sp.md),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openMovements(row),
+                    icon: Icon(LucideIcons.activity,
+                        size: 14, color: AppColors.textMid),
+                    label: Text(
+                      'الحركات',
+                      style: AppType.button(color: AppColors.textHi)
+                          .copyWith(fontSize: 12),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppColors.border),
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _openRow(row),
+                    icon: const Icon(LucideIcons.banknote, size: 14),
+                    label: Text(
+                      'تسديد',
+                      style: AppType.button(color: Colors.white)
+                          .copyWith(fontSize: 12),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brand,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _sourceBadge(_SourceFilter s) {
-    final color = s == _SourceFilter.sas
-        ? const Color(0xFF0EA5E9)
-        : const Color(0xFF8B5CF6);
-    final label = s == _SourceFilter.sas ? 'SAS' : 'أخرى';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.5),
-      ),
-      child: Text(label,
-          style: AppType.button(color: color)
-              .copyWith(fontSize: 9.5, fontWeight: FontWeight.w800)),
-    );
-  }
-
-  Widget _sasAmountRow(_DebtRow row) {
+  Widget _heroAmount({
+    required String label,
+    required double amount,
+    required Color color,
+  }) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: _amountBlock(
-            label: 'مبلغ الدين (SAS)',
-            amount: row.remaining,
-            color: AppColors.error,
-            bold: true,
-          ),
+        Text(
+          label,
+          style: AppType.muted().copyWith(fontSize: 11.5, height: 1.2),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              formatIQD(amount.round()),
+              style: AppType.title(color: color).copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'د.ع',
+              style: AppType.muted(color: color).copyWith(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _customAmountRow(_DebtRow row) {
+  Widget _threeAmountBlocks(_DebtRow row) {
     return Row(
       children: [
         Expanded(
@@ -802,18 +876,16 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             color: AppColors.textMid,
           ),
         ),
-        Container(width: 1, height: 22, color: AppColors.border),
-        const SizedBox(width: 8),
+        Container(width: 1, height: 26, color: AppColors.border),
         Expanded(
           child: _amountBlock(
             label: 'مسدَّد',
             amount: row.paid,
             color: const Color(0xFF14B8A6),
+            centered: true,
           ),
         ),
-        const SizedBox(width: 8),
-        Container(width: 1, height: 22, color: AppColors.border),
-        const SizedBox(width: 8),
+        Container(width: 1, height: 26, color: AppColors.border),
         Expanded(
           child: _amountBlock(
             label: 'متبقٍ',
@@ -822,6 +894,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                 ? AppColors.error
                 : const Color(0xFF14B8A6),
             bold: true,
+            rightAlign: true,
           ),
         ),
       ],
@@ -833,26 +906,41 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     required double amount,
     required Color color,
     bool bold = false,
+    bool centered = false,
+    bool rightAlign = false,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: AppType.muted().copyWith(fontSize: 10)),
-        const SizedBox(height: 1),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: AlignmentDirectional.centerStart,
-          child: Text(
-            formatIQD(amount.round()),
-            style: AppType.title(color: color).copyWith(
-              fontSize: bold ? 13.5 : 12.5,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
-              height: 1.1,
+    final align = rightAlign
+        ? CrossAxisAlignment.end
+        : centered
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start;
+    final fittedAlign = rightAlign
+        ? AlignmentDirectional.centerEnd
+        : centered
+            ? Alignment.center
+            : AlignmentDirectional.centerStart;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        crossAxisAlignment: align,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: AppType.muted().copyWith(fontSize: 10)),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: fittedAlign,
+            child: Text(
+              formatIQD(amount.round()),
+              style: AppType.title(color: color).copyWith(
+                fontSize: bold ? 14 : 13,
+                fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
+                height: 1.1,
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
