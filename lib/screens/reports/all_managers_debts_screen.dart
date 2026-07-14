@@ -9,7 +9,6 @@ import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../managers/movements_screen.dart';
 import '../managers/sheets/pay_custom_debt_sheet.dart';
 import '../managers/sheets/pay_debt_sheet.dart';
 import 'widgets/report_export.dart';
@@ -37,7 +36,16 @@ class AllManagersDebtsScreen extends StatefulWidget {
   State<AllManagersDebtsScreen> createState() => _AllManagersDebtsScreenState();
 }
 
-enum _TypeFilter { all, deposit, withdraw, debtCreated, payment, points }
+enum _TypeFilter {
+  all,
+  depositCash,
+  depositLoan,
+  withdraw,
+  debtCreated,
+  paymentSas,
+  paymentCustom,
+  points,
+}
 
 class _MgrEvent {
   const _MgrEvent({
@@ -60,16 +68,17 @@ class _MgrEvent {
       case 'debt_created':
         return _TypeFilter.debtCreated;
       case 'debt_payment':
-        return _TypeFilter.payment;
+        return _TypeFilter.paymentCustom;
     }
     switch (movement.subKind) {
       case 'deposit_cash':
+        return _TypeFilter.depositCash;
       case 'deposit_loan':
-        return _TypeFilter.deposit;
+        return _TypeFilter.depositLoan;
       case 'withdraw':
         return _TypeFilter.withdraw;
       case 'sas_pay_debt':
-        return _TypeFilter.payment;
+        return _TypeFilter.paymentSas;
       case 'points':
         return _TypeFilter.points;
       default:
@@ -318,27 +327,27 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   // ─── actions ───────────────────────────────
 
   Future<void> _openEvent(_MgrEvent e) async {
-    // debt-related events → افتح sheet المناسب
-    if (e.movement.rowType == 'debt_created' ||
-        e.movement.rowType == 'debt_payment') {
-      // نحتاج ManagerDebt object — نجلبه بالـid لو متوفّر
-      // (الـsheet يعمل عليها). لسرعة، نفتح movements الكامل بدلاً.
-      _openMovements(e.manager);
-      return;
+    // 2026-07-14: كنّا نفتح شاشة "حركات المدير" — المستخدم قال إنها
+    // تخصّ صفحة المدراء (زر الحركات هناك). الآن نفتح sheet تسديد الدين
+    // فقط للأنواع المدينة، وبقيّة الأنواع تعطي تلميحاً.
+    if (e.movement.subKind == 'sas_pay_debt' ||
+        (e.movement.rowType == 'debt_created' && e.manager.totalDebt >= 0)) {
+      if (e.manager.totalDebt > 0) {
+        final changed = await showPayDebtSheet(context, e.manager);
+        if (changed == true) _load();
+        return;
+      }
     }
-    if (e.movement.subKind == 'sas_pay_debt' && e.manager.totalDebt > 0) {
-      final changed = await showPayDebtSheet(context, e.manager);
-      if (changed == true) _load();
-      return;
+    // لا فعل — البطاقة عرض فقط. Snackbar اختياري:
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'للتفاعل مع هذا المدير، افتح: قوائم أخرى → المدراء → ${e.manager.username}'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
-    _openMovements(e.manager);
-  }
-
-  void _openMovements(Manager m) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ManagerMovementsScreen(manager: m)),
-    );
-    if (mounted) _load();
   }
 
   Future<void> _pickDateRange() async {
@@ -738,13 +747,17 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   // ─── Type filters ──────────────────────────
 
   Widget _typeFilters() {
+    // 2026-07-14: فلاتر مفصّلة — شحن نقدي/آجل منفصلان، تسديد SAS/أخرى
+    // منفصلان. المستخدم يقدر يفصّل الحركات بدقّة.
     const filters = <(_TypeFilter, String, Color)>[
       (_TypeFilter.all, 'الكل', Color(0xFF64748B)),
-      (_TypeFilter.deposit, 'شحن', Color(0xFF14B8A6)),
+      (_TypeFilter.depositCash, 'شحن نقدي', Color(0xFF14B8A6)),
+      (_TypeFilter.depositLoan, 'شحن آجل', Color(0xFFE08F2D)),
       (_TypeFilter.debtCreated, 'إضافة دين', Color(0xFFDC2626)),
-      (_TypeFilter.payment, 'تسديد', Color(0xFF0EA5E9)),
-      (_TypeFilter.withdraw, 'سحب', Color(0xFFE08F2D)),
-      (_TypeFilter.points, 'نقاط', Color(0xFF8B5CF6)),
+      (_TypeFilter.paymentSas, 'تسديد SAS', Color(0xFF0EA5E9)),
+      (_TypeFilter.paymentCustom, 'تسديد أخرى', Color(0xFF8B5CF6)),
+      (_TypeFilter.withdraw, 'سحب', Color(0xFFCD8B00)),
+      (_TypeFilter.points, 'نقاط', Color(0xFFC084FC)),
     ];
     return SizedBox(
       height: 44,
