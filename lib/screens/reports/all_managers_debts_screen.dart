@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/manager_debts_api.dart';
+import '../../api/manager_movements_api.dart';
 import '../../api/managers_api.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
@@ -11,16 +12,24 @@ import '../../theme/typography.dart';
 import '../managers/movements_screen.dart';
 import '../managers/sheets/pay_custom_debt_sheet.dart';
 import '../managers/sheets/pay_debt_sheet.dart';
+import 'widgets/report_export.dart';
 
-/// تقرير ديون المدراء لكل المدراء الفرعيين — يفتح من:
-///   قوائم أخرى → التقارير → ديون المدراء
+/// تقرير موحّد للحركات المالية على المدراء الفرعيين — timeline.
 ///
-/// يوحّد مصدرَي الديون:
-///   • SAS: Manager.totalDebt (من إيداعات آجلة/سحوبات — external SAS4)
-///   • أخرى: manager_debts table المحلي (ديون تُضاف يدوياً بالـsheet)
+/// يفتح من: قوائم أخرى → التقارير → ديون المدراء
 ///
-/// فلاتر: مدير (بحث نصّي) + مصدر (all/sas/custom) + حالة + تاريخ (مطبّق
-/// على custom فقط لأن SAS ما عندها date field).
+/// تصميم متّسق مع تقارير المشتركين: كل صف = event مستقل. يشمل:
+///   • debt_created  — إضافة دين أخرى (مدين +)
+///   • debt_payment  — تسديد دين أخرى (كامل / جزئي)
+///   • deposit_cash  — شحن نقدي (يزيد الرصيد)
+///   • deposit_loan  — شحن آجل = دين SAS (+ يزيد الدين)
+///   • withdraw      — سحب رصيد
+///   • sas_pay_debt  — تسديد دين SAS
+///   • points        — نقاط مكافأة
+///
+/// فلاتر: المدير (بحث) + النوع + الحالة (للـpayments) + نطاق تاريخ.
+/// Summary: إجمالي دين SAS + إجمالي المتبقّي من ديون أخرى + عدد المدينين.
+/// Export: Excel + PDF.
 class AllManagersDebtsScreen extends StatefulWidget {
   const AllManagersDebtsScreen({super.key});
 
@@ -28,43 +37,119 @@ class AllManagersDebtsScreen extends StatefulWidget {
   State<AllManagersDebtsScreen> createState() => _AllManagersDebtsScreenState();
 }
 
-enum _StatusFilter { all, open, partial, paid }
-enum _SourceFilter { all, sas, custom }
+enum _TypeFilter { all, deposit, withdraw, debtCreated, payment, points }
 
-/// row مُوحَّد يجمع SAS و custom debts في نفس القائمة.
-class _DebtRow {
-  const _DebtRow.sas(this.manager)
-      : custom = null,
-        source = _SourceFilter.sas;
-  const _DebtRow.custom(this.manager, this.custom)
-      : source = _SourceFilter.custom;
+class _MgrEvent {
+  const _MgrEvent({
+    required this.manager,
+    required this.movement,
+    this.isFullPayment = false,
+  });
 
   final Manager manager;
-  final ManagerDebt? custom;
-  final _SourceFilter source;
+  final ManagerMovement movement;
+  /// true = تسديد كامل (لآخر جزء من دين). يُحسب post-fetch من الملاحظات.
+  final bool isFullPayment;
 
-  bool get isSas => source == _SourceFilter.sas;
-  bool get isCustom => source == _SourceFilter.custom;
+  DateTime get date => movement.eventAt;
+  double get amount => movement.amount.toDouble();
 
-  double get amount =>
-      isSas ? manager.totalDebt : (custom?.amount ?? 0);
-  double get paid =>
-      isSas ? 0 : (custom?.paidAmount ?? 0); // SAS ما نتتبّع مسدَّد فيه هنا
-  double get remaining =>
-      isSas ? manager.totalDebt : (custom?.remainingAmount ?? 0);
-  DateTime? get date => custom?.debtDate;
-  ManagerDebtStatus get status => custom?.status ??
-      (manager.totalDebt > 0 ? ManagerDebtStatus.open : ManagerDebtStatus.paid);
+  /// يطابق الـfilter المنطقي.
+  _TypeFilter get typeFilter {
+    switch (movement.rowType) {
+      case 'debt_created':
+        return _TypeFilter.debtCreated;
+      case 'debt_payment':
+        return _TypeFilter.payment;
+    }
+    switch (movement.subKind) {
+      case 'deposit_cash':
+      case 'deposit_loan':
+        return _TypeFilter.deposit;
+      case 'withdraw':
+        return _TypeFilter.withdraw;
+      case 'sas_pay_debt':
+        return _TypeFilter.payment;
+      case 'points':
+        return _TypeFilter.points;
+      default:
+        return _TypeFilter.all;
+    }
+  }
+
+  ({String label, IconData icon, Color color, bool debit}) get meta {
+    // debt_created — أحمر (سالب على المدير، يزيد دينه)
+    if (movement.rowType == 'debt_created') {
+      return (
+        label: 'إضافة دين أخرى',
+        icon: LucideIcons.receipt,
+        color: AppColors.error,
+        debit: true,
+      );
+    }
+    // debt_payment — أخضر
+    if (movement.rowType == 'debt_payment') {
+      return (
+        label: isFullPayment ? 'تسديد كامل — دين أخرى' : 'تسديد جزئي — دين أخرى',
+        icon: LucideIcons.banknote,
+        color: const Color(0xFF14B8A6),
+        debit: false,
+      );
+    }
+    switch (movement.subKind) {
+      case 'deposit_cash':
+        return (
+          label: 'شحن نقدي',
+          icon: LucideIcons.plus,
+          color: const Color(0xFF14B8A6),
+          debit: false,
+        );
+      case 'deposit_loan':
+        return (
+          label: 'شحن آجل — دين SAS',
+          icon: LucideIcons.plus,
+          color: const Color(0xFFE08F2D),
+          debit: true,
+        );
+      case 'withdraw':
+        return (
+          label: 'سحب رصيد',
+          icon: LucideIcons.circleMinus,
+          color: AppColors.error,
+          debit: true,
+        );
+      case 'sas_pay_debt':
+        return (
+          label: 'تسديد دين SAS',
+          icon: LucideIcons.banknote,
+          color: const Color(0xFF14B8A6),
+          debit: false,
+        );
+      case 'points':
+        return (
+          label: 'نقاط مكافأة',
+          icon: LucideIcons.star,
+          color: const Color(0xFF8B5CF6),
+          debit: false,
+        );
+      default:
+        return (
+          label: movement.arabicLabel,
+          icon: LucideIcons.activity,
+          color: AppColors.textMid,
+          debit: false,
+        );
+    }
+  }
 }
 
 class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   List<Manager> _managers = const [];
-  List<ManagerDebt> _customDebts = const [];
+  List<_MgrEvent> _events = const [];
   ManagerDebtsSummary? _summary;
   bool _loading = true;
 
-  _StatusFilter _statusFilter = _StatusFilter.all;
-  _SourceFilter _sourceFilter = _SourceFilter.all;
+  _TypeFilter _typeFilter = _TypeFilter.all;
   String _managerFilter = '';
   DateTime? _dateFrom;
   DateTime? _dateTo;
@@ -85,126 +170,128 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    // 3 استدعاءات بالتوازي.
-    final results = await Future.wait([
+    // 1) fetch managers + summary + custom debts (لحساب "تسديد كامل" لاحقاً)
+    final coreResults = await Future.wait([
       ManagersApi.listFull(count: 500),
-      ManagerDebtsApi.list(
-        from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
-        to: _dateTo == null ? null : _fmtDate(_dateTo!),
-      ),
       ManagerDebtsApi.summary(
         from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
         to: _dateTo == null ? null : _fmtDate(_dateTo!),
       ),
+      ManagerDebtsApi.list(),
     ]);
     if (!mounted) return;
+    final mgrs = (coreResults[0] as ({List<Manager> rows, int total})).rows;
+    final summary = coreResults[1] as ManagerDebtsSummary?;
+    final customDebts = coreResults[2] as List<ManagerDebt>;
+
+    // 2) concurrent fetch movements — قيد للـtop 60 مدير لتفادي الإرهاق.
+    final targets = mgrs.take(60).toList();
+    final moveResults = await Future.wait(
+      targets.map((m) =>
+          ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
+    );
+
+    // 3) اربط الديون بالـid — عشان نميّز "تسديد كامل" من "جزئي".
+    // debt_payment movement.foreignId (لو موجود) يشير للـdebt. نتحقّق:
+    //   remainingAmount == 0 و آخر دفعة على هذا الدين → تسديد كامل.
+    final debtsById = {for (final d in customDebts) d.id: d};
+
+    // 4) flatten + sort + apply date filter (client-side لأن movements API
+    // ما تدعم from/to حالياً).
+    final events = <_MgrEvent>[];
+    for (int i = 0; i < targets.length; i++) {
+      for (final mv in moveResults[i]) {
+        if (_dateFrom != null && mv.eventAt.isBefore(_dateFrom!)) continue;
+        if (_dateTo != null &&
+            mv.eventAt.isAfter(_dateTo!.add(const Duration(days: 1)))) {
+          continue;
+        }
+        bool full = false;
+        if (mv.rowType == 'debt_payment') {
+          final id = mv.debtId ?? mv.relatedDebtId;
+          if (id != null) {
+            final d = debtsById[id];
+            if (d != null && d.remainingAmount == 0) full = true;
+          }
+        }
+        events.add(_MgrEvent(
+          manager: targets[i],
+          movement: mv,
+          isFullPayment: full,
+        ));
+      }
+    }
+    events.sort((a, b) => b.date.compareTo(a.date));
+
     setState(() {
-      _managers = (results[0] as ({List<Manager> rows, int total})).rows;
-      _customDebts = results[1] as List<ManagerDebt>;
-      _summary = results[2] as ManagerDebtsSummary?;
+      _managers = mgrs;
+      _events = events;
+      _summary = summary;
       _loading = false;
     });
   }
 
-  // ─── unified rows ──────────────────────────
+  // ─── filtered view ─────────────────────────
 
-  List<_DebtRow> get _allRows {
-    final out = <_DebtRow>[];
-    // SAS: كل مدير عنده totalDebt > 0 يظهر كصف SAS.
-    for (final m in _managers) {
-      if (m.totalDebt > 0) out.add(_DebtRow.sas(m));
-    }
-    // Custom: كل دين من الجدول المحلي — نبني _DebtRow معه Manager الأصل
-    // (لعرض اسم المدير)؛ لو المدير مش موجود بالقائمة، نبني stub.
-    final byId = {for (final m in _managers) m.id: m};
-    for (final d in _customDebts) {
-      final mgr = byId[d.debtorAdminId] ??
-          Manager(
-            id: d.debtorAdminId,
-            username: d.debtorAdminUsername ?? '#${d.debtorAdminId}',
-            mobile: d.debtorAdminPhone ?? '',
-          );
-      out.add(_DebtRow.custom(mgr, d));
-    }
-    // ترتيب: SAS أعلى، ثم custom الأحدث فالأقدم.
-    out.sort((a, b) {
-      if (a.isSas != b.isSas) return a.isSas ? -1 : 1;
-      final ad = a.date ?? DateTime(1970);
-      final bd = b.date ?? DateTime(1970);
-      return bd.compareTo(ad);
-    });
-    return out;
-  }
-
-  List<_DebtRow> get _visible {
+  List<_MgrEvent> get _visible {
     final q = _managerFilter.trim().toLowerCase();
-    return _allRows.where((r) {
-      // Source filter
-      if (_sourceFilter != _SourceFilter.all && r.source != _sourceFilter) {
+    return _events.where((e) {
+      if (_typeFilter != _TypeFilter.all && e.typeFilter != _typeFilter) {
         return false;
       }
-      // Status filter
-      if (_statusFilter != _StatusFilter.all) {
-        final want = _statusFilter == _StatusFilter.open
-            ? ManagerDebtStatus.open
-            : _statusFilter == _StatusFilter.partial
-                ? ManagerDebtStatus.partial
-                : ManagerDebtStatus.paid;
-        if (r.status != want) return false;
-      }
-      // Manager search
       if (q.isNotEmpty) {
-        final u = r.manager.username.toLowerCase();
-        final n = r.manager.fullName.toLowerCase();
+        final u = e.manager.username.toLowerCase();
+        final n = e.manager.fullName.toLowerCase();
         if (!u.contains(q) && !n.contains(q)) return false;
       }
       return true;
     }).toList();
   }
 
-  // ─── totals (SAS + Custom) ─────────────────
+  // ─── totals ────────────────────────────────
 
   double get _totalSasDebt =>
       _managers.fold<double>(0, (acc, m) => acc + m.totalDebt);
-  double get _totalCustomAmount => _summary?.totals.totalAmount ?? 0;
-  double get _totalCustomPaid => _summary?.totals.totalPaid ?? 0;
   double get _totalCustomRemaining => _summary?.totals.totalRemaining ?? 0;
   double get _grandRemaining => _totalSasDebt + _totalCustomRemaining;
-
   int get _debtorsCount {
     final ids = <int>{};
     for (final m in _managers) {
       if (m.totalDebt > 0) ids.add(m.id);
     }
-    for (final d in _customDebts) {
-      if (d.remainingAmount > 0) ids.add(d.debtorAdminId);
+    if (_summary != null) {
+      for (final row in _summary!.perDebtor) {
+        if (row.totalRemaining > 0) ids.add(row.debtorAdminId);
+      }
     }
     return ids.length;
   }
 
-  // ─── row actions ───────────────────────────
+  // ─── actions ───────────────────────────────
 
-  Future<void> _openRow(_DebtRow row) async {
-    if (row.isSas) {
-      final changed = await showPayDebtSheet(context, row.manager);
-      if (changed == true) _load();
-    } else {
-      final changed =
-          await showPayCustomDebtSheet(context, row.manager, row.custom!);
-      if (changed == true) _load();
+  Future<void> _openEvent(_MgrEvent e) async {
+    // debt-related events → افتح sheet المناسب
+    if (e.movement.rowType == 'debt_created' ||
+        e.movement.rowType == 'debt_payment') {
+      // نحتاج ManagerDebt object — نجلبه بالـid لو متوفّر
+      // (الـsheet يعمل عليها). لسرعة، نفتح movements الكامل بدلاً.
+      _openMovements(e.manager);
+      return;
     }
+    if (e.movement.subKind == 'sas_pay_debt' && e.manager.totalDebt > 0) {
+      final changed = await showPayDebtSheet(context, e.manager);
+      if (changed == true) _load();
+      return;
+    }
+    _openMovements(e.manager);
   }
 
-  Future<void> _openMovements(_DebtRow row) async {
+  void _openMovements(Manager m) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ManagerMovementsScreen(manager: row.manager),
-      ),
+      MaterialPageRoute(builder: (_) => ManagerMovementsScreen(manager: m)),
     );
     if (mounted) _load();
   }
-
-  // ─── date picker ───────────────────────────
 
   Future<void> _pickDateRange() async {
     final now = DateTime.now();
@@ -238,6 +325,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = _visible;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -249,6 +337,43 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ReportExportBar(
+              title: 'reports.manager_debts'.tr(),
+              subtitle: _dateFrom != null && _dateTo != null
+                  ? '${_fmtDate(_dateFrom!)} → ${_fmtDate(_dateTo!)}'
+                  : 'كل الفترات',
+              fileNameBase: 'manager_debts_timeline',
+              columns: const [
+                'المدير',
+                'اسم المستخدم',
+                'التاريخ',
+                'الحركة',
+                'المبلغ',
+                'الاتجاه',
+                'المصدر',
+                'الملاحظة',
+              ],
+              rows: visible
+                  .map((e) => [
+                        e.manager.fullName.isEmpty
+                            ? e.manager.username
+                            : e.manager.fullName,
+                        e.manager.username,
+                        _fmtDateTime(e.date),
+                        e.meta.label,
+                        formatIQD(e.amount.abs().round()),
+                        e.meta.debit ? '-' : '+',
+                        e.movement.source == MovementSource.sas4
+                            ? 'الساس'
+                            : (e.movement.source != null ? 'يدوي' : ''),
+                        (e.movement.note ?? '').trim(),
+                      ])
+                  .toList(),
+              columnWeights: const [1.4, 1.2, 1.2, 1.5, 1.0, 0.6, 0.7, 2.0],
+            ),
+          ),
           IconButton(
             tooltip: 'common.refresh'.tr(),
             icon: Icon(LucideIcons.refreshCw,
@@ -266,24 +391,40 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                 slivers: [
                   SliverToBoxAdapter(child: _summaryCard()),
                   SliverToBoxAdapter(child: _managerSearch()),
-                  SliverToBoxAdapter(child: _sourceFilters()),
-                  SliverToBoxAdapter(child: _statusFilters()),
+                  SliverToBoxAdapter(child: _typeFilters()),
                   SliverToBoxAdapter(child: _dateRangeBar()),
-                  if (_visible.isEmpty)
+                  if (visible.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: _empty(),
                     )
-                  else
+                  else ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 4),
+                        child: Row(
+                          children: [
+                            Icon(LucideIcons.activity,
+                                size: 13, color: AppColors.textMid),
+                            const SizedBox(width: 5),
+                            Text(
+                              '${visible.length} حركة',
+                              style: AppType.muted().copyWith(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(
                           Sp.lg, 4, Sp.lg, Sp.huge),
                       sliver: SliverList.separated(
-                        itemCount: _visible.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) => _debtCard(_visible[i]),
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (_, i) => _eventTile(visible[i]),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -321,7 +462,6 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          // 3 كارتات: دين SAS، دين أخرى (متبقّي)، الإجمالي.
           Row(
             children: [
               _statTile(
@@ -346,21 +486,6 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               ),
             ],
           ),
-          if (_totalCustomPaid > 0) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(LucideIcons.check,
-                    size: 12, color: const Color(0xFF14B8A6)),
-                const SizedBox(width: 4),
-                Text(
-                  'مسدَّد من ديون أخرى: ${formatIQD(_totalCustomPaid.round())} د.ع',
-                  style: AppType.muted(color: const Color(0xFF14B8A6))
-                      .copyWith(fontSize: 11),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
@@ -464,66 +589,34 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     );
   }
 
-  // ─── Source filters ────────────────────────
+  // ─── Type filters ──────────────────────────
 
-  Widget _sourceFilters() {
-    const filters = <(_SourceFilter, String, Color)>[
-      (_SourceFilter.all, 'كل المصادر', Color(0xFF64748B)),
-      (_SourceFilter.sas, 'SAS', Color(0xFF0EA5E9)),
-      (_SourceFilter.custom, 'ديون أخرى', Color(0xFF8B5CF6)),
+  Widget _typeFilters() {
+    const filters = <(_TypeFilter, String, Color)>[
+      (_TypeFilter.all, 'الكل', Color(0xFF64748B)),
+      (_TypeFilter.deposit, 'شحن', Color(0xFF14B8A6)),
+      (_TypeFilter.debtCreated, 'إضافة دين', Color(0xFFDC2626)),
+      (_TypeFilter.payment, 'تسديد', Color(0xFF0EA5E9)),
+      (_TypeFilter.withdraw, 'سحب', Color(0xFFE08F2D)),
+      (_TypeFilter.points, 'نقاط', Color(0xFF8B5CF6)),
     ];
-    return _filterStrip(
-      children: [
-        for (final (k, label, color) in filters) ...[
-          _chip(
-            active: _sourceFilter == k,
-            label: label,
-            color: color,
-            onTap: () => setState(() => _sourceFilter = k),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ],
-    );
-  }
-
-  // ─── Status filters ────────────────────────
-
-  Widget _statusFilters() {
-    const filters = <(_StatusFilter, String, Color)>[
-      (_StatusFilter.all, 'كل الحالات', Color(0xFF3B82F6)),
-      (_StatusFilter.open, 'مفتوح', Color(0xFFDC2626)),
-      (_StatusFilter.partial, 'جزئي', Color(0xFFE08F2D)),
-      (_StatusFilter.paid, 'مسدّد', Color(0xFF14B8A6)),
-    ];
-    return _filterStrip(
-      children: [
-        for (final (k, label, color) in filters) ...[
-          _chip(
-            active: _statusFilter == k,
-            label: label,
-            color: color,
-            onTap: () => setState(() => _statusFilter = k),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ],
-    );
-  }
-
-  /// 2026-07-14: كانت SizedBox(height:32) بـpadding vertical:4 → المحتوى
-  /// الفعلي 24 فقط، النص ينقصّ من الأسفل (السالفات + الـchip padding عادةً
-  /// يحتاج 32-34). رفعنا الارتفاع لـ44 وشلنا الـvertical padding من الـ
-  /// ListView (يذهب على الـchip نفسه) — الآن النص يظهر كامل بلا قصّ.
-  Widget _filterStrip({required List<Widget> children}) {
     return SizedBox(
       height: 44,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
         children: [
-          for (final child in children)
-            Center(child: child),
+          for (final (k, label, color) in filters) ...[
+            Center(
+              child: _chip(
+                active: _typeFilter == k,
+                label: label,
+                color: color,
+                onTap: () => setState(() => _typeFilter = k),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
         ],
       ),
     );
@@ -558,7 +651,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   Widget _dateRangeBar() {
     final hasRange = _dateFrom != null || _dateTo != null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 6),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 2, Sp.lg, 6),
       child: Row(
         children: [
           Expanded(
@@ -601,8 +694,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   Widget _empty() {
     final hasAnyFilter = _managerFilter.isNotEmpty ||
-        _statusFilter != _StatusFilter.all ||
-        _sourceFilter != _SourceFilter.all ||
+        _typeFilter != _TypeFilter.all ||
         _dateFrom != null;
     return Center(
       child: Padding(
@@ -614,348 +706,188 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             const SizedBox(height: 12),
             Text(
               hasAnyFilter
-                  ? 'لا توجد نتائج للفلاتر المحدّدة'
-                  : 'لا توجد ديون على المدراء',
+                  ? 'لا توجد حركات للفلاتر المحدّدة'
+                  : 'لا توجد حركات على المدراء',
               style: AppType.subtitle(color: AppColors.textMid),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'الديون تُضاف من: قوائم أخرى → المدراء → الإجراءات\n(SAS: شحن آجل / ديون أخرى)',
-              textAlign: TextAlign.center,
-              style: AppType.muted().copyWith(fontSize: 11, height: 1.5),
-            ),
           ],
         ),
       ),
     );
   }
 
-  // ─── Row card ──────────────────────────────
+  // ─── Event tile (متّسق مع ReportLogTile) ─────
 
-  Widget _debtCard(_DebtRow row) {
-    final (statusColor, statusText) = _statusVisual(row.status);
-    final sourceColor = row.isSas
-        ? const Color(0xFF0EA5E9)
-        : const Color(0xFF8B5CF6);
-    final sourceLabel = row.isSas ? 'دين SAS' : 'دين أخرى';
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(R.lg),
-      ),
+  Widget _eventTile(_MgrEvent e) {
+    final meta = e.meta;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ─── Header: colored strip + username + status pill ───
-          Container(
-            padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.sm),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: sourceColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(R.md),
-                    border:
-                        Border.all(color: sourceColor.withValues(alpha: 0.25)),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(LucideIcons.userCog,
-                      size: 18, color: sourceColor),
+      child: InkWell(
+        onTap: () => _openEvent(e),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(R.md),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon square (نفس تصميم ReportLogTile)
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: meta.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        row.manager.username,
-                        style: AppType.title(color: AppColors.textHi).copyWith(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          height: 1.15,
+                child: Icon(meta.icon, color: meta.color, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: type badge + amount
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: meta.color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            meta.label,
+                            style: TextStyle(
+                              color: meta.color,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
-                        maxLines: 1,
+                        const Spacer(),
+                        if (e.amount != 0)
+                          Text(
+                            '${meta.debit ? '-' : '+'}${formatIQD(e.amount.abs().round())} د.ع',
+                            style: TextStyle(
+                              color: meta.debit
+                                  ? AppColors.error
+                                  : const Color(0xFF14B8A6),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                      ],
+                    ),
+                    // Row 2: الى من (manager) — أخضر برند بارز
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.userCog,
+                            size: 11,
+                            color: AppColors.isDark
+                                ? AppColors.brandLight
+                                : AppColors.brand),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            e.manager.fullName.isEmpty
+                                ? e.manager.username
+                                : e.manager.fullName,
+                            style: TextStyle(
+                              color: AppColors.isDark
+                                  ? AppColors.brandLight
+                                  : AppColors.brand,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                              letterSpacing: -0.1,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (e.manager.fullName.isNotEmpty &&
+                            e.manager.username.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              e.manager.username,
+                              style: AppType.muted().copyWith(
+                                fontSize: 10.5,
+                                height: 1.2,
+                                color: AppColors.textLow,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    // Row 3: note (لو موجود)
+                    if ((e.movement.note ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        e.movement.note!.trim(),
+                        style: AppType.muted(color: AppColors.textMid)
+                            .copyWith(fontSize: 11.5, height: 1.3),
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
+                    ],
+                    // Row 4: time + source
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(LucideIcons.clock,
+                            size: 10, color: AppColors.textLow),
+                        const SizedBox(width: 3),
+                        Text(
+                          _fmtDateTime(e.date),
+                          style: AppType.muted()
+                              .copyWith(fontSize: 10, height: 1.2),
+                        ),
+                        if (e.movement.source != null) ...[
+                          const SizedBox(width: 6),
                           Container(
-                            width: 5,
-                            height: 5,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: sourceColor,
+                              color: AppColors.surfaceInput,
                               borderRadius: BorderRadius.circular(3),
                             ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            sourceLabel,
-                            style: AppType.muted(color: sourceColor).copyWith(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
+                            child: Text(
+                              e.movement.source == MovementSource.sas4
+                                  ? 'الساس'
+                                  : 'يدوي',
+                              style: AppType.muted().copyWith(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                          if (row.date != null) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                                width: 2,
-                                height: 10,
-                                color: AppColors.border),
-                            const SizedBox(width: 6),
-                            Text(
-                              _fmtDateShort(row.date!),
-                              style: AppType.muted().copyWith(fontSize: 10.5),
-                            ),
-                          ],
                         ],
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(R.pill),
-                    border: Border.all(
-                        color: statusColor.withValues(alpha: 0.3), width: 0.6),
-                  ),
-                  child: Text(
-                    statusText,
-                    style: AppType.button(color: statusColor).copyWith(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // ─── Amounts area (light-tint background) ───
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(Sp.md, 10, Sp.md, 10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceInput.withValues(alpha: 0.5),
-              border: Border(
-                top: BorderSide(color: AppColors.border, width: 0.6),
-                bottom: BorderSide(color: AppColors.border, width: 0.6),
               ),
-            ),
-            child: row.isSas
-                ? _heroAmount(
-                    label: 'مبلغ الدين',
-                    amount: row.remaining,
-                    color: AppColors.error,
-                  )
-                : _threeAmountBlocks(row),
-          ),
-          // ─── Note (optional) ───
-          if (row.isCustom && (row.custom?.note ?? '').trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.md, 8, Sp.md, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(LucideIcons.stickyNote,
-                      size: 12, color: AppColors.textLow),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      row.custom!.note!.trim(),
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 11.5, height: 1.4),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          // ─── Actions row ───
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Sp.md, 10, Sp.md, Sp.md),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openMovements(row),
-                    icon: Icon(LucideIcons.activity,
-                        size: 14, color: AppColors.textMid),
-                    label: Text(
-                      'الحركات',
-                      style: AppType.button(color: AppColors.textHi)
-                          .copyWith(fontSize: 12),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.border),
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _openRow(row),
-                    icon: const Icon(LucideIcons.banknote, size: 14),
-                    label: Text(
-                      'تسديد',
-                      style: AppType.button(color: Colors.white)
-                          .copyWith(fontSize: 12),
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.brand,
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroAmount({
-    required String label,
-    required double amount,
-    required Color color,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: AppType.muted().copyWith(fontSize: 11.5, height: 1.2),
-        ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              formatIQD(amount.round()),
-              style: AppType.title(color: color).copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'د.ع',
-              style: AppType.muted(color: color).copyWith(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _threeAmountBlocks(_DebtRow row) {
-    return Row(
-      children: [
-        Expanded(
-          child: _amountBlock(
-            label: 'الأصل',
-            amount: row.amount,
-            color: AppColors.textMid,
+            ],
           ),
         ),
-        Container(width: 1, height: 26, color: AppColors.border),
-        Expanded(
-          child: _amountBlock(
-            label: 'مسدَّد',
-            amount: row.paid,
-            color: const Color(0xFF14B8A6),
-            centered: true,
-          ),
-        ),
-        Container(width: 1, height: 26, color: AppColors.border),
-        Expanded(
-          child: _amountBlock(
-            label: 'متبقٍ',
-            amount: row.remaining,
-            color: row.remaining > 0
-                ? AppColors.error
-                : const Color(0xFF14B8A6),
-            bold: true,
-            rightAlign: true,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _amountBlock({
-    required String label,
-    required double amount,
-    required Color color,
-    bool bold = false,
-    bool centered = false,
-    bool rightAlign = false,
-  }) {
-    final align = rightAlign
-        ? CrossAxisAlignment.end
-        : centered
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start;
-    final fittedAlign = rightAlign
-        ? AlignmentDirectional.centerEnd
-        : centered
-            ? Alignment.center
-            : AlignmentDirectional.centerStart;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Column(
-        crossAxisAlignment: align,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: AppType.muted().copyWith(fontSize: 10)),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: fittedAlign,
-            child: Text(
-              formatIQD(amount.round()),
-              style: AppType.title(color: color).copyWith(
-                fontSize: bold ? 14 : 13,
-                fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
-                height: 1.1,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
 
   // ─── helpers ───────────────────────────────
-
-  (Color, String) _statusVisual(ManagerDebtStatus s) {
-    switch (s) {
-      case ManagerDebtStatus.paid:
-        return (const Color(0xFF14B8A6), 'مسدّد');
-      case ManagerDebtStatus.partial:
-        return (const Color(0xFFE08F2D), 'جزئي');
-      case ManagerDebtStatus.open:
-        return (AppColors.error, 'مفتوح');
-    }
-  }
 
   String _fmtDate(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');
@@ -965,5 +897,10 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   String _fmtDateShort(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${d.year}/${two(d.month)}/${two(d.day)}';
+  }
+
+  String _fmtDateTime(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
   }
 }
