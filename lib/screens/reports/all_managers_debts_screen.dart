@@ -248,20 +248,68 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     }).toList();
   }
 
-  // ─── totals ────────────────────────────────
+  // ─── totals (reactive to filters) ─────────────
+
+  /// المدراء المطابقون لبحث اسم المدير — يُستعملون لـSAS totals + عدد
+  /// المدينين. لا يتأثر بفلتر النوع/التاريخ (SAS current state).
+  List<Manager> get _filteredManagers {
+    final q = _managerFilter.trim().toLowerCase();
+    if (q.isEmpty) return _managers;
+    return _managers
+        .where((m) =>
+            m.username.toLowerCase().contains(q) ||
+            m.fullName.toLowerCase().contains(q))
+        .toList();
+  }
 
   double get _totalSasDebt =>
-      _managers.fold<double>(0, (acc, m) => acc + m.totalDebt);
-  double get _totalCustomRemaining => _summary?.totals.totalRemaining ?? 0;
+      _filteredManagers.fold<double>(0, (acc, m) => acc + m.totalDebt);
+
+  double get _totalCustomRemaining {
+    if (_summary == null) return 0;
+    final q = _managerFilter.trim().toLowerCase();
+    if (q.isEmpty) return _summary!.totals.totalRemaining;
+    return _summary!.perDebtor
+        .where((d) => (d.debtorAdminUsername ?? '').toLowerCase().contains(q))
+        .fold<double>(0, (acc, d) => acc + d.totalRemaining);
+  }
+
   double get _grandRemaining => _totalSasDebt + _totalCustomRemaining;
+
+  /// إيرادات مستحصَلة من المدراء (من _visible events — تتأثر بكل الفلاتر:
+  /// نوع/تاريخ/بحث مدير):
+  ///   • شحن نقدي (deposit_cash) = المدير دفع لنا نقداً
+  ///   • تسديد دين SAS (sas_pay_debt) = المدير سدّد دين
+  ///   • تسديد دين أخرى (debt_payment) = المدير سدّد دين أخرى
+  /// النقاط و deposit_loan (رصيد آجل = دين، ليس إيراد) و withdraw
+  /// (نحن ندفع للمدير) لا تُحسب.
+  double get _totalIncoming {
+    double sum = 0;
+    for (final e in _visible) {
+      final sk = e.movement.subKind;
+      if (sk == 'deposit_cash' || sk == 'sas_pay_debt') {
+        sum += e.amount;
+      } else if (e.movement.rowType == 'debt_payment') {
+        sum += e.amount;
+      }
+    }
+    return sum;
+  }
+
   int get _debtorsCount {
     final ids = <int>{};
-    for (final m in _managers) {
+    for (final m in _filteredManagers) {
       if (m.totalDebt > 0) ids.add(m.id);
     }
     if (_summary != null) {
+      final q = _managerFilter.trim().toLowerCase();
       for (final row in _summary!.perDebtor) {
-        if (row.totalRemaining > 0) ids.add(row.debtorAdminId);
+        if (row.totalRemaining <= 0) continue;
+        if (q.isNotEmpty &&
+            !(row.debtorAdminUsername ?? '').toLowerCase().contains(q)) {
+          continue;
+        }
+        ids.add(row.debtorAdminId);
       }
     }
     return ids.length;
@@ -434,6 +482,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   // ─── Summary card ──────────────────────────
 
   Widget _summaryCard() {
+    final visibleCount = _visible.length;
     return Container(
       margin: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
       padding: const EdgeInsets.all(Sp.md),
@@ -455,34 +504,131 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                     .copyWith(fontSize: 13),
               ),
               const Spacer(),
-              Text(
-                '$_debtorsCount مدين',
-                style: AppType.muted().copyWith(fontSize: 11),
-              ),
+              // 2026-07-14: الأرقام أعلى تفاعلية مع الفلاتر — نُظهر
+              // الحركات المرئية + المدينين المطابقين.
+              Icon(LucideIcons.activity, size: 11, color: AppColors.textLow),
+              const SizedBox(width: 3),
+              Text('$visibleCount حركة',
+                  style: AppType.muted().copyWith(fontSize: 10.5)),
+              const SizedBox(width: 8),
+              Icon(LucideIcons.userCog, size: 11, color: AppColors.textLow),
+              const SizedBox(width: 3),
+              Text('$_debtorsCount مدين',
+                  style: AppType.muted().copyWith(fontSize: 10.5)),
             ],
           ),
           const SizedBox(height: 10),
+          // الصفّ الأوّل: إيرادات مستحصَلة (تتفاعل مع كل الفلاتر) — أهم رقم.
+          _heroTile(
+            label: 'إيرادات مستحصَلة',
+            hint: 'شحن نقدي + تسديد ديون (SAS + أخرى)',
+            value: _totalIncoming,
+            color: const Color(0xFF14B8A6),
+            icon: LucideIcons.trendingUp,
+          ),
+          const SizedBox(height: 8),
+          // الصفّ الثاني: تفصيل المتبقّي (SAS + أخرى) + إجمالي.
           Row(
             children: [
               _statTile(
-                label: 'دين SAS',
+                label: 'متبقّي SAS',
                 value: _totalSasDebt,
                 color: const Color(0xFF0EA5E9),
               ),
               const SizedBox(width: 6),
               _statTile(
-                label: 'ديون أخرى',
+                label: 'متبقّي أخرى',
                 value: _totalCustomRemaining,
                 color: const Color(0xFF8B5CF6),
               ),
               const SizedBox(width: 6),
               _statTile(
-                label: 'الإجمالي',
+                label: 'إجمالي المتبقّي',
                 value: _grandRemaining,
                 color: _grandRemaining > 0
                     ? AppColors.error
                     : const Color(0xFF14B8A6),
                 emphasize: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// كارت hero بارز لأهم رقم (الإيرادات المستحصَلة).
+  Widget _heroTile({
+    required String label,
+    required String hint,
+    required double value,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: AlignmentDirectional.topStart,
+          end: AlignmentDirectional.bottomEnd,
+          colors: [
+            color.withValues(alpha: 0.14),
+            color.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: AppType.title(color: color)
+                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  hint,
+                  style: AppType.muted().copyWith(fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                formatIQD(value.round()),
+                style: AppType.title(color: color).copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    height: 1.1),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'د.ع',
+                style: AppType.muted(color: color).copyWith(
+                    fontSize: 10.5, fontWeight: FontWeight.w700),
               ),
             ],
           ),
