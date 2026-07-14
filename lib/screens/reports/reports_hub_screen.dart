@@ -10,6 +10,7 @@ import '../../theme/typography.dart';
 import '../expenses/expenses_screen.dart';
 import 'activations_report_screen.dart';
 import 'activity_log_report_screen.dart';
+import 'all_managers_debts_screen.dart';
 import 'daily_activations_report_screen.dart';
 import 'financial_report_screen.dart';
 import 'sessions_report_screen.dart';
@@ -82,13 +83,11 @@ class ReportsHubScreen extends StatelessWidget {
               color: const Color(0xFF0EA5E9),
               title: 'reports.manager_debts'.tr(),
               subtitle: 'reports.manager_debts_hint'.tr(),
-              // CustomDebtsScreen يحتاج managerId — نستعمل null
-              // للوضع "الكل" (الـscreen يدعم all-managers mode).
-              // ملاحظة: لو الـconstructor تتطلب param، نلف بصفحة
-              // اختيار مدير. للآن نمرر اختصار "all".
+              // 2026-07-14: كانت stub بس (رسالة "افتح من مكان ثاني").
+              // بُنيت الآن كتقرير حقيقي — summary + list + فلاتر حالة.
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const _AllManagersDebtsRouter(),
+                  builder: (_) => const AllManagersDebtsScreen(),
                 ),
               ),
             ),
@@ -237,51 +236,6 @@ class _ReportCard extends StatelessWidget {
               ),
               Icon(LucideIcons.chevronLeft,
                   color: AppColors.textLow, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shim مؤقت — CustomDebtsScreen تحتاج managerId. الـall-managers view
-/// غير منفّذ كصفحة منفصلة بعد. حالياً نعرض رسالة + رابط لشاشة المدراء.
-class _AllManagersDebtsRouter extends StatelessWidget {
-  const _AllManagersDebtsRouter();
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Text('reports.manager_debts'.tr(),
-            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(Sp.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(LucideIcons.info, size: 36, color: AppColors.textLow),
-              const SizedBox(height: 10),
-              Text(
-                'reports.manager_debts_open_hint'.tr(),
-                textAlign: TextAlign.center,
-                style: AppType.subtitle(color: AppColors.textMid)
-                    .copyWith(height: 1.6),
-              ),
-              const SizedBox(height: Sp.lg),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(LucideIcons.chevronRight, size: 16),
-                label: Text('common.back'.tr()),
-              ),
             ],
           ),
         ),
