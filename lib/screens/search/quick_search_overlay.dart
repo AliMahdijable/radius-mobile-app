@@ -96,12 +96,26 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           // WITHOUT a matching status='done', leaving _listening=true
           // and the mic icon as 'stop' forever — user reported this.
           setState(() => _listening = false);
+          // 2026-07-14: أجهزة Tecno/Huawei/Xiaomi غالباً تشغّل محرّك
+          // تعرّف صوتي خاص (HiOS/HMS/Baidu) بدل Google، فحتى بعد تحميل
+          // اللغة في Google Voice يبقى المحرّك النشط لا يعرفها. الحلّ
+          // الفعلي = تغيير المحرّك الافتراضي من إعدادات النظام.
           if (err.errorMsg.contains('language-not-supported') ||
               err.errorMsg.contains('error_language_not_supported')) {
             _showSnack(
-              'العربية غير منزّلة. ادخل: Settings → Apps → Google →\n'
-              'Voice → Offline speech recognition → نزّل العربية',
+              'العربية غير مدعومة في المحرّك الحالي. الحلّ:\n'
+              'Settings → Apps → Default apps → Digital assistant → Google\n'
+              'أو: Settings → General → Voice input → Google',
             );
+          } else if (err.errorMsg.contains('error_client') ||
+              err.errorMsg.contains('error_no_match') ||
+              err.errorMsg.contains('error_speech_timeout')) {
+            _showSnack('لم يُلتقط أي كلام — حاول مجدّداً بصوت أعلى');
+          } else if (err.errorMsg.contains('error_network')) {
+            _showSnack('الميكروفون يحتاج اتصال إنترنت لهذا المحرّك');
+          } else if (err.errorMsg.contains('insufficient-permissions') ||
+              err.errorMsg.contains('permission')) {
+            _showSnack('صلاحية الميكروفون مرفوضة — فعّلها من إعدادات النظام');
           }
         },
       );
@@ -182,16 +196,15 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       _showSnack('التعرّف على الصوت غير متاح على هذا الجهاز');
       return;
     }
-    if (_arLocale == null) {
-      _showSnack(
-        'العربية غير منزّلة. ادخل: Settings → Apps → Google →\n'
-        'Voice → Offline speech recognition → نزّل العربية',
-      );
-      return;
-    }
+    // 2026-07-14: قبل، كنّا نرفض التسجيل إذا ما لقينا `ar-*` في قائمة
+    // اللغات المُعلَنة. المشكلة: أجهزة Tecno/Huawei/Xiaomi تستعمل محرّك
+    // خاص لا يعلن Arabic حتى لو النظام عربي. نحاول ونمرّر localeId=null
+    // فيلتقط اللغة من إعداد النظام؛ إن فشل، الـonError يعرض رسالة
+    // إرشاديّة تحدّد الحلّ (تغيير المحرّك الافتراضي إلى Google).
     setState(() => _listening = true);
     try {
       await _speech.listen(
+        localeId: _arLocale, // قد تكون null — يعتمد على default النظام
         onResult: (r) {
           if (!mounted) return;
           // 2026-07-14: (1) لو الـfinal result رجع فارغ (يحدث لمّا المستخدم
@@ -207,7 +220,6 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
             );
           });
         },
-        localeId: _arLocale,
         listenOptions: SpeechListenOptions(
           partialResults: true,
           cancelOnError: true,
