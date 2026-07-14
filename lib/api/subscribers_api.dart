@@ -308,6 +308,36 @@ class SubscribersApi {
   /// open. Use [refreshAll] for pull-to-refresh.
   static Future<List<Subscriber>?> loadAll() => _SubsListCache.get();
 
+  /// نفس `loadAll` لكن يدمج بيانات الجلسة المباشرة (IP + DL/UL + الجهاز)
+  /// من `/api/v2/online-users`. الاستدعاءان يعملان بالتوازي.
+  ///
+  /// السبب: Inbox والبحث السريع كانا يعرضان `isOnline` (من base list) بس،
+  /// وما يعرضان الاستهلاك ولا IP لأن مصدرهما `loadAll` الأساسي.
+  /// الشاشة الرئيسيّة (subscribers_screen) تعمل نفس الدمج يدوياً — هنا
+  /// نغلّفه ليكون قابلاً لإعادة الاستخدام دون ازدواج فتشات.
+  static Future<List<Subscriber>?> loadAllWithOnline() async {
+    final results = await Future.wait([
+      loadAll(),
+      loadOnline(),
+    ]);
+    final base = results[0] as List<Subscriber>?;
+    if (base == null) return null;
+    final onlineMap = (results[1] as Map<String, OnlineSessionInfo>?) ?? const {};
+    if (onlineMap.isEmpty) return base;
+    return base.map((s) {
+      final sess = onlineMap[s.username.toLowerCase()];
+      if (sess == null) return s;
+      return s.copyWithOnline(
+        online: true,
+        ip: sess.ip,
+        session: sess.sessionTime,
+        dl: sess.downloadBytes,
+        ul: sess.uploadBytes,
+        device: sess.device,
+      );
+    }).toList();
+  }
+
   /// مطلب 2026-06-11: مسح كل cache داخل process. يستعمله flow
   /// تسجيل الخروج عشان admin جديد ما يشوف بيانات admin السابق.
   static void clearAllCaches() {

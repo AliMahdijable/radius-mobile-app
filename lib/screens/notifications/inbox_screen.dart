@@ -42,7 +42,7 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> _loadLists() async {
-    final list = await SubscribersApi.loadAll();
+    final list = await SubscribersApi.loadAllWithOnline();
     if (!mounted) return;
     if (list == null) {
       setState(() => _loaded = true);
@@ -134,7 +134,7 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<Subscriber?> _findSubscriber(String usernameOrId) async {
-    final list = await SubscribersApi.loadAll();
+    final list = await SubscribersApi.loadAllWithOnline();
     if (list == null) return null;
     final needle = usernameOrId.toLowerCase();
     for (final s in list) {
@@ -478,14 +478,25 @@ class _SubscriberAlertRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      displayName,
-                      style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            style: AppType.label(color: AppColors.textHi)
+                                .copyWith(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        // شارة حالة الاتصال — كانت مفقودة كلياً قبل
+                        // 2026-07-14 فالمدير ما يعرف من الـInbox هل
+                        // المشترك متصل أم لا بدون فتح البطاقة.
+                        _OnlineDot(isOnline: sub.isOnline),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -505,6 +516,38 @@ class _SubscriberAlertRow extends StatelessWidget {
                         height: 1.2,
                       ),
                     ),
+                    // معلومات الجلسة الحيّة (تظهر فقط لو المشترك online).
+                    if (sub.isOnline &&
+                        ((sub.downloadBytes ?? 0) > 0 ||
+                            (sub.uploadBytes ?? 0) > 0 ||
+                            (sub.ipAddress?.isNotEmpty ?? false) ||
+                            (sub.deviceVendor?.isNotEmpty ?? false))) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if ((sub.downloadBytes ?? 0) > 0 ||
+                              (sub.uploadBytes ?? 0) > 0)
+                            _InboxInfoChip(
+                              icon: LucideIcons.arrowDownUp,
+                              text:
+                                  '${_fmtBytesInbox(sub.downloadBytes ?? 0)} ↓ / ${_fmtBytesInbox(sub.uploadBytes ?? 0)} ↑',
+                            ),
+                          if (sub.ipAddress?.isNotEmpty ?? false)
+                            _InboxInfoChip(
+                              icon: LucideIcons.globe,
+                              text: sub.ipAddress!,
+                            ),
+                          if (sub.deviceVendor?.isNotEmpty ?? false)
+                            _InboxInfoChip(
+                              icon: LucideIcons.router,
+                              text: sub.deviceVendor!,
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -516,6 +559,84 @@ class _SubscriberAlertRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _OnlineDot extends StatelessWidget {
+  const _OnlineDot({required this.isOnline});
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isOnline ? AppColors.brand : AppColors.textLow;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(R.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isOnline ? 'متصل' : 'غير متصل',
+            style: AppType.muted(color: color).copyWith(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InboxInfoChip extends StatelessWidget {
+  const _InboxInfoChip({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.brand.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 9, color: AppColors.brand),
+          const SizedBox(width: 3),
+          Text(
+            text,
+            style: AppType.muted(color: AppColors.brand).copyWith(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _fmtBytesInbox(int bytes) {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var i = 0;
+  var v = bytes.toDouble();
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
 }
 
 class _Group {

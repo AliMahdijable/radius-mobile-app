@@ -194,8 +194,14 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       await _speech.listen(
         onResult: (r) {
           if (!mounted) return;
+          // 2026-07-14: (1) لو الـfinal result رجع فارغ (يحدث لمّا المستخدم
+          // يضغط "إيقاف" قبل ما ينتهي التعرّف) — لا نمسح النصّ الجزئي
+          // الي عُرض. (2) نقصّ المسافات الابتدائيّة — بعض المحرّكات
+          // تعيد " كلمة" فتظهر مسافة قبل النصّ.
+          final txt = r.recognizedWords.trimLeft();
+          if (txt.isEmpty) return;
           setState(() {
-            _ctrl.text = r.recognizedWords;
+            _ctrl.text = txt;
             _ctrl.selection = TextSelection.collapsed(
               offset: _ctrl.text.length,
             );
@@ -419,7 +425,7 @@ class _Results extends StatelessWidget {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const _EmptyHints();
     return FutureBuilder<List<Subscriber>?>(
-      future: SubscribersApi.loadAll(),
+      future: SubscribersApi.loadAllWithOnline(),
       builder: (_, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -788,6 +794,40 @@ class _ResultRow extends StatelessWidget {
                         ],
                       ),
                     ],
+                    // معلومات الجلسة الحيّة (تظهر فقط لو المشترك online + عندنا
+                    // البيانات من /api/v2/online-users). قبل 2026-07-14 كانت
+                    // مخفيّة لأن الشاشة تستدعي loadAll فقط بدون enrichment.
+                    if (sub.isOnline &&
+                        ((sub.downloadBytes ?? 0) > 0 ||
+                            (sub.uploadBytes ?? 0) > 0 ||
+                            (sub.ipAddress?.isNotEmpty ?? false) ||
+                            (sub.deviceVendor?.isNotEmpty ?? false))) ...[
+                      const SizedBox(height: 3),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if ((sub.downloadBytes ?? 0) > 0 ||
+                              (sub.uploadBytes ?? 0) > 0)
+                            _InfoChip(
+                              icon: LucideIcons.arrowDownUp,
+                              text:
+                                  '${_fmtBytes(sub.downloadBytes ?? 0)} ↓ / ${_fmtBytes(sub.uploadBytes ?? 0)} ↑',
+                            ),
+                          if (sub.ipAddress?.isNotEmpty ?? false)
+                            _InfoChip(
+                              icon: LucideIcons.globe,
+                              text: sub.ipAddress!,
+                            ),
+                          if (sub.deviceVendor?.isNotEmpty ?? false)
+                            _InfoChip(
+                              icon: LucideIcons.router,
+                              text: sub.deviceVendor!,
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -822,6 +862,51 @@ class _ResultRow extends StatelessWidget {
     if (s.isExpired) return 'منتهي';
     if (s.isNearExpiry) return 'قارب الانتهاء';
     return 'نشط';
+  }
+}
+
+String _fmtBytes(int bytes) {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var i = 0;
+  var v = bytes.toDouble();
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
+}
+
+/// شارة معلومة صغيرة (أيقونة + نصّ) — تُستعمل لعرض الاستهلاك/IP/الجهاز
+/// على صفوف الجلسات المتّصلة في البحث السريع وInbox.
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.brand.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 9, color: AppColors.brand),
+          const SizedBox(width: 3),
+          Text(
+            text,
+            style: AppType.muted(color: AppColors.brand).copyWith(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
