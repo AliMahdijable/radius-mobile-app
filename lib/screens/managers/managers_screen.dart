@@ -508,7 +508,10 @@ class _ManagerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final balance = manager.balance ?? 0;
-    final debt = manager.debt + extraDebt;
+    // 2026-07-14: نفصل SAS عن الديون الأخرى في العرض بدل الدمج تحت رقم
+    // واحد — يخفي الديون الأخرى في الـchip الموحّد.
+    final sasDebt = manager.debt;
+    final otherDebt = extraDebt;
     final points = manager.rewardPoints ?? 0;
     return Material(
       color: Colors.transparent,
@@ -659,12 +662,19 @@ class _ManagerTile extends StatelessWidget {
                       value: '${points.toInt()}',
                       color: const Color(0xFF8B5CF6),
                     ),
-                  if (debt > 0)
+                  if (sasDebt > 0)
                     _statChip(
                       icon: LucideIcons.alertTriangle,
                       label: 'mgr.sas_debt'.tr(),
-                      value: '${formatIQD(debt)} د.ع',
+                      value: '${formatIQD(sasDebt)} د.ع',
                       color: const Color(0xFFE08F2D),
+                    ),
+                  if (otherDebt > 0)
+                    _statChip(
+                      icon: LucideIcons.receipt,
+                      label: 'mgr.other_debts'.tr(),
+                      value: '${formatIQD(otherDebt)} د.ع',
+                      color: const Color(0xFF8B5CF6),
                     ),
                 ],
               ),

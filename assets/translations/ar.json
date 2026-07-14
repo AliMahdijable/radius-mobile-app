@@ -569,6 +569,19 @@
     "chip_debt": "دين {amount}",
     "chip_subs": "{n} مشترك"
   },
+  "mgr": {
+    "title": "المدراء",
+    "search_hint": "ابحث باسم المستخدم أو الاسم…",
+    "new": "مدير جديد",
+    "empty_none": "لا يوجد مدراء",
+    "total_balance": "إجمالي الرصيد: {amt}",
+    "active": "نشط",
+    "sas_debt": "دين SAS",
+    "other_debts": "ديون أخرى",
+    "lastname": "الكنية",
+    "delete_title": "حذف المدير",
+    "delete_body": "هل تريد حذف المدير {name}? لا يمكن التراجع."
+  },
   "devices": {
     "save_failed": "تعذّر الحفظ",
     "creds_saved": "حُفظت الاعتمادات",

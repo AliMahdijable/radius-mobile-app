@@ -569,6 +569,19 @@
     "chip_debt": "Debt {amount}",
     "chip_subs": "{n} subs"
   },
+  "mgr": {
+    "title": "Managers",
+    "search_hint": "Search by username or name…",
+    "new": "New manager",
+    "empty_none": "No managers",
+    "total_balance": "Total balance: {amt}",
+    "active": "Active",
+    "sas_debt": "SAS debt",
+    "other_debts": "Other debts",
+    "lastname": "Last name",
+    "delete_title": "Delete manager",
+    "delete_body": "Delete {name}? This cannot be undone."
+  },
   "devices": {
     "save_failed": "Save failed",
     "creds_saved": "Credentials saved",
