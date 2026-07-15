@@ -516,7 +516,7 @@ class _Results extends StatelessWidget {
   /// Score-and-filter — exact prefix matches rank above contains
   /// matches so 'ahmed' finds 'ahmed@x' before 'mohammed@x'.
   static List<Subscriber> _filter(List<Subscriber> all, String raw) {
-    final q = raw.toLowerCase().trim();
+    final q = _normalizeArabic(raw.toLowerCase().trim());
     final qPhone = _normalizeIraqPhone(raw);
     final scored = <(int, Subscriber)>[];
     for (final s in all) {
@@ -525,6 +525,47 @@ class _Results extends StatelessWidget {
     }
     scored.sort((a, b) => b.$1.compareTo(a.$1));
     return scored.map((e) => e.$2).toList();
+  }
+
+  /// 2026-07-14: تطبيع نصّ عربي قبل المقارنة. iOS Speech Recognition
+  /// (وأحياناً Google) يحقن أحرفاً غير مرئيّة تكسر contains-match:
+  ///
+  /// • علامات BiDi (‎ LRM, ‏ RLM, ‪-‮) — اتّجاه النصّ.
+  /// • NBSP ( ) بدل المسافة العاديّة.
+  /// • تشكيل (فتحة/كسرة/ضمّة/شدّة/سكون: ً-ٟ, ٰ).
+  /// • تطويل (ـ: ـ) — أحياناً يُستخدم للتنسيق البصري.
+  /// • ZWJ/ZWNJ (‌, ‍) — روابط الأحرف.
+  ///
+  /// كما نوحّد أشكال الأحرف المتشابهة (أ/إ/آ → ا، ى → ي، ة → ه) — الاسم
+  /// المُخزَّن قد يكون بشكل، والمنطوق يُترجم بشكل آخر.
+  static String _normalizeArabic(String s) {
+    if (s.isEmpty) return s;
+    var t = s;
+    // 1) شيل الأحرف غير المرئيّة + التشكيل + التطويل (\u escapes صريحة):
+    //    ​-\u200F  ZWSP, ZWNJ, ZWJ, LRM, RLM
+    //    \u202A-\u202E  LRE, RLE, PDF, LRO, RLO
+    //    \u2066-\u2069  LRI, RLI, FSI, PDI
+    //    ً-ٟ  التشكيل العربيّ (فتحة/ضمّة/كسرة/شدّة/سكون/تنوين)
+    //    ٰ          الألف الخنجريّة العلويّة
+    //    ـ          التطويل (ـ)
+    t = t.replaceAll(
+      RegExp(r'[​-\u200F\u202A-\u202E\u2066-\u2069ً-ٰٟـ]'),
+      '',
+    );
+    // 2) NBSP + غيرها من المسافات الخاصّة → مسافة عاديّة.
+    t = t.replaceAll(RegExp(r'[  -   　]'), ' ');
+    // 3) توحيد أحرف عربيّة متبادلة (المتحدّث/المُخزَّن قد يستخدم أشكالاً
+    //    مختلفة لنفس الحرف — أشكال أسفل تنقص التطابق بلا سبب).
+    t = t
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ئ', 'ي')
+        .replaceAll('ة', 'ه');
+    // 4) دمج المسافات المتعدّدة.
+    t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return t;
   }
 
   /// Normalize Iraqi phone numbers to a canonical core so the same
@@ -550,9 +591,12 @@ class _Results extends StatelessWidget {
 
   static int _scoreOne(Subscriber s, String q, String qPhone) {
     var score = 0;
-    final username = s.username.toLowerCase();
-    final fname = s.firstname.trim();
-    final lname = s.lastname.trim();
+    // نطبّع الاثنين — الحقول المُخزَّنة قد يكون فيها أحرف عربيّة مختلفة
+    // الشكل عن ما ينطق المستخدم. مثلاً "عمّي" (بشدّة) vs "عمي"، أو
+    // "أحمد" vs "احمد". بلا تطبيع، voice-typed لن يطابق stored-typed.
+    final username = _normalizeArabic(s.username.toLowerCase());
+    final fname = _normalizeArabic(s.firstname.trim());
+    final lname = _normalizeArabic(s.lastname.trim());
     final full = '$fname $lname'.trim();
     if (q.isNotEmpty) {
       if (username == q) {
