@@ -182,14 +182,14 @@ class _MainShellState extends State<MainShell> {
       body: Stack(
         children: [
           IndexedStack(index: _tab, children: tabs),
-          // Standalone search pill floats above the bar on the right.
-          // 2026-07-14: كان يظهر على tab home فقط. المستخدم يريده على
-          // كل الشاشات — البحث السريع أداة عابرة للمهمّة (يفتح المشترك
-          // مباشرة بدون تنقّل)، فمنطقيّ أن يبقى متاحاً في أي وقت.
+          // Standalone search pill — 2026-07-14: نازل حذو الشريط السفلي
+          // بدل ما يطفو فوقه بمسافة كبيرة. bottom يمركز الـpill عمودياً
+          // مع الـbottom nav (nav=64px، pill=44px، فمركزه = safeArea +
+          // Sp.sm + (64-44)/2 = safeArea + Sp.sm + 10). يظهر كجزء من
+          // التنقّل بدل عنصر عائم منفصل.
           Positioned(
             right: Sp.lg,
-            bottom:
-                64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 16,
+            bottom: Sp.sm + MediaQuery.paddingOf(context).bottom + 10,
             child: _SearchPill(onTap: () => showQuickSearch(context)),
           ),
         ],
