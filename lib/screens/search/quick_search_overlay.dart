@@ -338,7 +338,12 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                 Divider(height: 1, color: AppColors.border),
                 ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+                    // 2026-07-14: كان 0.5 من الشاشة. بعد إضافة شارات
+                    // IP/DL/UL/الجهاز صار كل صف أطول، فتظهر 4 نتائج
+                    // فقط من أصل 12 والباقي يبدو "مقطوع". 0.75 يعطي
+                    // مساحة كافية لـ~10 نتائج مباشرة مع القابليّة للتمرير
+                    // إن تجاوزت.
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.75,
                   ),
                   child: SingleChildScrollView(
                     child: Column(
