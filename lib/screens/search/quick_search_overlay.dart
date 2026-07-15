@@ -243,16 +243,14 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
             );
           });
         },
-        // 2026-07-14: تعديلات لتجنّب error_unknown (300) على محرّكات
-        // vendor (Tecno/Xiaomi/Huawei):
-        //  • partialResults=false — بعض المحرّكات لا تُطبّق partial
-        //    نتائج فترمي 300 فور استلام listen().
-        //  • listenMode=dictation — 'search' يفشل على محرّكات تحدّد
-        //    مدة قصيرة جداً؛ 'dictation' هو الوضع الأكثر توافقاً.
-        //  • onDevice=false — نجبر التعرّف السحابي (Google) بدل
-        //    الـon-device الذي قد يكون معطّلاً على vendor devices.
+        // 2026-07-14 (تحديث): partialResults=true حتى النصّ يظهر أثناء
+        // الكلام (تجربة أفضل — بحث لحظي بدون انتظار الضغط على إيقاف).
+        // كان false لتفادي error_unknown 300 على Android، لكن اتّضح
+        // لاحقاً أن ذاك الخطأ كان من الـSimulator فقط.
+        // listenMode=dictation + onDevice=false نبقيهما — أكثر توافقاً
+        // ولا يؤثّران على iOS.
         listenOptions: SpeechListenOptions(
-          partialResults: false,
+          partialResults: true,
           cancelOnError: true,
           listenMode: ListenMode.dictation,
           onDevice: false,
