@@ -13,7 +13,7 @@ import '../../../theme/typography.dart';
 /// has picked something, then makes the active choice obvious.
 enum SubscriberFilter { all, active, online, offline, disabled, expired, debtors, nearExpiry, onlineNoPlan }
 
-class FilterChipsBar extends StatelessWidget {
+class FilterChipsBar extends StatefulWidget {
   const FilterChipsBar({
     super.key,
     required this.current,
@@ -25,7 +25,57 @@ class FilterChipsBar extends StatelessWidget {
   final Map<SubscriberFilter, int> counts;
   final ValueChanged<SubscriberFilter> onSelect;
 
+  @override
+  State<FilterChipsBar> createState() => _FilterChipsBarState();
+}
+
+class _FilterChipsBarState extends State<FilterChipsBar> {
+  final ScrollController _scroll = ScrollController();
+
+  /// 2026-07-15: يحرّك القائمة تلقائياً حتى الـchip النشط يظهر في
+  /// النافذة. بدون هذا، لو المستخدم يختار فلتراً بعيداً (مثل onlineNoPlan
+  /// من الداشبورد)، الـchip موجود لكن مدفون خارج الشاشة يميناً — يشعر
+  /// أن الفلتر ما اشتغل.
+  void _scrollToActive() {
+    final idx = _defs.indexWhere((d) => d.key == widget.current);
+    if (idx < 0 || !_scroll.hasClients) return;
+    // تقدير موقع الـchip: عرض تقريبي 90px + spacing 6px.
+    const chipStride = 96.0;
+    final target = (idx * chipStride) - 40; // 40px offset ليضل جزء من السابق مرئي
+    final max = _scroll.position.maxScrollExtent;
+    final clamped = target.clamp(0.0, max);
+    _scroll.animateTo(
+      clamped,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
+  }
+
+  @override
+  void didUpdateWidget(covariant FilterChipsBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.current != widget.current) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   /// الـlabel هنا مفتاح ترجمة — الـ_Chip يستدعي .tr() عند البناء.
+  /// 2026-07-15: onlineNoPlan نُقل من آخر القائمة إلى موضع بين expired
+  /// و debtors. في RTL كان يختفي لليمين خارج الشاشة، فالمستخدم يشوف
+  /// الفلتر مطبَّق على البطاقات لكن الـchip المُظلَّل غير مرئي. مطابق
+  /// لموضعه في الويب — علاقة دلاليّة مع "منتهي".
   static const _defs = <_ChipDef>[
     _ChipDef(SubscriberFilter.all, 'subscribers.filter_all', LucideIcons.users, AppColors.brand),
     _ChipDef(SubscriberFilter.active, 'subscribers.filter_active', LucideIcons.circleCheck, Color(0xFF14B8A6)),
@@ -33,11 +83,11 @@ class FilterChipsBar extends StatelessWidget {
     _ChipDef(SubscriberFilter.offline, 'subscribers.filter_offline', LucideIcons.wifiOff, Color(0xFF90A4AE)),
     _ChipDef(SubscriberFilter.disabled, 'subscribers.filter_disabled', LucideIcons.ban, Color(0xFF6D4C41)),
     _ChipDef(SubscriberFilter.expired, 'subscribers.filter_expired', LucideIcons.timerOff, Color(0xFFC62828)),
-    _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors', LucideIcons.creditCard, Color(0xFFF57F17)),
-    _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry', LucideIcons.triangleAlert, Color(0xFFE08F2D)),
     // "بدون نت" — متصل + منتهي. لون بنفسجي يطابق status_online_expired
     // في الويب حتى الإدمن يربط الـchip بالحالة اللونية للصف.
     _ChipDef(SubscriberFilter.onlineNoPlan, 'subscribers.filter_online_no_plan', LucideIcons.wifiOff, Color(0xFF9333EA)),
+    _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors', LucideIcons.creditCard, Color(0xFFF57F17)),
+    _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry', LucideIcons.triangleAlert, Color(0xFFE08F2D)),
   ];
 
   @override
@@ -46,21 +96,22 @@ class FilterChipsBar extends StatelessWidget {
     return SizedBox(
       height: 42,
       child: ListView.separated(
+        controller: _scroll,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
         itemCount: _defs.length,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final d = _defs[i];
-          final selected = current == d.key;
-          final count = counts[d.key] ?? 0;
+          final selected = widget.current == d.key;
+          final count = widget.counts[d.key] ?? 0;
           return _Chip(
             label: d.label.tr(),
             icon: d.icon,
             color: d.color,
             count: count,
             selected: selected,
-            onTap: () => onSelect(d.key),
+            onTap: () => widget.onSelect(d.key),
           );
         },
       ),
