@@ -243,10 +243,19 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
             );
           });
         },
+        // 2026-07-14: تعديلات لتجنّب error_unknown (300) على محرّكات
+        // vendor (Tecno/Xiaomi/Huawei):
+        //  • partialResults=false — بعض المحرّكات لا تُطبّق partial
+        //    نتائج فترمي 300 فور استلام listen().
+        //  • listenMode=dictation — 'search' يفشل على محرّكات تحدّد
+        //    مدة قصيرة جداً؛ 'dictation' هو الوضع الأكثر توافقاً.
+        //  • onDevice=false — نجبر التعرّف السحابي (Google) بدل
+        //    الـon-device الذي قد يكون معطّلاً على vendor devices.
         listenOptions: SpeechListenOptions(
-          partialResults: true,
+          partialResults: false,
           cancelOnError: true,
-          listenMode: ListenMode.search,
+          listenMode: ListenMode.dictation,
+          onDevice: false,
         ),
       );
     } catch (e) {
