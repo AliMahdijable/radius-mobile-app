@@ -2080,58 +2080,44 @@ class _DebtSummaryCard extends StatelessWidget {
     }
     final count = subscribers.length;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 0),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: const Color(0xFFE65100).withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(R.md),
+          borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
-            color: const Color(0xFFE65100).withValues(alpha: 0.25),
+            color: const Color(0xFFE65100).withValues(alpha: 0.22),
           ),
         ),
         child: Row(
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE65100).withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                LucideIcons.wallet,
-                size: 18,
-                color: Color(0xFFE65100),
+            const Icon(
+              LucideIcons.wallet,
+              size: 13,
+              color: Color(0xFFE65100),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'إجمالي الديون:',
+              style: AppType.muted().copyWith(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 6),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'إجمالي الديون',
-                    style: AppType.muted().copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  '${formatIQD(total)} د.ع  •  $count مشترك',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFE65100),
                   ),
-                  const SizedBox(height: 2),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: AlignmentDirectional.centerStart,
-                    child: Text(
-                      '${formatIQD(total)} د.ع  من  $count مشترك',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFFE65100),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
