@@ -42,6 +42,9 @@ const _defaultSortByFilter = <SubscriberFilter, (SortField, SortDirection)>{
   SubscriberFilter.expired: (SortField.expiration, SortDirection.desc),
   SubscriberFilter.debtors: (SortField.notes, SortDirection.asc),
   SubscriberFilter.nearExpiry: (SortField.remainingDays, SortDirection.asc),
+  // "بدون نت" — الأكثر تخطّياً للانتهاء (الأقل remaining) أولاً حتى
+  // الإدمن يشوف الأخطر (سحب طويل بدون اشتراك) قبل الحديث الانتهاء.
+  SubscriberFilter.onlineNoPlan: (SortField.remainingDays, SortDirection.asc),
 };
 
 /// Subscribers list — v2 port of v1's screen with a modernized look.
@@ -413,6 +416,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         it = it.where((s) => s.hasDebt);
       case SubscriberFilter.nearExpiry:
         it = it.where((s) => s.isNearExpiry);
+      case SubscriberFilter.onlineNoPlan:
+        // "بدون نت" — متصل بالشبكة لكن اشتراكه منتهي.
+        it = it.where((s) => s.isOnline && s.isExpired);
     }
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
@@ -562,6 +568,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       SubscriberFilter.expired: src.where((s) => s.isExpired).length,
       SubscriberFilter.debtors: src.where((s) => s.hasDebt).length,
       SubscriberFilter.nearExpiry: src.where((s) => s.isNearExpiry).length,
+      SubscriberFilter.onlineNoPlan:
+          src.where((s) => s.isOnline && s.isExpired).length,
     };
   }
 

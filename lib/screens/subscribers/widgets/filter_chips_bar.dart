@@ -11,7 +11,7 @@ import '../../../theme/typography.dart';
 /// pill; inactive chips collapse to a tiny icon-only circle with the
 /// count next to it. This keeps the row visually quiet until the user
 /// has picked something, then makes the active choice obvious.
-enum SubscriberFilter { all, active, online, offline, disabled, expired, debtors, nearExpiry }
+enum SubscriberFilter { all, active, online, offline, disabled, expired, debtors, nearExpiry, onlineNoPlan }
 
 class FilterChipsBar extends StatelessWidget {
   const FilterChipsBar({
@@ -35,6 +35,9 @@ class FilterChipsBar extends StatelessWidget {
     _ChipDef(SubscriberFilter.expired, 'subscribers.filter_expired', LucideIcons.timerOff, Color(0xFFC62828)),
     _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors', LucideIcons.creditCard, Color(0xFFF57F17)),
     _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry', LucideIcons.triangleAlert, Color(0xFFE08F2D)),
+    // "بدون نت" — متصل + منتهي. لون بنفسجي يطابق status_online_expired
+    // في الويب حتى الإدمن يربط الـchip بالحالة اللونية للصف.
+    _ChipDef(SubscriberFilter.onlineNoPlan, 'subscribers.filter_online_no_plan', LucideIcons.wifiOff, Color(0xFF9333EA)),
   ];
 
   @override

@@ -60,6 +60,7 @@ class DebtorsResult {
     required this.active,
     required this.expired,
     required this.totalSubs,
+    required this.onlineNoPlan,
   });
   final int count;
   final int total;
@@ -74,6 +75,10 @@ class DebtorsResult {
   final int active; // !isExpired && !isDisabled (or per model)
   final int expired;
   final int totalSubs;
+  /// "بدون نت" — متصل + منتهي. المشترك يسحب data لكن اشتراكه انتهى.
+  /// الإدمن يحتاج يمدّد أو يفصل. نحسبها هنا مرة واحدة لتُستهلك في
+  /// dashboard KPI ولتفادي تمرير القائمة الكاملة للـstats-mapper.
+  final int onlineNoPlan;
 }
 
 enum RevenuePeriod { day, week, month }
@@ -170,6 +175,7 @@ class DashboardApi {
     var offline = 0;
     var active = 0;
     var expired = 0;
+    var onlineNoPlan = 0;
     for (final s in list) {
       if (s.hasDebt) {
         debtCount++;
@@ -180,6 +186,7 @@ class DashboardApi {
       if (s.isOffline) offline++; // !isOnline && !isExpired
       if (s.isExpired) expired++;
       if (s.isActive) active++; // matches isExpired==false
+      if (s.isOnline && s.isExpired) onlineNoPlan++;
     }
     return DebtorsResult(
       count: debtCount,
@@ -190,6 +197,7 @@ class DashboardApi {
       active: active,
       expired: expired,
       totalSubs: list.length,
+      onlineNoPlan: onlineNoPlan,
     );
   }
 

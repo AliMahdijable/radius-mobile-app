@@ -109,6 +109,18 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.nearExpiry),
                     ),
+                    const SizedBox(height: 7),
+                    // "بدون نت" — متصل + منتهي. لون بنفسجي مطابق
+                    // للـchip في صفحة المشتركين والويب.
+                    _RingStatRow(
+                      color: const Color(0xFF9333EA),
+                      icon: LucideIcons.wifiOff,
+                      label: 'dashboard.online_no_plan'.tr(),
+                      value: s.onlineNoPlan,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.onlineNoPlan),
+                    ),
                   ],
                 ),
               ),

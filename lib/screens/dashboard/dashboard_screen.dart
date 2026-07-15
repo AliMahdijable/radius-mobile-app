@@ -179,6 +179,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       offline: d.offline,
       expired: d.expired,
       nearExpiry: d.nearExpiry,
+      onlineNoPlan: d.onlineNoPlan,
     );
   }
 

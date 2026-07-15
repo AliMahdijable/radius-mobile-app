@@ -22,6 +22,7 @@ class SubscribersStats {
     required this.offline,
     required this.expired,
     required this.nearExpiry,
+    required this.onlineNoPlan,
   });
 
   final int total;
@@ -30,6 +31,11 @@ class SubscribersStats {
   final int offline;
   final int expired;
   final int nearExpiry;
+  /// "بدون نت" — subscribers whose session is up but plan has expired
+  /// (isOnline && isExpired). Iraqi ISP colloquial: they're consuming
+  /// bandwidth without a valid subscription; admin needs to either
+  /// extend or disconnect them.
+  final int onlineNoPlan;
 }
 
 class WhatsAppStatus {
