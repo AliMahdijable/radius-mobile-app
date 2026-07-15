@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
+import '../../core/util/format.dart';
 import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -983,6 +984,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 _page = 0;
               }),
             ),
+            // مطلب 2026-07-14: كارت "إجمالي الديون" (نظير v1 —
+            // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
+            // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
+            // _filteredAll الي بنفسه محكوم بـ_managerScoped.
+            if (_filter == SubscriberFilter.debtors &&
+                !_selectionMode)
+              _DebtSummaryCard(subscribers: _filteredAll),
             // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
             // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
             // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.
@@ -2053,3 +2061,82 @@ class _ScanAllChip extends StatelessWidget {
 
 // مطلب 2026-06-11 (تحديث ثالث): زر التكويل انتقل إلى _SearchHeader
 // بجانب زر الفرز فما عاد الـ_CollapseAllChip هنا له داعي.
+
+/// كارت "إجمالي الديون" — نظير v1 (subscribers_screen.dart:875). يظهر
+/// عند فلتر "المدينون" ويعرض الإجمالي + العدد. لأنّه يأخذ [subscribers]
+/// من `_filteredAll`، هو تلقائياً محكوم بفلتر المدير الفرعي وأي بحث
+/// نصّي حالي — بلا حاجة لـproviders أو حسابات خارجيّة.
+class _DebtSummaryCard extends StatelessWidget {
+  const _DebtSummaryCard({required this.subscribers});
+  final List<Subscriber> subscribers;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    if (subscribers.isEmpty) return const SizedBox.shrink();
+    var total = 0.0;
+    for (final s in subscribers) {
+      total += s.debtAbs;
+    }
+    final count = subscribers.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE65100).withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(R.md),
+          border: Border.all(
+            color: const Color(0xFFE65100).withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE65100).withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                LucideIcons.wallet,
+                size: 18,
+                color: Color(0xFFE65100),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'إجمالي الديون',
+                    style: AppType.muted().copyWith(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      '${formatIQD(total)} د.ع  من  $count مشترك',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFFE65100),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
