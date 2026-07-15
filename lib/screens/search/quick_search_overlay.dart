@@ -207,11 +207,17 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         localeId: _arLocale, // قد تكون null — يعتمد على default النظام
         onResult: (r) {
           if (!mounted) return;
-          // 2026-07-14: (1) لو الـfinal result رجع فارغ (يحدث لمّا المستخدم
-          // يضغط "إيقاف" قبل ما ينتهي التعرّف) — لا نمسح النصّ الجزئي
-          // الي عُرض. (2) نقصّ المسافات الابتدائيّة — بعض المحرّكات
-          // تعيد " كلمة" فتظهر مسافة قبل النصّ.
-          final txt = r.recognizedWords.trimLeft();
+          // 2026-07-14: تنظيف نتيجة الصوت قبل ما تدخل الحقل:
+          //  (1) لو رجعت فارغة (المستخدم ضغط إيقاف مبكراً) — نتجاهلها
+          //      ونبقي النصّ الجزئي الي عُرض.
+          //  (2) trim للمسافات ابتداءً وانتهاءً — Google أحياناً يرجع
+          //      " كلمة".
+          //  (3) iOS Speech Recognition يضيف علامات ترقيم تلقائياً
+          //      ("Ahmed." "علي؟") — البحث بـcontains ما يطابق
+          //      "ahmed@popq" مع النقطة، فالمستخدم يشوف "0 نتائج"
+          //      رغم أن الصوت انترجم صح. نقصّ الترقيم النهائيّ.
+          var txt = r.recognizedWords.trim();
+          txt = txt.replaceAll(RegExp(r'''[.,;:!?،؛؟"']+$'''), '').trim();
           if (txt.isEmpty) return;
           setState(() {
             _ctrl.text = txt;
