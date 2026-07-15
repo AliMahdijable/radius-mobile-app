@@ -116,6 +116,14 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           } else if (err.errorMsg.contains('insufficient-permissions') ||
               err.errorMsg.contains('permission')) {
             _showSnack('صلاحية الميكروفون مرفوضة — فعّلها من إعدادات النظام');
+          } else if (err.errorMsg.contains('error_unknown') ||
+              err.errorMsg.contains('300')) {
+            // 2026-07-14: Tecno/Huawei/Xiaomi غالباً — المحرّك النشط
+            // ليس Google. اقتراح مباشر لتغييره.
+            _showSnack(
+              'محرّك الصوت الحالي لا يعمل. غيّره من:\n'
+              'Settings → Apps → Default apps → Digital assistant → Google',
+            );
           }
         },
       );
@@ -202,9 +210,18 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     // فيلتقط اللغة من إعداد النظام؛ إن فشل، الـonError يعرض رسالة
     // إرشاديّة تحدّد الحلّ (تغيير المحرّك الافتراضي إلى Google).
     setState(() => _listening = true);
+    // 2026-07-14: fallback ترتيبي للـlocale:
+    //   1. الـprobe لقى ar-IQ / ar-SA / ar-* → استعمله (الأفضل).
+    //   2. probe فشل → 'ar' (bare code) — أجهزة Tecno/Huawei/Xiaomi
+    //      كانت تعطي error_unknown (300) مع null لأن محرّكها الخاص
+    //      يشترط localeId. 'ar' يقبله معظم المحرّكات كقيمة عامّة.
+    //   3. لو المحرّك يرفض 'ar' نفسه، الـonError يعرض رسالة تدلّ
+    //      المستخدم على تغيير الافتراضي إلى Google.
+    final effectiveLocale = _arLocale ?? 'ar';
+    if (kDebugMode) debugPrint('🎙️ listen with locale="$effectiveLocale"');
     try {
       await _speech.listen(
-        localeId: _arLocale, // قد تكون null — يعتمد على default النظام
+        localeId: effectiveLocale,
         onResult: (r) {
           if (!mounted) return;
           // 2026-07-14: تنظيف نتيجة الصوت قبل ما تدخل الحقل:
