@@ -1683,12 +1683,53 @@ class _SubscriberHero extends StatelessWidget {
               copyable: true,
               context: context,
             ),
+          // 2026-07-16: آخر اتصال في الكرت الأخضر للأوف لاين فقط
+          // (المتّصلون عندهم "نشط الآن" وليس بحاجة). value = SAS4
+          // last_online مباشرة إن وُجد، وإلا التقدير من expiration.
+          if (!sub.isOnline)
+            _infoRow(
+              icon: LucideIcons.history,
+              label: 'آخر اتصال',
+              value: _lastSeenText(sub),
+            ),
         ],
       ),
     );
   }
 
-  String _formatExpiration(String? raw) {
+  static String _lastSeenText(Subscriber s) {
+    final lastRaw = s.lastOnline?.trim();
+    if (lastRaw != null && lastRaw.isNotEmpty) {
+      final rel = _formatLastOnline(lastRaw);
+      final exact = _formatExpiration(lastRaw);
+      return exact == '—' || exact == lastRaw ? rel : '$rel · $exact';
+    }
+    if (!s.isExpired) return 'subscribers.ago_not_available'.tr();
+    final raw = s.expiration?.trim();
+    if (raw == null || raw.isEmpty) return 'subscribers.ago_unknown'.tr();
+    final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
+    if (t == null) return raw.split(' ').first;
+    final diff = DateTime.now().difference(t);
+    if (diff.inDays > 365) return 'subscribers.ago_over_year'.tr();
+    if (diff.inDays > 30) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
+    if (diff.inDays > 0) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
+    if (diff.inHours > 0) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
+    return 'subscribers.ago_minutes'.tr();
+  }
+
+  static String _formatLastOnline(String raw) {
+    final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
+    if (t == null) return raw.split(' ').first;
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return 'subscribers.ago_now'.tr();
+    if (diff.inMinutes < 60) return 'subscribers.ago_minutes_n'.tr(namedArgs: {'n': '${diff.inMinutes}'});
+    if (diff.inHours < 24) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
+    if (diff.inDays < 30) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
+    if (diff.inDays < 365) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
+    return 'subscribers.ago_over_year'.tr();
+  }
+
+  static String _formatExpiration(String? raw) {
     if (raw == null || raw.isEmpty) return '—';
     final dt = DateTime.tryParse(raw);
     if (dt == null) return raw;
