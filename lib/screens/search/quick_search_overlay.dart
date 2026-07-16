@@ -885,6 +885,26 @@ class _ResultRow extends StatelessWidget {
                         ],
                       ),
                     ],
+                    // 2026-07-16: آخر اتصال للأوف لاين فقط (SAS4 last_online).
+                    if (!sub.isOnline &&
+                        (sub.lastOnline?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(LucideIcons.history,
+                              size: 10, color: AppColors.textLow),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatLastOnlineShort(sub.lastOnline!),
+                            style: AppType.muted(color: AppColors.textLow)
+                                .copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     // معلومات الجلسة الحيّة (تظهر فقط لو المشترك online + عندنا
                     // البيانات من /api/v2/online-users). قبل 2026-07-14 كانت
                     // مخفيّة لأن الشاشة تستدعي loadAll فقط بدون enrichment.
@@ -954,6 +974,20 @@ class _ResultRow extends StatelessWidget {
     if (s.isNearExpiry) return 'قارب الانتهاء';
     return 'نشط';
   }
+}
+
+/// 2026-07-16: تنسيق مختصر لـSAS4 last_online — "قبل X" بأسلوب طبيعي.
+/// يُعرَض في بطاقة البحث السريع للمشتركين غير المتّصلين فقط.
+String _formatLastOnlineShort(String raw) {
+  final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
+  if (t == null) return raw.split(' ').first;
+  final diff = DateTime.now().difference(t);
+  if (diff.inMinutes < 1) return 'الآن';
+  if (diff.inMinutes < 60) return 'قبل ${diff.inMinutes} د';
+  if (diff.inHours < 24) return 'قبل ${diff.inHours} س';
+  if (diff.inDays < 30) return 'قبل ${diff.inDays} يوم';
+  if (diff.inDays < 365) return 'قبل ${(diff.inDays / 30).round()} شهر';
+  return 'قبل سنة+';
 }
 
 String _fmtBytes(int bytes) {

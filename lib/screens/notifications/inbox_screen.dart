@@ -516,6 +516,15 @@ class _SubscriberAlertRow extends StatelessWidget {
                         height: 1.2,
                       ),
                     ),
+                    // 2026-07-16: آخر اتصال للأوف لاين فقط (SAS4).
+                    if (!sub.isOnline &&
+                        (sub.lastOnline?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 4),
+                      _InboxInfoChip(
+                        icon: LucideIcons.history,
+                        text: 'آخر اتصال: ${_formatLastOnlineInbox(sub.lastOnline!)}',
+                      ),
+                    ],
                     // معلومات الجلسة الحيّة (تظهر فقط لو المشترك online).
                     if (sub.isOnline &&
                         ((sub.downloadBytes ?? 0) > 0 ||
@@ -625,6 +634,19 @@ class _InboxInfoChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 2026-07-16: تنسيق last_online مختصر للـInbox.
+String _formatLastOnlineInbox(String raw) {
+  final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
+  if (t == null) return raw.split(' ').first;
+  final diff = DateTime.now().difference(t);
+  if (diff.inMinutes < 1) return 'الآن';
+  if (diff.inMinutes < 60) return 'قبل ${diff.inMinutes} د';
+  if (diff.inHours < 24) return 'قبل ${diff.inHours} س';
+  if (diff.inDays < 30) return 'قبل ${diff.inDays} يوم';
+  if (diff.inDays < 365) return 'قبل ${(diff.inDays / 30).round()} شهر';
+  return 'قبل سنة+';
 }
 
 String _fmtBytesInbox(int bytes) {

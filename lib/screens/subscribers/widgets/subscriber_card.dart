@@ -337,6 +337,20 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
         if (showLiveSession && sub.isOnline) ...[
           _LiveSessionRow(sub: sub),
         ],
+        // 2026-07-16: آخر اتصال للأوف لاين فقط — SAS4 last_online.
+        if (!sub.isOnline && (sub.lastOnline?.isNotEmpty ?? false)) ...[
+          Row(
+            children: [
+              Icon(LucideIcons.history, size: 11, color: AppColors.textLow),
+              const SizedBox(width: 3),
+              Text(
+                'آخر اتصال: ${_formatLastOnlineCard(sub.lastOnline!)}',
+                style: AppType.muted(color: AppColors.textLow)
+                    .copyWith(fontSize: 10.5, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ],
         // DeviceChipMicro يظهر لأي مشترك عنده IP — قيم الفحص (RX/CCQ/
         // إشارة/حرارة/LAN) تجي من probe مباشر على الجهاز، مو من session.
         // مطلب المستخدم 2026-07-12: كان مقصور على تاب "متصل" — وسّعناه.
@@ -1023,4 +1037,17 @@ class _GhostAction extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 2026-07-16: تنسيق last_online مختصر لبطاقة المشترك.
+String _formatLastOnlineCard(String raw) {
+  final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
+  if (t == null) return raw.split(' ').first;
+  final diff = DateTime.now().difference(t);
+  if (diff.inMinutes < 1) return 'الآن';
+  if (diff.inMinutes < 60) return 'قبل ${diff.inMinutes} د';
+  if (diff.inHours < 24) return 'قبل ${diff.inHours} س';
+  if (diff.inDays < 30) return 'قبل ${diff.inDays} يوم';
+  if (diff.inDays < 365) return 'قبل ${(diff.inDays / 30).round()} شهر';
+  return 'قبل سنة+';
 }

@@ -10,6 +10,10 @@ class Subscriber {
   final String? phone;
   final String? mobile;
   final String? expiration;
+  /// 2026-07-16: آخر اتصال — من SAS4 `last_online` field. backend يمرّرها
+  /// في /api/v2/subscribers (server.js:9006). فارغة = SAS4 ما زوّدها.
+  /// تُعرَض في subscriber_detail_screen للمشتركين غير المتّصلين.
+  final String? lastOnline;
   final int? remainingDays;
   final String? notes;
   final bool hasDebtFlag;
@@ -54,6 +58,7 @@ class Subscriber {
     this.phone,
     this.mobile,
     this.expiration,
+    this.lastOnline,
     this.remainingDays,
     this.notes,
     this.hasDebtFlag = false,
@@ -192,6 +197,7 @@ class Subscriber {
       phone: j['phone']?.toString(),
       mobile: j['mobile']?.toString(),
       expiration: j['expiration']?.toString(),
+      lastOnline: j['last_online']?.toString(),
       remainingDays: toInt(j['remaining_days'] ?? j['daysRemaining']),
       notes: j['notes']?.toString() ?? j['comments']?.toString(),
       hasDebtFlag: toBool(j['hasDebt']),
@@ -262,6 +268,7 @@ class Subscriber {
       phone: phone,
       mobile: mobile,
       expiration: expiration,
+      lastOnline: lastOnline,
       remainingDays: remainingDays,
       notes: notes,
       hasDebtFlag: hasDebtFlag,
@@ -297,6 +304,7 @@ class Subscriber {
       phone: phone,
       mobile: mobile,
       expiration: expiration,
+      lastOnline: lastOnline,
       remainingDays: remainingDays,
       notes: notes,
       hasDebtFlag: hasDebtFlag,

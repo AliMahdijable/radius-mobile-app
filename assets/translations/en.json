@@ -413,7 +413,9 @@
     "ago_hours_short": "{n}h ago",
     "ago_one_day": "1 day ago",
     "ago_days_short": "{n}d ago",
-    "activate_cash_partial": "Activate (partial cash)"
+    "activate_cash_partial": "Activate (partial cash)",
+    "ago_now": "just now",
+    "ago_minutes_n": "{n} min ago"
   },
   "reports": {
     "title": "Reports",

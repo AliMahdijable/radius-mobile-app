@@ -413,7 +413,9 @@
     "ago_hours_short": "قبل {n} س",
     "ago_one_day": "قبل يوم",
     "ago_days_short": "قبل {n} أيام",
-    "activate_cash_partial": "تفعيل نقدي جزئي"
+    "activate_cash_partial": "تفعيل نقدي جزئي",
+    "ago_now": "الآن",
+    "ago_minutes_n": "منذ {n} د"
   },
   "reports": {
     "title": "التقارير",

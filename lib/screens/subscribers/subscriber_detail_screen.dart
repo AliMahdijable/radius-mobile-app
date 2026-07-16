@@ -827,10 +827,14 @@ class _SubscriptionCard extends StatelessWidget {
   }
 
   static String _lastSeenText(Subscriber s) {
-    // Best-effort: when SAS4 isn't giving us a last-session ts, infer
-    // a coarse signal from the expiration field. If the sub is expired,
-    // last contact was at-or-before the expiry; otherwise we don't know
-    // precisely and surface 'غير متاح'.
+    // 2026-07-16: نستخدم SAS4 last_online إذا كان موجوداً (تاريخ ووقت
+    // دقيقان). backend يمرّرها في /api/v2/subscribers منذ 2026-07-13.
+    // fallback: التقدير القديم من expiration (لو backend ما زوّدها).
+    final lastRaw = s.lastOnline?.trim();
+    if (lastRaw != null && lastRaw.isNotEmpty) {
+      return _formatLastOnline(lastRaw);
+    }
+    // Fallback القديم:
     if (!s.isExpired) return 'subscribers.ago_not_available'.tr();
     final raw = s.expiration?.trim();
     if (raw == null || raw.isEmpty) return 'subscribers.ago_unknown'.tr();
@@ -843,6 +847,20 @@ class _SubscriptionCard extends StatelessWidget {
     if (diff.inDays > 0) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
     if (diff.inHours > 0) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
     return 'subscribers.ago_minutes'.tr();
+  }
+
+  /// 2026-07-16: تنسيق last_online كـ"قبل X" بأسلوب طبيعي. يحوّل SAS4
+  /// timestamp إلى تعبير نسبيّ (منذ 5 دقائق / 3 ساعات / يومين...).
+  static String _formatLastOnline(String raw) {
+    final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
+    if (t == null) return raw.split(' ').first;
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return 'subscribers.ago_now'.tr();
+    if (diff.inMinutes < 60) return 'subscribers.ago_minutes_n'.tr(namedArgs: {'n': '${diff.inMinutes}'});
+    if (diff.inHours < 24) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
+    if (diff.inDays < 30) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
+    if (diff.inDays < 365) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
+    return 'subscribers.ago_over_year'.tr();
   }
 
   static String _expirationText(String? raw) {
