@@ -278,6 +278,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final hasSas = _sasDebt > 0;
     final hasCustom = _customRemaining > 0;
     final showSegmented = hasSas && hasCustom;
+    // iOS keyboard-avoidance: push the sheet up so amount + note +
+    // submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.86,
       minChildSize: 0.55,
@@ -289,6 +292,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
             color: AppColors.surface,
             borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

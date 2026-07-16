@@ -415,6 +415,9 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final s = _summary;
+    // iOS keyboard-avoidance: push the sheet up so partial-cash amount
+    // fields + submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.92,
       minChildSize: 0.6,
@@ -427,6 +430,7 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

@@ -280,6 +280,9 @@ class _EditSheetState extends State<_EditSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // iOS keyboard-avoidance: push the sheet up so the text fields +
+    // save button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -292,6 +295,7 @@ class _EditSheetState extends State<_EditSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

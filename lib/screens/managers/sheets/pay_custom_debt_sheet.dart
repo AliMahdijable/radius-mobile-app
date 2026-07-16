@@ -187,6 +187,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF0EA5E9);
+    // iOS keyboard-avoidance: push the sheet up so amount + note +
+    // submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (_, __) {
@@ -205,6 +208,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
               borderRadius:
                   BorderRadius.vertical(top: Radius.circular(R.xl)),
             ),
+            padding: EdgeInsets.only(bottom: bottomInset),
             child: Column(
               children: [
                 const SizedBox(height: 8),

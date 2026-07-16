@@ -189,6 +189,9 @@ class _AddSheetState extends State<_AddSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // iOS keyboard-avoidance: push the sheet up so the text fields +
+    // add button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -201,6 +204,7 @@ class _AddSheetState extends State<_AddSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

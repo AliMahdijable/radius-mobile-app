@@ -198,6 +198,9 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     final accent =
         _isRemoval ? AppColors.error : const Color(0xFF14B8A6);
+    // iOS keyboard-avoidance: push the sheet up so the amount field +
+    // save button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.8,
       minChildSize: 0.5,
@@ -210,6 +213,7 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

@@ -127,6 +127,9 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF25D366);
     final hasPhone = (widget.manager.mobile ?? '').trim().isNotEmpty;
+    // iOS keyboard-avoidance: push the sheet up so the editable message
+    // text field + send button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.5,
@@ -139,6 +142,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               const SizedBox(height: 8),

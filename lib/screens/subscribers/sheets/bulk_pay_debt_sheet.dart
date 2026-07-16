@@ -234,6 +234,9 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6);
     final s = _summary;
+    // iOS keyboard-avoidance: push the sheet up so amount fields +
+    // submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.92,
       minChildSize: 0.6,
@@ -246,6 +249,7 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

@@ -112,6 +112,9 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     String two(int n) => n.toString().padLeft(2, '0');
     final dateLabel =
         '${_date.year}/${two(_date.month)}/${two(_date.day)}';
+    // iOS keyboard-avoidance: push the sheet up so amount + note +
+    // submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.5,
@@ -124,6 +127,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               const SizedBox(height: 8),

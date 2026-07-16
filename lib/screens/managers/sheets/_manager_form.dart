@@ -178,6 +178,9 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // iOS keyboard-avoidance: push the sheet up so the text fields +
+    // save button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -190,6 +193,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               const SizedBox(height: 8),

@@ -180,6 +180,9 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFFE08F2D); // amber — debt addition
+    // iOS keyboard-avoidance: push the sheet up so the amount/comment
+    // fields + submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -192,6 +195,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

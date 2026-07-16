@@ -207,6 +207,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = Color(0xFF14B8A6); // teal — pay/credit
+    // iOS keyboard-avoidance: push the sheet up so amount + notes +
+    // submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -219,6 +222,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               _SheetHandle(),

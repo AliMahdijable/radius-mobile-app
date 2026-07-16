@@ -247,6 +247,9 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // iOS keyboard-avoidance: push the sheet up so amount + note +
+    // submit button stay visible when the keyboard opens.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.5,
@@ -259,6 +262,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             children: [
               const SizedBox(height: 8),
