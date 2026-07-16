@@ -829,10 +829,13 @@ class _SubscriptionCard extends StatelessWidget {
   static String _lastSeenText(Subscriber s) {
     // 2026-07-16: نستخدم SAS4 last_online إذا كان موجوداً (تاريخ ووقت
     // دقيقان). backend يمرّرها في /api/v2/subscribers منذ 2026-07-13.
-    // fallback: التقدير القديم من expiration (لو backend ما زوّدها).
+    // نعرض الاثنين: تقدير نسبيّ + التاريخ الدقيق (زي الويب) —
+    // "قبل 3 أيام · 2026/07/13 14:32".
     final lastRaw = s.lastOnline?.trim();
     if (lastRaw != null && lastRaw.isNotEmpty) {
-      return _formatLastOnline(lastRaw);
+      final rel = _formatLastOnline(lastRaw);
+      final exact = _expirationText(lastRaw); // نفس صيغة تاريخ الانتهاء
+      return exact == '—' || exact == lastRaw ? rel : '$rel · $exact';
     }
     // Fallback القديم:
     if (!s.isExpired) return 'subscribers.ago_not_available'.tr();
