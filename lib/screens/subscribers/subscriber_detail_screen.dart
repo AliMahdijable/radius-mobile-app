@@ -1538,7 +1538,10 @@ class _SubscriberHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = AppColors.brand;
+    // 2026-07-16: لون الكرت يتغيّر حسب حالة المشترك بدل الأخضر الثابت.
+    // الألوان داكنة كافياً لتباين واضح مع النصّ الأبيض في الوضعَين
+    // (الفاتح والداكن). طلب المستخدم — تمييز فوري للحالة عند فتح الكرت.
+    final accent = _heroColor(sub);
     final remaining = sub.remainingDays;
     String remainingTop = '—';
     String remainingSub = 'الأيام المتبقية';
@@ -1605,8 +1608,10 @@ class _SubscriberHero extends StatelessWidget {
                 Flexible(
                   child: Text(
                     sub.username,
-                    style: const TextStyle(
-                      color: Color(0xFFCBE4D7),
+                    // 2026-07-16: أبيض شفاف بدل الأخضر الفاتح — يشتغل مع
+                    // كل ألوان الكرت الجديدة (blue/red/purple/amber/slate).
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1738,6 +1743,28 @@ class _SubscriberHero extends StatelessWidget {
         '${two(dt.hour)}:${two(dt.minute)}';
   }
 
+  /// 2026-07-16: يرجّع لون خلفيّة الكرت الرئيسي حسب حالة المشترك.
+  /// يطابق ألوان شريط قائمة المشتركين لكن بتدرّج أغمق (700-level)
+  /// عشان يوفّر تباين كافٍ مع النصّ الأبيض في الوضعَين. الترتيب
+  /// حسب الأولوية — الأشد يلغي الأخف:
+  ///   1. معطّل     → slate-600 (رمادي)
+  ///   2. متصل + منتهي → purple-700 (بنفسجي)
+  ///   3. متصل     → blue-700 (أزرق)
+  ///   4. منتهي    → red-700 (أحمر)
+  ///   5. قارب     → amber-700 (كهرماني)
+  ///   6. نشط (offline + فعّال) → emerald-700 (أخضر — مطابق لسلوك v1)
+  static Color _heroColor(Subscriber s) {
+    if (s.isDisabled) return const Color(0xFF475569); // slate-600
+    if (s.isOnline) {
+      if (s.isExpired) return const Color(0xFF6D28D9); // purple-700
+      if (s.isNearExpiry) return const Color(0xFFB45309); // amber-700
+      return const Color(0xFF1D4ED8); // blue-700
+    }
+    if (s.isExpired) return const Color(0xFFB91C1C); // red-700
+    if (s.isNearExpiry) return const Color(0xFFB45309); // amber-700
+    return const Color(0xFF047857); // emerald-700
+  }
+
   Widget _heroStat({
     required String big,
     required String small,
@@ -1761,8 +1788,11 @@ class _SubscriberHero extends StatelessWidget {
         const SizedBox(height: 3),
         Text(
           small,
-          style: const TextStyle(
-            color: Color(0xFFCBE4D7),
+          // 2026-07-16: أبيض شفاف بدل الأخضر الفاتح — الكرت الآن يتلوّن
+          // حسب الحالة (blue/red/purple/amber/slate)، فاللون العام
+          // يشتغل على كل الحالات.
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.75),
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -1798,13 +1828,15 @@ class _SubscriberHero extends StatelessWidget {
             width: 110,
             child: Row(
               children: [
-                Icon(icon, color: const Color(0xFFCBE4D7), size: 14),
+                // 2026-07-16: أبيض شفاف بدل الأخضر الفاتح — يتناسب مع
+                // كل ألوان الكرت الجديدة (blue/red/purple/amber/slate).
+                Icon(icon, color: Colors.white.withValues(alpha: 0.75), size: 14),
                 const SizedBox(width: 7),
                 Flexible(
                   child: Text(
                     label,
-                    style: const TextStyle(
-                      color: Color(0xFFCBE4D7),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
