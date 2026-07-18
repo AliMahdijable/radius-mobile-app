@@ -677,20 +677,34 @@ class _ExpirationPicker extends StatelessWidget {
                   cancelText: 'إلغاء',
                   confirmText: 'تأكيد',
                 );
-                if (picked != null) {
-                  // Preserve any time-of-day already in the original
-                  // value so a date-only pick doesn't truncate the
-                  // expiration to midnight (loses ~16h of service).
-                  final src = value;
-                  onPick(DateTime(
-                    picked.year,
-                    picked.month,
-                    picked.day,
-                    src?.hour ?? 20,
-                    src?.minute ?? 59,
-                    src?.second ?? 59,
-                  ));
-                }
+                if (picked == null) return;
+                if (!context.mounted) return;
+                // 2026-07-16: بعد التاريخ، منتقي الوقت — كان المدير
+                // يقدر يغيّر التاريخ فقط، الوقت يبقى ثابت (20:59:59
+                // افتراضي) — شكوى المستخدم الحقيقية.
+                final src = value;
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(
+                    hour: src?.hour ?? 20,
+                    minute: src?.minute ?? 59,
+                  ),
+                  helpText: 'اختر وقت الانتهاء',
+                  cancelText: 'إلغاء',
+                  confirmText: 'تأكيد',
+                );
+                // لو المدير ألغى منتقي الوقت، نحافظ على الوقت الأصلي
+                // (لا نخسر معلومات).
+                final hour = pickedTime?.hour ?? src?.hour ?? 20;
+                final minute = pickedTime?.minute ?? src?.minute ?? 59;
+                onPick(DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  hour,
+                  minute,
+                  src?.second ?? 59,
+                ));
               }
             : null,
         borderRadius: BorderRadius.circular(R.sm),

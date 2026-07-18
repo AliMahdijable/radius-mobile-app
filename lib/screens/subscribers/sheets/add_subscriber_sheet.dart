@@ -595,21 +595,29 @@ class _ExpirationPicker extends StatelessWidget {
                   cancelText: 'إلغاء',
                   confirmText: 'تأكيد',
                 );
-                if (picked != null) {
-                  // Preserve the time-of-day so picking just a date
-                  // doesn't lose the minute/second the field was
-                  // seeded with (مطلب 2026-06-10 — defaults to
-                  // DateTime.now()).
-                  final src = value ?? DateTime.now();
-                  onPick(DateTime(
-                    picked.year,
-                    picked.month,
-                    picked.day,
-                    src.hour,
-                    src.minute,
-                    src.second,
-                  ));
-                }
+                if (picked == null) return;
+                if (!context.mounted) return;
+                // 2026-07-16: بعد التاريخ، منتقي الوقت — كان المدير
+                // يقدر يغيّر التاريخ فقط، الوقت يبقى نفس اللحظة الحالية.
+                final src = value ?? DateTime.now();
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(hour: src.hour, minute: src.minute),
+                  helpText: 'اختر وقت الانتهاء',
+                  cancelText: 'إلغاء',
+                  confirmText: 'تأكيد',
+                );
+                // لو المدير ألغى منتقي الوقت، نحافظ على الوقت الأصلي.
+                final hour = pickedTime?.hour ?? src.hour;
+                final minute = pickedTime?.minute ?? src.minute;
+                onPick(DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  hour,
+                  minute,
+                  src.second,
+                ));
               }
             : null,
         borderRadius: BorderRadius.circular(R.sm),
