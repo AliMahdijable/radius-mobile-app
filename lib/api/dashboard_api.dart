@@ -182,7 +182,9 @@ class DashboardApi {
         debtTotal += s.debtAbs.round();
       }
       if (s.isNearExpiry) nearExpiry++;
-      if (s.isOnline) online++;
+      // 2026-07-16: "متصل" في الداشبورد يستثني المنتهين — عندهم فلتر
+      // مخصّص onlineNoPlan (بدون نت). المستخدم يريد الفصل الدقيق.
+      if (s.isOnline && !s.isExpired) online++;
       if (s.isOffline) offline++; // !isOnline && !isExpired
       if (s.isExpired) expired++;
       if (s.isActive) active++; // matches isExpired==false

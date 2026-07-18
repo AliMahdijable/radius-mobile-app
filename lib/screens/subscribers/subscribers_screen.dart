@@ -405,7 +405,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       case SubscriberFilter.active:
         it = it.where((s) => s.isActive); // not-expired (disabled included)
       case SubscriberFilter.online:
-        it = it.where((s) => s.isOnline);
+        // 2026-07-16: "متصل" الآن يستثني المنتهي اشتراكه — عنده فلتر
+        // "بدون نت" مخصّص. المستخدم يريد الفصل الدقيق: هنا المتصلون
+        // النشطون فقط، والمنتهون المتصلون في onlineNoPlan.
+        it = it.where((s) => s.isOnline && !s.isExpired);
       case SubscriberFilter.offline:
         it = it.where((s) => s.isOffline); // not-online AND not-expired
       case SubscriberFilter.disabled:
@@ -562,7 +565,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     return {
       SubscriberFilter.all: src.length,
       SubscriberFilter.active: src.where((s) => s.isActive).length,
-      SubscriberFilter.online: src.where((s) => s.isOnline).length,
+      // 2026-07-16: نفس التغيير في العدّ — مطابق لمنطق الفلتر أعلاه.
+      SubscriberFilter.online: src.where((s) => s.isOnline && !s.isExpired).length,
       SubscriberFilter.offline: src.where((s) => s.isOffline).length,
       SubscriberFilter.disabled: src.where((s) => s.isDisabled).length,
       SubscriberFilter.expired: src.where((s) => s.isExpired).length,
