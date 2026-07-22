@@ -9,6 +9,7 @@ import '../../api/dashboard_api.dart';
 import '../../api/sas4_api.dart';
 import '../../models/dashboard.dart';
 import '../../services/alerts_service.dart';
+import '../../services/app_resumed_signal.dart';
 import '../../services/auth_storage.dart';
 import '../../services/inbox_service.dart';
 import '../../services/subscriber_events.dart';
@@ -71,11 +72,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // anywhere in the app succeeds (activate/extend/disconnect/bulk
     // toggle/delete). Matches v1's pattern of state-driven refresh.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
+    // إعادة الجلب لمّا التطبيق يرجع من الخلفيّة — بدون هذا الـlistener،
+    // إذا المدير خرج للـHome ورجع بعد فترة، الـKPIs تبقى قديمة لأن
+    // IndexedStack يحتفظ بالـDashboard مركّبة وinitState ما ينطلق ثانية.
+    AppResumedSignal.tick.addListener(_onAppResumed);
   }
 
   void _onDataChanged() {
     if (!mounted) return;
-    // Debounce — اجمع موجة الأحداث في refresh واحد.
+    _scheduleSilentRefresh();
+  }
+
+  void _onAppResumed() {
+    if (!mounted) return;
+    _scheduleSilentRefresh();
+  }
+
+  void _scheduleSilentRefresh() {
+    // Debounce — اجمع موجة الأحداث في refresh واحد. يعالج أيضاً حالة
+    // resume + dataChanged بتوقيت متقارب (مثلاً مدير رجع للتطبيق بعد
+    // بضع ثواني من تفعيل).
     _refreshDebounce?.cancel();
     _refreshDebounce = Timer(const Duration(milliseconds: 700), () {
       if (!mounted) return;
@@ -90,6 +106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _refreshDebounce?.cancel();
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    AppResumedSignal.tick.removeListener(_onAppResumed);
     super.dispose();
   }
 

@@ -352,6 +352,15 @@ class SubscribersApi {
     return _SubsListCache.get();
   }
 
+  /// Drop the cached list WITHOUT triggering a fetch. Used by the
+  /// app-lifecycle resume handler (main.dart) so the next dashboard/
+  /// subscribers refresh always hits the backend after the app returns
+  /// from background — without forcing an eager network call from
+  /// main.dart itself.
+  static void invalidateListCache() {
+    _SubsListCache.invalidate();
+  }
+
   /// Raw fetch — used internally by the cache. Don't call directly.
   /// Hits /api/v2/subscribers (NOT /api/subscribers/with-phones).
   /// The legacy with-phones endpoint asks SAS4 for column 'idx' which

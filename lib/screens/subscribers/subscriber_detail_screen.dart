@@ -8,6 +8,7 @@ import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
+import '../../services/app_resumed_signal.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
@@ -90,11 +91,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // this, the screen sits on its widget.sub copy and shows stale
     // numbers until the admin closes and re-opens it.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
+    // إعادة الجلب لمّا التطبيق يرجع من الخلفيّة — نفس _onDataChanged،
+    // لأن الشاشة تبقى مركّبة في stack الـnavigation حتى بعد resume
+    // فما تنطلق initState ثانية.
+    AppResumedSignal.tick.addListener(_onDataChanged);
   }
 
   @override
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    AppResumedSignal.tick.removeListener(_onDataChanged);
     super.dispose();
   }
 

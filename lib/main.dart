@@ -10,6 +10,8 @@ import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
 import 'api/device_probe_api.dart';
+import 'api/subscribers_api.dart';
+import 'services/app_resumed_signal.dart';
 import 'services/fcm_service.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
@@ -126,14 +128,25 @@ class _MyServicesAppState extends State<MyServicesApp>
     super.dispose();
   }
 
-  /// عند رجوع التطبيق من الخلفيّة (foreground)، نُعيد مزامنة badge
-  /// الأيقونة مع InboxService.unreadCount. iOS badge يتراكم أحياناً لو
-  /// وصلت push notifications متعدّدة والمدير ما دخل التطبيق بينها.
+  /// عند رجوع التطبيق من الخلفيّة (foreground):
+  ///   1. مزامنة badge الأيقونة مع InboxService.unreadCount — iOS badge
+  ///      يتراكم أحياناً لو وصلت push notifications متعدّدة والمدير ما
+  ///      دخل التطبيق بينها.
+  ///   2. إلغاء كاش قائمة المشتركين (TTL=45s) — لضمان أن الشاشات اللي
+  ///      تجلب بعد الـresume تحصل على بيانات طازة من الـbackend حتى لو
+  ///      الغياب كان أقل من 45 ثانية.
+  ///   3. bump للـAppResumedSignal — كل شاشة تجلب بيانات (Dashboard،
+  ///      SubscriberDetail، إلخ) تستمع لهذا الـtick وتنفّذ refresh صامت.
+  ///      يعالج bug: بعد رجوع التطبيق من الخلفيّة، البيانات المعروضة
+  ///      كانت stale لأن initState فقط يجلب مرّة واحدة (v1 كان يعالجها
+  ///      عبر WidgetsBindingObserver على HomeScreen).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       BadgeService.sync();
+      SubscribersApi.invalidateListCache();
+      AppResumedSignal.bump();
     }
   }
 
