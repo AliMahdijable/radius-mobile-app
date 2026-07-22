@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
+import '../../../services/app_resumed_signal.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -48,6 +49,10 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     // the user pulled to refresh or switched periods (user report
     // 2026-06-09: "ما يتحدث بشكل حي مع الحركات").
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
+    // إعادة جلب على resume من الخلفيّة — الكارت يملك state خاص
+    // ولا يعتمد على _refreshLive في DashboardScreen، فبدون هذا
+    // الـlistener الإيرادات تبقى قديمة بعد رجوع التطبيق.
+    AppResumedSignal.tick.addListener(_onDataChanged);
   }
 
   void _onDataChanged() {
@@ -68,6 +73,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   @override
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    AppResumedSignal.tick.removeListener(_onDataChanged);
     super.dispose();
   }
 

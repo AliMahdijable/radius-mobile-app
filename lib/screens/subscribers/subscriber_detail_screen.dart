@@ -106,7 +106,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   Future<void> _onDataChanged() async {
     if (!mounted) return;
-    final list = await SubscribersApi.loadAll();
+    // Safety timeout — لمّا نُستدعى من AppResumedSignal بعد فترة
+    // غياب طويلة، الـbackend ممكن يتأخّر (SubscribersApi.loadAll
+    // يحمّل قائمة ثقيلة). بدون timeout، الـFuture يعلق ويبقى الصف
+    // stale بلا مؤشّر بصري.
+    List<Subscriber>? list;
+    try {
+      list = await SubscribersApi.loadAll()
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {
+      list = null;
+    }
     if (!mounted || list == null) return;
     // Match by idx first (canonical, survives username renames),
     // then fall back to username for any rows where idx didn't land.

@@ -140,11 +140,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // البطل + المدينون كانوا يعلقون على spinner لدقائق.
     const kMaxLoad = Duration(seconds: 20);
 
+    // UX guard: على silent refresh (event-driven أو resume)، لو fetch
+    // فشل (r==null) وعندنا بيانات جيّدة سابقة، ما نستبدلها بـerror state.
+    // يمنع flash "فشل جلب" العابر على شبكات ضعيفة. Pull-to-refresh
+    // (silent==false) يعرض الحقيقة دائماً.
     DashboardApi.fetchWhatsAppStatus()
         .timeout(kMaxLoad, onTimeout: () => null)
         .catchError((_) => null)
         .then((r) {
       if (!mounted) return;
+      if (silent && r == null && _waLive != null) return;
       setState(() {
         _waLive = r;
         _waLoaded = true;
@@ -155,6 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .catchError((_) => null)
         .then((r) {
       if (!mounted) return;
+      if (silent && r == null && _activationsLive != null) return;
       setState(() {
         _activationsLive = r;
         _activationsLoaded = true;
@@ -165,6 +171,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .catchError((_) => const Sas4Stats())
         .then((r) {
       if (!mounted) return;
+      // Sas4Stats non-nullable — نستعمل total==null كإشارة على fetch فشل.
+      final failed = r.total == null && r.active == null &&
+          r.expired == null && r.online == null && r.balance == null;
+      if (silent && failed && _sas4Live != null) return;
       setState(() {
         _sas4Live = r;
         _sas4Loaded = true;
@@ -175,6 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .catchError((_) => null)
         .then((r) {
       if (!mounted) return;
+      if (silent && r == null && _debtorsLive != null) return;
       setState(() {
         _debtorsLive = r;
         _debtorsLoaded = true;
@@ -188,6 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .catchError((_) => null)
         .then((r) {
       if (!mounted) return;
+      if (silent && r == null && _walletLive != null) return;
       setState(() {
         _walletLive = r;
         _walletLoaded = true;
