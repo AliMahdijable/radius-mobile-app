@@ -76,7 +76,17 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       _loading = p;
       _failed.remove(p);
     });
-    final r = await DashboardApi.fetchRevenue(p);
+    // Safety net: timeout 20 ثانية + catchError — نضمن أن الـUI ما
+    // يعلق على spinner للأبد لو الشبكة هنغت أو الـauth refresh دخل
+    // بلوب. المدير رفع screenshot 2026-07-22 يوضّح spinner ثابت في
+    // كارت البطل بسبب /api/reports/finance بطيء.
+    RevenueResult? r;
+    try {
+      r = await DashboardApi.fetchRevenue(p)
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {
+      r = null;
+    }
     if (!mounted) return;
     setState(() {
       if (r != null) {

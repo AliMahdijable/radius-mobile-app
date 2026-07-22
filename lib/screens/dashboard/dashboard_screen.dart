@@ -132,28 +132,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     // Independent fetches — each updates its loaded flag as soon as it
     // returns so cards can light up one by one instead of all-or-nothing.
-    DashboardApi.fetchWhatsAppStatus().then((r) {
+    //
+    // Safety net: كل fetch مغطّى بـtimeout 20 ثانية + catchError. حتى لو
+    // Dio hang (network drop، auth refresh loop، backend slow query)،
+    // الـFuture ما يعلق للأبد. كارت الـUI يصير إلى error state
+    // بدل spinner ثابت. أُضيف بعد تقرير المدير 2026-07-22: كارت
+    // البطل + المدينون كانوا يعلقون على spinner لدقائق.
+    const kMaxLoad = Duration(seconds: 20);
+
+    DashboardApi.fetchWhatsAppStatus()
+        .timeout(kMaxLoad, onTimeout: () => null)
+        .catchError((_) => null)
+        .then((r) {
       if (!mounted) return;
       setState(() {
         _waLive = r;
         _waLoaded = true;
       });
     });
-    DashboardApi.fetchDailyActivations().then((r) {
+    DashboardApi.fetchDailyActivations()
+        .timeout(kMaxLoad, onTimeout: () => null)
+        .catchError((_) => null)
+        .then((r) {
       if (!mounted) return;
       setState(() {
         _activationsLive = r;
         _activationsLoaded = true;
       });
     });
-    Sas4Api.fetchAll().then((r) {
+    Sas4Api.fetchAll()
+        .timeout(kMaxLoad, onTimeout: () => const Sas4Stats())
+        .catchError((_) => const Sas4Stats())
+        .then((r) {
       if (!mounted) return;
       setState(() {
         _sas4Live = r;
         _sas4Loaded = true;
       });
     });
-    DashboardApi.fetchDebtors().then((r) {
+    DashboardApi.fetchDebtors()
+        .timeout(kMaxLoad, onTimeout: () => null)
+        .catchError((_) => null)
+        .then((r) {
       if (!mounted) return;
       setState(() {
         _debtorsLive = r;
@@ -163,7 +183,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
       AlertsService.refresh();
     });
-    DashboardApi.fetchWallet().then((r) {
+    DashboardApi.fetchWallet()
+        .timeout(kMaxLoad, onTimeout: () => null)
+        .catchError((_) => null)
+        .then((r) {
       if (!mounted) return;
       setState(() {
         _walletLive = r;
