@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -99,7 +101,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       context: context,
       initialTime: initial,
       builder: (ctx, child) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: ui.TextDirection.rtl,
         child: child ?? const SizedBox.shrink(),
       ),
     );
@@ -194,7 +196,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(msg,
-              style: AppType.body(color: Colors.white)
+              style: AppType.label(color: Colors.white)
                   .copyWith(fontWeight: FontWeight.w600)),
           backgroundColor: error ? AppColors.error : AppColors.brand,
           behavior: SnackBarBehavior.floating,
@@ -282,7 +284,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
                       .copyWith(fontSize: 15)),
               const SizedBox(height: 2),
               Text(subtitle,
-                  style: AppType.body(color: AppColors.textMid)
+                  style: AppType.label(color: AppColors.textMid)
                       .copyWith(fontSize: 12)),
             ],
           ),
@@ -317,7 +319,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
                 size: 18, color: AppColors.textMid),
             const SizedBox(width: 10),
             Text('wa_schedules.execution_time'.tr(),
-                style: AppType.body(color: AppColors.textMid)
+                style: AppType.label(color: AppColors.textMid)
                     .copyWith(fontSize: 13)),
             const Spacer(),
             Text(display,
@@ -439,15 +441,15 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           ),
           const SizedBox(height: Sp.md),
           Text('wa_schedules.days_before_label'.tr(),
-              style: AppType.body(color: AppColors.textMid)
+              style: AppType.label(color: AppColors.textMid)
                   .copyWith(fontSize: 12)),
           const SizedBox(height: 6),
           TextField(
             controller: _daysBeforeCtrl,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            textDirection: TextDirection.ltr,
-            style: AppType.body(color: AppColors.textHi),
+            textDirection: ui.TextDirection.ltr,
+            style: AppType.input(color: AppColors.textHi),
             decoration: InputDecoration(
               hintText: '1..30',
               filled: true,
@@ -470,7 +472,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           ),
           const SizedBox(height: Sp.md),
           Text('wa_schedules.weekly_days'.tr(),
-              style: AppType.body(color: AppColors.textMid)
+              style: AppType.label(color: AppColors.textMid)
                   .copyWith(fontSize: 12)),
           const SizedBox(height: 8),
           _weekdayChips(
@@ -546,7 +548,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           const SizedBox(height: Sp.md),
           if (_debtMode == 'weekly') ...[
             Text('wa_schedules.weekly_days'.tr(),
-                style: AppType.body(color: AppColors.textMid)
+                style: AppType.label(color: AppColors.textMid)
                     .copyWith(fontSize: 12)),
             const SizedBox(height: 8),
             _weekdayChips(
@@ -556,7 +558,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             ),
           ] else ...[
             Text('wa_schedules.monthly_days'.tr(),
-                style: AppType.body(color: AppColors.textMid)
+                style: AppType.label(color: AppColors.textMid)
                     .copyWith(fontSize: 12)),
             const SizedBox(height: 8),
             _monthDayChips(color: color),
