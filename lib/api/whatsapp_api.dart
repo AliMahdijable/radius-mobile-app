@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/util/format.dart';
 import '../models/subscriber.dart';
+import '../models/whatsapp_schedule.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 
@@ -491,6 +492,157 @@ class WhatsAppApi {
     } catch (e) {
       _log('whatsapp/template DELETE', e);
       return (ok: false, message: 'تعذّر الحذف');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // WhatsApp Schedules (وقت/أيام إرسال التبليغات التلقائيّة)
+  // منقولة من v1 mobile — نفس الـendpoints بالتحديد.
+  // ─────────────────────────────────────────────────────────────
+
+  /// GET /api/whatsapp/schedules/:adminId — يرجع قائمة WhatsAppSchedule
+  /// (نوع واحد لكل schedule_type: expiry_warning + debt_reminder + service_end).
+  /// نُرجع null على فشل الشبكة، [] على استجابة فارغة (مثلاً مدير جديد).
+  static Future<List<WhatsAppSchedule>?> loadSchedules() async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return null;
+    try {
+      final r = await ApiClient.dio.get<dynamic>(
+        '/api/whatsapp/schedules/$adminId',
+      );
+      final data = r.data;
+      List<dynamic> rows;
+      if (data is List) {
+        rows = data;
+      } else if (data is Map && data['schedules'] is List) {
+        rows = data['schedules'] as List;
+      } else {
+        rows = const [];
+      }
+      final list = <WhatsAppSchedule>[];
+      for (final row in rows) {
+        if (row is! Map) continue;
+        try {
+          list.add(WhatsAppSchedule.fromJson(
+            Map<String, dynamic>.from(row),
+          ));
+        } catch (_) {
+          // صف تالف — نتخطّاه بدل إسقاط كل القائمة
+        }
+      }
+      return list;
+    } catch (e) {
+      _log('whatsapp/schedules GET', e);
+      return null;
+    }
+  }
+
+  /// POST /api/whatsapp/save-schedule — upsert جدولة كاملة (وقت + أيام + وضع).
+  static Future<({bool ok, String? message})> saveSchedule(
+      WhatsAppSchedule schedule) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/save-schedule',
+        data: schedule.toSaveJson(),
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (
+        ok: ok,
+        message: ok
+            ? null
+            : (body['message']?.toString() ??
+                body['error']?.toString() ??
+                'تعذّر حفظ الجدولة'),
+      );
+    } catch (e) {
+      _log('whatsapp/save-schedule POST', e);
+      return (ok: false, message: 'تعذّر حفظ الجدولة');
+    }
+  }
+
+  /// PATCH /api/whatsapp/schedule-toggle — تبديل التفعيل بدون تغيير باقي
+  /// الحقول (وقت/أيام). أسرع من saveSchedule الكامل + يعمل على جدولة
+  /// موجودة (لا يُنشئ صف جديد).
+  static Future<({bool ok, String? message})> toggleSchedule({
+    required String scheduleType,
+    required bool isEnabled,
+  }) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.patch<Map<String, dynamic>>(
+        '/api/whatsapp/schedule-toggle',
+        data: {
+          'adminId': adminId,
+          'scheduleType': scheduleType,
+          'isEnabled': isEnabled,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (
+        ok: ok,
+        message: ok
+            ? null
+            : (body['message']?.toString() ??
+                body['error']?.toString() ??
+                'تعذّر تحديث الحالة'),
+      );
+    } catch (e) {
+      _log('whatsapp/schedule-toggle PATCH', e);
+      return (ok: false, message: 'تعذّر تحديث الحالة');
+    }
+  }
+
+  /// DELETE /api/whatsapp/schedule/:adminId/:scheduleType — مسح كامل.
+  static Future<({bool ok, String? message})> deleteSchedule(
+      String scheduleType) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.delete<Map<String, dynamic>>(
+        '/api/whatsapp/schedule/$adminId/$scheduleType',
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (
+        ok: ok,
+        message: ok
+            ? null
+            : (body['message']?.toString() ?? 'تعذّر الحذف'),
+      );
+    } catch (e) {
+      _log('whatsapp/schedule DELETE', e);
+      return (ok: false, message: 'تعذّر الحذف');
+    }
+  }
+
+  /// POST /api/whatsapp/trigger-schedule — تنفيذ فوري (تجاوز الوقت المجدول).
+  /// يستعملها زر "شغّل الآن" في UI.
+  static Future<({bool ok, String? message})> triggerSchedule(
+      String scheduleType) async {
+    final adminId = await AuthStorage.readAdminId();
+    if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/whatsapp/trigger-schedule',
+        data: {
+          'adminId': adminId,
+          'scheduleType': scheduleType,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (
+        ok: ok,
+        message: ok
+            ? null
+            : (body['message']?.toString() ?? 'تعذّر التشغيل'),
+      );
+    } catch (e) {
+      _log('whatsapp/trigger-schedule POST', e);
+      return (ok: false, message: 'تعذّر التشغيل');
     }
   }
 

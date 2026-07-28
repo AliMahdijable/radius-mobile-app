@@ -125,19 +125,27 @@ class _LoginScreenState extends State<LoginScreen> {
           // TODO[2fa-screen]: route to 2FA when that screen exists.
           return;
         }
-        // مطلب 2026-06-12: نجلب صلاحيات الـactor قبل التنقّل لـMainShell.
-        // لو فشلت (شبكة/خطأ سيرفر) نمسح الكاش ونوقف الدخول — أأمن من
-        // دخول بكاش قديم لمستخدم سابق على نفس الجهاز.
-        final permsOk = await PermissionsService.refreshFromBackend();
-        if (!mounted) return;
-        if (!permsOk) {
-          await PermissionsService.clear();
+        // Perf 2026-XX: نجلب الصلاحيات في الخلفيّة للـadmin (default =
+        // كل شي مسموح، فما في fallout بصري لو الشبكة بطيئة). للـemployee
+        // نستنّى الجلب لأن سلوك has() للـemployee "كل شي ممنوع افتراضياً"
+        // — بدون الاستنظار سيرى قوائم فارغة لثوانٍ قبل ما تتحدّث.
+        // النتيجة: admin يدخل بـ~-300ms، employee بنفس السلوك السابق.
+        if (isEmployee) {
+          final permsOk = await PermissionsService.refreshFromBackend();
           if (!mounted) return;
-          _showSnack('login.perms_fetch_failed'.tr(), error: true);
-          return;
+          if (!permsOk) {
+            await PermissionsService.clear();
+            if (!mounted) return;
+            _showSnack('login.perms_fetch_failed'.tr(), error: true);
+            return;
+          }
+        } else {
+          // Admin (99% من الحالات): unrestricted افتراضياً → آمن unaware.
+          // لو الجلب فشل، الـUI يبقى مسموحاً كأدمن (سلوك صحيح).
+          unawaited(PermissionsService.refreshFromBackend());
         }
-        // نُسجّل FCM بعد إتمام الجلسة + جلب الصلاحيات. آمنة الفشل —
-        // ما تعطّل الدخول لو Firebase غير متوفّر (fire-and-forget).
+        // نُسجّل FCM بعد إتمام الجلسة. آمنة الفشل — ما تعطّل الدخول لو
+        // Firebase غير متوفّر (fire-and-forget).
         unawaited(FcmService.initAfterLogin());
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainShell()),

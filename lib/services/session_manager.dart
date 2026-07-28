@@ -23,11 +23,13 @@ import 'permissions_service.dart';
 ///     admin's leftover in-memory data.
 ///
 /// Order matters:
-///   1. In-memory API caches first (don't need to await FCM/network).
-///   2. Async persistent stores (Inbox, Perms, Auth) — awaited.
+///   1. In-memory API caches first — sync, instant, no await.
+///   2. Async persistent stores — parallelized via Future.wait
+///      (previously ran sequentially, wasting ~150ms during login).
 ///   3. FCM unregister LAST because it hits network; missed unregister
 ///      just means old device gets a few extra push messages once,
 ///      never a permanent leak.
+///   4. Auth wipe — last so anything above that reads auth still works.
 class SessionManager {
   SessionManager._();
 
@@ -41,61 +43,49 @@ class SessionManager {
     bool unregisterFcm = true,
     bool clearAuth = true,
   }) async {
-    // 1) in-memory API caches — sync
-    try {
-      SubscribersApi.clearAllCaches();
-    } catch (e) {
-      _log('SubscribersApi.clearAllCaches', e);
-    }
-    try {
-      DeviceConfigApi.clearAllCaches();
-    } catch (e) {
-      _log('DeviceConfigApi.clearAllCaches', e);
-    }
-    try {
-      await DeviceProbeApi.clearAllCaches();
-    } catch (e) {
-      _log('DeviceProbeApi.clearAllCaches', e);
-    }
-    try {
-      AlertsService.reset();
-    } catch (e) {
-      _log('AlertsService.reset', e);
-    }
-    try {
-      await BadgeService.clear();
-    } catch (e) {
-      _log('BadgeService.clear', e);
-    }
+    // 1) In-memory API caches — SYNC, instant. Fire before any await
+    //    so subsequent screens never see prior admin's list/config data.
+    _guardSync('SubscribersApi.clearAllCaches',
+        () => SubscribersApi.clearAllCaches());
+    _guardSync('DeviceConfigApi.clearAllCaches',
+        () => DeviceConfigApi.clearAllCaches());
+    _guardSync('AlertsService.reset', () => AlertsService.reset());
 
-    // 2) persistent per-session stores
-    try {
-      await InboxService.clear();
-    } catch (e) {
-      _log('InboxService.clear', e);
-    }
-    try {
-      await PermissionsService.clear();
-    } catch (e) {
-      _log('PermissionsService.clear', e);
-    }
+    // 2) Async persistent stores — PARALLEL via Future.wait.
+    //    Previously sequential: each waited on the last (~40ms × 4).
+    //    Now bounded by the slowest single write, not the sum.
+    await Future.wait([
+      _guardAsync('DeviceProbeApi.clearAllCaches',
+          DeviceProbeApi.clearAllCaches()),
+      _guardAsync('BadgeService.clear', BadgeService.clear()),
+      _guardAsync('InboxService.clear', InboxService.clear()),
+      _guardAsync('PermissionsService.clear', PermissionsService.clear()),
+    ]);
 
-    // 3) FCM unregister (network — after everything else)
+    // 3) FCM unregister (network — only on real logout).
     if (unregisterFcm) {
-      try {
-        await FcmService.unregister();
-      } catch (e) {
-        _log('FcmService.unregister', e);
-      }
+      await _guardAsync('FcmService.unregister', FcmService.unregister());
     }
 
     // 4) Auth wipe — last so anything above that reads auth still works.
     if (clearAuth) {
-      try {
-        await AuthStorage.clear();
-      } catch (e) {
-        _log('AuthStorage.clear', e);
-      }
+      await _guardAsync('AuthStorage.clear', AuthStorage.clear());
+    }
+  }
+
+  static void _guardSync(String tag, void Function() fn) {
+    try {
+      fn();
+    } catch (e) {
+      _log(tag, e);
+    }
+  }
+
+  static Future<void> _guardAsync(String tag, Future<void> fut) async {
+    try {
+      await fut;
+    } catch (e) {
+      _log(tag, e);
     }
   }
 }

@@ -16,6 +16,7 @@ import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
+import 'whatsapp/whatsapp_schedules_screen.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
 
@@ -163,6 +164,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const WhatsAppTemplatesScreen(),
+                    ),
+                  ),
+                ),
+              // مطلب 2026-XX: قائمة الجدولة (أوقات + أيام تبليغات)
+              // منقولة من v1 — الآن متاحة تحت whatsapp.templates.
+              if (Perms.has('whatsapp.templates'))
+                const SizedBox(height: Sp.xs),
+              if (Perms.has('whatsapp.templates'))
+                _Row(
+                  icon: Icons.schedule_outlined,
+                  label: 'settings.whatsapp_schedules'.tr(),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WhatsAppSchedulesScreen(),
                     ),
                   ),
                 ),
