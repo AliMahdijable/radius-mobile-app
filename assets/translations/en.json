@@ -743,7 +743,8 @@
     "save": "Save schedule",
     "saved": "Schedule saved",
     "save_failed": "Failed to save schedule",
-    "toggle_failed": "Failed to update status"
+    "toggle_failed": "Failed to update status",
+    "enabled": "Schedule enabled"
   },
   "notifications": {
     "title": "Notifications",

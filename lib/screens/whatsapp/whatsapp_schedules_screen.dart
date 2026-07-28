@@ -35,6 +35,10 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   int _daysBefore = 3;
   final _daysBeforeCtrl = TextEditingController(text: '3');
   bool _savingExpiry = false;
+  // Server-side row existence — نحتاجه للـtoggle. لو null → لسّة ما
+  // أُنشئت جدولة على السيرفر، فالـPATCH toggle سيفشل. نستعمل SAVE بدلها
+  // (نفس نمط v1 mobile _toggleOrCreateSchedule).
+  int? _expiryScheduleId;
 
   // Debt Reminder state
   bool _debtEnabled = false;
@@ -43,6 +47,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   String _debtMode = 'weekly';
   List<int> _debtMonthDays = const [1];
   bool _savingDebt = false;
+  int? _debtScheduleId;
 
   @override
   void initState() {
@@ -69,15 +74,26 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     setState(() => _loading = false);
   }
 
+  /// Silent reload — نستعمله بعد save/toggle عشان نحصل على schedule id
+  /// بدون spinner كامل يمسح الشاشة. الـUI يبقى مرئي أثناء إعادة الجلب.
+  Future<void> _silentReload() async {
+    final schedules = await WhatsAppApi.loadSchedules();
+    if (!mounted) return;
+    _hydrateFromSchedules(schedules ?? const []);
+    setState(() {}); // لتحديث IDs في الـstate
+  }
+
   void _hydrateFromSchedules(List<WhatsAppSchedule> list) {
     for (final s in list) {
       if (s.scheduleType == 'expiry_warning') {
+        _expiryScheduleId = s.id;
         _expiryEnabled = s.isEnabled;
         _expiryTime = s.scheduledTime;
         _expiryDays = List<int>.from(s.activeDays);
         _daysBefore = s.daysBefore ?? 3;
         _daysBeforeCtrl.text = _daysBefore.toString();
       } else if (s.scheduleType == 'debt_reminder') {
+        _debtScheduleId = s.id;
         _debtEnabled = s.isEnabled;
         _debtTime = s.scheduledTime;
         _debtDays = List<int>.from(s.activeDays);
@@ -116,16 +132,22 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     if (!_validateDaysBefore()) return;
     setState(() => _savingExpiry = true);
     final schedule = WhatsAppSchedule(
+      id: _expiryScheduleId,
       adminId: _adminId!,
       scheduleType: 'expiry_warning',
       isEnabled: _expiryEnabled,
       scheduledTime: _expiryTime,
-      activeDays: _expiryDays,
+      activeDays: List<int>.from(_expiryDays)..sort(),
       daysBefore: _daysBefore,
     );
     final r = await WhatsAppApi.saveSchedule(schedule);
     if (!mounted) return;
     setState(() => _savingExpiry = false);
+    if (r.ok) {
+      // إعادة تحميل — نحصل على schedule id لو كانت أول مرّة
+      await _silentReload();
+      if (!mounted) return;
+    }
     _showSnack(r.ok
         ? 'wa_schedules.saved'.tr()
         : (r.message ?? 'wa_schedules.save_failed'.tr()),
@@ -136,39 +158,110 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     if (_adminId == null) return;
     setState(() => _savingDebt = true);
     final schedule = WhatsAppSchedule(
+      id: _debtScheduleId,
       adminId: _adminId!,
       scheduleType: 'debt_reminder',
       isEnabled: _debtEnabled,
       scheduledTime: _debtTime,
-      activeDays: _debtDays,
+      activeDays: List<int>.from(_debtDays)..sort(),
       scheduleMode: _debtMode,
-      monthDays: _debtMode == 'monthly' ? _debtMonthDays : const [],
+      monthDays: _debtMode == 'monthly'
+          ? (List<int>.from(_debtMonthDays)..sort())
+          : const [],
     );
     final r = await WhatsAppApi.saveSchedule(schedule);
     if (!mounted) return;
     setState(() => _savingDebt = false);
+    if (r.ok) {
+      await _silentReload();
+      if (!mounted) return;
+    }
     _showSnack(r.ok
         ? 'wa_schedules.saved'.tr()
         : (r.message ?? 'wa_schedules.save_failed'.tr()),
         error: !r.ok);
   }
 
+  /// Toggle مع fallback ذكي — لو الجدولة ما زالت غير موجودة على السيرفر
+  /// (أول مرّة يفعّلها المدير)، PATCH schedule-toggle يفشل ("الجدولة غير
+  /// موجودة"). نستعمل SAVE بدلها لإنشاء الصف. مطابق v1 mobile
+  /// (_toggleOrCreateSchedule).
   Future<void> _toggleExpiry(bool v) async {
+    if (_adminId == null) return;
     setState(() => _expiryEnabled = v);
+
+    // لو ما في صف بعد + تعطيل → no-op (لا شي لتعطيله)
+    if (_expiryScheduleId == null && !v) return;
+
+    // لو ما في صف + تفعيل → أنشئه عبر SAVE (نفس v1)
+    if (_expiryScheduleId == null && v) {
+      if (!_validateDaysBefore()) {
+        setState(() => _expiryEnabled = false);
+        return;
+      }
+      final schedule = WhatsAppSchedule(
+        adminId: _adminId!,
+        scheduleType: 'expiry_warning',
+        isEnabled: true,
+        scheduledTime: _expiryTime,
+        activeDays: List<int>.from(_expiryDays)..sort(),
+        daysBefore: _daysBefore,
+      );
+      final r = await WhatsAppApi.saveSchedule(schedule);
+      if (!mounted) return;
+      if (r.ok) {
+        await _silentReload();
+        if (!mounted) return;
+        _showSnack('wa_schedules.enabled'.tr());
+      } else {
+        setState(() => _expiryEnabled = false);
+        _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(),
+            error: true);
+      }
+      return;
+    }
+
+    // الحالة العاديّة — الصف موجود، PATCH toggle
     final r = await WhatsAppApi.toggleSchedule(
       scheduleType: 'expiry_warning',
       isEnabled: v,
     );
     if (!mounted) return;
     if (!r.ok) {
-      // إعادة الحالة للأصل + رسالة خطأ
       setState(() => _expiryEnabled = !v);
       _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(), error: true);
     }
   }
 
   Future<void> _toggleDebt(bool v) async {
+    if (_adminId == null) return;
     setState(() => _debtEnabled = v);
+    if (_debtScheduleId == null && !v) return;
+    if (_debtScheduleId == null && v) {
+      final schedule = WhatsAppSchedule(
+        adminId: _adminId!,
+        scheduleType: 'debt_reminder',
+        isEnabled: true,
+        scheduledTime: _debtTime,
+        activeDays: List<int>.from(_debtDays)..sort(),
+        scheduleMode: _debtMode,
+        monthDays: _debtMode == 'monthly'
+            ? (List<int>.from(_debtMonthDays)..sort())
+            : const [],
+      );
+      final r = await WhatsAppApi.saveSchedule(schedule);
+      if (!mounted) return;
+      if (r.ok) {
+        await _silentReload();
+        if (!mounted) return;
+        _showSnack('wa_schedules.enabled'.tr());
+      } else {
+        setState(() => _debtEnabled = false);
+        _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(),
+            error: true);
+      }
+      return;
+    }
     final r = await WhatsAppApi.toggleSchedule(
       scheduleType: 'debt_reminder',
       isEnabled: v,
@@ -451,7 +544,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             textDirection: ui.TextDirection.ltr,
             style: AppType.input(color: AppColors.textHi),
             decoration: InputDecoration(
-              hintText: '1..30',
+              hintText: '3',
               filled: true,
               fillColor: AppColors.surfaceInput,
               contentPadding: const EdgeInsets.symmetric(
