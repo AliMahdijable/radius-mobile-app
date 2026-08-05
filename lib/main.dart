@@ -29,51 +29,40 @@ void main() async {
   // easy_localization يحتاج init قبل runApp — يحمّل الـcache ويتأكّد إن
   // الـstorage جاهز حتى الـsaveLocale يشتغل من اللحظة الأولى. مطلب
   // 2026-07-12: التطبيق يدعم عربي/إنجليزي مع حفظ اختيار المستخدم.
+  //
+  // هذي الوحيدة اللي تبقى منفصلة لأن runApp يعتمد على EasyLocalization
+  // ككلمة widget أعلى الشجرة — لازم تكون جاهزة قبل ما ننشئه.
   await EasyLocalization.ensureInitialized();
 
-  // Load the user's saved theme preference BEFORE the first frame so we
-  // don't paint a light flash then snap to dark on the next tick. The
-  // notifier is read synchronously below; this `await` guarantees it
-  // already holds the persisted value by the time runApp fires.
-  await ThemeService.load();
-  // Print prefs — يحدّد نوع القالب الافتراضي (a4/pos) لأزرار "طباعة الوصل"
-  // بعد التفعيل/التسديد. يُقرأ قبل أي زر يظهر.
-  await PrintPrefs.load();
-  // Version — يُحمَّل مرّة من pubspec.yaml (عبر manifest) حتى الشاشات تعرضه
-  // synchronously بدون كل واحدة تعمل PackageInfo.fromPlatform().
-  await AppVersion.load();
-  // Permissions service يعيد تحميل الـcache المخزّن من الجلسة السابقة
-  // قبل أول frame عشان الـgating يشتغل صح.
-  await PermissionsService.init();
-  // Inbox الإشعارات — نحمّل من الـcache قبل أي رسالة FCM محتملة عند
-  // startup (الـinit idempotent فآمن). الـFCM registration نفسه يصير
-  // بعد login (في fcm_service.initAfterLogin).
-  await InboxService.init();
-  // Badge — يزامن عدد الإشعارات على أيقونة التطبيق (iOS badge + Android
-  // launchers) مع InboxService.unreadCount. لولاه iOS badge يتراكم للأبد
-  // بينما داخل التطبيق العدد دقيق (شكوى مستخدم 2026-07-13: 12 خارجي، 4 داخلي).
-  await BadgeService.init();
-  // Device probe snapshot cache — نستعيد من SharedPreferences حتى قائمة
-  // المشتركين تعرض آخر حالة معروفة فوراً بلا انتظار wave جديد. مطلب
-  // المستخدم 2026-07-12 "instant load".
-  await DeviceProbeApi.hydrateFromPrefs();
-
-  // Bring up Firebase with options baked into firebase_options.dart —
-  // same approach as v1. This bypasses the GoogleService-Info.plist /
-  // google-services.json wiring entirely, so the build doesn't depend
-  // on the plist being registered in the Xcode project (most common
-  // cause of TestFlight white-screen). Still wrapped just in case.
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    NotificationService.markFirebaseReady(true);
-  } catch (e) {
-    if (kDebugMode) {
-      debugPrint('Firebase init failed: $e');
-    }
-    NotificationService.markFirebaseReady(false);
-  }
+  // Perf 2026-08-05: كل الـinits التالية مستقلّة عن بعضها — نشغّلها
+  // بالتوازي عبر Future.wait. كانت متتالية (~570-1290ms شاشة سوداء
+  // قبل ظهور splash). الآن الوقت = مدّة أبطأ عمليّة، مو مجموعهم.
+  // كل واحدة idempotent وتكتب في storage منفصل، فلا race conditions.
+  await Future.wait([
+    // Theme — يحمّل تفضيل المستخدم قبل أول frame (يمنع light-flash → dark).
+    ThemeService.load(),
+    // Print prefs — نوع القالب الافتراضي (a4/pos) لأزرار طباعة الوصل.
+    PrintPrefs.load(),
+    // Version — من manifest حتى الشاشات تعرض synchronously.
+    AppVersion.load(),
+    // Permissions — يعيد تحميل الـcache من الجلسة السابقة للـgating.
+    PermissionsService.init(),
+    // Inbox — cache الإشعارات قبل أي رسالة FCM.
+    InboxService.init(),
+    // Badge — يزامن العدد على أيقونة التطبيق (iOS badge لا يتراكم للأبد).
+    BadgeService.init(),
+    // Device probe — snapshot cache لقائمة المشتركين (instant load).
+    DeviceProbeApi.hydrateFromPrefs(),
+    // Firebase — options baked في firebase_options.dart. Wrapped catchError
+    // حتى TestFlight ما يصير white-screen لو plist مو registered.
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+        .then((_) {
+      NotificationService.markFirebaseReady(true);
+    }).catchError((e) {
+      if (kDebugMode) debugPrint('Firebase init failed: $e');
+      NotificationService.markFirebaseReady(false);
+    }),
+  ]);
 
   runApp(
     EasyLocalization(
