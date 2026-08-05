@@ -2,9 +2,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
@@ -55,9 +55,21 @@ void main() async {
     DeviceProbeApi.hydrateFromPrefs(),
     // Firebase — options baked في firebase_options.dart. Wrapped catchError
     // حتى TestFlight ما يصير white-screen لو plist مو registered.
+    // 2026-08-05: أضفنا Crashlytics wiring داخل نفس الـchain — يبدأ
+    // يجمع crashes فوراً بعد Firebase init. Zero overhead لو ما في crash.
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
         .then((_) {
       NotificationService.markFirebaseReady(true);
+      // Crashlytics: كل uncaught Flutter error يُرسل تلقائياً
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      // Crashlytics: كل uncaught async error يُرسل تلقائياً
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+      // Debug mode: نعطّل الإرسال حتى لا نضيف noise أثناء التطوير
+      FirebaseCrashlytics.instance
+          .setCrashlyticsCollectionEnabled(!kDebugMode);
     }).catchError((e) {
       if (kDebugMode) debugPrint('Firebase init failed: $e');
       NotificationService.markFirebaseReady(false);
@@ -224,11 +236,12 @@ class _MyServicesAppState extends State<MyServicesApp>
       useMaterial3: true,
       brightness: brightness,
       scaffoldBackgroundColor: AppColors.bg,
-      // Cairo as the default font for the WHOLE app. This catches
-      // every Text widget — incl. ElevatedButton/FilledButton/
-      // TextButton labels that don't pass an explicit style — so
-      // we don't have to retrofit AppType.button() on each Text.
-      textTheme: GoogleFonts.cairoTextTheme(base.textTheme),
+      // Cairo as the default font for the WHOLE app. Perf 2026-08-05:
+      // كان GoogleFonts.cairoTextTheme يفتح network fetch → text flash.
+      // الآن apply(fontFamily: 'Cairo') يستعمل الـfont المُضمَّن في
+      // assets (see pubspec.yaml fonts section). Offline من اللحظة
+      // الأولى، لا flash.
+      textTheme: base.textTheme.apply(fontFamily: 'Cairo'),
       colorScheme: brightness == Brightness.dark
           ? ColorScheme.dark(
               primary: AppColors.brand,

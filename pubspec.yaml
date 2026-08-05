@@ -14,8 +14,16 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # UI + motion (minimal)
+  # Perf 2026-08-05: أبقيناها للـfallback فقط — Cairo يُحمَّل من
+  # assets/fonts/ محلياً عبر Flutter font system (typography.dart)
+  # بدل runtime fetch من Google CDN (كان يسبب 200-500ms flash).
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.0
+
+  # Firebase Crashlytics — يجمع stack traces + device info لكل crash
+  # يحصل مع أي مدير. بدونه لا نعرف بالمشاكل إلا لمّا يشتكي المدير
+  # يدوياً. مطلب 2026-08-05.
+  firebase_crashlytics: ^4.1.3
 
   # Biometric login
   local_auth: ^2.3.0
@@ -116,3 +124,11 @@ flutter:
   assets:
     - assets/images/
     - assets/translations/
+
+  # Perf 2026-08-05: Cairo مُضمَّن محلياً بدل runtime fetch من
+  # google_fonts CDN. توفير 200-500ms على cold start + منع "text flash"
+  # (يظهر font افتراضي ثم يتبدّل بعد الـfetch).
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-VariableFont_slnt,wght.ttf

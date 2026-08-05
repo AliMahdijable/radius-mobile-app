@@ -37,6 +37,19 @@ class _SplashScreenState extends State<SplashScreen> {
     _decide();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Perf 2026-08-05: نُحمّل الـlogo في memory قبل ما يظهر على شاشات
+    // الدخول والداشبورد → صور فوريّة بلا "flash of nothing".
+    // precacheImage يحتاج context جاهز، لهيك في didChangeDependencies
+    // مو initState.
+    precacheImage(
+      const AssetImage('assets/images/logo.png'),
+      context,
+    );
+  }
+
   Future<void> _decide() async {
     // Perf 2026-08-05: كنّا نفرض Future.delayed(350ms) "حتى splash ما
     // يكون flash-of-nothing". الفعليّة: splash يظهر فعلاً لأن main.dart

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'colors.dart';
 
-/// Cairo via google_fonts (runtime download + cache). Returns TextStyles
-/// from static methods because GoogleFonts.cairo() can't be const-evaluated.
+/// Cairo مُحمَّل من assets/fonts/ محلياً (Flutter font system).
+/// كنّا نستعمل google_fonts.cairo() اللي يفتح network fetch على cold
+/// start (~200-500ms flash يظهر font افتراضي ثم يتبدّل). الآن الخط
+/// جزء من الـAPK ويعمل offline من اللحظة الأولى.
 ///
 /// ── v2 Type Scale (Material Design 3, Arabic-mobile tuned) ──────────
 ///   Hero KPI       : 22pt w800 — single biggest metric on screen
@@ -24,12 +25,16 @@ import 'colors.dart';
 class AppType {
   AppType._();
 
+  // اسم الـfamily المسجّل في pubspec.yaml → assets/fonts/Cairo-*.ttf
+  static const _cairo = 'Cairo';
+
   // 2026-07-13: كل style يستعمل AppColors.textHi/Mid/Low افتراضياً
   // حتى النصوص في dark mode تنقلب تلقائياً بلا تعديل يدوي في كل callsite.
   // الـcaller يقدر يتجاوز باللون الذي يريده.
 
   // Logo title
-  static TextStyle title({Color? color}) => GoogleFonts.cairo(
+  static TextStyle title({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 22,
         fontWeight: FontWeight.w700,
         height: 1.25,
@@ -37,7 +42,8 @@ class AppType {
         color: color ?? AppColors.textHi,
       );
 
-  static TextStyle subtitle({Color? color}) => GoogleFonts.cairo(
+  static TextStyle subtitle({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 13,
         fontWeight: FontWeight.w400,
         height: 1.5,
@@ -45,7 +51,8 @@ class AppType {
       );
 
   // Input label (above each field)
-  static TextStyle label({Color? color}) => GoogleFonts.cairo(
+  static TextStyle label({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 12,
         fontWeight: FontWeight.w600,
         height: 1.3,
@@ -53,7 +60,8 @@ class AppType {
       );
 
   // Input text + body
-  static TextStyle input({Color? color}) => GoogleFonts.cairo(
+  static TextStyle input({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 15,
         fontWeight: FontWeight.w500,
         height: 1.4,
@@ -61,7 +69,8 @@ class AppType {
       );
 
   // Button text
-  static TextStyle button({Color? color}) => GoogleFonts.cairo(
+  static TextStyle button({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 15,
         fontWeight: FontWeight.w600,
         height: 1.2,
@@ -69,7 +78,8 @@ class AppType {
       );
 
   // Link / tertiary text
-  static TextStyle link({Color? color}) => GoogleFonts.cairo(
+  static TextStyle link({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 13,
         fontWeight: FontWeight.w500,
         height: 1.3,
@@ -77,7 +87,8 @@ class AppType {
       );
 
   // Footer / muted small
-  static TextStyle muted({Color? color}) => GoogleFonts.cairo(
+  static TextStyle muted({Color? color}) => TextStyle(
+        fontFamily: _cairo,
         fontSize: 11,
         fontWeight: FontWeight.w400,
         height: 1.3,
