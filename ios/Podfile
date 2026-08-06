@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '14.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,6 +39,12 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    # Explicit iOS 15.0 override — بعض الـpods القديمة تعيد ضبطها لـ
+    # قيم منخفضة (11/12). Apple بدأت تحذّر ITMS-90068 لأي شي < 15.0
+    # وستمنع الرفع من Spring 2027.
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
   end
 
   # 2026-07-14: Apple ITMS-91056 رفض Build 93 لأن PrivacyInfo.xcprivacy
