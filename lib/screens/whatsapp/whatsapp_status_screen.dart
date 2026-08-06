@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 
@@ -611,7 +612,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
             TextField(
               controller: _pairPhoneCtl,
               keyboardType: TextInputType.phone,
-              textDirection: TextDirection.ltr,
+              textDirection: ui.TextDirection.ltr,
               style: AppType.input(color: AppColors.textHi).copyWith(
                 fontFamily: 'monospace',
                 fontSize: 14,
@@ -727,7 +728,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
             ),
             child: SelectableText(
               code,
-              textDirection: TextDirection.ltr,
+              textDirection: ui.TextDirection.ltr,
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 28,
