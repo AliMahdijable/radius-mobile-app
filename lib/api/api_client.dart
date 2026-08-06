@@ -14,6 +14,12 @@ import 'auth_api.dart';
 /// قناة لإخبار الـUI أن الجلسة انتهت ولا فائدة من المتابعة.
 final ValueNotifier<int> authExpiredSignal = ValueNotifier<int>(0);
 
+/// إشارة "هذا المدير محظور من super-admin". تُطلق حين يرد السيرفر
+/// 403 مع {blocked:true, message}. الـMainShell يستمع ويطرد المستخدم
+/// لـLoginScreen مع عرض `blockedMessage`.
+final ValueNotifier<int> accessBlockedSignal = ValueNotifier<int>(0);
+String? blockedMessage;
+
 /// Two shared Dio instances:
 ///  • `dio` → backend (rad.mysvcs.net)
 ///  • `sas4` → SAS4 (reseller-supernet.net), direct widget endpoints
@@ -83,10 +89,28 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) async {
+    final data = response.data;
+
+    // 403 مع {blocked:true} → المدير محظور من super-admin. نمسح الجلسة
+    // ونبعث إشارة للـUI ليطرده لـLoginScreen مع عرض السبب. نضع
+    // blockedMessage قبل أن نطلق الإشارة عشان الـMainShell يقرأها.
+    if (response.statusCode == 403 &&
+        data is Map &&
+        data['blocked'] == true) {
+      final msg = data['message']?.toString();
+      blockedMessage = (msg != null && msg.isNotEmpty)
+          ? msg
+          : 'تم إيقاف حسابك — تواصل مع الإدارة';
+      // نمسح كل ما يتعلّق بالجلسة (token، caches). نلغي unregisterFcm
+      // لأن الاتصال بالخادم قد يفشل الآن (لكن الـtoken غير نافع بأي حال).
+      await SessionManager.clearAllSessionData(unregisterFcm: false);
+      accessBlockedSignal.value = accessBlockedSignal.value + 1;
+      return handler.next(response);
+    }
+
     // Some endpoints return 200 OK with `{success:false, message:'Token has expired'}`
     // (SAS4 widget endpoints do exactly that — see status=401 in user logs).
     // Trigger a refresh + retry the SAME way we do for HTTP 401.
-    final data = response.data;
     final isExpiredEnvelope = response.statusCode == 401 ||
         (data is Map &&
             data['message'] is String &&

@@ -2,7 +2,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../api/api_client.dart' show authExpiredSignal;
+import '../api/api_client.dart'
+    show authExpiredSignal, accessBlockedSignal, blockedMessage;
 import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -69,16 +70,59 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  int _accessBlockedSeen = 0;
+  void _onAccessBlocked() {
+    final v = accessBlockedSignal.value;
+    if (v == _accessBlockedSeen || !mounted) return;
+    _accessBlockedSeen = v;
+    // super-admin حظر هذا الحساب. الـinterceptor مسح الجلسة بالفعل —
+    // نُلقيه لـLoginScreen مع الرسالة اللي أرسلها الـsuper.
+    final msg = blockedMessage ?? 'تم إيقاف حسابك — تواصل مع الإدارة';
+    // dialog أوضح من snackbar للحالة الحرجة (المدير لن يرى الـsnackbar
+    // لو انتقل مباشرة لـLoginScreen).
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.block, color: Color(0xFFDC2626), size: 40),
+        title: const Text('تم إيقاف حسابك',
+            textAlign: TextAlign.center),
+        content: Text(msg,
+            textAlign: TextAlign.center,
+            style: const TextStyle(height: 1.5)),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              minimumSize: const Size(double.infinity, 40),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (_) => false,
+              );
+            },
+            child: const Text('حسناً'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);
+    _accessBlockedSeen = accessBlockedSignal.value;
+    accessBlockedSignal.addListener(_onAccessBlocked);
   }
 
   @override
   void dispose() {
     authExpiredSignal.removeListener(_onAuthExpired);
+    accessBlockedSignal.removeListener(_onAccessBlocked);
     _subsFilterCmd.dispose();
     super.dispose();
   }
