@@ -97,4 +97,20 @@ class Sas4Stats {
   final int? expired;
   final int? online;
   final String? balance;
+
+  Map<String, dynamic> toJson() => {
+        'total': total,
+        'active': active,
+        'expired': expired,
+        'online': online,
+        'balance': balance,
+      };
+
+  factory Sas4Stats.fromJson(Map<String, dynamic> j) => Sas4Stats(
+        total: (j['total'] as num?)?.toInt(),
+        active: (j['active'] as num?)?.toInt(),
+        expired: (j['expired'] as num?)?.toInt(),
+        online: (j['online'] as num?)?.toInt(),
+        balance: j['balance'] as String?,
+      );
 }

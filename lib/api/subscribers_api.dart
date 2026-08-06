@@ -385,19 +385,8 @@ class SubscribersApi {
         return null;
       }
       final data = (body['data'] as List?) ?? const [];
-      // Diagnostic: dump the FIRST row's keys + every id-ish field +
-      // the raw JSON so we can see why Subscriber.idx ends up null on
-      // some admin trees (the user just hit 'المشترك بدون idx' on
-      // activate/extend). One-shot — first row only.
-      if (!kReleaseMode && data.isNotEmpty && data.first is Map) {
-        final first = data.first as Map;
-        debugPrint('🔍 first subscriber keys: ${first.keys.toList()}');
-        debugPrint(
-            '🔍 first subscriber id-fields: id=${first['id']} idx=${first['idx']} ID=${first['ID']} acctid=${first['acctid']} user_id=${first['user_id']}');
-        debugPrint('🔍 first subscriber raw: $first');
-        debugPrint('🔍 first subscriber profile_details=${first['profile_details']}');
-        debugPrint('🔍 first subscriber profile_name=${first['profile_name']} name=${first['name']} profile_id=${first['profile_id']}');
-      }
+      // (Removed 5 diagnostic prints — كانت تنفّذ interpolation ثقيل لكل
+      //  subscriber على كل load. المشكلة اللي أُضيفت من أجلها انحلّت.)
       return data
           .whereType<Map>()
           .map((m) => Subscriber.fromJson(Map<String, dynamic>.from(m)))

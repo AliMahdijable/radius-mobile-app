@@ -90,11 +90,21 @@ class WalletResult {
   const WalletResult({required this.balance, required this.points});
   final num balance;
   final num points;
+
+  Map<String, dynamic> toJson() => {'balance': balance, 'points': points};
+  factory WalletResult.fromJson(Map<String, dynamic> j) => WalletResult(
+        balance: (j['balance'] as num?) ?? 0,
+        points: (j['points'] as num?) ?? 0,
+      );
 }
 
 class RevenueResult {
   const RevenueResult({required this.amount});
   final int amount;
+
+  Map<String, dynamic> toJson() => {'amount': amount};
+  factory RevenueResult.fromJson(Map<String, dynamic> j) =>
+      RevenueResult(amount: (j['amount'] as num?)?.toInt() ?? 0);
 }
 
 class DashboardApi {

@@ -11,6 +11,7 @@ import '../../models/dashboard.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/auth_storage.dart';
+import '../../services/dashboard_cache.dart';
 import '../../services/inbox_service.dart';
 import '../../services/subscriber_events.dart';
 import '../notifications/inbox_screen.dart';
@@ -67,6 +68,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadIdentity();
+    // Cache-first: hydrate KPIs from SharedPreferences BEFORE the live
+    // fetch fires. الـSpinner ما يظهر لو عندنا بيانات محفوظة — يظهر
+    // فقط أوّل مرّة أو بعد logout. الـlive fetch يشتغل بالتوازي ويحدّث
+    // الأرقام لمّا يوصل.
+    _hydrateFromCache();
     _refreshLive(silent: false);
     // Re-fetch dashboard KPIs whenever any subscriber operation
     // anywhere in the app succeeds (activate/extend/disconnect/bulk
@@ -114,6 +120,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final name = await AuthStorage.readDisplayName();
     if (!mounted) return;
     setState(() => _displayName = name ?? '');
+  }
+
+  /// Read the last-known KPI values from SharedPreferences and paint
+  /// them right away so the user sees numbers instead of spinners while
+  /// the network catches up. Non-fatal on failure.
+  Future<void> _hydrateFromCache() async {
+    try {
+      final results = await Future.wait([
+        DashboardCache.readSas4(),
+        DashboardCache.readWallet(),
+      ]);
+      if (!mounted) return;
+      final cachedSas4 = results[0] as Sas4Stats?;
+      final cachedWallet = results[1] as WalletResult?;
+      setState(() {
+        if (cachedSas4 != null) {
+          _sas4Live = cachedSas4;
+          _sas4Loaded = true;
+        }
+        if (cachedWallet != null) {
+          _walletLive = cachedWallet;
+          _walletLoaded = true;
+        }
+      });
+    } catch (_) { /* silent — cache is best-effort */ }
   }
 
   Future<void> _refreshLive({bool silent = false}) async {
@@ -179,20 +210,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _sas4Live = r;
         _sas4Loaded = true;
       });
+      if (!failed) DashboardCache.saveSas4(r);   // persist for next cold start
     });
-    DashboardApi.fetchDebtors()
-        .timeout(kMaxLoad, onTimeout: () => null)
-        .catchError((_) => null)
-        .then((r) {
+    // Defer debtors 800ms so the faster widgets (SAS4/wallet/finance)
+    // grab bandwidth first. `subscribers/with-phones` is the heaviest
+    // fetch (loads every subscriber's row + notes + package) — running
+    // it in parallel with the light widgets was starving them.
+    // On silent refresh we still fire immediately (no cold start).
+    Future.delayed(silent ? Duration.zero : const Duration(milliseconds: 800), () {
       if (!mounted) return;
-      if (silent && r == null && _debtorsLive != null) return;
-      setState(() {
-        _debtorsLive = r;
-        _debtorsLoaded = true;
+      DashboardApi.fetchDebtors()
+          .timeout(kMaxLoad, onTimeout: () => null)
+          .catchError((_) => null)
+          .then((r) {
+        if (!mounted) return;
+        if (silent && r == null && _debtorsLive != null) return;
+        setState(() {
+          _debtorsLive = r;
+          _debtorsLoaded = true;
+        });
+        // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
+        // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
+        AlertsService.refresh();
       });
-      // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
-      // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
-      AlertsService.refresh();
     });
     DashboardApi.fetchWallet()
         .timeout(kMaxLoad, onTimeout: () => null)
@@ -204,6 +244,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _walletLive = r;
         _walletLoaded = true;
       });
+      if (r != null) DashboardCache.saveWallet(r);   // persist for next cold start
     });
   }
 
