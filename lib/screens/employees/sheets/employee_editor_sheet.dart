@@ -22,7 +22,7 @@ Future<bool?> showEmployeeEditorSheet(
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) =>
-        SheetScaffold(child: _EmployeeEditorSheet(catalog: catalog, employee: employee)),
+        _EmployeeEditorSheet(catalog: catalog, employee: employee),
   );
 }
 
@@ -89,13 +89,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
 
   void _applyPreset(PermPreset p) {
     setState(() => _perms = Map<String, bool>.from(p.permissions));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('تم تطبيق ${p.label}'),
-        backgroundColor: AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, 'تم تطبيق ${p.label}', isError: false);
   }
 
   void _setAll(bool v) {

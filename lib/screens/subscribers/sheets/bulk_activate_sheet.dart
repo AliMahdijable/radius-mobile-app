@@ -10,7 +10,6 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
-import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bulk activate / renew sheet — direct port of v1's bulk_renew_sheet
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart with
@@ -40,7 +39,7 @@ Future<bool?> showBulkActivateSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _BulkActivateSheet(subs: subs)),
+    builder: (_) => _BulkActivateSheet(subs: subs),
   );
 }
 

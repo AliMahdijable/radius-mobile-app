@@ -30,7 +30,7 @@ Future<bool?> showAddSubscriberSheet(BuildContext context) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: const _AddSheet()),
+    builder: (_) => const _AddSheet(),
   );
 }
 
@@ -294,13 +294,7 @@ class _AddSheetState extends State<_AddSheet> {
                                 if (r.phone != null) {
                                   setState(() => _phone.text = r.phone!);
                                 } else if (r.error != null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(r.error!),
-                                      backgroundColor: AppColors.error,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  showSheetSnack(context, r.error!, isError: true);
                                 }
                               },
                       ),

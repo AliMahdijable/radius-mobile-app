@@ -36,10 +36,10 @@ Future<bool?> showPayDebtSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _PayDebtSheet(
+    builder: (_) => _PayDebtSheet(
       manager: manager,
       initialCustomRemaining: initialCustomRemaining,
-    )),
+    ),
   );
 }
 
@@ -196,13 +196,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     if (!mounted) return;
     if (!ok) {
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message ?? 'تعذّر تسديد الدين'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, message ?? 'تعذّر تسديد الدين', isError: true);
       return;
     }
 

@@ -8,7 +8,6 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
-import '../../../core/widgets/sheet_scaffold.dart';
 
 /// إضافة دين خارجي على مدير فرعي. مطابق v1 add-debt sheet
 /// (managers_screen.dart:3007). الـbackend يقوم بإرسال إشعار
@@ -22,7 +21,7 @@ Future<bool?> showAddCustomDebtSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _AddDebtSheet(manager: manager)),
+    builder: (_) => _AddDebtSheet(manager: manager),
   );
 }
 

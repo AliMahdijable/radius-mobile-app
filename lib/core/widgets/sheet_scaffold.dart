@@ -1,46 +1,115 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-/// Wraps modal-bottom-sheet content so SnackBars raised from inside the
-/// sheet render **above** it instead of behind.
+/// Overlay-based helper to show a floating snack from **inside** a modal
+/// bottom sheet without breaking the sheet's own layout.
 ///
-/// Why this exists — without this wrapper, calling
-///   `ScaffoldMessenger.of(context).showSnackBar(...)`
-/// from inside a sheet walks up the widget tree and finds the app-root
-/// `ScaffoldMessenger` (registered by `MaterialApp`). That messenger's
-/// overlay sits BELOW the sheet's route in the navigator, so any error
-/// snackbar appears behind the sheet and is invisible to the user.
+/// Why not use `ScaffoldMessenger.of(context).showSnackBar(...)`?
+/// A sheet builder returns a widget that becomes a child of the app-root
+/// route's Overlay. Calling `ScaffoldMessenger.of(context)` from that
+/// widget walks up the tree and finds the app-root messenger — which
+/// paints its snackbars on the root Scaffold layer, BELOW the sheet's
+/// route. The user never sees the error.
 ///
-/// [SheetScaffold] introduces a nested `ScaffoldMessenger` + `Scaffold`
-/// scoped to the sheet route. Descendants that look up
-/// `ScaffoldMessenger.of(context)` receive this local one, and its
-/// snackbars stack on top of the sheet content.
+/// Wrapping the sheet in a nested `Scaffold` fixes the layer but breaks
+/// the layout (Scaffold expands to fill and pushes `DraggableScrollableSheet`
+/// to the top).
 ///
-/// Usage:
-/// ```dart
-/// showModalBottomSheet(
-///   context: context,
-///   backgroundColor: Colors.transparent,
-///   isScrollControlled: true,
-///   builder: (_) => const SheetScaffold(child: MyActionSheet()),
-/// );
-/// ```
+/// This helper sidesteps both problems: it grabs the top-most `Overlay`
+/// (which sits ABOVE all routes including sheets) and inserts a
+/// self-dismissing entry there.
 ///
-/// The Scaffold has a transparent background so it doesn't paint over
-/// the sheet's own rounded container. `resizeToAvoidBottomInset:false`
-/// because sheets already handle keyboard insets themselves via
-/// `MediaQuery.viewInsets`.
-class SheetScaffold extends StatelessWidget {
-  const SheetScaffold({super.key, required this.child});
+/// Usage — replace:
+///   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+///     content: Text(msg), backgroundColor: AppColors.error));
+///
+/// with:
+///   showSheetSnack(context, msg, isError: true);
+Future<void> showSheetSnack(
+  BuildContext context,
+  String message, {
+  bool isError = false,
+  Duration duration = const Duration(seconds: 3),
+}) async {
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+  final entry = _SheetSnackEntry(
+    message: message,
+    isError: isError,
+    duration: duration,
+  );
+  overlay.insert(entry.overlay);
+  await entry.done;
+}
 
-  final Widget child;
+class _SheetSnackEntry {
+  _SheetSnackEntry({
+    required this.message,
+    required this.isError,
+    required this.duration,
+  }) {
+    overlay = OverlayEntry(builder: _build);
+    _timer = Timer(duration, _dismiss);
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return ScaffoldMessenger(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        resizeToAvoidBottomInset: false,
-        body: child,
+  final String message;
+  final bool isError;
+  final Duration duration;
+  late final OverlayEntry overlay;
+  late final Timer _timer;
+  final Completer<void> _completer = Completer<void>();
+  Future<void> get done => _completer.future;
+
+  void _dismiss() {
+    _timer.cancel();
+    if (overlay.mounted) overlay.remove();
+    if (!_completer.isCompleted) _completer.complete();
+  }
+
+  Widget _build(BuildContext context) {
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: safeBottom + 24,
+      child: SafeArea(
+        top: false,
+        child: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(10),
+          color: isError
+              ? const Color(0xFFDC2626)
+              : const Color(0xFF16A34A),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: _dismiss,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    isError ? Icons.error_outline : Icons.check_circle_outline,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textDirection: TextDirection.rtl,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -9,7 +9,6 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
-import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for setting/removing a subscriber's package discount —
 /// port of v1's `_showQuickDiscountSheet`. Layout:
@@ -34,7 +33,7 @@ Future<bool?> showQuickDiscountSheet(BuildContext context, Subscriber sub) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _QuickDiscountSheet(sub: sub)),
+    builder: (_) => _QuickDiscountSheet(sub: sub),
   );
 }
 

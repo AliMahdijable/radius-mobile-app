@@ -18,7 +18,6 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
-import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet لتوليد رمز QR دخول المشترك (30 يوم). المشترك يمسحه
 /// من تطبيق البورتال فيسجّل دخول تلقائياً بلا كتابة username/password.
@@ -27,7 +26,7 @@ Future<void> showQrLoginSheet(BuildContext context, Subscriber sub) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => SheetScaffold(child: _QrLoginSheet(sub: sub)),
+    builder: (_) => _QrLoginSheet(sub: sub),
   );
 }
 

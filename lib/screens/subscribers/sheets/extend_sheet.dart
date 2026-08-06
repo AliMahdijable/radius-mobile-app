@@ -12,7 +12,6 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
-import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -30,7 +29,7 @@ Future<bool?> showExtendSheet(BuildContext context, Subscriber sub) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _ExtendSheet(sub: sub)),
+    builder: (_) => _ExtendSheet(sub: sub),
   );
 }
 

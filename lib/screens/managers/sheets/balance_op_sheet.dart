@@ -28,7 +28,7 @@ Future<bool?> showBalanceOpSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _BalanceOpSheet(manager: m, preselected: preselected)),
+    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected),
   );
 }
 
@@ -142,13 +142,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     if (!mounted) return;
     if (!r.ok) {
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(r.message ?? 'فشلت العملية'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, r.message ?? 'فشلت العملية', isError: true);
       return;
     }
     // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد

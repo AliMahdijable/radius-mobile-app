@@ -39,7 +39,7 @@ Future<bool?> showEditSubscriberSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => SheetScaffold(child: _EditSheet(sub: sub)),
+    builder: (_) => _EditSheet(sub: sub),
   );
 }
 
@@ -399,13 +399,7 @@ class _EditSheetState extends State<_EditSheet> {
                                 if (r.phone != null) {
                                   setState(() => _phone.text = r.phone!);
                                 } else if (r.error != null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(r.error!),
-                                      backgroundColor: AppColors.error,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  showSheetSnack(context, r.error!, isError: true);
                                 }
                               },
                       ),
