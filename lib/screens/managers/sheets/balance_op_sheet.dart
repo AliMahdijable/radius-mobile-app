@@ -147,7 +147,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     }
     // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد
     // نجاح العملية في الـsnackbar الأساسي.
-    showSheetSnack(context, const Text('تمت العملية'), isError: false);
+    showSheetSnack(context, 'تمت العملية', isError: false);
     // حساب أرصدة ما بعد العملية (تقديرية — السيرفر قد يدور بـSAS4
     // قيم مختلفة قليلاً، لكن هذا كافٍ للقالب).
     num currentCredit = previousCredit;
