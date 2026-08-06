@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Unified pay-debt sheet — mirrors v1
 /// _PayDebtUnifiedSheet (mobile-app/lib/screens/managers_screen.dart:
@@ -35,10 +36,10 @@ Future<bool?> showPayDebtSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _PayDebtSheet(
+    builder: (_) => SheetScaffold(child: _PayDebtSheet(
       manager: manager,
       initialCustomRemaining: initialCustomRemaining,
-    ),
+    )),
   );
 }
 

@@ -6,6 +6,7 @@ import '../../../api/employees_api.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Sheet إنشاء/تعديل موظف. tab1 = معلومات، tab2 = صلاحيات. الـpresets
 /// (3 افتراضية من backend: cashier/assistant_manager/viewer) تطبّق
@@ -21,7 +22,7 @@ Future<bool?> showEmployeeEditorSheet(
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) =>
-        _EmployeeEditorSheet(catalog: catalog, employee: employee),
+        SheetScaffold(child: _EmployeeEditorSheet(catalog: catalog, employee: employee)),
   );
 }
 

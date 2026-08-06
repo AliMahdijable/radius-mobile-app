@@ -10,6 +10,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Add new subscriber sheet — focused port of v1's add_subscriber_sheet
 /// (mobile-app/lib/widgets/add_subscriber_sheet.dart) into v2's design
@@ -29,7 +30,7 @@ Future<bool?> showAddSubscriberSheet(BuildContext context) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => const _AddSheet(),
+    builder: (_) => SheetScaffold(child: const _AddSheet()),
   );
 }
 

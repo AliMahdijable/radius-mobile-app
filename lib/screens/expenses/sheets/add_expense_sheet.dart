@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Add admin expense sheet — wired from FAB → 'إضافة سريعة' →
 /// 'إضافة صرفية'. Three fields:
@@ -20,7 +21,7 @@ Future<bool?> showAddExpenseSheet(BuildContext context) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => const _AddExpenseSheet(),
+    builder: (_) => SheetScaffold(child: const _AddExpenseSheet()),
   );
 }
 

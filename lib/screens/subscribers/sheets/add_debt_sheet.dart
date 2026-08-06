@@ -9,6 +9,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for adding to a subscriber's debt — port of v1's
 /// `_showAddDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -31,7 +32,7 @@ Future<bool?> showAddDebtSheet(BuildContext context, Subscriber sub) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _AddDebtSheet(sub: sub),
+    builder: (_) => SheetScaffold(child: _AddDebtSheet(sub: sub)),
   );
 }
 

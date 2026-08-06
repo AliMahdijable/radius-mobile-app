@@ -8,6 +8,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// تسديد جزئي/كلي لدين خارجي + عرض الدفعات السابقة. مطابق v1
 /// _PayDebtUnifiedSheet (لمصدر custom debt).
@@ -21,7 +22,7 @@ Future<bool?> showPayCustomDebtSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _PayDebtSheet(manager: manager, debt: debt),
+    builder: (_) => SheetScaffold(child: _PayDebtSheet(manager: manager, debt: debt)),
   );
 }
 

@@ -8,6 +8,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// إرسال رسالة معلومات للمدير (وضعه المالي الحالي) بدون أي عملية.
 /// مطابق v1 _sendManagerInfoMessage (managers_screen.dart:1109).
@@ -19,7 +20,7 @@ Future<bool?> showSendInfoSheet(BuildContext context, Manager m) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _SendInfoSheet(manager: m),
+    builder: (_) => SheetScaffold(child: _SendInfoSheet(manager: m)),
   );
 }
 

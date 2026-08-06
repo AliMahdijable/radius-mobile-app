@@ -10,6 +10,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Edit subscriber sheet — focused port of v1's _showEditSheet from
 /// mobile-app/lib/screens/subscribers/subscriber_details_screen.dart.
@@ -38,7 +39,7 @@ Future<bool?> showEditSubscriberSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _EditSheet(sub: sub),
+    builder: (_) => SheetScaffold(child: _EditSheet(sub: sub)),
   );
 }
 

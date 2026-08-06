@@ -10,6 +10,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// نوع العملية الافتراضي (لو actions sheet مرّر نوعاً محدّداً).
 enum BalanceOpKind { deposit, withdraw, addPoints }
@@ -27,7 +28,7 @@ Future<bool?> showBalanceOpSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected),
+    builder: (_) => SheetScaffold(child: _BalanceOpSheet(manager: m, preselected: preselected)),
   );
 }
 

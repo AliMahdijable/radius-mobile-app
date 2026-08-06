@@ -6,6 +6,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// تعديل صرفية قائمة. الـsheet مطابق visually للـadd لكن:
 ///  • Title 'تعديل صرفية'
@@ -19,7 +20,7 @@ Future<bool?> showEditExpenseSheet(BuildContext context, ExpenseRow row) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _EditExpenseSheet(row: row),
+    builder: (_) => SheetScaffold(child: _EditExpenseSheet(row: row)),
   );
 }
 

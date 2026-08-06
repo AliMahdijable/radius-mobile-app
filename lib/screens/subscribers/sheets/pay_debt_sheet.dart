@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -34,7 +35,7 @@ Future<bool?> showPayDebtSheet(BuildContext context, Subscriber sub) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _PayDebtSheet(sub: sub),
+    builder: (_) => SheetScaffold(child: _PayDebtSheet(sub: sub)),
   );
 }
 

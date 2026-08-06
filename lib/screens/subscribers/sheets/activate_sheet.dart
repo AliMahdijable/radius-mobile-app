@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -39,7 +40,7 @@ Future<bool?> showActivateSheet(BuildContext context, Subscriber sub) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _ActivateSheet(sub: sub),
+    builder: (_) => SheetScaffold(child: _ActivateSheet(sub: sub)),
   );
 }
 

@@ -10,6 +10,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bulk pay-debt sheet — mirrors v1's bulk_renew_sheet per-row pattern
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart. The
@@ -34,7 +35,7 @@ Future<bool?> showBulkPayDebtSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _BulkPayDebtSheet(subs: subs),
+    builder: (_) => SheetScaffold(child: _BulkPayDebtSheet(subs: subs)),
   );
 }
 

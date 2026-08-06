@@ -6,6 +6,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 Future<bool?> showEditDiscountSheet(BuildContext context, Discount d) {
   return showModalBottomSheet<bool>(
@@ -13,7 +14,7 @@ Future<bool?> showEditDiscountSheet(BuildContext context, Discount d) {
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _EditDiscountSheet(discount: d),
+    builder: (_) => SheetScaffold(child: _EditDiscountSheet(discount: d)),
   );
 }
 
