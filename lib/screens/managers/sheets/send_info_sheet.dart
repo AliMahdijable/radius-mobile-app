@@ -8,6 +8,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// إرسال رسالة معلومات للمدير (وضعه المالي الحالي) بدون أي عملية.
 /// مطابق v1 _sendManagerInfoMessage (managers_screen.dart:1109).
@@ -91,13 +92,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     if (_submitting) return;
     final phone = (widget.manager.mobile ?? '').trim();
     if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('لا يوجد رقم هاتف للمدير'),
-          backgroundColor: Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'لا يوجد رقم هاتف للمدير', isError: true);
       return;
     }
     final message = _msgCtrl.text.trim();
@@ -110,15 +105,9 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok
+    showSheetSnack(context, r.ok
             ? 'تم إرسال المعلومات'
-            : (r.message ?? 'تعذّر الإرسال')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+            : (r.message ?? 'تعذّر الإرسال'), isError: (r.ok) ? false : true);
     if (r.ok) Navigator.of(context).pop(true);
   }
 

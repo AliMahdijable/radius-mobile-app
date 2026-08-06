@@ -6,6 +6,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// تعديل صرفية قائمة. الـsheet مطابق visually للـadd لكن:
 ///  • Title 'تعديل صرفية'
@@ -92,13 +93,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (_amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('أدخل المبلغ'),
-          backgroundColor: Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'أدخل المبلغ', isError: true);
       return;
     }
     setState(() => _submitting = true);
@@ -113,15 +108,9 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.ok
+    showSheetSnack(context, result.ok
             ? 'تم التعديل'
-            : (result.message ?? 'تعذّر التعديل')),
-        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+            : (result.message ?? 'تعذّر التعديل'), isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 

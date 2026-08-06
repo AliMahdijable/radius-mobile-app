@@ -18,6 +18,7 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet لتوليد رمز QR دخول المشترك (30 يوم). المشترك يمسحه
 /// من تطبيق البورتال فيسجّل دخول تلقائياً بلا كتابة username/password.
@@ -200,13 +201,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
 
   void _snack(String msg, {required bool isError}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? AppColors.error : AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, msg, isError: true);
   }
 
   @override

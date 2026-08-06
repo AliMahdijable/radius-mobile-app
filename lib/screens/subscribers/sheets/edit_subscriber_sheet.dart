@@ -264,17 +264,9 @@ class _EditSheetState extends State<_EditSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok
+    showSheetSnack(context, result.ok
               ? 'تم تعديل بيانات المشترك'
-              : (result.message ?? 'تعذّر التعديل'),
-        ),
-        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+              : (result.message ?? 'تعذّر التعديل'), isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 

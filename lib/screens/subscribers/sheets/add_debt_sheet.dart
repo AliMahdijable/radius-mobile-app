@@ -9,6 +9,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for adding to a subscriber's debt — port of v1's
 /// `_showAddDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -161,18 +162,9 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok
+    showSheetSnack(context, result.ok
               ? 'تم إضافة الدين بنجاح'
-              : (result.message ?? 'فشل إضافة الدين'),
-        ),
-        backgroundColor:
-            result.ok ? const Color(0xFFE08F2D) : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+              : (result.message ?? 'فشل إضافة الدين'), isError: (result.ok) ? true : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 

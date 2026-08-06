@@ -125,13 +125,7 @@ class _AddSheetState extends State<_AddSheet> {
     if (_saving) return;
     final err = _validate();
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(err),
-          backgroundColor: const Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, err, isError: true);
       return;
     }
     final adminId = await AuthStorage.readAdminId();
@@ -143,13 +137,7 @@ class _AddSheetState extends State<_AddSheet> {
         ? _parentId
         : int.tryParse(adminId ?? '');
     if (parentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول', isError: true);
       return;
     }
     setState(() => _saving = true);
@@ -173,17 +161,9 @@ class _AddSheetState extends State<_AddSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok
+    showSheetSnack(context, result.ok
               ? 'تم إضافة المشترك بنجاح'
-              : (result.message ?? 'تعذّر الإضافة'),
-        ),
-        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+              : (result.message ?? 'تعذّر الإضافة'), isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 

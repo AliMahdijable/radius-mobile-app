@@ -10,6 +10,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bulk activate / renew sheet — direct port of v1's bulk_renew_sheet
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart with
@@ -394,18 +395,9 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
     if (anyOk) SubscriberEvents.notifyChange();
     final okCount = _rows.where((r) => r.ok == true).length;
     final failCount = _rows.where((r) => r.ok == false).length;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          failCount == 0
+    showSheetSnack(context, failCount == 0
               ? 'sheets.renewed_n'.tr(namedArgs: {'n': '$okCount'})
-              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}),
-        ),
-        backgroundColor:
-            failCount == 0 ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}), isError: (failCount == 0) ? false : true);
     if (anyOk && failCount == 0 && mounted) {
       Navigator.of(context).pop(true);
     }

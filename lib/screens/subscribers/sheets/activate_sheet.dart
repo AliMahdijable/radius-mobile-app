@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -210,23 +211,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!result.ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message ?? 'common.error'.tr()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, result.message ?? 'common.error'.tr(), isError: true);
       return;
     }
     SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('sheets.renew_ok'.tr()),
-        backgroundColor: AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, 'sheets.renew_ok'.tr(), isError: false);
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;

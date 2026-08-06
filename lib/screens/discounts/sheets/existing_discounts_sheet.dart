@@ -10,6 +10,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'edit_discount_sheet.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// عرض الخصومات الحالية فقط (المشتركون الذين لديهم خصم). الـscreen
 /// الأساسية لقسم الخصومات صارت تطبيق + browse؛ هذه الـsheet تجاوب
@@ -155,13 +156,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
     if (ok != true || !mounted) return;
     final r = await DiscountsApi.delete(d.id);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف'), isError: (r.ok) ? false : true);
     if (r.ok) {
       _changed = true;
       _load();

@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -143,23 +144,11 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!result.ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message ?? 'common.error'.tr()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, result.message ?? 'common.error'.tr(), isError: true);
       return;
     }
     SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('sheets.extend_ok'.tr()),
-        backgroundColor: AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, 'sheets.extend_ok'.tr(), isError: false);
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       final price = _method == _Method.points ? 0 : _selectedPrice;

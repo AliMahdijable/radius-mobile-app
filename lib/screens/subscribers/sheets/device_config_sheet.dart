@@ -7,6 +7,7 @@ import '../../../models/device_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Per-subscriber CPE override editor — opened from the gear button
 /// on the DeviceProbeCard. Lets the admin pin device type, custom
@@ -73,9 +74,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر الحفظ')),
-      );
+      showSheetSnack(context, 'تعذّر الحفظ', isError: false);
       return;
     }
     // Invalidate any cached probe under the old IP AND the new IP so the
@@ -95,9 +94,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر الحذف')),
-      );
+      showSheetSnack(context, 'تعذّر الحذف', isError: false);
       return;
     }
     if (_originalIp != null && _originalIp!.isNotEmpty) {

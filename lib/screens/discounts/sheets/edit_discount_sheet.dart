@@ -6,6 +6,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 Future<bool?> showEditDiscountSheet(BuildContext context, Discount d) {
   return showModalBottomSheet<bool>(
@@ -82,15 +83,9 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok
+    showSheetSnack(context, r.ok
             ? 'تم التعديل'
-            : (r.message ?? 'تعذّر التعديل')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+            : (r.message ?? 'تعذّر التعديل'), isError: (r.ok) ? false : true);
     if (r.ok) Navigator.of(context).pop(true);
   }
 

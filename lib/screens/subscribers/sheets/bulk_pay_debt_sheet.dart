@@ -10,6 +10,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bulk pay-debt sheet — mirrors v1's bulk_renew_sheet per-row pattern
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart. The
@@ -210,18 +211,9 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
     if (anyOk) SubscriberEvents.notifyChange();
     final okCount = _rows.where((r) => r.ok == true).length;
     final failCount = _rows.where((r) => r.ok == false).length;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          failCount == 0
+    showSheetSnack(context, failCount == 0
               ? 'sheets.paid_n_subs'.tr(namedArgs: {'n': '$okCount'})
-              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}),
-        ),
-        backgroundColor:
-            failCount == 0 ? const Color(0xFF14B8A6) : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}), isError: (failCount == 0) ? false : true);
     // Auto-close only when everything succeeded — leave the sheet open
     // on partial failure so the admin can see which rows failed.
     if (anyOk && failCount == 0 && mounted) {

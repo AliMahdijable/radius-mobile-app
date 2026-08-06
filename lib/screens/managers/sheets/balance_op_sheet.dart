@@ -147,13 +147,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     }
     // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد
     // نجاح العملية في الـsnackbar الأساسي.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('تمت العملية'),
-        backgroundColor: AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, const Text('تمت العملية'), isError: false);
     // حساب أرصدة ما بعد العملية (تقديرية — السيرفر قد يدور بـSAS4
     // قيم مختلفة قليلاً، لكن هذا كافٍ للقالب).
     num currentCredit = previousCredit;

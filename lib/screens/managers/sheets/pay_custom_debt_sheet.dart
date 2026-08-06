@@ -8,6 +8,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// تسديد جزئي/كلي لدين خارجي + عرض الدفعات السابقة. مطابق v1
 /// _PayDebtUnifiedSheet (لمصدر custom debt).
@@ -114,13 +115,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   Future<void> _submit() async {
     if (_submitting || _amount <= 0) return;
     if (_amount > _remaining) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('المبلغ يتجاوز المتبقي (${formatIQD(_remaining)})'),
-          backgroundColor: const Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'المبلغ يتجاوز المتبقي (${formatIQD(_remaining)})', isError: true);
       return;
     }
     setState(() => _submitting = true);
@@ -131,13 +126,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم التسديد' : (r.errorMessage ?? 'تعذّر التسديد')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, r.ok ? 'تم التسديد' : (r.errorMessage ?? 'تعذّر التسديد'), isError: (r.ok) ? false : true);
     if (r.ok) {
       SubscriberEvents.notifyChange();
       _changed = true;
@@ -174,13 +163,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       _changed = true;
       _loadPayments();
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف'), isError: (r.ok) ? false : true);
   }
 
   @override

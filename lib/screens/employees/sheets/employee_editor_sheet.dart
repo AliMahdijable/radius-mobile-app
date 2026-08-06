@@ -163,13 +163,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   }
 
   void _snack(String msg, {bool warn = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: warn ? AppColors.error : AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, msg, isError: true);
   }
 
   @override

@@ -8,6 +8,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// إضافة دين خارجي على مدير فرعي. مطابق v1 add-debt sheet
 /// (managers_screen.dart:3007). الـbackend يقوم بإرسال إشعار
@@ -95,13 +96,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم تسجيل الدين' : (r.message ?? 'تعذّر التسجيل')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, r.ok ? 'تم تسجيل الدين' : (r.message ?? 'تعذّر التسجيل'), isError: (r.ok) ? false : true);
     if (r.ok) { SubscriberEvents.notifyChange(); Navigator.of(context).pop(true); }
   }
 

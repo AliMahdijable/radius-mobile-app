@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Add admin expense sheet — wired from FAB → 'إضافة سريعة' →
 /// 'إضافة صرفية'. Three fields:
@@ -94,13 +95,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (_amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('أدخل المبلغ'),
-          backgroundColor: Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'أدخل المبلغ', isError: true);
       return;
     }
     setState(() => _submitting = true);
@@ -114,16 +109,9 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.ok
+    showSheetSnack(context, result.ok
             ? 'تم تسجيل الصرفية'
-            : (result.message ?? 'تعذّر التسجيل')),
-        backgroundColor:
-            result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+            : (result.message ?? 'تعذّر التسجيل'), isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 
