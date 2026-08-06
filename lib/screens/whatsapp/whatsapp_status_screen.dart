@@ -23,10 +23,16 @@ class WhatsAppStatusScreen extends StatefulWidget {
   State<WhatsAppStatusScreen> createState() => _WhatsAppStatusScreenState();
 }
 
+/// Pairing method the admin selected before hitting Connect.
+enum _AuthMode { qr, code }
+
 class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   WhatsConnectionStatus? _status;
   WhatsFeatures? _features;
   String? _qrData;
+  String? _pairCode;
+  final TextEditingController _pairPhoneCtl = TextEditingController();
+  _AuthMode _authMode = _AuthMode.qr;
   bool _loading = true;
   bool _busy = false;
   bool _savingFeatures = false;
@@ -34,6 +40,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   Timer? _qrPoll;
   int _qrPollElapsed = 0;
   static const int _qrPollTimeoutSec = 90;
+  static const int _pairCodeTimeoutSec = 240;   // ~4 min (WAHA gives ~3-5)
 
   @override
   void initState() {
@@ -45,6 +52,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   void dispose() {
     _statusPoll?.cancel();
     _qrPoll?.cancel();
+    _pairPhoneCtl.dispose();
     super.dispose();
   }
 
@@ -70,11 +78,14 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
       final s = await WhatsAppApi.connectionStatus();
       if (!mounted) return;
       setState(() => _status = s);
-      // لو ربط نجح، أخفِ QR وأوقف الـpolling
+      // لو ربط نجح، أخفِ QR/كود وأوقف الـpolling
       if (s?.connected == true) {
         _stopQrPolling();
-        if (_qrData != null) {
-          setState(() => _qrData = null);
+        if (_qrData != null || _pairCode != null) {
+          setState(() {
+            _qrData = null;
+            _pairCode = null;
+          });
         }
       }
     });
@@ -93,16 +104,56 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   /// زر واحد "اتصال" فقط عند فصل الاتصال (طلب المستخدم 2026-07-12: زر
   /// إعادة اتصال منفصل لا معنى له بدون جلسة سابقة).
   Future<void> _connect() async {
+    // Pair-code path: validate phone first — no point round-tripping to
+    // the backend when we can catch a bad number here.
+    if (_authMode == _AuthMode.code) {
+      final digits = _pairPhoneCtl.text.replaceAll(RegExp(r'\D'), '');
+      if (digits.length < 8) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('wa.enter_phone_intl'.tr()),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _busy = true;
+        _qrData = null;
+        _pairCode = null;
+      });
+      final ss = await WhatsAppApi.startSessionCode(phone: digits);
+      if (!mounted) return;
+      if (!ss.ok || ss.code == null) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ss.message ?? 'common.error'.tr()),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _pairCode = ss.code;
+        _busy = false;
+      });
+      _startPairCodePolling();
+      return;
+    }
+
+    // QR path (default)
     setState(() {
       _busy = true;
       _qrData = null;
+      _pairCode = null;
     });
 
     // 1) reconnect silent — لو نجح فوراً بدون QR، خلاص.
     final rc = await WhatsAppApi.reconnect();
     if (!mounted) return;
-    // نراجع الحالة الحيّة — الـreconnect ممكن يرجع ok حتى لو المسار لم يصل
-    // للاتصال الكامل، فنعتمد على connection-status.
     if (rc.ok) {
       final s = await WhatsAppApi.connectionStatus(live: true);
       if (!mounted) return;
@@ -137,8 +188,44 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
       return;
     }
 
-    // ابدأ polling — كل 3 ثواني، حتى 90 ثانية.
     _startQrPolling();
+  }
+
+  /// Countdown loop while the admin types the 8-digit code into WhatsApp.
+  /// Poll uses connection-status only — the code is already known locally
+  /// from startSessionCode's response, so no need to re-fetch it.
+  void _startPairCodePolling() {
+    _stopQrPolling();
+    _qrPoll = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!mounted) return;
+      _qrPollElapsed += 3;
+      if (_qrPollElapsed > _pairCodeTimeoutSec) {
+        _stopQrPolling();
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _pairCode = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('wa.pair_timeout'.tr()),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      final s = await WhatsAppApi.connectionStatus(live: true);
+      if (!mounted) return;
+      if (s?.connected == true) {
+        _stopQrPolling();
+        setState(() {
+          _status = s;
+          _pairCode = null;
+          _busy = false;
+        });
+      }
+    });
   }
 
   void _startQrPolling() {
@@ -310,6 +397,19 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   _qrCard(),
                   const SizedBox(height: Sp.md),
                 ],
+                if (_pairCode != null) ...[
+                  _pairCodeCard(accent),
+                  const SizedBox(height: Sp.md),
+                ],
+                // Show the QR/Code mode picker only when disconnected AND
+                // no pending pairing is in flight — otherwise it just adds
+                // visual noise.
+                if (_status?.connected != true &&
+                    _qrData == null &&
+                    _pairCode == null) ...[
+                  _authModePicker(accent),
+                  const SizedBox(height: Sp.sm),
+                ],
                 _actionsBar(accent),
                 // Features + Templates تظهر فقط عند الاتصال — طلب المستخدم
                 // 2026-07-12: لا معنى لعرض toggles إشعارات وقوالب واتساب
@@ -459,6 +559,225 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           ),
           const SizedBox(height: Sp.md),
           Center(child: body),
+        ],
+      ),
+    );
+  }
+
+  /// Segmented control + phone input for choosing QR vs pair-code before
+  /// hitting Connect. Only shown while disconnected (see build()).
+  Widget _authModePicker(Color accent) {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'wa.auth_mode_title'.tr(),
+            style: AppType.title(color: AppColors.textHi)
+                .copyWith(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _modeChip(
+                  icon: LucideIcons.qrCode,
+                  label: 'wa.mode_qr'.tr(),
+                  active: _authMode == _AuthMode.qr,
+                  accent: accent,
+                  onTap: () => setState(() => _authMode = _AuthMode.qr),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _modeChip(
+                  icon: LucideIcons.smartphone,
+                  label: 'wa.mode_code'.tr(),
+                  active: _authMode == _AuthMode.code,
+                  accent: accent,
+                  onTap: () => setState(() => _authMode = _AuthMode.code),
+                ),
+              ),
+            ],
+          ),
+          if (_authMode == _AuthMode.code) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _pairPhoneCtl,
+              keyboardType: TextInputType.phone,
+              textDirection: TextDirection.ltr,
+              style: AppType.input(color: AppColors.textHi).copyWith(
+                fontFamily: 'monospace',
+                fontSize: 14,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '9647701234567',
+                hintStyle: AppType.muted().copyWith(fontFamily: 'monospace'),
+                prefixIcon: Icon(LucideIcons.phone,
+                    size: 16, color: AppColors.textLow),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.md),
+                  borderSide: BorderSide(color: AppColors.border),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'wa.mode_code_hint'.tr(),
+              style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
+            ),
+          ] else ...[
+            const SizedBox(height: 4),
+            Text(
+              'wa.mode_qr_hint'.tr(),
+              style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _modeChip({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: active ? accent.withValues(alpha: 0.15) : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(
+              color: active ? accent : AppColors.border,
+              width: active ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 14,
+                  color: active ? accent : AppColors.textLow),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: active ? accent : AppColors.textMid,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Big monospace display for the 8-digit pair code returned by WAHA.
+  /// The admin types this into WhatsApp → Linked Devices → Link with
+  /// phone number. Kept intentionally large + selectable.
+  Widget _pairCodeCard(Color accent) {
+    final code = _pairCode ?? '';
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: accent.withValues(alpha: 0.4), width: 1.5),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'wa.pair_code_title'.tr(),
+            style: AppType.title(color: AppColors.textHi)
+                .copyWith(fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'wa.pair_code_hint'.tr(),
+            style: AppType.muted().copyWith(fontSize: 11, height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: SelectableText(
+              code,
+              textDirection: TextDirection.ltr,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 6,
+                color: AppColors.textHi,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'wa.pair_waiting'.tr(),
+                style: AppType.muted().copyWith(fontSize: 11),
+              ),
+              const SizedBox(width: 10),
+              TextButton(
+                onPressed: () {
+                  _stopQrPolling();
+                  setState(() {
+                    _pairCode = null;
+                    _busy = false;
+                  });
+                },
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: Text(
+                  'common.cancel'.tr(),
+                  style: TextStyle(
+                    color: AppColors.textLow,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
