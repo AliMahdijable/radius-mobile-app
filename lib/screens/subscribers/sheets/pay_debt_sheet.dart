@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
@@ -159,33 +160,18 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    final messenger = ScaffoldMessenger.of(context);
     if (!result.ok) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(result.message ?? 'فشل التسديد'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, result.message ?? 'فشل التسديد', isError: true);
       return;
     }
     SubscriberEvents.notifyChange();
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('تم التسديد بنجاح'),
-        backgroundColor: const Color(0xFF14B8A6),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(context, 'تم التسديد بنجاح');
     // مطلب 2026-06-11: لو الإرسال فشل لسبب فني، أظهر تحذير.
     if (result.wa != null && result.wa!.shouldShowFailure) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('لم يُرسل واتساب: ${result.wa!.arabicReason}'),
-          backgroundColor: const Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
+      showSheetSnack(
+        context,
+        'لم يُرسل واتساب: ${result.wa!.arabicReason}',
+        isError: true,
       );
     }
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox داخل المودل مُفعَّل.

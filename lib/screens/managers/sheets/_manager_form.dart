@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -162,12 +163,10 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
     final r = await widget.onSubmit(data);
     if (!mounted) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم الحفظ' : (r.message ?? 'تعذّر الحفظ')),
-        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSheetSnack(
+      context,
+      r.ok ? 'تم الحفظ' : (r.message ?? 'تعذّر الحفظ'),
+      isError: !r.ok,
     );
     if (r.ok) {
       SubscriberEvents.notifyChange();
