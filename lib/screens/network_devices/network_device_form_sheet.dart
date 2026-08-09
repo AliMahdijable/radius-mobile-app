@@ -224,8 +224,25 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                       icon: LucideIcons.fingerprint),
 
                   const SizedBox(height: Sp.xl),
-                  _sectionTitle('الاتصال والـcredentials'),
-                  const SizedBox(height: 8),
+                  _sectionTitle('بروتوكول الإدارة (اختياري — للمرحلة القادمة)'),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF06B6D4).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF06B6D4).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(children: [
+                      Icon(LucideIcons.info, size: 14, color: const Color(0xFF06B6D4)),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(
+                        'الفحص (ICMP ping) يعمل تلقائيّاً بدون credentials. هذا القسم فقط لإدارة الجهاز في المرحلة القادمة (interfaces / traffic / reboot).',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4),
+                      )),
+                    ]),
+                  ),
+                  const SizedBox(height: 10),
                   _protocolSelector(),
                   const SizedBox(height: 12),
                   if (_protocol != null) _credentialsSection(),
@@ -303,7 +320,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     return Wrap(
       spacing: 8, runSpacing: 8,
       children: [
-        _protoOption(null, 'بلا اتصال', LucideIcons.ban),
+        _protoOption(null, 'ICMP فقط (افتراضي)', LucideIcons.zap),
         _protoOption('api', 'API', LucideIcons.globe),
         _protoOption('ssh', 'SSH', LucideIcons.terminal),
         _protoOption('telnet', 'Telnet', LucideIcons.monitor),
