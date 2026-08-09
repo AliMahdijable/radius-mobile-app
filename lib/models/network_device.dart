@@ -107,10 +107,10 @@ class NetworkDeviceLabels {
   };
 
   /// Default ports حسب الـprotocol.
-  /// Mikrotik REST API = HTTP 80 (أو HTTPS 443 لو www-ssl مفعّل).
-  /// **مو** 8728 — ذاك binary API (WinBox) وليس REST.
+  /// Mikrotik: API الصحيح هو Binary على 8728 (أو 8729 مع TLS)،
+  /// المُفعَّل بـ`/ip service enable api`.
   static const protocolPorts = <String, int>{
-    'api': 80,
+    'api': 8728,
     'ssh': 22,
     'telnet': 23,
     'snmp': 161,

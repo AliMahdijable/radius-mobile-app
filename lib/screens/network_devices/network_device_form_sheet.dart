@@ -373,7 +373,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         if (_protocol == 'api') ...[
           const SizedBox(height: 4),
           Text(
-            '💡 Mikrotik REST يستعمل 80 (HTTP) أو 443 (HTTPS). فعّل عبر /ip service www',
+            '💡 Mikrotik API الافتراضي 8728 — فعّله عبر /ip service enable api',
             style: TextStyle(fontSize: 9, color: AppColors.textLow),
           ),
         ],
