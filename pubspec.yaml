@@ -49,7 +49,7 @@ dependencies:
   fl_chart: ^0.70.2
 
   # ICMP ping — لميزة الأجهزة (network_devices) — يعمل على iOS + Android
-  dart_ping: ^11.0.0
+  dart_ping: ^10.0.1
 
   # Voice → text for the quick-search overlay's mic button. On-device
   # recognizer (no server round-trip), supports Arabic via the iOS /
