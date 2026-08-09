@@ -741,16 +741,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   String _formatBps(int bps) {
     if (bps <= 0) return '0';
     if (bps < 1000) return '${bps}bps';
-    if (bps < 1_000_000) return '${(bps / 1000).toStringAsFixed(1)}K';
-    if (bps < 1_000_000_000) return '${(bps / 1_000_000).toStringAsFixed(1)}M';
-    return '${(bps / 1_000_000_000).toStringAsFixed(2)}G';
+    if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(1)}K';
+    if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
+    return '${(bps / 1000000000).toStringAsFixed(2)}G';
   }
 
   String _formatBpsShort(int bps) {
     if (bps < 1000) return '0';
-    if (bps < 1_000_000) return '${(bps / 1000).round()}K';
-    if (bps < 1_000_000_000) return '${(bps / 1_000_000).round()}M';
-    return '${(bps / 1_000_000_000).toStringAsFixed(1)}G';
+    if (bps < 1000000) return '${(bps / 1000).round()}K';
+    if (bps < 1000000000) return '${(bps / 1000000).round()}M';
+    return '${(bps / 1000000000).toStringAsFixed(1)}G';
   }
 }
 
