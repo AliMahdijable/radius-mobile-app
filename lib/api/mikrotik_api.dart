@@ -19,10 +19,21 @@ class MikrotikApi {
     required int port,
     required String user,
     required String pass,
-    bool useHttps = false,
+    bool? useHttps,
     Duration timeout = const Duration(seconds: 6),
   }) async {
-    final scheme = useHttps ? 'https' : 'http';
+    // كشف HTTPS تلقائيّاً حسب الـport لو ما مُحدَّد
+    final https = useHttps ?? (port == 443 || port == 8443);
+    // خطأ شائع: المستخدم يضع 8728 ظنّاً أنه port الـAPI. لكن 8728 هو binary
+    // WinBox API، مو REST. REST يحتاج www (80) أو www-ssl (443).
+    if (port == 8728 || port == 8729) {
+      throw MikrotikException(
+        'المنفذ $port هو للـWinBox API القديم (binary). '
+        'REST API يستعمل 80 (HTTP) أو 443 (HTTPS). '
+        'فعّل /ip service www على الراوتر واستعمل 80.',
+      );
+    }
+    final scheme = https ? 'https' : 'http';
     final baseUrl = '$scheme://$ip:$port';
     final auth = 'Basic ${base64Encode(utf8.encode('$user:$pass'))}';
 

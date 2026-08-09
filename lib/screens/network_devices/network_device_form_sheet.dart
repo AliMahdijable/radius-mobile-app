@@ -370,6 +370,13 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             icon: LucideIcons.plug,
             keyboardType: TextInputType.number,
             formatters: [FilteringTextInputFormatter.digitsOnly]),
+        if (_protocol == 'api') ...[
+          const SizedBox(height: 4),
+          Text(
+            '💡 Mikrotik REST يستعمل 80 (HTTP) أو 443 (HTTPS). فعّل عبر /ip service www',
+            style: TextStyle(fontSize: 9, color: AppColors.textLow),
+          ),
+        ],
         const SizedBox(height: 10),
         if (_protocol == 'snmp') ..._snmpFields() else ..._userPassFields(),
       ]),

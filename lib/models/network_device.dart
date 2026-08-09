@@ -58,7 +58,7 @@ class NetworkDevice {
         mac: j['mac']?.toString(),
         location: j['location']?.toString(),
         notes: j['notes']?.toString(),
-        hasCredentials: (j['has_credentials'] == 1 || j['has_credentials'] == true),
+        hasCredentials: _parseHasCreds(j['has_credentials']),
         lastProbedAt: j['last_probed_at'] != null
             ? DateTime.tryParse(j['last_probed_at'].toString())
             : null,
@@ -66,6 +66,16 @@ class NetworkDevice {
         lastResponseMs: j['last_response_ms'] as int?,
         createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now(),
       );
+}
+
+/// MySQL `(x IS NOT NULL)` قد يأتي كـint (0/1)، String ('0'/'1')، أو bool.
+/// نغطّي كل الأشكال — الـfalse الافتراضي عند null أو غير معروف.
+bool _parseHasCreds(dynamic v) {
+  if (v == null) return false;
+  if (v is bool) return v;
+  if (v is num) return v > 0;
+  final s = v.toString().toLowerCase();
+  return s == '1' || s == 'true';
 }
 
 class NetworkDeviceLabels {
@@ -96,9 +106,11 @@ class NetworkDeviceLabels {
     'snmp': 'SNMP',
   };
 
-  /// Default ports حسب الـprotocol
+  /// Default ports حسب الـprotocol.
+  /// Mikrotik REST API = HTTP 80 (أو HTTPS 443 لو www-ssl مفعّل).
+  /// **مو** 8728 — ذاك binary API (WinBox) وليس REST.
   static const protocolPorts = <String, int>{
-    'api': 443,
+    'api': 80,
     'ssh': 22,
     'telnet': 23,
     'snmp': 161,

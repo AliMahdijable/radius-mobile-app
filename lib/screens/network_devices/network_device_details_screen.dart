@@ -192,12 +192,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           _statsRow(),
           const SizedBox(height: Sp.md),
           _pingSection(),
-          // Mikrotik Live Panel — يظهر فقط لأجهزة Mikrotik مع API + credentials
-          if (_d.brand == 'mikrotik' &&
-              _d.protocol == 'api' &&
-              _d.hasCredentials) ...[
+          // Mikrotik Live Panel — يظهر لأجهزة Mikrotik مع API + credentials.
+          // لو ناقص شرط: نعرض hint واضح للمستخدم بما ينقص.
+          if (_d.brand == 'mikrotik') ...[
             const SizedBox(height: Sp.md),
-            MikrotikLivePanel(device: _d),
+            if (_d.protocol == 'api' && _d.hasCredentials)
+              MikrotikLivePanel(device: _d)
+            else
+              _mikrotikHint(),
           ],
           const SizedBox(height: Sp.md),
           _infoGrid(),
@@ -586,12 +588,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     final items = <_InfoItem>[
       if (_d.model != null && _d.model!.isNotEmpty)
         _InfoItem(LucideIcons.info, 'الموديل', _d.model!),
-      _InfoItem(LucideIcons.plug, 'المنفذ', _d.port.toString()),
       if (_d.mac != null && _d.mac!.isNotEmpty)
         _InfoItem(LucideIcons.fingerprint, 'MAC', _d.mac!),
       if (_d.location != null && _d.location!.isNotEmpty)
         _InfoItem(LucideIcons.mapPin, 'الموقع', _d.location!),
     ];
+    if (items.isEmpty) return const SizedBox.shrink();
 
     return Container(
       decoration: BoxDecoration(
@@ -778,6 +780,48 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           text,
           style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4),
         )),
+      ]),
+    );
+  }
+}
+
+extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
+  Widget _mikrotikHint() {
+    final needsApi = _d.protocol != 'api';
+    final needsCreds = _d.protocol == 'api' && !_d.hasCredentials;
+    final msg = needsApi
+        ? 'اختر بروتوكول API + أدخل user/password للراوتر لتفعيل المراقبة الحيّة (CPU/RAM/interfaces)'
+        : (needsCreds ? 'أدخل user/password للراوتر لتفعيل المراقبة الحيّة' : '');
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFF06B6D4).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF06B6D4).withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF06B6D4).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(LucideIcons.zap, color: const Color(0xFF06B6D4), size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('مراقبة حيّة متوفّرة لـMikrotik',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+          ]),
+        ),
+        IconButton(
+          icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
+          onPressed: _edit,
+          tooltip: 'تعديل',
+        ),
       ]),
     );
   }
