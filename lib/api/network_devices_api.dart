@@ -69,6 +69,20 @@ class NetworkDevicesApi {
     }
   }
 
+  /// GET /api/v2/admin/devices/:id/credentials — يفكّ التشفير ويرجع الـcredentials
+  /// (مطلوب عند فتح الـedit form لملء الحقول)
+  static Future<Map<String, dynamic>> getCredentials(int id) async {
+    final r = await ApiClient.dio.get<Map<String, dynamic>>(
+      '/api/v2/admin/devices/$id/credentials',
+    );
+    if (r.data?['success'] != true) {
+      throw Exception(r.data?['message'] ?? 'فشل جلب المعلومات');
+    }
+    final creds = r.data!['credentials'];
+    if (creds is Map<String, dynamic>) return creds;
+    return <String, dynamic>{};
+  }
+
   /// TCP probe محلّي (من الموبايل على LAN) — يحاول socket connect على ip:port
   /// بـtimeout معطى، يرجع online + response_ms أو offline. **لا يمرّ عبر السيرفر**
   /// لأنّ السيرفر ما يوصل شبكة الوكيل. بعد الفحص، ترسل النتيجة لـsaveProbeResult.
