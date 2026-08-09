@@ -48,6 +48,9 @@ dependencies:
   # Charts (sparkline on hero revenue card, etc.)
   fl_chart: ^0.70.2
 
+  # ICMP ping — لميزة الأجهزة (network_devices) — يعمل على iOS + Android
+  dart_ping: ^11.0.0
+
   # Voice → text for the quick-search overlay's mic button. On-device
   # recognizer (no server round-trip), supports Arabic via the iOS /
   # Android system recognizers.

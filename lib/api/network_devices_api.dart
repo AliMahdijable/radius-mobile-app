@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -83,25 +82,34 @@ class NetworkDevicesApi {
     return <String, dynamic>{};
   }
 
-  /// TCP probe محلّي (من الموبايل على LAN) — يحاول socket connect على ip:port
-  /// بـtimeout معطى، يرجع online + response_ms أو offline. **لا يمرّ عبر السيرفر**
-  /// لأنّ السيرفر ما يوصل شبكة الوكيل. بعد الفحص، ترسل النتيجة لـsaveProbeResult.
-  static Future<({String status, int? responseMs})> localTcpProbe({
+  /// ICMP ping محلّي (من الموبايل على LAN) — يعمل على iOS + Android.
+  /// أدقّ من TCP لأنّه لا يعتمد على منفذ محدّد. يرسل count ping ويرجع
+  /// متوسّط الاستجابة + status.
+  static Future<({String status, int? responseMs, double? packetLoss})> localIcmpPing({
     required String ip,
-    required int port,
+    int count = 3,
     Duration timeout = const Duration(seconds: 2),
   }) async {
-    final sw = Stopwatch()..start();
-    Socket? sock;
     try {
-      sock = await Socket.connect(ip, port, timeout: timeout);
-      sw.stop();
-      await sock.close();
-      return (status: 'online', responseMs: sw.elapsedMilliseconds);
-    } catch (_) {
-      return (status: 'offline', responseMs: null);
-    } finally {
-      try { await sock?.close(); } catch (_) {}
+      final ping = Ping(ip, count: count, timeout: timeout.inSeconds);
+      final times = <int>[];
+      int received = 0;
+      await for (final event in ping.stream) {
+        if (event.response != null && event.response!.time != null) {
+          times.add(event.response!.time!.inMilliseconds);
+          received++;
+        }
+        if (event.summary != null) break;
+      }
+      if (received == 0) {
+        return (status: 'offline', responseMs: null, packetLoss: 100.0);
+      }
+      final avg = (times.reduce((a, b) => a + b) / times.length).round();
+      final loss = ((count - received) / count) * 100.0;
+      return (status: 'online', responseMs: avg, packetLoss: loss);
+    } catch (e) {
+      if (kDebugMode) print('⚠️ localIcmpPing failed: $e');
+      return (status: 'offline', responseMs: null, packetLoss: 100.0);
     }
   }
 

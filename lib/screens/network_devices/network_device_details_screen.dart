@@ -1,15 +1,23 @@
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
+import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
 
-/// شاشة تفاصيل جهاز — Slice 1 = عرض + زر فحص. Slice 2 يضيف
-/// live monitoring (Mikrotik/UBNT/Mimosa API) + auto-refresh + graph.
+/// شاشة تفاصيل جهاز — تصميم متقدّم:
+/// - Hero card بـpulse للـonline + brand icon + stats
+/// - Ping section مع sparkline لآخر 10 فحوصات
+/// - Info grid منظّم
+/// - Protocol/credentials info
+/// - Placeholder cards لـSlice 2 (interfaces + traffic + reboot)
 class NetworkDeviceDetailsScreen extends StatefulWidget {
   final NetworkDevice device;
   const NetworkDeviceDetailsScreen({super.key, required this.device});
@@ -18,73 +26,74 @@ class NetworkDeviceDetailsScreen extends StatefulWidget {
   State<NetworkDeviceDetailsScreen> createState() => _NetworkDeviceDetailsScreenState();
 }
 
-class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen> {
+class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
+    with SingleTickerProviderStateMixin {
   late NetworkDevice _d;
   bool _probing = false;
   bool _changed = false;
+  double? _lastPacketLoss;
+
+  /// آخر 10 قراءات ping — للـsparkline
+  final List<_PingSample> _history = [];
+
+  late AnimationController _pulseCtrl;
 
   @override
   void initState() {
     super.initState();
     _d = widget.device;
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+    // نضيف الحالة الحاليّة كأوّل نقطة لو معروفة
+    if (_d.lastResponseMs != null) {
+      _history.add(_PingSample(
+        at: _d.lastProbedAt ?? DateTime.now(),
+        ms: _d.lastResponseMs,
+        online: _d.lastStatus == 'online',
+      ));
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _probe() async {
+    if (_probing) return;
     setState(() => _probing = true);
     try {
-      final r = await NetworkDevicesApi.localTcpProbe(
-        ip: _d.ip,
-        port: _d.port,
-      );
-      // احفظ النتيجة على السيرفر (لا نـawait — لا يهمّ لو فشل)
+      final r = await NetworkDevicesApi.localIcmpPing(ip: _d.ip);
       NetworkDevicesApi.saveProbeResult(
         deviceId: _d.id,
         status: r.status,
         responseMs: r.responseMs,
       );
       if (!mounted) return;
-      // حدّث حالة الجهاز محلّياً
       setState(() {
         _d = NetworkDevice(
-          id: _d.id,
-          adminId: _d.adminId,
-          regionId: _d.regionId,
-          name: _d.name,
-          type: _d.type,
-          brand: _d.brand,
-          model: _d.model,
-          ip: _d.ip,
-          port: _d.port,
-          apiPort: _d.apiPort,
-          protocol: _d.protocol,
-          mac: _d.mac,
-          location: _d.location,
-          notes: _d.notes,
+          id: _d.id, adminId: _d.adminId, regionId: _d.regionId,
+          name: _d.name, type: _d.type, brand: _d.brand, model: _d.model,
+          ip: _d.ip, port: _d.port, apiPort: _d.apiPort, protocol: _d.protocol,
+          mac: _d.mac, location: _d.location, notes: _d.notes,
           hasCredentials: _d.hasCredentials,
           lastProbedAt: DateTime.now(),
           lastStatus: r.status,
           lastResponseMs: r.responseMs,
           createdAt: _d.createdAt,
         );
+        _lastPacketLoss = r.packetLoss;
+        _history.add(_PingSample(at: DateTime.now(), ms: r.responseMs, online: r.status == 'online'));
+        if (_history.length > 10) _history.removeAt(0);
         _probing = false;
         _changed = true;
       });
-      HapticFeedback.lightImpact();
-      final color = r.status == 'online' ? Colors.green : Colors.red;
-      final msg = r.status == 'online'
-          ? '🟢 online (${r.responseMs}ms)'
-          : '🔴 offline';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: color,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _probing = false);
+      HapticFeedback.selectionClick();
+    } catch (_) {
+      if (mounted) setState(() => _probing = false);
     }
   }
 
@@ -95,26 +104,26 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => NetworkDeviceFormSheet(existing: _d),
     );
-    if (updated != null) {
-      setState(() { _d = updated; _changed = true; });
-    }
+    if (updated != null) setState(() { _d = updated; _changed = true; });
   }
 
   Future<void> _delete() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        icon: Icon(LucideIcons.trash2, color: AppColors.error, size: 32),
         title: const Text('حذف الجهاز'),
-        content: Text('هل أنت متأكّد من حذف "${_d.name}"؟'),
+        content: Text('سيُحذف "${_d.name}" نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('إلغاء'),
           ),
-          TextButton(
+          FilledButton.icon(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('حذف'),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            icon: const Icon(LucideIcons.trash2, size: 16),
+            label: const Text('حذف نهائي'),
           ),
         ],
       ),
@@ -126,173 +135,656 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل الحذف: $e'), backgroundColor: Colors.red),
-      );
+      showSheetSnack(context, 'فشل الحذف: $e', isError: true);
     }
   }
 
-  Color _statusColor() {
-    return switch (_d.lastStatus) {
-      'online' => const Color(0xFF10B981),
-      'offline' => const Color(0xFFEF4444),
-      _ => const Color(0xFF9CA3AF),
-    };
-  }
+  Color get _statusColor => switch (_d.lastStatus) {
+        'online' => const Color(0xFF10B981),
+        'offline' => AppColors.error,
+        _ => AppColors.textLow,
+      };
 
-  String _statusText() {
-    return switch (_d.lastStatus) {
-      'online' => '🟢 متّصل',
-      'offline' => '🔴 غير متّصل',
-      _ => '⚪ لم يُفحص بعد',
-    };
-  }
+  IconData get _typeIcon => switch (_d.type) {
+        'link' => LucideIcons.satellite,
+        'switch' => LucideIcons.network,
+        'sector' => LucideIcons.radioTower,
+        'router' => LucideIcons.router,
+        'ap' => LucideIcons.wifi,
+        'camera' => LucideIcons.video,
+        _ => LucideIcons.circuitBoard,
+      };
 
   String _timeAgo(DateTime? dt) {
     if (dt == null) return '—';
     final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return 'منذ ${diff.inSeconds} ثانية';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} دقيقة';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours} ساعة';
-    return 'منذ ${diff.inDays} يوم';
+    if (diff.inSeconds < 10) return 'الآن';
+    if (diff.inSeconds < 60) return 'منذ ${diff.inSeconds}ث';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes}د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours}س';
+    return 'منذ ${diff.inDays}ي';
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop && _changed) {
-          // signal parent list to reload — handled by pop(true) if needed
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(_d.name, overflow: TextOverflow.ellipsis),
-          actions: [
-            IconButton(icon: const Icon(LucideIcons.pencil, size: 20), onPressed: _edit),
-            IconButton(icon: const Icon(LucideIcons.trash2, size: 20, color: Colors.red), onPressed: _delete),
-          ],
-          leading: IconButton(
-            icon: const Icon(LucideIcons.arrowRight),
-            onPressed: () => Navigator.pop(context, _changed),
-          ),
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        title: Text(_d.name, overflow: TextOverflow.ellipsis),
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textHi,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.arrowRight),
+          onPressed: () => Navigator.pop(context, _changed),
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(Sp.md),
-          children: [
-            // Status hero
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _statusColor().withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _statusColor().withValues(alpha: 0.3), width: 1.5),
-              ),
-              child: Column(
-                children: [
-                  Text(_statusText(), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _statusColor())),
-                  const SizedBox(height: 6),
-                  if (_d.lastResponseMs != null)
-                    Text('زمن الاستجابة: ${_d.lastResponseMs} ms',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text('آخر فحص: ${_timeAgo(_d.lastProbedAt)}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _probing ? null : _probe,
-                      icon: _probing
-                          ? const SizedBox(width: 18, height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(LucideIcons.zap, size: 18),
-                      label: Text(_probing ? 'جاري الفحص…' : 'فحص الآن (TCP)'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brand,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'ℹ️ يجب أن يكون الموبايل على نفس شبكة الجهاز',
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Info
-            _infoCard('معلومات الجهاز', [
-              _infoRow(LucideIcons.tag, 'البراند', NetworkDeviceLabels.brandLabel(_d.brand)),
-              _infoRow(LucideIcons.circuitBoard, 'النوع', NetworkDeviceLabels.typeLabel(_d.type)),
-              if (_d.model != null && _d.model!.isNotEmpty)
-                _infoRow(LucideIcons.info, 'الموديل', _d.model!),
-              _infoRow(LucideIcons.globe, 'عنوان IP', _d.ip),
-              _infoRow(LucideIcons.plug, 'المنفذ', _d.port.toString()),
-              if (_d.mac != null && _d.mac!.isNotEmpty)
-                _infoRow(LucideIcons.fingerprint, 'MAC', _d.mac!),
-              if (_d.location != null && _d.location!.isNotEmpty)
-                _infoRow(LucideIcons.mapPin, 'الموقع', _d.location!),
-            ]),
-            if (_d.notes != null && _d.notes!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _infoCard('ملاحظات', [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(_d.notes!, style: const TextStyle(fontSize: 13)),
-                ),
-              ]),
-            ],
-            const SizedBox(height: 20),
-            Text(
-              'المرحلة القادمة ستضيف: مراقبة interfaces + traffic + CPU + reboot (Mikrotik/UBNT/Mimosa)',
-              style: TextStyle(fontSize: 10, color: Colors.grey.withValues(alpha: 0.7)),
-              textAlign: TextAlign.center,
-            ),
+        actions: [
+          IconButton(icon: const Icon(LucideIcons.pencil, size: 18), onPressed: _edit),
+          IconButton(icon: Icon(LucideIcons.trash2, size: 18, color: AppColors.error), onPressed: _delete),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(Sp.md),
+        children: [
+          _heroCard(),
+          const SizedBox(height: Sp.md),
+          _statsRow(),
+          const SizedBox(height: Sp.md),
+          _pingSection(),
+          const SizedBox(height: Sp.md),
+          _infoGrid(),
+          if (_d.protocol != null) ...[
+            const SizedBox(height: Sp.md),
+            _protocolCard(),
           ],
-        ),
+          if (_d.notes != null && _d.notes!.isNotEmpty) ...[
+            const SizedBox(height: Sp.md),
+            _notesCard(),
+          ],
+          const SizedBox(height: Sp.md),
+          _comingSoonCard(),
+          const SizedBox(height: Sp.xl),
+        ],
       ),
     );
   }
 
-  Widget _infoCard(String title, List<Widget> children) {
+  // ══════════════════════════════════════════════════════════════
+  // Hero card — الأيقونة + الاسم + IP + status hero + pulse
+  // ══════════════════════════════════════════════════════════════
+  Widget _heroCard() {
+    final online = _d.lastStatus == 'online';
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.brand.withValues(alpha: 0.08),
+            AppColors.brand.withValues(alpha: 0.02),
+          ],
+        ),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(title,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+      padding: const EdgeInsets.all(Sp.lg),
+      child: Column(children: [
+        Row(children: [
+          // Big icon with brand corner badge
+          Stack(clipBehavior: Clip.none, children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.brand.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(_typeIcon, color: AppColors.brand, size: 32),
+            ),
+            // Pulse ring when online
+            if (online)
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (_, __) {
+                    final t = _pulseCtrl.value;
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16 + 6 * t),
+                        border: Border.all(
+                          color: _statusColor.withValues(alpha: (1 - t) * 0.5),
+                          width: 2,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            // Brand badge (small chip on top-right)
+            Positioned(
+              top: -4, right: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Text(
+                  NetworkDeviceLabels.brandLabel(_d.brand),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi,
+                  ),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                _pulseDot(online),
+                const SizedBox(width: 6),
+                Text(
+                  online ? 'متّصل' : (_d.lastStatus == 'offline' ? 'غير متّصل' : 'لم يُفحص'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _statusColor,
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                NetworkDeviceLabels.typeLabel(_d.type),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textMid,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(children: [
+                Icon(LucideIcons.globe, size: 12, color: AppColors.textLow),
+                const SizedBox(width: 4),
+                Text(
+                  _d.ip,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textHi,
+                  ),
+                ),
+              ]),
+            ]),
           ),
-          const Divider(height: 1),
-          ...children,
+          // Big response time (right side)
+          if (online && _d.lastResponseMs != null)
+            Column(children: [
+              Text(
+                '${_d.lastResponseMs}',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: _statusColor,
+                  height: 1,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              Text('ms', style: TextStyle(fontSize: 10, color: AppColors.textMid)),
+            ]),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _pulseDot(bool online) {
+    if (!online) {
+      return Container(
+        width: 8, height: 8,
+        decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle),
+      );
+    }
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (_, __) {
+        final t = _pulseCtrl.value;
+        return Stack(alignment: Alignment.center, children: [
+          Container(
+            width: 8 + 6 * t, height: 8 + 6 * t,
+            decoration: BoxDecoration(
+              color: _statusColor.withValues(alpha: (1 - t) * 0.4),
+              shape: BoxShape.circle,
+            ),
+          ),
+          Container(
+            width: 8, height: 8,
+            decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle),
+          ),
+        ]);
+      },
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Stats row — 3 stat cards (ping avg / packet loss / آخر فحص)
+  // ══════════════════════════════════════════════════════════════
+  Widget _statsRow() {
+    final times = _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
+    final avg = times.isEmpty ? null : (times.reduce((a, b) => a + b) / times.length).round();
+    final min = times.isEmpty ? null : times.reduce(math.min);
+    final max = times.isEmpty ? null : times.reduce(math.max);
+
+    return Row(children: [
+      Expanded(child: _statCard(
+        icon: LucideIcons.zap,
+        label: 'المتوسّط',
+        value: avg == null ? '—' : '$avg',
+        unit: avg == null ? '' : 'ms',
+        color: AppColors.brand,
+      )),
+      const SizedBox(width: 8),
+      Expanded(child: _statCard(
+        icon: LucideIcons.chartLine,
+        label: 'الأدنى/الأقصى',
+        value: (min == null || max == null) ? '—' : '$min/$max',
+        unit: '',
+        color: const Color(0xFF06B6D4),
+      )),
+      const SizedBox(width: 8),
+      Expanded(child: _statCard(
+        icon: LucideIcons.packageX,
+        label: 'فقدان الحزم',
+        value: _lastPacketLoss == null ? '—' : '${_lastPacketLoss!.toInt()}',
+        unit: _lastPacketLoss == null ? '' : '%',
+        color: _lastPacketLoss != null && _lastPacketLoss! > 0 ? AppColors.error : const Color(0xFF10B981),
+      )),
+    ]);
+  }
+
+  Widget _statCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.textMid),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textHi,
+                fontFamily: 'monospace',
+                height: 1,
+              ),
+            ),
+            if (unit.isNotEmpty) ...[
+              const SizedBox(width: 3),
+              Text(unit, style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+            ],
+          ],
+        ),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Ping section — زر ICMP + sparkline + history dots
+  // ══════════════════════════════════════════════════════════════
+  Widget _pingSection() {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('فحص ICMP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          const Spacer(),
+          Text(
+            'آخر فحص: ${_timeAgo(_d.lastProbedAt)}',
+            style: TextStyle(fontSize: 10, color: AppColors.textLow),
+          ),
+        ]),
+        const SizedBox(height: 12),
+
+        // Sparkline (إذا لدينا >= 2 نقطة)
+        if (_history.length >= 2) ...[
+          SizedBox(height: 50, child: _sparkline()),
+          const SizedBox(height: 8),
+          _historyDots(),
+          const SizedBox(height: 12),
         ],
+
+        // زر الفحص
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: ElevatedButton.icon(
+            onPressed: _probing ? null : _probe,
+            icon: _probing
+                ? const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(LucideIcons.zap, size: 16),
+            label: Text(_probing ? 'جاري إرسال 3 حزم ICMP…' : 'فحص ICMP (3 حزم)'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(LucideIcons.info, size: 10, color: AppColors.textLow),
+          const SizedBox(width: 4),
+          Text(
+            'يجب أن يكون الموبايل على نفس شبكة الجهاز',
+            style: TextStyle(fontSize: 10, color: AppColors.textLow),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _sparkline() {
+    final spots = <FlSpot>[];
+    for (int i = 0; i < _history.length; i++) {
+      final ms = _history[i].ms?.toDouble() ?? 0;
+      spots.add(FlSpot(i.toDouble(), ms));
+    }
+    final validMs = _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
+    final maxY = validMs.isEmpty ? 100.0 : (validMs.reduce(math.max) * 1.3);
+    return LineChart(
+      LineChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: const FlTitlesData(show: false),
+        borderData: FlBorderData(show: false),
+        minY: 0,
+        maxY: maxY,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: AppColors.brand,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+                radius: 3,
+                color: _history[spot.x.toInt()].online
+                    ? const Color(0xFF10B981) : AppColors.error,
+                strokeWidth: 0,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              color: AppColors.brand.withValues(alpha: 0.1),
+            ),
+          ),
+        ],
+        lineTouchData: const LineTouchData(enabled: false),
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.grey),
-          const SizedBox(width: 10),
-          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey)),
-          const Spacer(),
-          Text(value, style: TextStyle(fontSize: 13, fontFamily: 'monospace')),
-        ],
+  Widget _historyDots() {
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      for (final sample in _history)
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          width: 8, height: 8,
+          decoration: BoxDecoration(
+            color: sample.online ? const Color(0xFF10B981) : AppColors.error,
+            shape: BoxShape.circle,
+          ),
+        ),
+    ]);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Info grid — معلومات الجهاز بشكل grid منظّم
+  // ══════════════════════════════════════════════════════════════
+  Widget _infoGrid() {
+    final items = <_InfoItem>[
+      if (_d.model != null && _d.model!.isNotEmpty)
+        _InfoItem(LucideIcons.info, 'الموديل', _d.model!),
+      _InfoItem(LucideIcons.plug, 'المنفذ', _d.port.toString()),
+      if (_d.mac != null && _d.mac!.isNotEmpty)
+        _InfoItem(LucideIcons.fingerprint, 'MAC', _d.mac!),
+      if (_d.location != null && _d.location!.isNotEmpty)
+        _InfoItem(LucideIcons.mapPin, 'الموقع', _d.location!),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
       ),
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 8),
+          child: Row(children: [
+            Icon(LucideIcons.info, size: 14, color: AppColors.brand),
+            const SizedBox(width: 6),
+            Text('معلومات الجهاز', style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi,
+            )),
+          ]),
+        ),
+        const Divider(height: 1),
+        for (int i = 0; i < items.length; i++) ...[
+          _infoRow(items[i]),
+          if (i < items.length - 1)
+            Divider(height: 1, color: AppColors.border.withValues(alpha: 0.5), indent: 40),
+        ],
+      ]),
     );
   }
+
+  Widget _infoRow(_InfoItem item) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 12),
+      child: Row(children: [
+        Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(
+            color: AppColors.brand.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(item.icon, size: 14, color: AppColors.brand),
+        ),
+        const SizedBox(width: 10),
+        Text(item.label, style: TextStyle(fontSize: 11, color: AppColors.textMid)),
+        const Spacer(),
+        Text(
+          item.value,
+          style: TextStyle(
+            fontSize: 12,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+            color: AppColors.textHi,
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Protocol card
+  // ══════════════════════════════════════════════════════════════
+  Widget _protocolCard() {
+    final protoIcon = switch (_d.protocol) {
+      'api' => LucideIcons.globe,
+      'ssh' => LucideIcons.terminal,
+      'telnet' => LucideIcons.monitor,
+      'snmp' => LucideIcons.activity,
+      _ => LucideIcons.plug,
+    };
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.brand.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(protoIcon, size: 20, color: AppColors.brand),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              NetworkDeviceLabels.protocolLabel(_d.protocol!),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textHi),
+            ),
+            const SizedBox(height: 2),
+            Row(children: [
+              Text('port ${_d.apiPort ?? "—"}',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMid, fontFamily: 'monospace')),
+              if (_d.hasCredentials) ...[
+                const SizedBox(width: 8),
+                Icon(LucideIcons.keyRound, size: 11, color: const Color(0xFF10B981)),
+                const SizedBox(width: 3),
+                Text('credentials محفوظة',
+                    style: TextStyle(fontSize: 10, color: const Color(0xFF10B981))),
+              ],
+            ]),
+          ]),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.textLow.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            'Slice 2',
+            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.textLow),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Notes card
+  // ══════════════════════════════════════════════════════════════
+  Widget _notesCard() {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.stickyNote, size: 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('ملاحظات', style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi,
+          )),
+        ]),
+        const SizedBox(height: 8),
+        Text(_d.notes!, style: TextStyle(fontSize: 12, color: AppColors.textMid, height: 1.6)),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Coming soon (Slice 2 preview)
+  // ══════════════════════════════════════════════════════════════
+  Widget _comingSoonCard() {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [
+          AppColors.brand.withValues(alpha: 0.05),
+          AppColors.brand.withValues(alpha: 0.02),
+        ]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.brand.withValues(alpha: 0.2), width: 1),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.sparkles, size: 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('قادم في Slice 2', style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand,
+          )),
+        ]),
+        const SizedBox(height: 10),
+        _comingItem(LucideIcons.chartLine, 'مراقبة interfaces + traffic حيّ (RX/TX Mbps لكل منفذ)'),
+        _comingItem(LucideIcons.cpu, 'CPU + RAM + حرارة + uptime (Mikrotik/UBNT/Mimosa API)'),
+        _comingItem(LucideIcons.wifi, 'إشارة الـwireless + عدد المتّصلين (للـAPs والـsectors)'),
+        _comingItem(LucideIcons.zap, 'زر Reboot عن بُعد'),
+        _comingItem(LucideIcons.bellRing, 'تنبيهات (حرارة/CPU/فولتيّة) مع حدود مخصّصة'),
+      ]),
+    );
+  }
+
+  Widget _comingItem(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Icon(icon, size: 12, color: AppColors.textMid),
+        const SizedBox(width: 6),
+        Expanded(child: Text(
+          text,
+          style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4),
+        )),
+      ]),
+    );
+  }
+}
+
+class _InfoItem {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _InfoItem(this.icon, this.label, this.value);
+}
+
+class _PingSample {
+  final DateTime at;
+  final int? ms;
+  final bool online;
+  const _PingSample({required this.at, this.ms, required this.online});
 }
