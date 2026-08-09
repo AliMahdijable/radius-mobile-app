@@ -51,13 +51,8 @@ class MikrotikApi {
           ]);
           if (monResult.isNotEmpty) {
             ethMonitorByName[name] = monResult.first;
-            if (kDebugMode) {
-              debugPrint('🔵 ether monitor $name: rate=${monResult.first["rate"]} status=${monResult.first["status"]}');
-            }
           }
-        } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ ether monitor $name failed: $e');
-        }
+        } catch (_) {}
       }
 
       if (resourceRows.isEmpty) {
