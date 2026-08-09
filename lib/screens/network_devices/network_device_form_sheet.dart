@@ -7,7 +7,6 @@ import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
-import '../../theme/typography.dart';
 
 /// bottom sheet لإضافة/تعديل جهاز شبكة. راجع project_devices_monitoring_plan.
 class NetworkDeviceFormSheet extends StatefulWidget {
@@ -120,7 +119,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   const SizedBox(width: 8),
                   Text(
                     widget.existing == null ? 'إضافة جهاز جديد' : 'تعديل جهاز',
-                    style: AppTypography.h3,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),

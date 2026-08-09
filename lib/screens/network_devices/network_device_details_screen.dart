@@ -6,7 +6,6 @@ import '../../api/network_devices_api.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
-import '../../theme/typography.dart';
 import 'network_device_form_sheet.dart';
 
 /// شاشة تفاصيل جهاز — Slice 1 = عرض + زر فحص. Slice 2 يضيف
@@ -178,7 +177,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           ),
         ),
         body: ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.all(Sp.md),
           children: [
             // Status hero
             Container(
@@ -190,13 +189,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               ),
               child: Column(
                 children: [
-                  Text(_statusText(), style: AppTypography.h2.copyWith(color: _statusColor())),
+                  Text(_statusText(), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _statusColor())),
                   const SizedBox(height: 6),
                   if (_d.lastResponseMs != null)
                     Text('زمن الاستجابة: ${_d.lastResponseMs} ms',
-                        style: AppTypography.small.copyWith(color: Colors.grey)),
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
                   Text('آخر فحص: ${_timeAgo(_d.lastProbedAt)}',
-                      style: AppTypography.small.copyWith(color: Colors.grey)),
+                      style: TextStyle(fontSize: 11, color: Colors.grey)),
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -216,7 +215,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   const SizedBox(height: 8),
                   Text(
                     'ℹ️ يجب أن يكون الموبايل على نفس شبكة الجهاز',
-                    style: AppTypography.small.copyWith(color: Colors.grey, fontSize: 10),
+                    style: TextStyle(fontSize: 10, color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -242,14 +241,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               _infoCard('ملاحظات', [
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Text(_d.notes!, style: AppTypography.body),
+                  child: Text(_d.notes!, style: const TextStyle(fontSize: 13)),
                 ),
               ]),
             ],
             const SizedBox(height: 20),
             Text(
               'المرحلة القادمة ستضيف: مراقبة interfaces + traffic + CPU + reboot (Mikrotik/UBNT/Mimosa)',
-              style: AppTypography.small.copyWith(color: Colors.grey.withValues(alpha: 0.7), fontSize: 10),
+              style: TextStyle(fontSize: 10, color: Colors.grey.withValues(alpha: 0.7)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -271,7 +270,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           Padding(
             padding: const EdgeInsets.all(12),
             child: Text(title,
-                style: AppTypography.body.copyWith(fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
           ),
           const Divider(height: 1),
           ...children,
@@ -287,9 +286,9 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         children: [
           Icon(icon, size: 16, color: Colors.grey),
           const SizedBox(width: 10),
-          Text(label, style: AppTypography.small.copyWith(color: Colors.grey)),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey)),
           const Spacer(),
-          Text(value, style: AppTypography.body.copyWith(fontFamily: 'monospace')),
+          Text(value, style: TextStyle(fontSize: 13, fontFamily: 'monospace')),
         ],
       ),
     );

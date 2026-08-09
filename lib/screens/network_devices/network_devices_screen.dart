@@ -5,7 +5,6 @@ import '../../api/network_devices_api.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
-import '../../theme/typography.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 
@@ -181,7 +180,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
         ),
         child: Text(
           label,
-          style: AppTypography.small.copyWith(
+          style: TextStyle(fontSize: 11, 
             color: active ? Colors.white : null,
             fontWeight: active ? FontWeight.bold : FontWeight.normal,
           ),
@@ -204,14 +203,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
               const SizedBox(height: 16),
               Text(
                 _all.isEmpty ? 'لا توجد أجهزة بعد' : 'لا توجد نتائج للفلتر الحالي',
-                style: AppTypography.body,
+                style: const TextStyle(fontSize: 13),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               if (_all.isEmpty)
                 Text(
                   'اضغط "إضافة جهاز" لبدء تسجيل أجهزتك',
-                  style: AppTypography.small.copyWith(color: Colors.grey),
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
             ],
@@ -231,7 +230,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
             onTap: () => _openDetails(d),
             borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.all(Sp.md),
               child: Row(
                 children: [
                   Container(
@@ -254,7 +253,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                             Expanded(
                               child: Text(
                                 d.name,
-                                style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -263,14 +262,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '${d.ip} • ${NetworkDeviceLabels.brandLabel(d.brand)} • ${NetworkDeviceLabels.typeLabel(d.type)}',
-                          style: AppTypography.small.copyWith(color: Colors.grey),
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (d.location != null && d.location!.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
                             '📍 ${d.location}',
-                            style: AppTypography.small.copyWith(color: Colors.grey, fontSize: 10),
+                            style: TextStyle(fontSize: 10, color: Colors.grey),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
