@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/managers_api.dart';
 import '../../api/packages_api.dart';
+import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../services/auth_storage.dart';
 import '../../services/permissions_service.dart';
@@ -187,7 +188,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) _load();
+    if (r.ok) {
+      // 2026-08-09: invalidate cache حتى القائمة تجيب الأسعار الجديدة
+      SubscribersApi.invalidatePackagesCache();
+      _load();
+    }
   }
 
   @override

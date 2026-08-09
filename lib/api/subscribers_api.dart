@@ -155,11 +155,29 @@ class _SubsListCache {
 class SubscribersApi {
   SubscribersApi._();
 
+  // 2026-08-09: cache 5 دقائق للـpackages — كانت تُطلب كل 5s مع _silentRefresh
+  // في subscribers_screen مما سبّب ضغط على السيرفر (Cloudflare 502 أحياناً).
+  // الباقات نادراً ما تتغيّر — cache تُبطَل تلقائيّاً بعد 5د أو عند invalidate().
+  static Map<String, PackageInfo>? _packagesCache;
+  static DateTime? _packagesCacheTime;
+  static const _packagesCacheTtl = Duration(minutes: 5);
+
+  static void invalidatePackagesCache() {
+    _packagesCache = null;
+    _packagesCacheTime = null;
+  }
+
   /// GET /api/v2/packages — fetches the package catalogue (id → name
   /// + sale price) so we can fill in subscriber.profileName + price
   /// when the with-phones row only carried profile_id. Mirrors v1's
   /// loadPackages + _enrichWithPackage flow + priceList enrichment.
   static Future<Map<String, PackageInfo>?> loadPackages() async {
+    // اقرأ من الـcache لو حديث
+    final ct = _packagesCacheTime;
+    if (_packagesCache != null && ct != null &&
+        DateTime.now().difference(ct) < _packagesCacheTtl) {
+      return _packagesCache;
+    }
     final token = await AuthStorage.readToken();
     if (token == null) return null;
     try {
@@ -192,7 +210,9 @@ class SubscribersApi {
         }
         out[id] = PackageInfo(name: name, price: price);
       }
-      if (!kReleaseMode) debugPrint('🟢 v2/packages: ${out.length} loaded');
+      _packagesCache = out;
+      _packagesCacheTime = DateTime.now();
+      if (!kReleaseMode) debugPrint('🟢 v2/packages: ${out.length} loaded (cached 5m)');
       return out;
     } on DioException catch (e) {
       _log('v2/packages', e);
@@ -223,14 +243,8 @@ class SubscribersApi {
         return null;
       }
       final rows = (body['data'] as List?) ?? const [];
-      // Diagnostic: dump the first online row so we can see whether
-      // the byte counters actually come through from the backend.
-      // The user's report said DL/UL show as 0 on the card; this log
-      // tells us whether the data is missing or just being mis-merged.
-      if (!kReleaseMode && rows.isNotEmpty && rows.first is Map) {
-        final first = rows.first as Map;
-        debugPrint('🔍 online[0]: $first');
-      }
+      // 2026-08-09: diagnostic log كان ينفجر مع polling 5s (spam مزعج).
+      // معطّل الآن — لو حبيت تشخّص DL/UL، أعِد تفعيله مؤقّتاً.
       final out = <String, OnlineSessionInfo>{};
       int? toInt(dynamic v) {
         if (v == null) return null;
