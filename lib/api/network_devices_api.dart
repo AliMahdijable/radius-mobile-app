@@ -94,12 +94,16 @@ class NetworkDevicesApi {
       final ping = Ping(ip, count: count, timeout: timeout.inSeconds);
       final times = <int>[];
       int received = 0;
+      // dart_ping 10.x: PingEvent = sealed (PingResponse | PingError | PingSummary)
       await for (final event in ping.stream) {
-        if (event.response != null && event.response!.time != null) {
-          times.add(event.response!.time!.inMilliseconds);
-          received++;
+        if (event is PingResponse) {
+          if (event.time != null) {
+            times.add(event.time!.inMilliseconds);
+            received++;
+          }
+        } else if (event is PingSummary) {
+          break;
         }
-        if (event.summary != null) break;
       }
       if (received == 0) {
         return (status: 'offline', responseMs: null, packetLoss: 100.0);
