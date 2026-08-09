@@ -36,36 +36,28 @@ class MikrotikApi {
       }
 
       // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
-      // عبر /interface/ethernet/monitor مع once لتفادي stream
+      // عبر /interface/ethernet/monitor لكل ether بشكل منفصل (أضمن).
       final Map<String, Map<String, String>> ethMonitorByName = {};
-      try {
-        final ethMon = await client.query([
-          '/interface/ethernet/monitor',
-          '=numbers=',
-          '=once=',
-        ]);
-        for (final row in ethMon) {
-          final name = row['name'];
-          if (name != null && name.isNotEmpty) ethMonitorByName[name] = row;
-        }
-      } catch (_) {
-        // بعض إصدارات RouterOS ما تدعم numbers فارغ — fallback per-ether
+      for (final row in interfaceRows) {
+        final name = row['name'];
+        if (name == null || name.isEmpty) continue;
+        final type = row['type'] ?? '';
+        if (type != 'ether' && type != 'sfp') continue;
         try {
-          for (final row in interfaceRows) {
-            final name = row['name'];
-            if (name == null || name.isEmpty) continue;
-            final type = row['type'] ?? '';
-            if (type != 'ether' && type != 'sfp') continue;
-            try {
-              final r = await client.query([
-                '/interface/ethernet/monitor',
-                '=numbers=$name',
-                '=once=',
-              ]);
-              if (r.isNotEmpty) ethMonitorByName[name] = r.first;
-            } catch (_) {}
+          final monResult = await client.query([
+            '/interface/ethernet/monitor',
+            '=numbers=$name',
+            '=once=',
+          ]);
+          if (monResult.isNotEmpty) {
+            ethMonitorByName[name] = monResult.first;
+            if (kDebugMode) {
+              debugPrint('🔵 ether monitor $name: rate=${monResult.first["rate"]} status=${monResult.first["status"]}');
+            }
           }
-        } catch (_) {}
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ ether monitor $name failed: $e');
+        }
       }
 
       if (resourceRows.isEmpty) {

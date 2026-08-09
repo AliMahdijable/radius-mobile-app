@@ -351,7 +351,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             const SizedBox(width: 3),
             Text(_formatUptime(s.uptime),
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: AppColors.brand, fontFamily: 'monospace')),
+                    color: AppColors.brand)),
           ]),
         ),
         if (s.pppActiveCount > 0) ...[
