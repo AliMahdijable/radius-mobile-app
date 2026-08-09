@@ -211,8 +211,6 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             const SizedBox(height: Sp.md),
             _notesCard(),
           ],
-          const SizedBox(height: Sp.md),
-          _comingSoonCard(),
           const SizedBox(height: Sp.xl),
         ],
       ),

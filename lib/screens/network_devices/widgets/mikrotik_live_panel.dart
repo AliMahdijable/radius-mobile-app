@@ -158,19 +158,29 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   bool _isEther(MikrotikInterface i) =>
       i.type == 'ether' || i.type == 'sfp';
 
-  /// أعلى interface throughput (RX+TX combined) — للـmetric card
-  ({String name, int rxBps, int txBps})? _maxIface() {
+  /// أعلى interface بالـRX (download) — منفصل عن الـTX
+  ({String name, int bps})? _maxRxIface() {
     final ethers = (_stats?.interfaces ?? []).where(_isEther).toList();
-    if (ethers.isEmpty) return null;
-    ({String name, int rxBps, int txBps})? best;
-    int bestTotal = 0;
+    ({String name, int bps})? best;
     for (final i in ethers) {
       final r = _rates[i.name];
       if (r == null) continue;
-      final total = r.rxBps + r.txBps;
-      if (best == null || total > bestTotal) {
-        best = (name: i.name, rxBps: r.rxBps, txBps: r.txBps);
-        bestTotal = total;
+      if (best == null || r.rxBps > best.bps) {
+        best = (name: i.name, bps: r.rxBps);
+      }
+    }
+    return best;
+  }
+
+  /// أعلى interface بالـTX (upload) — منفصل عن الـRX
+  ({String name, int bps})? _maxTxIface() {
+    final ethers = (_stats?.interfaces ?? []).where(_isEther).toList();
+    ({String name, int bps})? best;
+    for (final i in ethers) {
+      final r = _rates[i.name];
+      if (r == null) continue;
+      if (best == null || r.txBps > best.bps) {
+        best = (name: i.name, bps: r.txBps);
       }
     }
     return best;
@@ -324,13 +334,28 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            '${s.boardName} • RouterOS ${s.version}',
+            '${s.boardName} • ${s.version.split(' ').first}',
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textHi),
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        // Uptime badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.brand.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(LucideIcons.clock, size: 9, color: AppColors.brand),
+            const SizedBox(width: 3),
+            Text(_formatUptime(s.uptime),
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                    color: AppColors.brand, fontFamily: 'monospace')),
+          ]),
+        ),
         if (s.pppActiveCount > 0) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -351,23 +376,36 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // ══════════════════════════════════════════════════════════════
   Widget _metricsRow() {
     final s = _stats!;
-    final maxIf = _maxIface();
+    final maxRx = _maxRxIface();
+    final maxTx = _maxTxIface();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-      child: Row(children: [
-        Expanded(child: _percentCard(
-          icon: LucideIcons.cpu,
-          label: 'CPU',
-          percent: s.cpuLoad.toDouble(),
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _percentCard(
-          icon: LucideIcons.memoryStick,
-          label: 'RAM',
-          percent: s.memUsedPercent.toDouble(),
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _topIfaceCard(maxIf)),
+      child: Column(children: [
+        Row(children: [
+          Expanded(child: _percentCard(
+            icon: LucideIcons.cpu, label: 'CPU',
+            percent: s.cpuLoad.toDouble(),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: _percentCard(
+            icon: LucideIcons.memoryStick, label: 'RAM',
+            percent: s.memUsedPercent.toDouble(),
+          )),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: _topRateCard(
+            label: 'أعلى تنزيل ↓',
+            iface: maxRx,
+            color: const Color(0xFF10B981),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: _topRateCard(
+            label: 'أعلى رفع ↑',
+            iface: maxTx,
+            color: const Color(0xFF3B82F6),
+          )),
+        ]),
       ]),
     );
   }
@@ -415,7 +453,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     );
   }
 
-  Widget _topIfaceCard(({String name, int rxBps, int txBps})? maxIf) {
+  Widget _topRateCard({
+    required String label,
+    required ({String name, int bps})? iface,
+    required Color color,
+  }) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -424,35 +466,24 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.arrowDownUp, size: 12, color: AppColors.brand),
-          const SizedBox(width: 4),
-          Text('أعلى', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
-        ]),
+        Text(label,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
         const SizedBox(height: 6),
-        if (maxIf != null) ...[
-          Text(maxIf.name,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                  color: AppColors.textHi, fontFamily: 'monospace'),
+        if (iface != null && iface.bps > 0) ...[
+          Text(iface.name,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                  color: AppColors.textMid, fontFamily: 'monospace'),
               overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 4),
-          Row(children: [
-            Icon(LucideIcons.arrowDown, size: 9, color: const Color(0xFF10B981)),
-            Text(_formatBps(maxIf.rxBps),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
-            const SizedBox(width: 6),
-            Icon(LucideIcons.arrowUp, size: 9, color: const Color(0xFF3B82F6)),
-            Text(_formatBps(maxIf.txBps),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
-          ]),
+          const SizedBox(height: 2),
+          Text(_formatBps(iface.bps),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+                  color: color, fontFamily: 'monospace', height: 1)),
         ] else ...[
           Text('—',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
                   color: AppColors.textLow, fontFamily: 'monospace')),
           const SizedBox(height: 4),
-          Text('جارٍ حساب المعدّل…',
+          Text('لا حركة',
               style: TextStyle(fontSize: 9, color: AppColors.textLow)),
         ],
       ]),
@@ -677,18 +708,35 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Row(children: [
           Icon(statusIcon, size: 12, color: color),
           const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              iface.name,
-              style: TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
-                color: iface.disabled ? AppColors.textLow : AppColors.textHi,
-              ),
-              overflow: TextOverflow.ellipsis,
+          Text(
+            iface.name,
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+              color: iface.disabled ? AppColors.textLow : AppColors.textHi,
             ),
           ),
+          if (iface.linkSpeed != null && iface.linkSpeed!.isNotEmpty && iface.running) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: _linkSpeedColor(iface.linkSpeed!).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _shortLinkSpeed(iface.linkSpeed!),
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: _linkSpeedColor(iface.linkSpeed!),
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+          const Spacer(),
           if (rate != null) ...[
             Icon(LucideIcons.arrowDown, size: 9, color: const Color(0xFF10B981)),
             const SizedBox(width: 2),
@@ -736,6 +784,37 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     if (p >= 85) return AppColors.error;
     if (p >= 65) return const Color(0xFFF59E0B);
     return const Color(0xFF10B981);
+  }
+
+  /// اختصار الـlink speed: "1Gbps" → "1G", "100Mbps" → "100M", "10Mbps" → "10M"
+  String _shortLinkSpeed(String raw) {
+    final r = raw.toLowerCase().replaceAll('bps', '').trim();
+    if (r.endsWith('g')) return '${r.substring(0, r.length - 1).trim()}G';
+    if (r.endsWith('m')) return '${r.substring(0, r.length - 1).trim()}M';
+    return raw;
+  }
+
+  /// اللون حسب سرعة الـport — 1G أخضر، 100M أزرق، 10M أصفر، أقلّ أحمر
+  Color _linkSpeedColor(String raw) {
+    final r = raw.toLowerCase();
+    if (r.contains('g') || r.contains('10000') || r.contains('2500')) return const Color(0xFF10B981);
+    if (r.contains('1000') || r.contains('100m')) return const Color(0xFF06B6D4);
+    if (r.contains('10m')) return const Color(0xFFF59E0B);
+    return AppColors.textMid;
+  }
+
+  /// اختصار uptime: "3w2d15h4m5s" → "3أ 2ي" (أسبوع/يوم) أو "17س 4د"
+  String _formatUptime(String raw) {
+    if (raw.isEmpty) return '—';
+    final weeks = RegExp(r'(\d+)w').firstMatch(raw)?.group(1);
+    final days = RegExp(r'(\d+)d').firstMatch(raw)?.group(1);
+    final hours = RegExp(r'(\d+)h').firstMatch(raw)?.group(1);
+    final mins = RegExp(r'(\d+)m(?!s)').firstMatch(raw)?.group(1);
+    if (weeks != null) return '${weeks}أ ${days ?? "0"}ي';
+    if (days != null) return '${days}ي ${hours ?? "0"}س';
+    if (hours != null) return '${hours}س ${mins ?? "0"}د';
+    if (mins != null) return '${mins}د';
+    return raw;
   }
 
   String _formatBps(int bps) {

@@ -35,6 +35,39 @@ class MikrotikApi {
         // ppp/active قد لا يكون موجوداً — تجاهل
       }
 
+      // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
+      // عبر /interface/ethernet/monitor مع once لتفادي stream
+      final Map<String, Map<String, String>> ethMonitorByName = {};
+      try {
+        final ethMon = await client.query([
+          '/interface/ethernet/monitor',
+          '=numbers=',
+          '=once=',
+        ]);
+        for (final row in ethMon) {
+          final name = row['name'];
+          if (name != null && name.isNotEmpty) ethMonitorByName[name] = row;
+        }
+      } catch (_) {
+        // بعض إصدارات RouterOS ما تدعم numbers فارغ — fallback per-ether
+        try {
+          for (final row in interfaceRows) {
+            final name = row['name'];
+            if (name == null || name.isEmpty) continue;
+            final type = row['type'] ?? '';
+            if (type != 'ether' && type != 'sfp') continue;
+            try {
+              final r = await client.query([
+                '/interface/ethernet/monitor',
+                '=numbers=$name',
+                '=once=',
+              ]);
+              if (r.isNotEmpty) ethMonitorByName[name] = r.first;
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
       if (resourceRows.isEmpty) {
         throw MikrotikBinaryException('لم يرجع الراوتر معلومات system/resource');
       }
@@ -51,7 +84,11 @@ class MikrotikApi {
         architectureName: resource['architecture-name'] ?? '',
         cpuCount: _asInt(resource['cpu-count']),
         cpuFrequencyMhz: _asInt(resource['cpu-frequency']),
-        interfaces: interfaceRows.map(MikrotikInterface.fromApiMap).toList(),
+        interfaces: interfaceRows.map((row) {
+          final name = row['name'] ?? '';
+          final monitor = ethMonitorByName[name];
+          return MikrotikInterface.fromApiMap(row, monitor: monitor);
+        }).toList(),
         pppActiveCount: pppRows.length,
       );
     } on MikrotikBinaryException {
@@ -138,6 +175,10 @@ class MikrotikInterface {
   final int? mtu;
   final int? rxBytes;
   final int? txBytes;
+  /// سرعة الـport الفعليّة من ethernet/monitor (مثل "1Gbps", "100Mbps")
+  final String? linkSpeed;
+  /// full-duplex من ethernet/monitor
+  final bool fullDuplex;
 
   const MikrotikInterface({
     required this.name,
@@ -147,10 +188,16 @@ class MikrotikInterface {
     this.mtu,
     this.rxBytes,
     this.txBytes,
+    this.linkSpeed,
+    this.fullDuplex = true,
   });
 
   /// Binary API يرجع كل القيم كـString — نحوّل نحن.
-  factory MikrotikInterface.fromApiMap(Map<String, String> j) {
+  /// monitor (اختياري) من /interface/ethernet/monitor يحوي rate + full-duplex
+  factory MikrotikInterface.fromApiMap(
+    Map<String, String> j, {
+    Map<String, String>? monitor,
+  }) {
     bool asBool(String? v) => v?.toLowerCase() == 'true';
     int? asInt(String? v) {
       if (v == null) return null;
@@ -164,6 +211,8 @@ class MikrotikInterface {
       mtu: asInt(j['actual-mtu'] ?? j['mtu']),
       rxBytes: asInt(j['rx-byte']),
       txBytes: asInt(j['tx-byte']),
+      linkSpeed: monitor?['rate'],
+      fullDuplex: monitor == null ? true : asBool(monitor['full-duplex']),
     );
   }
 }
