@@ -329,21 +329,48 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               ]),
             ]),
           ),
-          // Big response time (right side)
-          if (online && _d.lastResponseMs != null)
-            Column(children: [
+          // Response time + compact ICMP ping button
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            if (online && _d.lastResponseMs != null) ...[
               Text(
                 '${_d.lastResponseMs}',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 24,
                   fontWeight: FontWeight.w800,
                   color: _statusColor,
                   height: 1,
                   fontFamily: 'monospace',
                 ),
               ),
-              Text('ms', style: TextStyle(fontSize: 10, color: AppColors.textMid)),
-            ]),
+              Text('ms', style: TextStyle(fontSize: 9, color: AppColors.textMid)),
+              const SizedBox(height: 6),
+            ],
+            // زر ICMP مدمج — icon فقط
+            InkWell(
+              onTap: _probing ? null : _probe,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: _probing
+                    ? SizedBox(
+                        width: 12, height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.brand))
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(LucideIcons.zap, size: 11, color: AppColors.brand),
+                        const SizedBox(width: 3),
+                        Text('ping',
+                            style: TextStyle(
+                              fontSize: 10, fontWeight: FontWeight.w700,
+                              color: AppColors.brand,
+                            )),
+                      ]),
+              ),
+            ),
+          ]),
         ]),
       ]),
     );
@@ -463,9 +490,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   }
 
   // ══════════════════════════════════════════════════════════════
-  // Ping section — زر ICMP + sparkline + history dots
+  // Ping mini section — sparkline + history dots فقط (بدون زر كبير).
+  // زر الفحص انتقل لـHero card (compact).
   // ══════════════════════════════════════════════════════════════
   Widget _pingSection() {
+    // لا نعرض شيء لو ما فيه history كافي — الـsparkline بلا نقاط غير مفيد
+    if (_history.length < 2) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
@@ -475,50 +505,25 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       ),
       child: Column(children: [
         Row(children: [
-          Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
+          Icon(LucideIcons.activity, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('فحص ICMP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          Text('سجلّ ICMP', style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           const Spacer(),
-          Text(
-            'آخر فحص: ${_timeAgo(_d.lastProbedAt)}',
-            style: TextStyle(fontSize: 10, color: AppColors.textLow),
-          ),
+          Text('آخر: ${_timeAgo(_d.lastProbedAt)}',
+              style: TextStyle(fontSize: 10, color: AppColors.textLow)),
         ]),
-        const SizedBox(height: 12),
-
-        // Sparkline (إذا لدينا >= 2 نقطة)
-        if (_history.length >= 2) ...[
-          SizedBox(height: 50, child: _sparkline()),
-          const SizedBox(height: 8),
-          _historyDots(),
-          const SizedBox(height: 12),
-        ],
-
-        // زر الفحص
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: ElevatedButton.icon(
-            onPressed: _probing ? null : _probe,
-            icon: _probing
-                ? const SizedBox(width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(LucideIcons.zap, size: 16),
-            label: Text(_probing ? 'جاري إرسال 3 حزم ICMP…' : 'فحص ICMP (3 حزم)'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ),
+        const SizedBox(height: 8),
+        SizedBox(height: 40, child: _sparkline()),
         const SizedBox(height: 6),
+        _historyDots(),
+        const SizedBox(height: 2),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(LucideIcons.info, size: 10, color: AppColors.textLow),
-          const SizedBox(width: 4),
+          Icon(LucideIcons.info, size: 9, color: AppColors.textLow),
+          const SizedBox(width: 3),
           Text(
             'يجب أن يكون الموبايل على نفس شبكة الجهاز',
-            style: TextStyle(fontSize: 10, color: AppColors.textLow),
+            style: TextStyle(fontSize: 9, color: AppColors.textLow),
           ),
         ]),
       ]),
