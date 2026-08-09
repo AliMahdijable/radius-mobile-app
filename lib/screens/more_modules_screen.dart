@@ -13,6 +13,7 @@ import 'message_logs/message_logs_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
+import 'network_devices/network_devices_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
 
@@ -139,6 +140,16 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
+          // 2026-08-09: الأجهزة — inventory + LAN monitoring (Slice 1: TCP probe)
+          _ModuleCard(
+            icon: LucideIcons.router,
+            color: const Color(0xFF06B6D4),
+            title: 'الأجهزة',
+            subtitle: 'مراقبة أجهزة الشبكة (Mikrotik/UBNT/Mimosa)',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NetworkDevicesScreen()),
+            ),
+          ),
         ];
 
         return Scaffold(
