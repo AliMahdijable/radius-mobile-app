@@ -11,6 +11,7 @@ import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
+import 'widgets/mikrotik_live_panel.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -191,6 +192,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           _statsRow(),
           const SizedBox(height: Sp.md),
           _pingSection(),
+          // Mikrotik Live Panel — يظهر فقط لأجهزة Mikrotik مع API + credentials
+          if (_d.brand == 'mikrotik' &&
+              _d.protocol == 'api' &&
+              _d.hasCredentials) ...[
+            const SizedBox(height: Sp.md),
+            MikrotikLivePanel(device: _d),
+          ],
           const SizedBox(height: Sp.md),
           _infoGrid(),
           if (_d.protocol != null) ...[
@@ -746,16 +754,16 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         Row(children: [
           Icon(LucideIcons.sparkles, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('قادم في Slice 2', style: TextStyle(
+          Text('قادم قريباً', style: TextStyle(
             fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand,
           )),
         ]),
         const SizedBox(height: 10),
-        _comingItem(LucideIcons.chartLine, 'مراقبة interfaces + traffic حيّ (RX/TX Mbps لكل منفذ)'),
-        _comingItem(LucideIcons.cpu, 'CPU + RAM + حرارة + uptime (Mikrotik/UBNT/Mimosa API)'),
-        _comingItem(LucideIcons.wifi, 'إشارة الـwireless + عدد المتّصلين (للـAPs والـsectors)'),
-        _comingItem(LucideIcons.zap, 'زر Reboot عن بُعد'),
+        _comingItem(LucideIcons.wifi, 'UBNT + Mimosa API — signal + throughput + stations'),
+        _comingItem(LucideIcons.chartLine, 'رسم بياني حيّ للـtraffic لكل interface (RX/TX Mbps)'),
+        _comingItem(LucideIcons.zap, 'زر Reboot عن بُعد (للـMikrotik أولاً)'),
         _comingItem(LucideIcons.bellRing, 'تنبيهات (حرارة/CPU/فولتيّة) مع حدود مخصّصة'),
+        _comingItem(LucideIcons.mapPin, 'تنظيم بالمناطق (regions) + bulk IP scan'),
       ]),
     );
   }
