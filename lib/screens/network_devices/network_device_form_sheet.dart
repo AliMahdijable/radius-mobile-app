@@ -200,24 +200,17 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   const SizedBox(height: Sp.xl),
                   _sectionTitle('الشبكة'),
                   const SizedBox(height: 8),
-                  Row(children: [
-                    Expanded(flex: 3, child: _textField(_ipCtrl, 'عنوان IP *',
-                        hint: '192.168.1.1',
-                        icon: LucideIcons.globe,
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'مطلوب';
-                          if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(v.trim())) {
-                            return 'IP غير صالح';
-                          }
-                          return null;
-                        })),
-                    const SizedBox(width: 10),
-                    Expanded(child: _textField(_portCtrl, 'HTTP port',
-                        hint: '80',
-                        keyboardType: TextInputType.number,
-                        formatters: [FilteringTextInputFormatter.digitsOnly])),
-                  ]),
+                  _textField(_ipCtrl, 'عنوان IP *',
+                      hint: '192.168.1.1',
+                      icon: LucideIcons.globe,
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'مطلوب';
+                        if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(v.trim())) {
+                          return 'IP غير صالح';
+                        }
+                        return null;
+                      }),
                   const SizedBox(height: 10),
                   _textField(_macCtrl, 'MAC (اختياري)',
                       hint: 'AA:BB:CC:DD:EE:FF',
