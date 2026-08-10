@@ -50,10 +50,14 @@ class FinanceKPIs {
   static num _n(dynamic v) => v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
   static int _i(dynamic v) => v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
 
-  /// إيراد نقدي حقيقي = activate_cash + debt_pay + balance_deduct
-  /// (مطابق Financial.tsx). balance_add يدخل debt — لا revenue.
+  /// إيراد نقدي حقيقي = activate_cash + payments + debt_pay + balance_deduct.
+  /// **مطابق Financial.tsx** — كان mobile يفتقد `paymentsSum` (PAYMENT_ADD)
+  /// وينتج فرق بين الويب والموبايل (bug 2026-08-10).
   num get totalCashRevenue =>
-      activateCashSum + debtPaySum + balanceDeductSum;
+      activateCashSum + paymentsSum + debtPaySum + balanceDeductSum;
+
+  /// تسديد ديون (debt collections) للعرض في KPI grid — يشمل paymentsSum أيضاً.
+  num get totalDebtPayments => paymentsSum + debtPaySum + balanceDeductSum;
 
   /// الصافي = الإيراد - المصاريف - إضافة الدين اليدوي (2026-07-10).
   /// إضافة الدين اليدوي هي مبالغ منحها المدير للمشترك بلا استلام نقد
@@ -421,6 +425,14 @@ class ReportsApi {
   static String _date(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// نهاية اليوم — للـdate_to حتى يشمل كل عمليّات اليوم.
+  /// كنّا نرسل YYYY-MM-DD فقط، فالـSQL يعتبرها 00:00:00 ويتخطّى كل
+  /// عمليّات اليوم الحالي. يجب مطابقة web (يرسل 23:59:59).
+  static String _dateEnd(DateTime d) => '${_date(d)} 23:59:59';
+
+  /// بداية اليوم — للـdate_from (00:00:00 صريحة).
+  static String _dateStart(DateTime d) => '${_date(d)} 00:00:00';
+
   /// التقرير المالي — KPIs + آخر السجلات.
   /// dateFrom/dateTo بصيغة YYYY-MM-DD. لو فاضي يرجع الـbackend الافتراضي.
   /// userIds — قائمة IDs المدراء المرشّحين. لو فاضي يرجع كل المدراء.
@@ -439,8 +451,8 @@ class ReportsApi {
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
-        if (from != null) 'date_from': _date(from),
-        if (to != null) 'date_to': _date(to),
+        if (from != null) 'date_from': _dateStart(from),
+        if (to != null) 'date_to': _dateEnd(to),
         // priority: actionManagerId (single) > userIds (list)
         if (actionManagerId != null && actionManagerId.isNotEmpty)
           'user_id': actionManagerId
@@ -506,8 +518,8 @@ class ReportsApi {
     try {
       final qp = <String, String>{
         'limit': '$limit',
-        if (from != null) 'date_from': _date(from),
-        if (to != null) 'date_to': _date(to),
+        if (from != null) 'date_from': _dateStart(from),
+        if (to != null) 'date_to': _dateEnd(to),
         if (activityType != null && activityType.isNotEmpty)
           'activity_type': activityType,
         if (search != null && search.isNotEmpty) 'search': search,
@@ -568,8 +580,8 @@ class ReportsApi {
     try {
       final qp = <String, String>{
         'limit': '5000',
-        if (from != null) 'date_from': _date(from),
-        if (to != null) 'date_to': _date(to),
+        if (from != null) 'date_from': _dateStart(from),
+        if (to != null) 'date_to': _dateEnd(to),
         // priority: actionManagerId (single) > userIds (list)
         if (actionManagerId != null && actionManagerId.isNotEmpty)
           'user_id': actionManagerId
@@ -744,8 +756,8 @@ class ReportsApi {
     try {
       final qp = <String, String>{
         'username': username,
-        if (from != null) 'date_from': _date(from),
-        if (to != null) 'date_to': _date(to),
+        if (from != null) 'date_from': _dateStart(from),
+        if (to != null) 'date_to': _dateEnd(to),
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
         if (actionTypes != null && actionTypes.isNotEmpty)
           'action_types': actionTypes.join(','),

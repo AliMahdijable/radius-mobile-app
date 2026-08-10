@@ -313,9 +313,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   }
 
   Widget _kpiGrid(FinanceKPIs k) {
-    // تسديد دين = debt_pay + balance_deduct مجموعان (BALANCE_DEDUCT مع
-    // description "تسديد دين …" هو تسديد دين فعلياً — مطابق web _shared.tsx).
-    final debtPayTotal = k.debtPaySum + k.balanceDeductSum;
+    // تسديد دين = payments + debt_pay + balance_deduct مجموعان — مطابق web
+    // Financial.tsx. كان يفتقد paymentsSum ويظهر أقلّ من الويب.
+    final debtPayTotal = k.totalDebtPayments;
     final items = <_KpiItem>[
       _KpiItem('actions.activate_cash'.tr(), formatIQD(k.activateCashSum), const Color(0xFF14B8A6), LucideIcons.zap),
       _KpiItem('actions.debt_pay'.tr(), formatIQD(debtPayTotal), const Color(0xFF14B8A6), LucideIcons.banknote),
