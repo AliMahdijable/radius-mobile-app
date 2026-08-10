@@ -11,6 +11,7 @@ import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
+import 'widgets/brand_badge.dart';
 import 'widgets/mikrotik_live_panel.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
@@ -55,6 +56,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         online: _d.lastStatus == 'online',
       ));
     }
+    // Auto-ping فور فتح الشاشة — يضمن أن الحالة المعروضة حقيقيّة الآن
+    // (وليس آخر ping ناجح قديم لمّا كان المدير داخل الشبكة).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _probe();
+    });
   }
 
   @override
@@ -238,53 +244,41 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       padding: const EdgeInsets.all(Sp.lg),
       child: Column(children: [
         Row(children: [
-          // Big icon with brand corner badge
+          // Big brand badge with type icon corner + pulse ring
           Stack(clipBehavior: Clip.none, children: [
-            Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.brand.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(_typeIcon, color: AppColors.brand, size: 32),
-            ),
+            BrandBadge(brand: _d.brand, size: 64),
             // Pulse ring when online
             if (online)
               Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: _pulseCtrl,
-                  builder: (_, __) {
-                    final t = _pulseCtrl.value;
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16 + 6 * t),
-                        border: Border.all(
-                          color: _statusColor.withValues(alpha: (1 - t) * 0.5),
-                          width: 2,
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _pulseCtrl,
+                    builder: (_, __) {
+                      final t = _pulseCtrl.value;
+                      return Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16 + 6 * t),
+                          border: Border.all(
+                            color: _statusColor.withValues(alpha: (1 - t) * 0.5),
+                            width: 2,
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
-            // Brand badge (small chip on top-right)
+            // Type icon (router/switch/link/sector) في زاوية علوى — يوضّح النوع
             Positioned(
               top: -4, right: -4,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border, width: 1.5),
                 ),
-                child: Text(
-                  NetworkDeviceLabels.brandLabel(_d.brand),
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                  ),
-                ),
+                child: TypeIcon(type: _d.type, size: 12, color: AppColors.textHi),
               ),
             ),
           ]),

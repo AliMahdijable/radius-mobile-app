@@ -7,6 +7,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
+import 'widgets/brand_badge.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -312,14 +313,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
           child: Row(
             children: [
               Stack(children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.brand.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+                BrandBadge(brand: d.brand, size: 44),
+                // Type icon صغير في الزاوية العلوى (لتمييز router عن switch عن link)
+                Positioned(
+                  top: -3, right: -3,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: TypeIcon(type: d.type, size: 10, color: AppColors.textMid),
                   ),
-                  child: Icon(_typeIcon(d.type), color: AppColors.brand, size: 22),
                 ),
+                // Status dot سفلى يمين
                 Positioned(
                   bottom: 0, right: 0,
                   child: Container(
