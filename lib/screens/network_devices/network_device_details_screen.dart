@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/mikrotik_live_panel.dart';
+import 'widgets/ubnt_live_panel.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -198,14 +199,19 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           _statsRow(),
           const SizedBox(height: Sp.md),
           _pingSection(),
-          // Mikrotik Live Panel — يظهر لأجهزة Mikrotik مع API + credentials.
-          // لو ناقص شرط: نعرض hint واضح للمستخدم بما ينقص.
+          // Live Panels حسب البراند — تظهر مع API + credentials
           if (_d.brand == 'mikrotik') ...[
             const SizedBox(height: Sp.md),
             if (_d.protocol == 'api' && _d.hasCredentials)
               MikrotikLivePanel(device: _d)
             else
               _mikrotikHint(),
+          ] else if (_d.brand == 'ubnt') ...[
+            const SizedBox(height: Sp.md),
+            if (_d.protocol == 'api' && _d.hasCredentials)
+              UbntLivePanel(device: _d)
+            else
+              _ubntHint(),
           ],
           const SizedBox(height: Sp.md),
           _infoGrid(),
@@ -777,6 +783,47 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           text,
           style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4),
         )),
+      ]),
+    );
+  }
+}
+
+extension _UbntHint on _NetworkDeviceDetailsScreenState {
+  Widget _ubntHint() {
+    final needsApi = _d.protocol != 'api';
+    final needsCreds = _d.protocol == 'api' && !_d.hasCredentials;
+    final msg = needsApi
+        ? 'اختر بروتوكول API + أدخل user/password للـUBNT لعرض signal + throughput + stations'
+        : (needsCreds ? 'أدخل user/password لعرض المراقبة الحيّة (default: ubnt/ubnt)' : '');
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0559C9).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF0559C9).withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0559C9).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(LucideIcons.radioTower, color: const Color(0xFF0559C9), size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('مراقبة UBNT airOS متوفّرة',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+          ]),
+        ),
+        IconButton(
+          icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
+          onPressed: _edit,
+        ),
       ]),
     );
   }

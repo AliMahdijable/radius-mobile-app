@@ -106,15 +106,30 @@ class NetworkDeviceLabels {
     'snmp': 'SNMP',
   };
 
-  /// Default ports حسب الـprotocol.
-  /// Mikrotik: API الصحيح هو Binary على 8728 (أو 8729 مع TLS)،
-  /// المُفعَّل بـ`/ip service enable api`.
+  /// Default ports حسب الـprotocol (عامّة، ما تعرف البراند).
+  /// للـapi يفضّل استعمال portForBrandProtocol التي تعرف الفرق:
+  /// - Mikrotik = 8728 (binary)
+  /// - UBNT / Mimosa = 443 (HTTPS)
   static const protocolPorts = <String, int>{
-    'api': 8728,
+    'api': 8728,       // Mikrotik default
     'ssh': 22,
     'telnet': 23,
     'snmp': 161,
   };
+
+  /// المنفذ المناسب حسب الـbrand + protocol.
+  /// Mikrotik API = 8728 binary. UBNT/Mimosa API = 443 HTTPS. غيرها = 80.
+  static int portForBrandProtocol(String brand, String? protocol) {
+    if (protocol == null) return 80;
+    if (protocol == 'api') {
+      return switch (brand) {
+        'mikrotik' => 8728,
+        'ubnt' || 'mimosa' => 443,
+        _ => 80,
+      };
+    }
+    return protocolPorts[protocol] ?? 80;
+  }
 
   static String typeLabel(String t) => types[t] ?? t;
   static String brandLabel(String b) => brands[b] ?? b;

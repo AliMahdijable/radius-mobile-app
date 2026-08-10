@@ -143,8 +143,20 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   void _onProtocolChanged(String? v) {
     setState(() {
       _protocol = v;
-      if (v != null && NetworkDeviceLabels.protocolPorts.containsKey(v)) {
-        _apiPortCtrl.text = NetworkDeviceLabels.protocolPorts[v]!.toString();
+      if (v != null) {
+        // المنفذ يعتمد على البراند + البروتوكول (Mikrotik≠UBNT للـapi)
+        _apiPortCtrl.text = NetworkDeviceLabels.portForBrandProtocol(_brand, v).toString();
+      }
+    });
+  }
+
+  /// عند تغيير البراند، لو الـprotocol=api نحدّث المنفذ الافتراضي
+  /// (Mikrotik→8728، UBNT→443).
+  void _onBrandChanged(String v) {
+    setState(() {
+      _brand = v;
+      if (_protocol == 'api') {
+        _apiPortCtrl.text = NetworkDeviceLabels.portForBrandProtocol(v, _protocol).toString();
       }
     });
   }
@@ -186,7 +198,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                     const SizedBox(width: 10),
                     Expanded(child: _dropdown('البراند *', _brand,
                         NetworkDeviceLabels.brands.entries.toList(),
-                        (v) => setState(() => _brand = v))),
+                        _onBrandChanged)),
                   ]),
                   const SizedBox(height: 10),
                   _textField(_modelCtrl, 'الموديل',
@@ -373,7 +385,12 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         if (_protocol == 'api') ...[
           const SizedBox(height: 4),
           Text(
-            '💡 Mikrotik API الافتراضي 8728 — فعّله عبر /ip service enable api',
+            switch (_brand) {
+              'mikrotik' => '💡 Mikrotik API الافتراضي 8728 — فعّله بـ/ip service enable api',
+              'ubnt' => '💡 UBNT airOS يستعمل HTTPS 443 (self-signed OK) — user default: ubnt',
+              'mimosa' => '💡 Mimosa يستعمل HTTPS 443 — أدخل admin credentials',
+              _ => '💡 تأكّد من تفعيل API service على الجهاز',
+            },
             style: TextStyle(fontSize: 9, color: AppColors.textLow),
           ),
         ],
