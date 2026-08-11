@@ -920,28 +920,48 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           color: signalColor, borderRadius: BorderRadius.circular(1.5),
         )),
         const SizedBox(width: 8),
-        // Name + secondary (IP or MAC)
+        // Name + secondary
+        // primary: hostname/comment لو موجود، وإلا نعرض IP لو موجود، وإلا MAC
+        // secondary: MAC (لو الـprimary مو MAC) + IP (لو الـprimary مو IP)
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(c.displayName,
-                style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi,
-                  fontFamily: hasName ? null : 'monospace',  // Cairo لو hostname عربي
-                ),
-                overflow: TextOverflow.ellipsis),
+            () {
+              // اختر الـprimary display
+              String primary;
+              bool isMonospace;
+              if (hasName) {
+                primary = c.hostname ?? c.comment!;
+                isMonospace = false;   // Cairo — قد يكون عربي
+              } else if (c.ip != null) {
+                primary = c.ip!;
+                isMonospace = true;
+              } else {
+                primary = c.mac;
+                isMonospace = true;
+              }
+              return Text(primary,
+                  style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700,
+                    color: AppColors.textHi,
+                    fontFamily: isMonospace ? 'monospace' : null,
+                  ),
+                  overflow: TextOverflow.ellipsis);
+            }(),
             const SizedBox(height: 2),
+            // secondary line: IP (لو الـprimary اسم) + MAC دائماً بعده
             Row(children: [
-              if (c.ip != null) ...[
+              if (hasName && c.ip != null) ...[
                 Text(c.ip!,
                     style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
                 const SizedBox(width: 6),
               ],
-              Flexible(
-                child: Text(c.mac,
-                    style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
-                    overflow: TextOverflow.ellipsis),
-              ),
+              // MAC يظهر فقط لو الـprimary مو نفس MAC
+              if (hasName || c.ip != null)
+                Flexible(
+                  child: Text(c.mac,
+                      style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
+                      overflow: TextOverflow.ellipsis),
+                ),
             ]),
           ]),
         ),

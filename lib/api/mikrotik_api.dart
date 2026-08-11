@@ -47,18 +47,58 @@ class MikrotikApi {
         } catch (_) {}
       }
 
-      // DHCP leases — نستعملها لـMAC→hostname+IP map (تُثري wireless clients)
-      Map<String, ({String? hostname, String? ip})> dhcpMap = const {};
+      // نبني map غنيّ MAC→(hostname, IP) من 3 مصادر بأولويّة:
+      //   1. /ip/dhcp-server/lease — host-name + IP (لو الراوتر DHCP server)
+      //   2. /interface/wireless/access-list — comment (اسم مخصّص لكل client)
+      //   3. /ip/arp — IP فقط (شامل حتى لو DHCP على راوتر آخر)
+      final Map<String, ({String? hostname, String? ip})> dhcpMap = {};
+
+      // 1. DHCP leases
       try {
         final leases = await client.query(['/ip/dhcp-server/lease/print']);
-        dhcpMap = {
-          for (final l in leases)
-            if ((l['mac-address'] ?? '').isNotEmpty)
-              l['mac-address']!.toUpperCase(): (
-                hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
-                ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
-              ),
-        };
+        for (final l in leases) {
+          final mac = (l['mac-address'] ?? '').toUpperCase();
+          if (mac.isEmpty) continue;
+          dhcpMap[mac] = (
+            hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
+            ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
+          );
+        }
+      } catch (_) {}
+
+      // 2. Wireless access-list — comments هي أسماء client محفوظة يدوياً
+      try {
+        final acl = await client.query(['/interface/wireless/access-list/print']);
+        for (final a in acl) {
+          final mac = (a['mac-address'] ?? '').toUpperCase();
+          final comment = _nonEmpty(a['comment']);
+          if (mac.isEmpty || comment == null) continue;
+          final existing = dhcpMap[mac];
+          dhcpMap[mac] = (
+            hostname: existing?.hostname ?? comment,   // comment fallback لـhostname
+            ip: existing?.ip,
+          );
+        }
+      } catch (_) {}
+
+      // 3. ARP table — للـIP لو ما لكيناه من DHCP
+      try {
+        final arp = await client.query(['/ip/arp/print']);
+        for (final a in arp) {
+          final mac = (a['mac-address'] ?? '').toUpperCase();
+          final ip = _nonEmpty(a['address']);
+          final comment = _nonEmpty(a['comment']);
+          if (mac.isEmpty) continue;
+          final existing = dhcpMap[mac];
+          if (existing == null) {
+            dhcpMap[mac] = (hostname: comment, ip: ip);
+          } else {
+            dhcpMap[mac] = (
+              hostname: existing.hostname ?? comment,
+              ip: existing.ip ?? ip,
+            );
+          }
+        }
       } catch (_) {}
 
       // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
