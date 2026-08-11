@@ -503,6 +503,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               child: Center(
                 child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
                   Text('${w.signal}',
+                      textDirection: TextDirection.ltr,
                       style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900,
                           color: signalColor, height: 1, fontFamily: 'monospace')),
                   const SizedBox(height: 2),
@@ -739,9 +740,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('${s.signal} dBm',
+              textDirection: TextDirection.ltr,
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
                   color: signalColor, fontFamily: 'monospace')),
-          Text('↓${s.rxRate}/↑${s.txRate}',
+          Text('↓${s.rxRate} / ↑${s.txRate} Mbps',
+              textDirection: TextDirection.ltr,
               style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
         ]),
       ]),

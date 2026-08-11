@@ -1131,6 +1131,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text('${c.signalStrength}',
+                textDirection: TextDirection.ltr,
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
                     color: signalColor, fontFamily: 'monospace')),
             const SizedBox(width: 2),

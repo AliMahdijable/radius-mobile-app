@@ -98,7 +98,7 @@ class _ExpandableSectionState extends State<ExpandableSection>
             alignment: Alignment.topCenter,
             child: _expanded
                 ? Column(children: [
-                    const Divider(height: 1),
+                    const _DottedDivider(),
                     Padding(
                       padding: widget.contentPadding ?? const EdgeInsets.all(Sp.md),
                       child: widget.content,
@@ -110,4 +110,44 @@ class _ExpandableSectionState extends State<ExpandableSection>
       ]),
     );
   }
+}
+
+/// خط فصل منقّط رصاصي خفيف — بديل عن Divider الأسود الافتراضي.
+class _DottedDivider extends StatelessWidget {
+  const _DottedDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 1,
+      child: CustomPaint(
+        painter: _DottedLinePainter(
+          color: AppColors.border.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+}
+
+class _DottedLinePainter extends CustomPainter {
+  final Color color;
+  const _DottedLinePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round;
+    const dashWidth = 2.0;
+    const dashGap = 3.0;
+    double x = 0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, 0), Offset(x + dashWidth, 0), paint);
+      x += dashWidth + dashGap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DottedLinePainter old) => old.color != color;
 }

@@ -683,6 +683,10 @@ class UbntStats {
       if (ccq == 0) ccq = _n(m['wlanTxCcq']);
       if (ccq == 0) ccq = _n(m['tx_ccq']);
       if (ccq == 0) ccq = _n(m['station1_ccq']);
+      // بعض إصدارات airOS ترجع CCQ ×10 (مثل 961 يعني 96.1%)
+      // نُقسّم على 10 لو القيمة > 100 (لأن CCQ الحقيقي 0-100)
+      if (ccq > 100 && ccq <= 1000) ccq = (ccq / 10).round();
+      if (ccq > 100) ccq = 100;
 
       wireless = UbntWireless(
         essid: essid,
