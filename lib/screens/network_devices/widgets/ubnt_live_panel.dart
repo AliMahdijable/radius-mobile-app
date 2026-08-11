@@ -137,6 +137,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         if (_stats != null) ...[
           const Divider(height: 1),
           _boardBanner(),
+          _systemMetrics(),
           if (_stats!.wireless != null) ...[
             const SizedBox(height: 4),
             _signalHero(_stats!.wireless!),
@@ -274,6 +275,133 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         ),
       ]),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // System metrics — CPU / RAM / Temperature (لو متوفّرة)
+  // ══════════════════════════════════════════════════════════════
+  Widget _systemMetrics() {
+    final h = _stats!.host;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 8),
+      child: Row(children: [
+        Expanded(child: _percentCard(
+          icon: LucideIcons.cpu, label: 'CPU',
+          percent: h.cpuload.toDouble(),
+        )),
+        const SizedBox(width: 8),
+        // UBNT عادةً ما يعطي RAM بسهولة — نتركها للـfuture (لو mca-status جابها)
+        Expanded(child: _valueCard(
+          icon: LucideIcons.thermometer,
+          label: 'حرارة',
+          value: h.temperature > 0 ? '${h.temperature}' : '—',
+          unit: h.temperature > 0 ? '°C' : '',
+          color: _tempColor(h.temperature),
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: _valueCard(
+          icon: LucideIcons.clock,
+          label: 'Uptime',
+          value: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').first : '—',
+          unit: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').last : '',
+          color: const Color(0xFF0559C9),
+        )),
+      ]),
+    );
+  }
+
+  Widget _percentCard({
+    required IconData icon,
+    required String label,
+    required double percent,
+  }) {
+    final color = _percentGradeColor(percent);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+        ]),
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text('${percent.round()}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+                    color: AppColors.textHi, fontFamily: 'monospace', height: 1)),
+            const SizedBox(width: 2),
+            Text('%', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (percent / 100).clamp(0.0, 1.0),
+            minHeight: 4,
+            backgroundColor: AppColors.border,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _valueCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+        ]),
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(value,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+                    color: value == '—' ? AppColors.textLow : color,
+                    fontFamily: 'monospace', height: 1)),
+            if (unit.isNotEmpty) ...[
+              const SizedBox(width: 2),
+              Text(unit, style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+            ],
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Color _percentGradeColor(double p) {
+    if (p >= 85) return AppColors.error;
+    if (p >= 65) return const Color(0xFFF59E0B);
+    return const Color(0xFF10B981);
+  }
+
+  Color _tempColor(int t) {
+    if (t <= 0) return AppColors.textLow;
+    if (t >= 75) return AppColors.error;
+    if (t >= 60) return const Color(0xFFF59E0B);
+    if (t >= 45) return const Color(0xFF06B6D4);
+    return const Color(0xFF10B981);
   }
 
   // ══════════════════════════════════════════════════════════════

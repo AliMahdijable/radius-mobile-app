@@ -389,6 +389,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Column(children: [
+        // Row 1: CPU | RAM | Temperature
         Row(children: [
           Expanded(child: _percentCard(
             icon: LucideIcons.cpu, label: 'CPU',
@@ -399,23 +400,94 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             icon: LucideIcons.memoryStick, label: 'RAM',
             percent: s.memUsedPercent.toDouble(),
           )),
+          const SizedBox(width: 8),
+          Expanded(child: _valueCard(
+            icon: LucideIcons.thermometer,
+            label: 'حرارة',
+            value: s.temperature != null ? '${s.temperature}' : '—',
+            unit: s.temperature != null ? '°C' : '',
+            color: _tempColor(s.temperature),
+          )),
         ]),
         const SizedBox(height: 8),
+        // Row 2: Voltage | أعلى تنزيل ↓ | أعلى رفع ↑
         Row(children: [
+          Expanded(child: _valueCard(
+            icon: LucideIcons.plug,
+            label: 'فولتيّة',
+            value: s.voltage != null ? s.voltage!.toStringAsFixed(1) : '—',
+            unit: s.voltage != null ? 'V' : '',
+            color: _voltageColor(s.voltage),
+          )),
+          const SizedBox(width: 8),
           Expanded(child: _topRateCard(
-            label: 'أعلى تنزيل ↓',
+            label: 'أعلى ↓',
             iface: maxRx,
             color: const Color(0xFF10B981),
           )),
           const SizedBox(width: 8),
           Expanded(child: _topRateCard(
-            label: 'أعلى رفع ↑',
+            label: 'أعلى ↑',
             iface: maxTx,
             color: const Color(0xFF3B82F6),
           )),
         ]),
       ]),
     );
+  }
+
+  /// كارت قيمة عامّة (بدون progress bar) — للحرارة والفولتيّة
+  Widget _valueCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+        ]),
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(value,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+                    color: value == '—' ? AppColors.textLow : color,
+                    fontFamily: 'monospace', height: 1)),
+            if (unit.isNotEmpty) ...[
+              const SizedBox(width: 2),
+              Text(unit, style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+            ],
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Color _tempColor(int? t) {
+    if (t == null) return AppColors.textLow;
+    if (t >= 75) return AppColors.error;
+    if (t >= 60) return const Color(0xFFF59E0B);
+    if (t >= 45) return const Color(0xFF06B6D4);
+    return const Color(0xFF10B981);
+  }
+
+  Color _voltageColor(double? v) {
+    if (v == null) return AppColors.textLow;
+    // فولتيّة PoE عادية 24V / 48V — انحراف كبير = مشكلة
+    if (v < 20 || v > 60) return AppColors.error;
+    if (v < 22 || v > 55) return const Color(0xFFF59E0B);
+    return const Color(0xFF10B981);
   }
 
   Widget _percentCard({

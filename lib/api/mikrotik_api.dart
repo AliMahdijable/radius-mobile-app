@@ -28,6 +28,11 @@ class MikrotikApi {
       // نجيبهم بالتسلسل — Binary API socket واحد فقط
       final resourceRows = await client.query(['/system/resource/print']);
       final interfaceRows = await client.query(['/interface/print']);
+      // Health — حرارة + فولتيّة (اختياري، بعض الأجهزة الصغيرة ما تدعمه)
+      List<Map<String, String>> healthRows = const [];
+      try {
+        healthRows = await client.query(['/system/health/print']);
+      } catch (_) {}
       List<Map<String, String>> pppRows = const [];
       try {
         pppRows = await client.query(['/ppp/active/print']);
@@ -126,6 +131,36 @@ class MikrotikApi {
       }
       final resource = resourceRows.first;
 
+      // Health parsing — RouterOS v7 يرجع list of {name, value, type}
+      // بينما v6 قد يرجع flat map {temperature: "45C", voltage: "24V"}
+      int? healthTemp;
+      double? healthVoltage;
+      for (final h in healthRows) {
+        final name = (h['name'] ?? '').toLowerCase();
+        final valueStr = h['value'] ?? '';
+        if (name.contains('temp')) {
+          // القيمة قد تكون "45" أو "45C"
+          final v = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
+          if (v != null && (healthTemp == null || name.contains('cpu'))) {
+            healthTemp = v.round();
+          }
+        } else if (name.contains('voltage') || name == 'v') {
+          final v = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
+          if (v != null) healthVoltage = v;
+        }
+      }
+      // fallback: بعض الإصدارات ترجع flat في نفس row واحد
+      if (healthRows.length == 1) {
+        final r = healthRows.first;
+        healthTemp ??= _asInt(r['temperature']?.replaceAll(RegExp(r'[^\d-]'), ''));
+        if (healthVoltage == null && r['voltage'] != null) {
+          healthVoltage = double.tryParse(r['voltage']!.replaceAll(RegExp(r'[^\d.-]'), ''));
+        }
+      }
+      // fallback نهائي: system/resource قد يحوي cpu-temperature
+      healthTemp ??= _asInt(resource['cpu-temperature']);
+      if (healthTemp == 0) healthTemp = null;
+
       return MikrotikStats(
         cpuLoad: _asInt(resource['cpu-load']),
         memUsedPercent: _calcMemUsed(resource),
@@ -137,6 +172,8 @@ class MikrotikApi {
         architectureName: resource['architecture-name'] ?? '',
         cpuCount: _asInt(resource['cpu-count']),
         cpuFrequencyMhz: _asInt(resource['cpu-frequency']),
+        temperature: healthTemp,
+        voltage: healthVoltage,
         interfaces: interfaceRows.map((row) {
           final name = row['name'] ?? '';
           final monitor = ethMonitorByName[name];
@@ -207,6 +244,8 @@ class MikrotikStats {
   final String architectureName;
   final int cpuCount;
   final int cpuFrequencyMhz;
+  final int? temperature;         // °C من /system/health
+  final double? voltage;          // V من /system/health
   final List<MikrotikInterface> interfaces;
   final int pppActiveCount;
   final List<MikrotikWireless> wirelessInterfaces;
@@ -223,6 +262,8 @@ class MikrotikStats {
     required this.architectureName,
     required this.cpuCount,
     required this.cpuFrequencyMhz,
+    this.temperature,
+    this.voltage,
     required this.interfaces,
     required this.pppActiveCount,
     this.wirelessInterfaces = const [],
