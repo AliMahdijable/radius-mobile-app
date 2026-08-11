@@ -110,7 +110,23 @@ class UbntApi {
         } catch (_) {}
       }
 
-      return UbntStats.fromMcaStatus(parsed, interfaces: ifaceRaws);
+      // wstalist — قائمة المحطّات المتّصلة (لـAP mode) بصيغة JSON
+      // موجود على airOS 5.5+ (كل الأجهزة الحديثة نسبيّاً)
+      List<Map<String, dynamic>> stations = const [];
+      try {
+        final r = utf8.decode(await client.run('wstalist 2>/dev/null')
+            .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
+        if (r.isNotEmpty && r.startsWith('[')) {
+          final parsedJson = json.decode(r);
+          if (parsedJson is List) {
+            stations = parsedJson.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('⚠️ wstalist not available: $e');
+      }
+
+      return UbntStats.fromMcaStatus(parsed, interfaces: ifaceRaws, wstalistStations: stations);
     } on SSHAuthAbortError {
       throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
     } on SSHAuthFailError {
@@ -278,10 +294,11 @@ class UbntStats {
   bool get isStation => wireless?.mode.toLowerCase().contains('sta') ?? false ||
       wireless?.mode.toLowerCase().contains('managed') == true;
 
-  /// يبني من mca-status output map + interfaces من ifconfig (اختياري)
+  /// يبني من mca-status output map + interfaces + wstalist stations (اختياريّان)
   factory UbntStats.fromMcaStatus(
     Map<String, String> m, {
     List<Map<String, String>> interfaces = const [],
+    List<Map<String, dynamic>> wstalistStations = const [],
   }) {
     // mca-status keys شائعة (تختلف قليلاً حسب الإصدار):
     // deviceId, firmwareVersion, deviceName, uptime,
@@ -317,22 +334,45 @@ class UbntStats {
       );
     }
 
-    // Stations: station1_mac, station1_signal, ...
+    // Stations: نُفضّل wstalist (JSON — أدقّ وأكمل) على mca-status
     final stations = <UbntStation>[];
-    for (int i = 1; i <= 128; i++) {
-      final mac = m['station${i}_mac'];
-      if (mac == null || mac.isEmpty) break;
-      stations.add(UbntStation(
-        mac: mac,
-        ip: m['station${i}_ip'],
-        hostname: m['station${i}_name'] ?? m['station${i}_hostname'],
-        signal: _n(m['station${i}_signal']),
-        noise: _n(m['station${i}_noise']),
-        ccq: _n(m['station${i}_ccq']),
-        txRate: _n(m['station${i}_tx']),
-        rxRate: _n(m['station${i}_rx']),
-        connTime: _n(m['station${i}_uptime']),
-      ));
+    if (wstalistStations.isNotEmpty) {
+      // wstalist format:
+      // [{"mac":"AA:BB:...", "lastip":"192.168.1.10", "name":"host1",
+      //   "signal":-58, "noisefloor":-95, "ccq":100, "tx":150, "rx":135,
+      //   "uptime":12345, "tx_bytes":..., "rx_bytes":..., "rssi":58}, ...]
+      for (final s in wstalistStations) {
+        // remote قد تكون nested
+        final remote = (s['remote'] as Map?)?.cast<String, dynamic>() ?? const {};
+        stations.add(UbntStation(
+          mac: (s['mac'] ?? '').toString(),
+          ip: _strOrNull(s['lastip']) ?? _strOrNull(remote['ip']),
+          hostname: _strOrNull(s['name']) ?? _strOrNull(remote['hostname']),
+          signal: _n(s['signal']),
+          noise: _n(s['noisefloor']),
+          ccq: _n(s['ccq']),
+          txRate: _n(s['tx']),
+          rxRate: _n(s['rx']),
+          connTime: _n(s['uptime'] ?? s['conn_time']),
+        ));
+      }
+    } else {
+      // fallback: mca-status station1_*, station2_*, ...
+      for (int i = 1; i <= 128; i++) {
+        final mac = m['station${i}_mac'];
+        if (mac == null || mac.isEmpty) break;
+        stations.add(UbntStation(
+          mac: mac,
+          ip: m['station${i}_ip'],
+          hostname: m['station${i}_name'] ?? m['station${i}_hostname'],
+          signal: _n(m['station${i}_signal']),
+          noise: _n(m['station${i}_noise']),
+          ccq: _n(m['station${i}_ccq']),
+          txRate: _n(m['station${i}_tx']),
+          rxRate: _n(m['station${i}_rx']),
+          connTime: _n(m['station${i}_uptime']),
+        ));
+      }
     }
 
     // Interfaces من ifconfig
@@ -480,6 +520,12 @@ class UbntStation {
 }
 
 // ── Utilities
+String? _strOrNull(dynamic v) {
+  if (v == null) return null;
+  final s = v.toString().trim();
+  return s.isEmpty ? null : s;
+}
+
 int _n(dynamic v) {
   if (v == null) return 0;
   if (v is int) return v;

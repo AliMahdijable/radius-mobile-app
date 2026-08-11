@@ -197,8 +197,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           _heroCard(),
           const SizedBox(height: Sp.md),
           _statsRow(),
-          const SizedBox(height: Sp.md),
-          _pingSection(),
+          // ICMP sparkline log أُزيل (2026-08-11) — لا فائدة عمليّة له
           // Live Panels حسب البراند — تظهر مع API + credentials
           if (_d.brand == 'mikrotik') ...[
             const SizedBox(height: Sp.md),
