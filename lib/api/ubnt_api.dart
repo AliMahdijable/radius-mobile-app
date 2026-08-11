@@ -139,17 +139,42 @@ class UbntApi {
     return dio;
   }
 
+  /// يستخرج كل الـcookies من Set-Cookie، يُعطي أولوية لـAIROS ثمّ AIROS_
+  /// ثمّ أي cookie يبدو مثل session (PHPSESSID/session/id).
   static String? _extractAirosCookie(Headers headers) {
     final setCookies = headers.map['set-cookie'] ?? const [];
+    if (setCookies.isEmpty) return null;
+    // اجمع كل الـcookies المرسلة
+    final cookies = <String>[];
     for (final raw in setCookies) {
-      // مثال: "AIROS_ABC123=xyz; path=/; HttpOnly"
-      final match = RegExp(r'(AIROS_[^=]+=[^;]+)').firstMatch(raw);
-      if (match != null) return match.group(1);
+      // خذ الجزء قبل أوّل ";" (name=value فقط، بدون attributes)
+      final semi = raw.indexOf(';');
+      final nameVal = (semi > 0 ? raw.substring(0, semi) : raw).trim();
+      if (nameVal.contains('=') && !nameVal.startsWith('=')) {
+        cookies.add(nameVal);
+      }
     }
-    return null;
+    if (cookies.isEmpty) return null;
+
+    // أولوية لـAIROS
+    final airos = cookies.where((c) =>
+        c.toUpperCase().startsWith('AIROS')).toList();
+    if (airos.isNotEmpty) return airos.join('; ');
+
+    // fallback: أي session cookie (PHPSESSID, JSESSIONID, session, id)
+    final session = cookies.where((c) {
+      final name = c.split('=').first.toLowerCase();
+      return name.contains('sess') || name == 'id' || name.startsWith('ui-');
+    }).toList();
+    if (session.isNotEmpty) return session.join('; ');
+
+    // أخير: كل الـcookies (بعض إصدارات airOS تستعمل أسماء مخصّصة)
+    return cookies.join('; ');
   }
 
-  /// airOS 6 login flow (XM devices)
+  /// airOS 6 login flow (XM devices).
+  /// 3 خطوات: get cookie → post login → activate.
+  /// نتتبّع الـcookie في كل خطوة لأن airOS 6 قد يجدّده بعد POST.
   static Future<String?> _loginV6(
     Dio dio, String baseUrl, String user, String pass,
   ) async {
@@ -162,12 +187,11 @@ class UbntApi {
           validateStatus: (s) => s != null && s < 500,
         ),
       );
-      final sessionCookie = _extractAirosCookie(r1.headers);
-      if (sessionCookie == null) {
-        throw UbntException('airOS 6: لم نستلم session cookie');
-      }
+      String? cookie = _extractAirosCookie(r1.headers);
+      // بعض الأجهزة ما تُصدر cookie قبل POST — نستمرّ بدون
+      if (kDebugMode) debugPrint('🔵 UBNT v6 step1 cookie: ${cookie ?? "(none)"}');
 
-      // Step 2: POST /login.cgi → 302
+      // Step 2: POST /login.cgi → 302 (قد يُجدّد الـcookie هنا)
       final r2 = await dio.post(
         '/login.cgi',
         data: {
@@ -178,7 +202,7 @@ class UbntApi {
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
           headers: {
-            'Cookie': sessionCookie,
+            if (cookie != null) 'Cookie': cookie,
             'Referer': '$baseUrl/login.cgi',
             'Origin': baseUrl,
           },
@@ -186,20 +210,47 @@ class UbntApi {
           validateStatus: (s) => s != null && s < 500,
         ),
       );
+
+      // نتحقّق من status: 302 = نجاح (redirect لـ/index.cgi)
+      // 200 مع HTML قد يعني إعادة عرض login page (فشل)
+      final newCookie = _extractAirosCookie(r2.headers);
+      if (newCookie != null) {
+        cookie = newCookie;
+        if (kDebugMode) debugPrint('🔵 UBNT v6 step2 new cookie: $cookie');
+      }
       if (r2.statusCode != 302) {
-        throw UbntException('airOS 6: فشل تسجيل الدخول — user/pass خطأ');
+        // بعض الإصدارات ترجع 200 عند النجاح — نتحقّق من الـLocation header
+        final loc = r2.headers.value('location');
+        if (r2.statusCode == 200 && loc == null) {
+          throw UbntException('airOS 6: user/pass خطأ (لم نحصل على redirect)');
+        }
+      }
+      if (cookie == null) {
+        throw UbntException('airOS 6: لم نستلم session cookie بعد login');
       }
 
-      // Step 3: GET /index.cgi لتفعيل الجلسة
-      await dio.get(
+      // Step 3: GET /index.cgi لتفعيل الجلسة (يجب أن نرى صفحة index، ليس login)
+      final r3 = await dio.get(
         '/index.cgi',
         options: Options(
-          headers: {'Cookie': sessionCookie, 'Referer': '$baseUrl/login.cgi'},
+          headers: {'Cookie': cookie, 'Referer': '$baseUrl/login.cgi'},
+          followRedirects: false,
           validateStatus: (s) => s != null && s < 500,
         ),
       );
+      // لو رجعنا redirect لـ/login.cgi → session لم تُفعَّل
+      final loc3 = r3.headers.value('location') ?? '';
+      if (loc3.contains('login.cgi')) {
+        throw UbntException('airOS 6: user/pass خطأ (session ما اتفعّلت)');
+      }
+      // قد يُصدر cookie جديد في هذه الخطوة
+      final finalCookie = _extractAirosCookie(r3.headers);
+      if (finalCookie != null) {
+        cookie = finalCookie;
+        if (kDebugMode) debugPrint('🔵 UBNT v6 step3 final cookie: $cookie');
+      }
 
-      return sessionCookie;
+      return cookie;
     } on DioException catch (e) {
       _throwDio(e);
       return null;
