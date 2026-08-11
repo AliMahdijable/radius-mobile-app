@@ -72,10 +72,17 @@ class UbntApi {
     SSHSocket? socket;
     try {
       socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      // ندعم البروتوكولين: password auth (airOS العادي) + keyboard-interactive
+      // (بعض airFiber ومعظم Debian-based servers) — كل الـchallenges نُجيبها
+      // بنفس الـpass. بدون هذا، السيرفرات الي تدعم keyboard-interactive فقط
+      // ترجع SSHAuthFailError حتى مع الـcreds الصحيحة.
       client = SSHClient(
         socket,
         username: user,
         onPasswordRequest: () => pass,
+        onUserInfoRequest: (req) async {
+          return req.prompts.map((_) => pass).toList();
+        },
       );
 
       // ننتظر الـauth handshake صراحة — يفشل سريعاً على الـcreds الغلط
