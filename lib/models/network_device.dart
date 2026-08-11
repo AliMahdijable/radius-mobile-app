@@ -80,13 +80,13 @@ bool _parseHasCreds(dynamic v) {
 
 class NetworkDeviceLabels {
   /// ترتيب مقصود حسب أهميّة WISP (لنكات/سويتشات/سكاتر أوّلاً)
+  /// 2026-08-12: أُزيلت 'ap' و 'camera' حسب طلب المستخدم — غير مستعملة.
+  /// (الـENUM في DB ما يزال يقبلها للسجلات القديمة، لكن ما تظهر في UI)
   static const types = <String, String>{
     'link': 'لنكات',
     'switch': 'سويتشات',
     'sector': 'سكاتر',
     'router': 'راوترات',
-    'ap': 'AP',
-    'camera': 'كاميرات',
     'other': 'أخرى',
   };
 
