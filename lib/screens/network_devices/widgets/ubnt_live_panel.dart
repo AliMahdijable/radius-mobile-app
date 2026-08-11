@@ -70,7 +70,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       }
       final stats = await UbntApi.fetchStats(
         ip: widget.device.ip,
-        port: widget.device.apiPort ?? 443,
+        port: widget.device.apiPort ?? 22,  // SSH default
         user: user,
         pass: pass,
       );
@@ -188,7 +188,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         const SizedBox(width: 10),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('مراقبة حيّة (UBNT airOS)',
+            Text('مراقبة حيّة (UBNT via SSH)',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
             const SizedBox(height: 2),
             Row(children: [
@@ -202,11 +202,6 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 (_monitoring ? 'يُحدَّث كل ${_refreshInterval.inSeconds}s' : 'متوقّف'),
                 style: TextStyle(fontSize: 10, color: AppColors.textMid),
               ),
-              if (_stats != null) ...[
-                Text(' • ', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
-                Text('airOS ${_stats!.apiVersion}',
-                    style: TextStyle(fontSize: 10, color: AppColors.textLow)),
-              ],
             ]),
           ]),
         ),

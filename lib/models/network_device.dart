@@ -118,13 +118,15 @@ class NetworkDeviceLabels {
   };
 
   /// المنفذ المناسب حسب الـbrand + protocol.
-  /// Mikrotik API = 8728 binary. UBNT/Mimosa API = 443 HTTPS. غيرها = 80.
+  /// Mikrotik API = 8728 binary. UBNT API = 22 SSH (mca-status، أوثق من HTTP).
+  /// Mimosa API = 443 HTTPS.
   static int portForBrandProtocol(String brand, String? protocol) {
     if (protocol == null) return 80;
     if (protocol == 'api') {
       return switch (brand) {
         'mikrotik' => 8728,
-        'ubnt' || 'mimosa' => 443,
+        'ubnt' => 22,       // SSH لأنه يعمل على كل airOS 5/6/7/8 بدون issues
+        'mimosa' => 443,
         _ => 80,
       };
     }

@@ -51,6 +51,9 @@ dependencies:
   # ICMP ping — لميزة الأجهزة (network_devices) — يعمل على iOS + Android
   dart_ping: ^10.0.1
 
+  # SSH client — لمراقبة UBNT airOS عبر SSH (أفضل من HTTP لكل الإصدارات 5/6/7/8)
+  dartssh2: ^2.22.5
+
   # Voice → text for the quick-search overlay's mic button. On-device
   # recognizer (no server round-trip), supports Arabic via the iOS /
   # Android system recognizers.
