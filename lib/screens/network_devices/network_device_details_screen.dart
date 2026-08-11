@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
 import 'widgets/brand_badge.dart';
+import 'widgets/airfiber60_live_panel.dart';
 import 'widgets/mikrotik_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 
@@ -216,7 +217,9 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           ] else if (_d.brand == 'ubnt') ...[
             const SizedBox(height: Sp.md),
             if (_d.protocol == 'api' && _d.hasCredentials)
-              UbntLivePanel(device: _d)
+              _isAirFiber60(_d)
+                  ? AirFiber60LivePanel(device: _d)
+                  : UbntLivePanel(device: _d)
             else
               _ubntHint(),
           ],
@@ -850,6 +853,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       ]),
     );
   }
+}
+
+/// airFiber 60 يُكتشف من model (المستخدم يكتب "airFiber 60 LR" أو "AF-60-LR").
+/// نُفضّل الاختيار حسب الـmodel لأنّه معروف قبل الاتصال (بدل انتظار wstalist).
+bool _isAirFiber60(NetworkDevice d) {
+  final m = (d.model ?? '').toLowerCase();
+  if (m.isEmpty) return false;
+  return m.contains('airfiber 60') || m.contains('af-60') || m.contains('af60');
 }
 
 extension _UbntHint on _NetworkDeviceDetailsScreenState {

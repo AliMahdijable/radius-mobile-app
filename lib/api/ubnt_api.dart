@@ -453,6 +453,23 @@ class UbntApi {
         if (prs?['distance'] != null) {
           _set(map, 'station${idx}_distance', prs!['distance']);
         }
+
+        // airFiber 60 — حقول متقدّمة للـPtP link view
+        if (prs != null) {
+          _set(map, 'station${idx}_tx_mcs', prs['tx_mcs']);
+          _set(map, 'station${idx}_rx_mcs', prs['rx_mcs']);
+          _set(map, 'station${idx}_link_uptime', prs['uptime']);
+          _set(map, 'station${idx}_dl_signal_expect', prs['dl_signal_expect']);
+          _set(map, 'station${idx}_ul_signal_expect', prs['ul_signal_expect']);
+          _set(map, 'station${idx}_dl_capacity_expect', prs['dl_capacity_expect']);
+          _set(map, 'station${idx}_ul_capacity_expect', prs['ul_capacity_expect']);
+          _set(map, 'station${idx}_tx_sector', prs['tx_sector']);
+          _set(map, 'station${idx}_rx_sector', prs['rx_sector']);
+        }
+        // linked_60 = بيان اتّصال 60GHz (airFiber 60 فقط)
+        if (j['linked_60'] == true) {
+          _set(map, 'station${idx}_linked_60', 'true');
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ wstalist parse failed: $e');
@@ -600,6 +617,13 @@ class UbntStats {
   final UbntWireless? wireless;
   final List<UbntInterface> interfaces;
   final List<UbntStation> stations;
+  // ── airFiber 60 & LR extras ─────────────────────────
+  final double? latitude;
+  final double? longitude;
+  final int? memTotalKb;
+  final int? memFreeKb;
+  final int? memBuffersKb;
+  final String? lanSpeed;   // "1000Mbps-Full" — من mca-status لـairFiber
 
   const UbntStats({
     this.apiVersion = 5,
@@ -607,12 +631,55 @@ class UbntStats {
     this.wireless,
     this.interfaces = const [],
     this.stations = const [],
+    this.latitude,
+    this.longitude,
+    this.memTotalKb,
+    this.memFreeKb,
+    this.memBuffersKb,
+    this.lanSpeed,
   });
 
   bool get isAp => wireless?.mode.toLowerCase().contains('ap') ?? false ||
       wireless?.mode.toLowerCase().contains('master') == true;
   bool get isStation => wireless?.mode.toLowerCase().contains('sta') ?? false ||
       wireless?.mode.toLowerCase().contains('managed') == true;
+
+  /// airFiber 60 (GP/LR) — يظهر عبر platform أو linked_60 من أي station.
+  bool get isAirFiber60 {
+    final model = host.devmodel.toLowerCase();
+    if (model.contains('airfiber 60') || model.contains('af-60')) return true;
+    return stations.any((s) => s.isLinked60);
+  }
+
+  /// نسبة الذاكرة المُستعملة (%)
+  double? get memUsedPercent {
+    final total = memTotalKb ?? 0;
+    if (total <= 0) return null;
+    final free = memFreeKb ?? 0;
+    final buffers = memBuffersKb ?? 0;
+    final used = total - free - buffers;
+    if (used < 0) return 0;
+    return (used / total * 100).clamp(0, 100);
+  }
+
+  /// كمية الرام المُستعملة بالميجابايت
+  int? get memUsedMb {
+    final total = memTotalKb ?? 0;
+    if (total <= 0) return null;
+    final free = memFreeKb ?? 0;
+    final buffers = memBuffersKb ?? 0;
+    return ((total - free - buffers) / 1024).round();
+  }
+
+  /// كمية الرام الكلّيّة بالميجابايت
+  int? get memTotalMb {
+    final t = memTotalKb ?? 0;
+    return t > 0 ? (t / 1024).round() : null;
+  }
+
+  /// هل الإحداثيّات مُعرَّفة (غير 0,0)؟
+  bool get hasLocation => (latitude != null && latitude != 0) ||
+      (longitude != null && longitude != 0);
 
   /// يبني من mca-status output map + interfaces + wstalist stations (اختياريّان)
   factory UbntStats.fromMcaStatus(
@@ -709,22 +776,50 @@ class UbntStats {
     final stations = <UbntStation>[];
     if (wstalistStations.isNotEmpty) {
       // wstalist format:
-      // [{"mac":"AA:BB:...", "lastip":"192.168.1.10", "name":"host1",
-      //   "signal":-58, "noisefloor":-95, "ccq":100, "tx":150, "rx":135,
-      //   "uptime":12345, "tx_bytes":..., "rx_bytes":..., "rssi":58}, ...]
+      // airMax: {"mac":"AA:BB:...", "lastip":"192.168.1.10", "name":"host1",
+      //         "signal":-58, "noisefloor":-95, "ccq":100, "tx":150, "rx":135,
+      //         "uptime":12345, "tx_bytes":..., "rx_bytes":..., "rssi":58}
+      // airFiber 60: نفس المفاتيح + prs_sta nested فيه rssi_data/snr/capacity/mcs
       for (final s in wstalistStations) {
-        // remote قد تكون nested
         final remote = (s['remote'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final prs = (s['prs_sta'] as Map?)?.cast<String, dynamic>();
+
+        // إشارة: airFiber → prs_sta.rssi_data | airMax → s.signal
+        final signal = _n(prs?['rssi_data'] ?? s['signal'] ?? s['rssi']);
+        // معدّلات: airFiber → prs_sta.capacity Kbps → Mbps
+        final dlCap = prs?['dl_capacity'] != null ? _n(prs!['dl_capacity']) : null;
+        final ulCap = prs?['ul_capacity'] != null ? _n(prs!['ul_capacity']) : null;
+        final txRateMbps = dlCap != null
+            ? (dlCap / 1000).round()
+            : _n(_extractRate(s['tx']));
+        final rxRateMbps = ulCap != null
+            ? (ulCap / 1000).round()
+            : _n(_extractRate(s['rx']));
+
         stations.add(UbntStation(
           mac: (s['mac'] ?? '').toString(),
           ip: _strOrNull(s['lastip']) ?? _strOrNull(remote['ip']),
           hostname: _strOrNull(s['name']) ?? _strOrNull(remote['hostname']),
-          signal: _n(s['signal']),
+          signal: signal,
           noise: _n(s['noisefloor']),
           ccq: _n(s['ccq']),
-          txRate: _n(s['tx']),
-          rxRate: _n(s['rx']),
+          txRate: txRateMbps,
+          rxRate: rxRateMbps,
           connTime: _n(s['uptime'] ?? s['conn_time']),
+          explicitSnr: prs?['snr'] != null ? _n(prs!['snr']) : null,
+          txMcs: prs?['tx_mcs'] != null ? _n(prs!['tx_mcs']) : null,
+          rxMcs: prs?['rx_mcs'] != null ? _n(prs!['rx_mcs']) : null,
+          distanceMeters: prs?['distance'] != null ? _n(prs!['distance']) : null,
+          linkUptimeSec: prs?['uptime'] != null ? _n(prs!['uptime']) : null,
+          dlSignalExpect: prs?['dl_signal_expect'] != null ? _n(prs!['dl_signal_expect']) : null,
+          ulSignalExpect: prs?['ul_signal_expect'] != null ? _n(prs!['ul_signal_expect']) : null,
+          dlCapacityKbps: dlCap,
+          ulCapacityKbps: ulCap,
+          dlCapacityExpectKbps: prs?['dl_capacity_expect'] != null ? _n(prs!['dl_capacity_expect']) : null,
+          ulCapacityExpectKbps: prs?['ul_capacity_expect'] != null ? _n(prs!['ul_capacity_expect']) : null,
+          txSector: prs?['tx_sector'] != null ? _n(prs!['tx_sector']) : null,
+          rxSector: prs?['rx_sector'] != null ? _n(prs!['rx_sector']) : null,
+          isLinked60: s['linked_60'] == true,
         ));
       }
     } else {
@@ -765,7 +860,20 @@ class UbntStats {
       wireless: wireless,
       interfaces: ifs,
       stations: stations,
+      latitude: double.tryParse(m['latitude'] ?? ''),
+      longitude: double.tryParse(m['longitude'] ?? ''),
+      memTotalKb: _n(m['memTotal']) > 0 ? _n(m['memTotal']) : null,
+      memFreeKb: _n(m['memFree']) > 0 ? _n(m['memFree']) : null,
+      memBuffersKb: _n(m['memBuffers']) > 0 ? _n(m['memBuffers']) : null,
+      lanSpeed: _strOrNull(m['lanSpeed']),
     );
+  }
+
+  /// helper: بعض airMax يعطي tx/rx كـMap {rate: 150} — نستخرج الـrate فقط
+  static dynamic _extractRate(dynamic v) {
+    if (v == null) return 0;
+    if (v is Map) return v['rate'] ?? 0;
+    return v;
   }
 
   static int? _cpuFromLoadAvg(String? loadAvg) {
@@ -884,6 +992,21 @@ class UbntStation {
   final int txRate;
   final int rxRate;
   final int connTime;
+  // ── airFiber 60 & LR (PtP link view) ─────────────────
+  final int? explicitSnr;         // من prs_sta.snr
+  final int? txMcs;
+  final int? rxMcs;
+  final int? distanceMeters;      // prs_sta.distance
+  final int? linkUptimeSec;       // prs_sta.uptime (منفصل عن system uptime)
+  final int? dlSignalExpect;      // -47 مثلاً
+  final int? ulSignalExpect;
+  final int? dlCapacityKbps;      // 1951000
+  final int? ulCapacityKbps;
+  final int? dlCapacityExpectKbps;
+  final int? ulCapacityExpectKbps;
+  final int? txSector;
+  final int? rxSector;
+  final bool isLinked60;
 
   const UbntStation({
     required this.mac,
@@ -895,9 +1018,48 @@ class UbntStation {
     required this.txRate,
     required this.rxRate,
     required this.connTime,
+    this.explicitSnr,
+    this.txMcs,
+    this.rxMcs,
+    this.distanceMeters,
+    this.linkUptimeSec,
+    this.dlSignalExpect,
+    this.ulSignalExpect,
+    this.dlCapacityKbps,
+    this.ulCapacityKbps,
+    this.dlCapacityExpectKbps,
+    this.ulCapacityExpectKbps,
+    this.txSector,
+    this.rxSector,
+    this.isLinked60 = false,
   });
 
-  int get snr => (signal - noise).abs();
+  /// SNR — يُفضّل explicit من prs_sta على المحسوب
+  int? get snr {
+    if (explicitSnr != null && explicitSnr! > 0) return explicitSnr;
+    if (noise != 0 && signal != 0) return (signal - noise).abs();
+    return null;
+  }
+
+  /// هامش الإشارة عن المتوقّع (dB) — سالب = ضعف عن الأمثل
+  int? get signalMargin {
+    if (dlSignalExpect == null || signal == 0) return null;
+    return signal - dlSignalExpect!;
+  }
+
+  /// نسبة استغلال السعة (0-100%) — كم % من max capacity المتوقّع نستعمله
+  double? get capacityUtilization {
+    final actual = dlCapacityKbps ?? 0;
+    final expect = dlCapacityExpectKbps ?? 0;
+    if (actual <= 0 || expect <= 0) return null;
+    return (actual / expect * 100).clamp(0, 100);
+  }
+
+  /// أعلى capacity متوفّرة (Mbps) — نُفضّل dl على ul لو موجود
+  int? get capacityMbps {
+    final k = dlCapacityKbps ?? ulCapacityKbps ?? 0;
+    return k > 0 ? (k / 1000).round() : null;
+  }
 }
 
 // ── Utilities
