@@ -304,8 +304,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Expanded(child: _valueCard(
               icon: LucideIcons.clock,
               label: 'Uptime',
-              value: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').first : '—',
-              unit: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').last : '',
+              value: h.uptime > 0 ? _formatUptime(h.uptime) : '—',
+              unit: '',  // نضم كل النصّ في value بحجم موحّد
               color: const Color(0xFF0559C9),
             )),
           ],
@@ -364,6 +364,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     required String unit,
     required Color color,
   }) {
+    // إذا القيمة تحتوي مسافة (مثل "4d 1h") نُصغّرها قليلاً لتتّسع
+    final hasSpace = value.contains(' ');
+    final valueSize = hasSpace ? 15.0 : 18.0;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -383,7 +386,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
             children: [
               Text(value,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+                  style: TextStyle(fontSize: valueSize, fontWeight: FontWeight.w800,
                       color: value == '—' ? AppColors.textLow : color,
                       fontFamily: 'monospace', height: 1)),
               if (unit.isNotEmpty) ...[

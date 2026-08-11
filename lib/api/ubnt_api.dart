@@ -213,6 +213,7 @@ class UbntApi {
 
   /// mca-dump JSON — للـairFiber والأجهزة الحديثة. نُسطّح لصيغة key=value
   /// بأسماء متوافقة مع _parseMcaStatus عشان نفس الـfactory يشتغل.
+  /// airFiber 60 LR بنيته مختلفة — نغطّي عدّة variations.
   static Map<String, String> _flattenMcaDump(String jsonStr) {
     final map = <String, String>{};
     try {
@@ -220,58 +221,99 @@ class UbntApi {
       if (data is! Map) return map;
       final root = data as Map<String, dynamic>;
 
-      // host section
+      if (kDebugMode) {
+        debugPrint('🔵 UBNT mca-dump root keys: ${root.keys.toList()}');
+      }
+
+      // host section — الأكثر ثباتاً بين الأجهزة
       final host = (root['host'] as Map?)?.cast<String, dynamic>() ?? const {};
       _set(map, 'deviceName', host['hostname'] ?? host['device_id']);
       _set(map, 'firmwareVersion', host['fwversion'] ?? host['firmwareVersion']);
       _set(map, 'platform', host['devmodel'] ?? host['sysid']);
       _set(map, 'uptime', host['uptime']);
-      _set(map, 'cpuload', host['cpuload']);
-      _set(map, 'temperature', host['temperature']);
+      _set(map, 'cpuload', host['cpuload'] ?? host['cpu_load']);
+      // درجة الحرارة قد تكون في host أو في مواقع أخرى — نجرّب كلها
+      _set(map, 'temperature',
+          host['temperature'] ?? host['temp'] ?? root['temperature']);
 
-      // wireless section — airFiber يستعمل 'wireless' object
+      // wireless section (airMax/airOS 5-8)
       final w = (root['wireless'] as Map?)?.cast<String, dynamic>();
       if (w != null) {
-        _set(map, 'wlanEssid', w['essid']);
+        if (kDebugMode) debugPrint('🔵 wireless keys: ${w.keys.toList()}');
+        _set(map, 'wlanEssid', w['essid'] ?? w['ssid']);
         _set(map, 'wlanMode', w['mode']);
-        _set(map, 'wlanSignal', w['signal']);
+        _set(map, 'wlanSignal', w['signal'] ?? w['rssi']);
         _set(map, 'wlanNoiseFloor', w['noisef'] ?? w['noise']);
         _set(map, 'wlanCcq', w['ccq']);
-        _set(map, 'wlanTxRate', w['txrate']);
-        _set(map, 'wlanRxRate', w['rxrate']);
+        _set(map, 'wlanTxRate', w['txrate'] ?? w['tx_rate']);
+        _set(map, 'wlanRxRate', w['rxrate'] ?? w['rx_rate']);
         _set(map, 'wlanChan', w['channel']);
-        _set(map, 'wlanFrequency', w['frequency']);
+        _set(map, 'wlanFrequency', w['frequency'] ?? w['freq']);
         _set(map, 'wlanDistance', w['distance']);
         _set(map, 'wlanChanWidth', w['chanbw'] ?? w['chwidth']);
       }
 
-      // airFiber-specific: قد تكون البيانات في 'radio' بدل 'wireless'
+      // airFiber-specific: 'radio' section
       final radio = (root['radio'] as Map?)?.cast<String, dynamic>();
-      if (radio != null && w == null) {
-        _set(map, 'wlanSignal', radio['signal'] ?? radio['rxlevel']);
-        _set(map, 'wlanTxRate', radio['tx_capacity'] ?? radio['tx_rate']);
-        _set(map, 'wlanRxRate', radio['rx_capacity'] ?? radio['rx_rate']);
-        _set(map, 'wlanFrequency', radio['frequency']);
+      if (radio != null) {
+        if (kDebugMode) debugPrint('🔵 radio keys: ${radio.keys.toList()}');
+        // نستعمل radio لتكميل ما ينقص من wireless
+        map['wlanSignal'] ??= (radio['signal'] ?? radio['rxlevel'] ?? radio['rx_level'])?.toString() ?? '';
+        map['wlanNoiseFloor'] ??= (radio['noise'] ?? radio['noise_level'])?.toString() ?? '';
+        map['wlanFrequency'] ??= (radio['frequency'] ?? radio['freq'])?.toString() ?? '';
+        // معدّلات النقل في radio.link_capacity أو radio.tx_capacity
+        map['wlanTxRate'] ??= (radio['tx_capacity'] ?? radio['tx_rate'])?.toString() ?? '';
+        map['wlanRxRate'] ??= (radio['rx_capacity'] ?? radio['rx_rate'])?.toString() ?? '';
+        map['temperature'] ??= (radio['temperature'] ?? radio['temp'])?.toString() ?? '';
       }
 
-      // stations
-      final sta = (w?['sta'] as List?) ?? (root['stations'] as List?) ?? const [];
+      // airFiber 60: قد يكون فيه 'link' section
+      final link = (root['link'] as Map?)?.cast<String, dynamic>();
+      if (link != null) {
+        if (kDebugMode) debugPrint('🔵 link keys: ${link.keys.toList()}');
+        map['wlanTxRate'] ??= (link['tx_capacity'] ?? link['capacity'])?.toString() ?? '';
+        map['wlanRxRate'] ??= (link['rx_capacity'])?.toString() ?? '';
+      }
+
+      // إزالة أي قيم فارغة
+      map.removeWhere((k, v) => v.isEmpty);
+
+      // stations: قد تكون في wireless.sta أو root.stations أو root.remote (airFiber)
+      List sta = const [];
+      if (w?['sta'] is List) sta = w!['sta'] as List;
+      else if (root['stations'] is List) sta = root['stations'] as List;
+      else if (root['peers'] is List) sta = root['peers'] as List;
+      // airFiber remote peer
+      final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
+      if (sta.isEmpty && remote != null) sta = [remote];
+
       for (int i = 0; i < sta.length; i++) {
         final s = sta[i];
         if (s is! Map) continue;
         final j = s.cast<String, dynamic>();
         final idx = i + 1;
-        _set(map, 'station${idx}_mac', j['mac'] ?? j['mac_addr']);
-        _set(map, 'station${idx}_ip', j['lastip'] ?? j['ip']);
-        _set(map, 'station${idx}_name', j['name'] ?? j['hostname']);
-        _set(map, 'station${idx}_signal', j['signal']);
-        _set(map, 'station${idx}_noise', j['noisefloor']);
+        _set(map, 'station${idx}_mac',
+            j['mac'] ?? j['mac_addr'] ?? j['mac_address']);
+        _set(map, 'station${idx}_ip',
+            j['lastip'] ?? j['ip'] ?? j['address']);
+        _set(map, 'station${idx}_name',
+            j['name'] ?? j['hostname'] ?? j['device_name']);
+        _set(map, 'station${idx}_signal',
+            j['signal'] ?? j['rssi'] ?? j['rx_level']);
+        _set(map, 'station${idx}_noise',
+            j['noisefloor'] ?? j['noise']);
         _set(map, 'station${idx}_ccq', j['ccq']);
-        _set(map, 'station${idx}_tx', j['tx']);
-        _set(map, 'station${idx}_rx', j['rx']);
-        _set(map, 'station${idx}_uptime', j['uptime']);
+        // tx/rx قد تكون بـKbps أو Mbps — نتركها كما هي والـUI يعرضها
+        _set(map, 'station${idx}_tx',
+            j['tx'] ?? j['tx_rate'] ?? j['tx_capacity']);
+        _set(map, 'station${idx}_rx',
+            j['rx'] ?? j['rx_rate'] ?? j['rx_capacity']);
+        _set(map, 'station${idx}_uptime',
+            j['uptime'] ?? j['conn_time']);
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ mca-dump flatten error: $e');
+    }
     return map;
   }
 
