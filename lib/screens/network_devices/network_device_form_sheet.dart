@@ -387,7 +387,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           Text(
             switch (_brand) {
               'mikrotik' => '💡 Mikrotik API الافتراضي 8728 — فعّله بـ/ip service enable api',
-              'ubnt' => '💡 UBNT airOS يستعمل HTTPS 443 (self-signed OK) — user default: ubnt',
+              'ubnt' => '💡 UBNT airOS يستعمل HTTPS 443 — أدخل نفس user/pass الذي تدخل به عبر متصفّح الويب للجهاز',
               'mimosa' => '💡 Mimosa يستعمل HTTPS 443 — أدخل admin credentials',
               _ => '💡 تأكّد من تفعيل API service على الجهاز',
             },
