@@ -74,6 +74,34 @@ class UbntApi {
           ? _flattenMcaDump(output)
           : _parseMcaStatus(output);
 
+      // airFiber 60: أوامر إضافيّة لجلب wireless info (يفشل بصمت لغير airFiber)
+      try {
+        final afOut = utf8.decode(await client.run('af-status 2>/dev/null')
+            .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
+        if (afOut.isNotEmpty) {
+          if (kDebugMode) {
+            debugPrint('🔵 af-status output (first 1500 chars):');
+            debugPrint(afOut.substring(0, afOut.length > 1500 ? 1500 : afOut.length));
+          }
+          if (afOut.startsWith('{')) {
+            _mergeFromJson(parsed, afOut);
+          }
+        }
+      } catch (_) {}
+
+      // wstalist — قائمة العملاء (JSON) لكل الأجهزة UBNT
+      try {
+        final wstaOut = utf8.decode(await client.run('wstalist 2>/dev/null')
+            .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
+        if (wstaOut.startsWith('[')) {
+          if (kDebugMode) {
+            debugPrint('🔵 wstalist output (first 800 chars):');
+            debugPrint(wstaOut.substring(0, wstaOut.length > 800 ? 800 : wstaOut.length));
+          }
+          _mergeStationsFromWstalist(parsed, wstaOut);
+        }
+      } catch (_) {}
+
       // — إضافات من أوامر منفصلة لتكميل ما ينقص —
       // /proc/uptime
       try {
@@ -315,6 +343,92 @@ class UbntApi {
       if (kDebugMode) debugPrint('❌ mca-dump flatten error: $e');
     }
     return map;
+  }
+
+  /// دمج JSON من af-status (airFiber-specific) لتكميل ما ينقص في mca-dump
+  static void _mergeFromJson(Map<String, String> map, String jsonStr) {
+    try {
+      final data = json.decode(jsonStr);
+      if (data is! Map) return;
+      final root = data as Map<String, dynamic>;
+      if (kDebugMode) debugPrint('🔵 af-status root keys: ${root.keys.toList()}');
+
+      // airFiber structure: radio/local/remote/link
+      final local = (root['local'] as Map?)?.cast<String, dynamic>();
+      if (local != null) {
+        if (kDebugMode) debugPrint('🔵 af-status.local keys: ${local.keys.toList()}');
+        map['wlanSignal'] ??= _asStr(local['rf']?['rxlevel'] ?? local['signal'] ?? local['rx_level']);
+        map['wlanNoiseFloor'] ??= _asStr(local['rf']?['noise'] ?? local['noise']);
+        map['temperature'] ??= _asStr(local['temperature'] ?? local['temp']);
+      }
+      final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
+      if (remote != null) {
+        if (kDebugMode) debugPrint('🔵 af-status.remote keys: ${remote.keys.toList()}');
+        // remote peer — لو ما فيه station من مكان آخر، نضيفه
+        if (map['station1_mac'] == null) {
+          _set(map, 'station1_mac', remote['mac']);
+          _set(map, 'station1_ip', remote['ip']);
+          _set(map, 'station1_name', remote['hostname'] ?? remote['device_name']);
+          _set(map, 'station1_signal', remote['rf']?['rxlevel'] ?? remote['signal']);
+          _set(map, 'station1_noise', remote['rf']?['noise']);
+        }
+      }
+      final link = (root['link'] as Map?)?.cast<String, dynamic>();
+      if (link != null) {
+        if (kDebugMode) debugPrint('🔵 af-status.link keys: ${link.keys.toList()}');
+        map['wlanTxRate'] ??= _asStr(link['tx_capacity'] ?? link['capacity']);
+        map['wlanRxRate'] ??= _asStr(link['rx_capacity']);
+      }
+      final radio = (root['radio'] as Map?)?.cast<String, dynamic>();
+      if (radio != null) {
+        if (kDebugMode) debugPrint('🔵 af-status.radio keys: ${radio.keys.toList()}');
+        map['wlanFrequency'] ??= _asStr(radio['frequency']);
+      }
+      map.removeWhere((k, v) => v.isEmpty);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ af-status parse failed: $e');
+    }
+  }
+
+  /// دمج stations من wstalist JSON — أشمل من mca-status/dump
+  static void _mergeStationsFromWstalist(Map<String, String> map, String jsonStr) {
+    try {
+      final data = json.decode(jsonStr);
+      if (data is! List) return;
+      for (int i = 0; i < data.length; i++) {
+        final s = data[i];
+        if (s is! Map) continue;
+        final j = s.cast<String, dynamic>();
+        final idx = i + 1;
+        _set(map, 'station${idx}_mac', j['mac']);
+        _set(map, 'station${idx}_ip', j['lastip']);
+        _set(map, 'station${idx}_name', j['name']);
+        _set(map, 'station${idx}_signal', j['signal']);
+        _set(map, 'station${idx}_noise', j['noisefloor']);
+        _set(map, 'station${idx}_ccq', j['ccq']);
+        // tx/rx قد تكون nested في tx_ratedata أو مباشرة
+        final txr = j['tx'];
+        if (txr is Map) {
+          _set(map, 'station${idx}_tx', txr['rate']);
+        } else {
+          _set(map, 'station${idx}_tx', txr);
+        }
+        final rxr = j['rx'];
+        if (rxr is Map) {
+          _set(map, 'station${idx}_rx', rxr['rate']);
+        } else {
+          _set(map, 'station${idx}_rx', rxr);
+        }
+        _set(map, 'station${idx}_uptime', j['uptime']);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ wstalist parse failed: $e');
+    }
+  }
+
+  static String _asStr(dynamic v) {
+    if (v == null) return '';
+    return v.toString().trim();
   }
 
   static void _set(Map<String, String> map, String key, dynamic value) {
