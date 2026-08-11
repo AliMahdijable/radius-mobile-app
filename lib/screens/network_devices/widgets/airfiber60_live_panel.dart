@@ -306,19 +306,87 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             ],
           ),
         ),
-        const SizedBox(height: 6),
-        // Signal quality label + MAC
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(_signalLabel(peer.signal),
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w800, color: signalColor)),
-          Text(peer.mac,
+        const SizedBox(height: 12),
+        // شرائط قوّة الإشارة والـSNR (بصريّة، تصعد وتنزل مع القيم)
+        _qualityBar(
+          label: 'قوّة الإشارة',
+          percent: _signalPercent(peer.signal),
+          badge: _signalLabel(peer.signal),
+          color: signalColor,
+        ),
+        const SizedBox(height: 8),
+        _qualityBar(
+          label: 'SNR',
+          percent: snr != null ? _snrPercent(snr) : 0,
+          badge: snr != null ? _snrLabel(snr) : '—',
+          color: snr != null ? _snrColor(snr) : AppColors.textLow,
+        ),
+        const SizedBox(height: 10),
+        // MAC
+        Align(alignment: Alignment.centerRight,
+          child: Text(peer.mac,
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 10, color: AppColors.textLow, fontFamily: 'monospace')),
-        ]),
+        ),
       ]),
     );
+  }
+
+  /// شريط جودة بصري — يشتغل مثل CPU%: يرتفع/ينخفض مع القيم.
+  /// يعرض label + badge (تسمية) على اليمين + progress bar ملوّن.
+  Widget _qualityBar({
+    required String label,
+    required double percent,
+    required String badge,
+    required Color color,
+  }) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+        const Spacer(),
+        Text(badge,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w900, color: color)),
+        const SizedBox(width: 6),
+        Text('${percent.round()}%',
+            textDirection: TextDirection.ltr,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w800,
+                color: color, fontFamily: 'monospace')),
+      ]),
+      const SizedBox(height: 4),
+      LayoutBuilder(builder: (context, constraints) {
+        final fillWidth = constraints.maxWidth * (percent / 100).clamp(0.0, 1.0);
+        return Stack(children: [
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              color: AppColors.border.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutCubic,
+            height: 8,
+            width: fillWidth,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                color.withValues(alpha: 0.6), color,
+              ]),
+              borderRadius: BorderRadius.circular(6),
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.4),
+                    blurRadius: 4, offset: const Offset(0, 1)),
+              ],
+            ),
+          ),
+        ]);
+      }),
+    ]);
   }
 
   Widget _heroDivider() => Container(
@@ -939,11 +1007,33 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     return 'ضعيفة';
   }
 
+  /// dBm → % — mapping خطّي بين -95 (0%) و -40 (100%).
+  /// airFiber 60 عادةً بين -70 و -40 = 45%..100%.
+  double _signalPercent(int dbm) {
+    if (dbm >= -40) return 100.0;
+    if (dbm <= -95) return 0.0;
+    return ((dbm + 95) / 55 * 100).clamp(0.0, 100.0);
+  }
+
   Color _snrColor(int snr) {
     if (snr >= 25) return const Color(0xFF10B981);
     if (snr >= 15) return const Color(0xFF06B6D4);
     if (snr >= 10) return const Color(0xFFF59E0B);
     return AppColors.error;
+  }
+
+  /// SNR → % — mapping خطّي بين 0 (0%) و 40 (100%).
+  double _snrPercent(int snr) {
+    if (snr >= 40) return 100.0;
+    if (snr <= 0) return 0.0;
+    return (snr / 40 * 100).clamp(0.0, 100.0);
+  }
+
+  String _snrLabel(int snr) {
+    if (snr >= 25) return 'ممتاز';
+    if (snr >= 15) return 'جيّد';
+    if (snr >= 10) return 'مقبول';
+    return 'ضعيف';
   }
 
   Color _tempColor(int t) {
