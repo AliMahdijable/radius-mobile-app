@@ -31,8 +31,20 @@ class MikrotikApi {
       List<Map<String, String>> pppRows = const [];
       try {
         pppRows = await client.query(['/ppp/active/print']);
+      } catch (_) {}
+
+      // Wireless — لو الجهاز يدعم wireless package
+      List<Map<String, String>> wirelessRows = const [];
+      List<Map<String, String>> wirelessClients = const [];
+      try {
+        wirelessRows = await client.query(['/interface/wireless/print']);
       } catch (_) {
-        // ppp/active قد لا يكون موجوداً — تجاهل
+        // بعض الأجهزة ما تدعم wireless (مثل CCR raw routers)
+      }
+      if (wirelessRows.isNotEmpty) {
+        try {
+          wirelessClients = await client.query(['/interface/wireless/registration-table/print']);
+        } catch (_) {}
       }
 
       // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
@@ -77,6 +89,8 @@ class MikrotikApi {
           return MikrotikInterface.fromApiMap(row, monitor: monitor);
         }).toList(),
         pppActiveCount: pppRows.length,
+        wirelessInterfaces: wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
+        wirelessClients: wirelessClients.map(MikrotikWirelessClient.fromApiMap).toList(),
       );
     } on MikrotikBinaryException {
       rethrow;
@@ -133,6 +147,8 @@ class MikrotikStats {
   final int cpuFrequencyMhz;
   final List<MikrotikInterface> interfaces;
   final int pppActiveCount;
+  final List<MikrotikWireless> wirelessInterfaces;
+  final List<MikrotikWirelessClient> wirelessClients;
 
   const MikrotikStats({
     required this.cpuLoad,
@@ -147,11 +163,131 @@ class MikrotikStats {
     required this.cpuFrequencyMhz,
     required this.interfaces,
     required this.pppActiveCount,
+    this.wirelessInterfaces = const [],
+    this.wirelessClients = const [],
   });
+
+  bool get hasWireless => wirelessInterfaces.isNotEmpty;
 
   int get upInterfacesCount => interfaces.where((i) => i.running && !i.disabled).length;
   int get downInterfacesCount => interfaces.where((i) => !i.running && !i.disabled).length;
   int get memUsedBytes => memTotalBytes - memFreeBytes;
+}
+
+/// معلومات wireless interface (link / sector / AP)
+class MikrotikWireless {
+  final String name;              // wlan1, wlan2, ...
+  final String ssid;
+  final String mode;              // ap-bridge, station, station-bridge, wds-slave, ...
+  final String band;              // 5ghz-a, 5ghz-n, 2ghz-b/g/n, ...
+  final int frequency;            // MHz
+  final int channelWidth;         // MHz
+  final int txPower;              // dBm
+  final bool disabled;
+  final bool running;
+
+  const MikrotikWireless({
+    required this.name,
+    required this.ssid,
+    required this.mode,
+    required this.band,
+    required this.frequency,
+    required this.channelWidth,
+    required this.txPower,
+    required this.disabled,
+    required this.running,
+  });
+
+  bool get isAp => mode.startsWith('ap') || mode == 'bridge';
+  bool get isStation => mode.startsWith('station');
+
+  factory MikrotikWireless.fromApiMap(Map<String, String> j) {
+    bool asBool(String? v) => v?.toLowerCase() == 'true';
+    return MikrotikWireless(
+      name: j['name'] ?? '',
+      ssid: j['ssid'] ?? '',
+      mode: j['mode'] ?? '',
+      band: j['band'] ?? '',
+      frequency: _iOrZero(j['frequency']),
+      channelWidth: _iOrZero(j['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '')),
+      txPower: _iOrZero(j['tx-power']),
+      disabled: asBool(j['disabled']),
+      running: asBool(j['running']),
+    );
+  }
+}
+
+/// عميل wireless متصل (من registration-table)
+class MikrotikWirelessClient {
+  final String mac;
+  final String iface;             // wlan1, wlan2 — أي wireless انضمّ عليه
+  final int signalStrength;       // dBm
+  final int signalToNoise;        // dB
+  final int txRate;               // Mbps (rate يأتي كنصّ مثل "270Mbps-40MHz/2S/SGI")
+  final int rxRate;               // Mbps
+  final int uptime;               // seconds (converted from "3w2d15h4m5s")
+  final String? comment;
+
+  const MikrotikWirelessClient({
+    required this.mac,
+    required this.iface,
+    required this.signalStrength,
+    required this.signalToNoise,
+    required this.txRate,
+    required this.rxRate,
+    required this.uptime,
+    this.comment,
+  });
+
+  factory MikrotikWirelessClient.fromApiMap(Map<String, String> j) {
+    return MikrotikWirelessClient(
+      mac: j['mac-address'] ?? '',
+      iface: j['interface'] ?? '',
+      signalStrength: _parseSignal(j['signal-strength']),
+      signalToNoise: _iOrZero(j['signal-to-noise']),
+      txRate: _parseRate(j['tx-rate']),
+      rxRate: _parseRate(j['rx-rate']),
+      uptime: _parseUptimeSeconds(j['uptime']),
+      comment: (j['comment']?.isNotEmpty ?? false) ? j['comment'] : null,
+    );
+  }
+
+  /// "-58@1Mbps" أو "-58" → -58
+  static int _parseSignal(String? raw) {
+    if (raw == null) return 0;
+    final m = RegExp(r'-?\d+').firstMatch(raw);
+    return m == null ? 0 : (int.tryParse(m.group(0)!) ?? 0);
+  }
+
+  /// "270Mbps-40MHz/2S/SGI" → 270
+  static int _parseRate(String? raw) {
+    if (raw == null) return 0;
+    final m = RegExp(r'(\d+)').firstMatch(raw);
+    return m == null ? 0 : (int.tryParse(m.group(1)!) ?? 0);
+  }
+
+  /// "3w2d15h4m5s" → seconds
+  static int _parseUptimeSeconds(String? raw) {
+    if (raw == null || raw.isEmpty) return 0;
+    int total = 0;
+    final w = RegExp(r'(\d+)w').firstMatch(raw)?.group(1);
+    final d = RegExp(r'(\d+)d').firstMatch(raw)?.group(1);
+    final h = RegExp(r'(\d+)h').firstMatch(raw)?.group(1);
+    final m = RegExp(r'(\d+)m(?!s)').firstMatch(raw)?.group(1);
+    final s = RegExp(r'(\d+)s').firstMatch(raw)?.group(1);
+    if (w != null) total += int.parse(w) * 604800;
+    if (d != null) total += int.parse(d) * 86400;
+    if (h != null) total += int.parse(h) * 3600;
+    if (m != null) total += int.parse(m) * 60;
+    if (s != null) total += int.parse(s);
+    return total;
+  }
+}
+
+int _iOrZero(dynamic v) {
+  if (v == null) return 0;
+  if (v is int) return v;
+  return int.tryParse(v.toString()) ?? 0;
 }
 
 class MikrotikInterface {

@@ -227,6 +227,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           ],
           const Divider(height: 1),
           _interfacesSection(),
+          if (_stats!.hasWireless) ...[
+            const Divider(height: 1),
+            _wirelessSection(),
+          ],
+          if (_stats!.wirelessClients.isNotEmpty) ...[
+            const Divider(height: 1),
+            _wirelessClientsSection(),
+          ],
         ],
       ]),
     );
@@ -780,6 +788,165 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Helpers
   // ══════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+  // Wireless section — للـMikrotik links/sectors/APs
+  // ══════════════════════════════════════════════════════════════
+  Widget _wirelessSection() {
+    final wls = _stats!.wirelessInterfaces;
+    return Padding(
+      padding: const EdgeInsets.all(Sp.md),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('Wireless (${wls.length})',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+        ]),
+        const SizedBox(height: 8),
+        for (final w in wls) _wirelessCard(w),
+      ]),
+    );
+  }
+
+  Widget _wirelessCard(MikrotikWireless w) {
+    final active = w.running && !w.disabled;
+    final color = active ? const Color(0xFF10B981) : AppColors.error;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(w.isAp ? LucideIcons.radioTower : LucideIcons.satellite,
+              size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(w.name,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                  color: AppColors.textHi, fontFamily: 'monospace')),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(_modeLabel(w.mode),
+                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: color)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        if (w.ssid.isNotEmpty)
+          _wlRow(LucideIcons.wifi, 'SSID', w.ssid),
+        if (w.band.isNotEmpty)
+          _wlRow(LucideIcons.radio, 'Band', w.band),
+        if (w.frequency > 0)
+          _wlRow(LucideIcons.satellite, 'التردد',
+              '${w.frequency} MHz${w.channelWidth > 0 ? " • ${w.channelWidth}MHz" : ""}'),
+        if (w.txPower > 0)
+          _wlRow(LucideIcons.zap, 'TX Power', '${w.txPower} dBm'),
+      ]),
+    );
+  }
+
+  Widget _wlRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(children: [
+        Icon(icon, size: 10, color: AppColors.textLow),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMid)),
+        const Spacer(),
+        Text(value,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                color: AppColors.textHi)),
+      ]),
+    );
+  }
+
+  String _modeLabel(String m) => switch (m) {
+        'ap-bridge' => 'AP Bridge',
+        'bridge' => 'Bridge',
+        'station' => 'Station',
+        'station-bridge' => 'Station Bridge',
+        'station-wds' => 'Station WDS',
+        'wds-slave' => 'WDS Slave',
+        _ => m,
+      };
+
+  // ══════════════════════════════════════════════════════════════
+  // Wireless clients (registration table)
+  // ══════════════════════════════════════════════════════════════
+  Widget _wirelessClientsSection() {
+    final cs = _stats!.wirelessClients;
+    return Padding(
+      padding: const EdgeInsets.all(Sp.md),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.users, size: 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('العملاء المتّصلون (${cs.length})',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+        ]),
+        const SizedBox(height: 8),
+        for (final c in cs.take(30)) _clientRow(c),
+        if (cs.length > 30)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('+ ${cs.length - 30} عميل آخر',
+                style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+          ),
+      ]),
+    );
+  }
+
+  Widget _clientRow(MikrotikWirelessClient c) {
+    final signalColor = _signalColorFor(c.signalStrength);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(children: [
+        Container(width: 3, height: 24, decoration: BoxDecoration(
+          color: signalColor, borderRadius: BorderRadius.circular(1.5),
+        )),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(c.comment ?? c.mac,
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                    color: AppColors.textHi,
+                    fontFamily: c.comment == null ? 'monospace' : null),
+                overflow: TextOverflow.ellipsis),
+            if (c.comment != null)
+              Text(c.mac,
+                  style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
+                  overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${c.signalStrength} dBm',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
+                  color: signalColor, fontFamily: 'monospace')),
+          Text('↓${c.rxRate}/↑${c.txRate}',
+              style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
+        ]),
+      ]),
+    );
+  }
+
+  Color _signalColorFor(int dbm) {
+    if (dbm >= -60) return const Color(0xFF10B981);
+    if (dbm >= -70) return const Color(0xFF06B6D4);
+    if (dbm >= -80) return const Color(0xFFF59E0B);
+    return AppColors.error;
+  }
+
   Color _colorForPercent(double p) {
     if (p >= 85) return AppColors.error;
     if (p >= 65) return const Color(0xFFF59E0B);
