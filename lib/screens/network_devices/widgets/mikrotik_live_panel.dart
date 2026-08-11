@@ -904,6 +904,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   Widget _clientRow(MikrotikWirelessClient c) {
     final signalColor = _signalColorFor(c.signalStrength);
+    final hasName = c.hostname != null || c.comment != null;
+    // Use best CCQ (tx-ccq usually higher)
+    final ccq = c.txCcq > 0 ? c.txCcq : c.rxCcq;
+    final ccqColor = _ccqColor(ccq);
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -912,32 +916,80 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(children: [
-        Container(width: 3, height: 24, decoration: BoxDecoration(
+        Container(width: 3, height: 30, decoration: BoxDecoration(
           color: signalColor, borderRadius: BorderRadius.circular(1.5),
         )),
-        const SizedBox(width: 6),
+        const SizedBox(width: 8),
+        // Name + secondary (IP or MAC)
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(c.comment ?? c.mac,
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                    fontFamily: c.comment == null ? 'monospace' : null),
+            Text(c.displayName,
+                style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700,
+                  color: AppColors.textHi,
+                  fontFamily: hasName ? null : 'monospace',  // Cairo لو hostname عربي
+                ),
                 overflow: TextOverflow.ellipsis),
-            if (c.comment != null)
-              Text(c.mac,
-                  style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
-                  overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            Row(children: [
+              if (c.ip != null) ...[
+                Text(c.ip!,
+                    style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(c.mac,
+                    style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ]),
           ]),
         ),
+        const SizedBox(width: 6),
+        // Signal + CCQ + rates
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('${c.signalStrength} dBm',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
-                  color: signalColor, fontFamily: 'monospace')),
-          Text('↓${c.rxRate}/↑${c.txRate}',
-              style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('${c.signalStrength}',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                    color: signalColor, fontFamily: 'monospace')),
+            const SizedBox(width: 2),
+            Text('dBm', style: TextStyle(fontSize: 8, color: AppColors.textLow)),
+            if (ccq > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: ccqColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text('$ccq%',
+                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800,
+                        color: ccqColor, fontFamily: 'monospace')),
+              ),
+            ],
+          ]),
+          const SizedBox(height: 2),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(LucideIcons.arrowDown, size: 8, color: const Color(0xFF10B981)),
+            Text(' ${c.rxRate}',
+                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                    color: AppColors.textHi, fontFamily: 'monospace')),
+            const SizedBox(width: 6),
+            Icon(LucideIcons.arrowUp, size: 8, color: const Color(0xFF3B82F6)),
+            Text(' ${c.txRate}',
+                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                    color: AppColors.textHi, fontFamily: 'monospace')),
+            Text(' Mbps', style: TextStyle(fontSize: 8, color: AppColors.textLow)),
+          ]),
         ]),
       ]),
     );
+  }
+
+  Color _ccqColor(int ccq) {
+    if (ccq >= 80) return const Color(0xFF10B981);
+    if (ccq >= 50) return const Color(0xFFF59E0B);
+    return AppColors.error;
   }
 
   Color _signalColorFor(int dbm) {

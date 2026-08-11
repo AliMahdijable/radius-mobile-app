@@ -47,6 +47,20 @@ class MikrotikApi {
         } catch (_) {}
       }
 
+      // DHCP leases — نستعملها لـMAC→hostname+IP map (تُثري wireless clients)
+      Map<String, ({String? hostname, String? ip})> dhcpMap = const {};
+      try {
+        final leases = await client.query(['/ip/dhcp-server/lease/print']);
+        dhcpMap = {
+          for (final l in leases)
+            if ((l['mac-address'] ?? '').isNotEmpty)
+              l['mac-address']!.toUpperCase(): (
+                hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
+                ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
+              ),
+        };
+      } catch (_) {}
+
       // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
       // عبر /interface/ethernet/monitor لكل ether بشكل منفصل (أضمن).
       final Map<String, Map<String, String>> ethMonitorByName = {};
@@ -90,7 +104,15 @@ class MikrotikApi {
         }).toList(),
         pppActiveCount: pppRows.length,
         wirelessInterfaces: wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
-        wirelessClients: wirelessClients.map(MikrotikWirelessClient.fromApiMap).toList(),
+        wirelessClients: wirelessClients.map((c) {
+          final macUpper = (c['mac-address'] ?? '').toUpperCase();
+          final dhcp = dhcpMap[macUpper];
+          return MikrotikWirelessClient.fromApiMap(
+            c,
+            hostname: dhcp?.hostname,
+            ip: dhcp?.ip,
+          );
+        }).toList(),
       );
     } on MikrotikBinaryException {
       rethrow;
@@ -217,38 +239,57 @@ class MikrotikWireless {
   }
 }
 
-/// عميل wireless متصل (من registration-table)
+/// عميل wireless متصل (من registration-table + DHCP lease enrichment)
 class MikrotikWirelessClient {
   final String mac;
   final String iface;             // wlan1, wlan2 — أي wireless انضمّ عليه
   final int signalStrength;       // dBm
-  final int signalToNoise;        // dB
-  final int txRate;               // Mbps (rate يأتي كنصّ مثل "270Mbps-40MHz/2S/SGI")
+  final int signalToNoise;        // dB (SNR)
+  final int txCcq;                // Client Connection Quality % (0-100)
+  final int rxCcq;                // %
+  final int txRate;               // Mbps
   final int rxRate;               // Mbps
-  final int uptime;               // seconds (converted from "3w2d15h4m5s")
-  final String? comment;
+  final int uptime;               // seconds
+  final String? comment;          // من registration-table comment
+  final String? hostname;         // من DHCP host-name أو lease comment
+  final String? ip;                // من DHCP active-address
 
   const MikrotikWirelessClient({
     required this.mac,
     required this.iface,
     required this.signalStrength,
     required this.signalToNoise,
+    required this.txCcq,
+    required this.rxCcq,
     required this.txRate,
     required this.rxRate,
     required this.uptime,
     this.comment,
+    this.hostname,
+    this.ip,
   });
 
-  factory MikrotikWirelessClient.fromApiMap(Map<String, String> j) {
+  /// أفضل اسم لعرض العميل: hostname (DHCP) > comment (registration) > MAC
+  String get displayName => hostname ?? comment ?? mac;
+
+  factory MikrotikWirelessClient.fromApiMap(
+    Map<String, String> j, {
+    String? hostname,
+    String? ip,
+  }) {
     return MikrotikWirelessClient(
       mac: j['mac-address'] ?? '',
       iface: j['interface'] ?? '',
-      signalStrength: _parseSignal(j['signal-strength']),
+      signalStrength: _parseSignal(j['signal-strength'] ?? j['signal']),
       signalToNoise: _iOrZero(j['signal-to-noise']),
+      txCcq: _iOrZero(j['tx-ccq']),
+      rxCcq: _iOrZero(j['rx-ccq']),
       txRate: _parseRate(j['tx-rate']),
       rxRate: _parseRate(j['rx-rate']),
       uptime: _parseUptimeSeconds(j['uptime']),
       comment: (j['comment']?.isNotEmpty ?? false) ? j['comment'] : null,
+      hostname: hostname,
+      ip: ip,
     );
   }
 
@@ -289,6 +330,8 @@ int _iOrZero(dynamic v) {
   if (v is int) return v;
   return int.tryParse(v.toString()) ?? 0;
 }
+
+String? _nonEmpty(String? s) => (s == null || s.trim().isEmpty) ? null : s.trim();
 
 class MikrotikInterface {
   final String name;
