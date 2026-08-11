@@ -677,12 +677,19 @@ class UbntStats {
       if (txRate == 0) txRate = _n(m['station1_tx_capacity']) ~/ 1000; // Kbps → Mbps
       if (rxRate == 0) rxRate = _n(m['station1_rx_capacity']) ~/ 1000;
 
+      // CCQ: أسماء متعدّدة في mca-status حسب الإصدار
+      int ccq = _n(m['wlanCcq']);
+      if (ccq == 0) ccq = _n(m['ccq']);
+      if (ccq == 0) ccq = _n(m['wlanTxCcq']);
+      if (ccq == 0) ccq = _n(m['tx_ccq']);
+      if (ccq == 0) ccq = _n(m['station1_ccq']);
+
       wireless = UbntWireless(
         essid: essid,
         mode: _normalizeMode(m['wlanMode'] ?? m['wlanOpmode'] ?? ''),
         signal: signal,
         noise: _n(m['wlanNoiseFloor']) != 0 ? _n(m['wlanNoiseFloor']) : _n(m['noise']),
-        ccq: _n(m['wlanCcq']),
+        ccq: ccq,
         txRate: txRate,
         rxRate: rxRate,
         channel: _n(m['wlanChan']),
