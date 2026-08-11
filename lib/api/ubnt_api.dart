@@ -953,10 +953,12 @@ class UbntWireless {
   bool get hasNoise => noise != 0;
   bool get hasCcq => ccq != 0;
 
+  /// dBm → % — mapping خطّي: -95 dBm = 0% | -40 dBm = 100%
+  /// مثال: -55 dBm = (40/55)*100 = 72.7%
   double get signalQualityPercent {
     if (signal >= -40) return 100.0;
     if (signal <= -95) return 0.0;
-    return ((-40.0 - signal.abs().toDouble()) / 55.0 * 100 + 100).clamp(0, 100);
+    return ((signal + 95) / 55 * 100).clamp(0.0, 100.0);
   }
 }
 
