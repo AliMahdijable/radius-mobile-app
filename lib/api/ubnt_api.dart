@@ -27,34 +27,52 @@ class UbntApi {
     SSHSocket? socket;
     try {
       socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      // بعض UBNT (خصوصاً airFiber جديد) يقبل username فارغ — نُعطي 'ubnt' افتراضي
+      final effectiveUser = user.trim().isEmpty ? 'ubnt' : user.trim();
       client = SSHClient(
         socket,
-        username: user,
+        username: effectiveUser,
         onPasswordRequest: () => pass,
       );
 
-      // ننفّذ mca-status ونحصل على output
-      String output;
+      // نجرّب mca-dump أوّلاً (JSON منظّم، أوثق للأجهزة الحديثة airFiber/airMax AC)
+      // ثمّ fallback إلى mca-status (key=value، للـXM/AC القديمة)
+      String output = '';
+      bool isJsonDump = false;
+
       try {
-        final result = await client.run('mca-status').timeout(timeout);
-        output = utf8.decode(result, allowMalformed: true);
-      } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
-        final result = await client.run('ubntbox status').timeout(timeout);
-        output = utf8.decode(result, allowMalformed: true);
+        final result = await client.run('mca-dump').timeout(timeout);
+        output = utf8.decode(result, allowMalformed: true).trim();
+        if (output.startsWith('{') || output.startsWith('[')) {
+          isJsonDump = true;
+        }
+      } catch (_) {}
+
+      if (!isJsonDump) {
+        try {
+          final result = await client.run('mca-status').timeout(timeout);
+          output = utf8.decode(result, allowMalformed: true);
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
+          final result = await client.run('ubntbox status').timeout(timeout);
+          output = utf8.decode(result, allowMalformed: true);
+        }
       }
 
       if (output.trim().isEmpty) {
-        throw UbntException('mca-status رجع فارغ — تحقّق من صلاحيّات المستخدم');
+        throw UbntException('لم نستلم بيانات — تحقّق من صلاحيّات المستخدم');
       }
 
       if (kDebugMode) {
-        debugPrint('══════ mca-status output ══════');
-        debugPrint(output.substring(0, output.length > 1500 ? 1500 : output.length));
+        debugPrint('══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════');
+        debugPrint(output.substring(0, output.length > 2000 ? 2000 : output.length));
         debugPrint('════════════════════════════════');
       }
 
-      final parsed = _parseMcaStatus(output);
+      // لو JSON: نحوّله لـflat map key=value ليعمل مع نفس الـparser
+      final parsed = isJsonDump
+          ? _flattenMcaDump(output)
+          : _parseMcaStatus(output);
 
       // — إضافات من أوامر منفصلة لتكميل ما ينقص —
       // /proc/uptime
@@ -191,6 +209,77 @@ class UbntApi {
       try { client?.close(); } catch (_) {}
       try { socket?.close(); } catch (_) {}
     }
+  }
+
+  /// mca-dump JSON — للـairFiber والأجهزة الحديثة. نُسطّح لصيغة key=value
+  /// بأسماء متوافقة مع _parseMcaStatus عشان نفس الـfactory يشتغل.
+  static Map<String, String> _flattenMcaDump(String jsonStr) {
+    final map = <String, String>{};
+    try {
+      final data = json.decode(jsonStr);
+      if (data is! Map) return map;
+      final root = data as Map<String, dynamic>;
+
+      // host section
+      final host = (root['host'] as Map?)?.cast<String, dynamic>() ?? const {};
+      _set(map, 'deviceName', host['hostname'] ?? host['device_id']);
+      _set(map, 'firmwareVersion', host['fwversion'] ?? host['firmwareVersion']);
+      _set(map, 'platform', host['devmodel'] ?? host['sysid']);
+      _set(map, 'uptime', host['uptime']);
+      _set(map, 'cpuload', host['cpuload']);
+      _set(map, 'temperature', host['temperature']);
+
+      // wireless section — airFiber يستعمل 'wireless' object
+      final w = (root['wireless'] as Map?)?.cast<String, dynamic>();
+      if (w != null) {
+        _set(map, 'wlanEssid', w['essid']);
+        _set(map, 'wlanMode', w['mode']);
+        _set(map, 'wlanSignal', w['signal']);
+        _set(map, 'wlanNoiseFloor', w['noisef'] ?? w['noise']);
+        _set(map, 'wlanCcq', w['ccq']);
+        _set(map, 'wlanTxRate', w['txrate']);
+        _set(map, 'wlanRxRate', w['rxrate']);
+        _set(map, 'wlanChan', w['channel']);
+        _set(map, 'wlanFrequency', w['frequency']);
+        _set(map, 'wlanDistance', w['distance']);
+        _set(map, 'wlanChanWidth', w['chanbw'] ?? w['chwidth']);
+      }
+
+      // airFiber-specific: قد تكون البيانات في 'radio' بدل 'wireless'
+      final radio = (root['radio'] as Map?)?.cast<String, dynamic>();
+      if (radio != null && w == null) {
+        _set(map, 'wlanSignal', radio['signal'] ?? radio['rxlevel']);
+        _set(map, 'wlanTxRate', radio['tx_capacity'] ?? radio['tx_rate']);
+        _set(map, 'wlanRxRate', radio['rx_capacity'] ?? radio['rx_rate']);
+        _set(map, 'wlanFrequency', radio['frequency']);
+      }
+
+      // stations
+      final sta = (w?['sta'] as List?) ?? (root['stations'] as List?) ?? const [];
+      for (int i = 0; i < sta.length; i++) {
+        final s = sta[i];
+        if (s is! Map) continue;
+        final j = s.cast<String, dynamic>();
+        final idx = i + 1;
+        _set(map, 'station${idx}_mac', j['mac'] ?? j['mac_addr']);
+        _set(map, 'station${idx}_ip', j['lastip'] ?? j['ip']);
+        _set(map, 'station${idx}_name', j['name'] ?? j['hostname']);
+        _set(map, 'station${idx}_signal', j['signal']);
+        _set(map, 'station${idx}_noise', j['noisefloor']);
+        _set(map, 'station${idx}_ccq', j['ccq']);
+        _set(map, 'station${idx}_tx', j['tx']);
+        _set(map, 'station${idx}_rx', j['rx']);
+        _set(map, 'station${idx}_uptime', j['uptime']);
+      }
+    } catch (_) {}
+    return map;
+  }
+
+  static void _set(Map<String, String> map, String key, dynamic value) {
+    if (value == null) return;
+    final s = value.toString().trim();
+    if (s.isEmpty || s == 'null') return;
+    map[key] = s;
   }
 
   /// mca-status output: أسطر key=value، بعض القيم متعدّدة (station1_ip=...)

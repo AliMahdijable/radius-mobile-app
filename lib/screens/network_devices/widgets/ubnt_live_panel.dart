@@ -740,11 +740,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     final mins = (seconds % 3600) ~/ 60;
     if (days > 7) {
       final weeks = days ~/ 7;
-      return '${weeks}أ ${days % 7}ي';
+      return '${weeks}w ${days % 7}d';
     }
-    if (days > 0) return '${days}ي ${hours}س';
-    if (hours > 0) return '${hours}س ${mins}د';
-    return '${mins}د';
+    if (days > 0) return '${days}d ${hours}h';
+    if (hours > 0) return '${hours}h ${mins}m';
+    return '${mins}m';
   }
 
   String _formatBps(int bps) {

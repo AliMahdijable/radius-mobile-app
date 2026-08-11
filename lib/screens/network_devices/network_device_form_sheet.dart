@@ -104,6 +104,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     }
     final u = _userCtrl.text.trim();
     final p = _passCtrl.text;
+    // نحفظ حتى لو user فارغ (بعض UBNT airFiber بلا user) — يكفي password
     if (u.isEmpty && p.isEmpty) return null;
     return {'user': u, 'pass': p};
   }
@@ -401,7 +402,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   }
 
   List<Widget> _userPassFields() => [
-        _textField(_userCtrl, 'اسم المستخدم', hint: 'admin', icon: LucideIcons.user),
+        _textField(_userCtrl, 'اسم المستخدم (اختياري لبعض UBNT)', hint: 'admin أو ubnt', icon: LucideIcons.user),
         const SizedBox(height: 10),
         TextFormField(
           controller: _passCtrl,

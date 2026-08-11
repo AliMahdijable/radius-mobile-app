@@ -1142,10 +1142,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     final days = RegExp(r'(\d+)d').firstMatch(raw)?.group(1);
     final hours = RegExp(r'(\d+)h').firstMatch(raw)?.group(1);
     final mins = RegExp(r'(\d+)m(?!s)').firstMatch(raw)?.group(1);
-    if (weeks != null) return '${weeks}أ ${days ?? "0"}ي';
-    if (days != null) return '${days}ي ${hours ?? "0"}س';
-    if (hours != null) return '${hours}س ${mins ?? "0"}د';
-    if (mins != null) return '${mins}د';
+    if (weeks != null) return '${weeks}w ${days ?? "0"}d';
+    if (days != null) return '${days}d ${hours ?? "0"}h';
+    if (hours != null) return '${hours}h ${mins ?? "0"}m';
+    if (mins != null) return '${mins}m';
     return raw;
   }
 
