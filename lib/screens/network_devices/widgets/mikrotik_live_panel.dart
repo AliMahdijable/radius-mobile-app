@@ -389,54 +389,65 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Column(children: [
-        // Row 1: CPU | RAM | Temperature
-        Row(children: [
-          Expanded(child: _percentCard(
-            icon: LucideIcons.cpu, label: 'CPU',
-            percent: s.cpuLoad.toDouble(),
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: _percentCard(
-            icon: LucideIcons.memoryStick, label: 'RAM',
-            percent: s.memUsedPercent.toDouble(),
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: _valueCard(
-            icon: LucideIcons.thermometer,
-            label: 'حرارة',
-            value: s.temperature != null ? '${s.temperature}' : '—',
-            unit: s.temperature != null ? '°C' : '',
-            color: _tempColor(s.temperature),
-          )),
-        ]),
+        // Row 1: CPU | RAM | Temperature — كل الكارتات بنفس الارتفاع
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _percentCard(
+                icon: LucideIcons.cpu, label: 'CPU',
+                percent: s.cpuLoad.toDouble(),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _percentCard(
+                icon: LucideIcons.memoryStick, label: 'RAM',
+                percent: s.memUsedPercent.toDouble(),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _valueCard(
+                icon: LucideIcons.thermometer,
+                label: 'حرارة',
+                value: s.temperature != null ? '${s.temperature}' : '—',
+                unit: s.temperature != null ? '°C' : '',
+                color: _tempColor(s.temperature),
+              )),
+            ],
+          ),
+        ),
         const SizedBox(height: 8),
         // Row 2: Voltage | أعلى تنزيل ↓ | أعلى رفع ↑
-        Row(children: [
-          Expanded(child: _valueCard(
-            icon: LucideIcons.plug,
-            label: 'فولتيّة',
-            value: s.voltage != null ? s.voltage!.toStringAsFixed(1) : '—',
-            unit: s.voltage != null ? 'V' : '',
-            color: _voltageColor(s.voltage),
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: _topRateCard(
-            label: 'أعلى ↓',
-            iface: maxRx,
-            color: const Color(0xFF10B981),
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: _topRateCard(
-            label: 'أعلى ↑',
-            iface: maxTx,
-            color: const Color(0xFF3B82F6),
-          )),
-        ]),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _valueCard(
+                icon: LucideIcons.plug,
+                label: 'فولتيّة',
+                value: s.voltage != null ? s.voltage!.toStringAsFixed(1) : '—',
+                unit: s.voltage != null ? 'V' : '',
+                color: _voltageColor(s.voltage),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _topRateCard(
+                label: 'أعلى ↓',
+                iface: maxRx,
+                color: const Color(0xFF10B981),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _topRateCard(
+                label: 'أعلى ↑',
+                iface: maxTx,
+                color: const Color(0xFF3B82F6),
+              )),
+            ],
+          ),
+        ),
       ]),
     );
   }
 
-  /// كارت قيمة عامّة (بدون progress bar) — للحرارة والفولتيّة
+  /// كارت قيمة عامّة (بدون progress bar) — للحرارة والفولتيّة.
+  /// mainAxisAlignment: spaceBetween يوزّع العناصر عند stretch (نفس ارتفاع _percentCard).
   Widget _valueCard({
     required IconData icon,
     required String label,
@@ -451,26 +462,31 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
-        ]),
-        const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(value,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                    color: value == '—' ? AppColors.textLow : color,
-                    fontFamily: 'monospace', height: 1)),
-            if (unit.isNotEmpty) ...[
-              const SizedBox(width: 2),
-              Text(unit, style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+          ]),
+          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+                      color: value == '—' ? AppColors.textLow : color,
+                      fontFamily: 'monospace', height: 1)),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 2),
+                Text(unit, style: TextStyle(fontSize: 11, color: AppColors.textLow)),
+              ],
             ],
-          ],
-        ),
-      ]),
+          ),
+          // مُسافة صغيرة أسفل لمحاذاة تقريبيّة مع progress bar في _percentCard
+          const SizedBox(height: 4),
+        ],
+      ),
     );
   }
 
@@ -538,6 +554,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     required ({String name, int bps})? iface,
     required Color color,
   }) {
+    final hasData = iface != null && iface.bps > 0;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -545,28 +562,37 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
-        const SizedBox(height: 6),
-        if (iface != null && iface.bps > 0) ...[
-          Text(iface.name,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                  color: AppColors.textMid, fontFamily: 'monospace'),
-              overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(_formatBps(iface.bps),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Header: label
+          Row(children: [
+            Icon(
+              label.contains('↓') ? LucideIcons.arrowDown : LucideIcons.arrowUp,
+              size: 12, color: color,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(label.replaceAll(RegExp(r'[↓↑]'), '').trim(),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid),
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ]),
+          // Middle: interface name (لو موجود)
+          if (hasData)
+            Text(iface.name,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                    color: AppColors.textMid, fontFamily: 'monospace'),
+                overflow: TextOverflow.ellipsis),
+          // Bottom: value
+          Text(hasData ? _formatBps(iface.bps) : '—',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                  color: color, fontFamily: 'monospace', height: 1)),
-        ] else ...[
-          Text('—',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                  color: AppColors.textLow, fontFamily: 'monospace')),
+                  color: hasData ? color : AppColors.textLow,
+                  fontFamily: 'monospace', height: 1)),
           const SizedBox(height: 4),
-          Text('لا حركة',
-              style: TextStyle(fontSize: 9, color: AppColors.textLow)),
         ],
-      ]),
+      ),
     );
   }
 

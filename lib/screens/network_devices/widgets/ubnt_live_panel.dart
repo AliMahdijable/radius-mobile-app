@@ -284,29 +284,33 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     final h = _stats!.host;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 8),
-      child: Row(children: [
-        Expanded(child: _percentCard(
-          icon: LucideIcons.cpu, label: 'CPU',
-          percent: h.cpuload.toDouble(),
-        )),
-        const SizedBox(width: 8),
-        // UBNT عادةً ما يعطي RAM بسهولة — نتركها للـfuture (لو mca-status جابها)
-        Expanded(child: _valueCard(
-          icon: LucideIcons.thermometer,
-          label: 'حرارة',
-          value: h.temperature > 0 ? '${h.temperature}' : '—',
-          unit: h.temperature > 0 ? '°C' : '',
-          color: _tempColor(h.temperature),
-        )),
-        const SizedBox(width: 8),
-        Expanded(child: _valueCard(
-          icon: LucideIcons.clock,
-          label: 'Uptime',
-          value: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').first : '—',
-          unit: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').last : '',
-          color: const Color(0xFF0559C9),
-        )),
-      ]),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _percentCard(
+              icon: LucideIcons.cpu, label: 'CPU',
+              percent: h.cpuload.toDouble(),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: _valueCard(
+              icon: LucideIcons.thermometer,
+              label: 'حرارة',
+              value: h.temperature > 0 ? '${h.temperature}' : '—',
+              unit: h.temperature > 0 ? '°C' : '',
+              color: _tempColor(h.temperature),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: _valueCard(
+              icon: LucideIcons.clock,
+              label: 'Uptime',
+              value: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').first : '—',
+              unit: h.uptime > 0 ? _formatUptime(h.uptime).split(' ').last : '',
+              color: const Color(0xFF0559C9),
+            )),
+          ],
+        ),
+      ),
     );
   }
 
@@ -367,26 +371,30 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
-        ]),
-        const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(value,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                    color: value == '—' ? AppColors.textLow : color,
-                    fontFamily: 'monospace', height: 1)),
-            if (unit.isNotEmpty) ...[
-              const SizedBox(width: 2),
-              Text(unit, style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+          ]),
+          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+                      color: value == '—' ? AppColors.textLow : color,
+                      fontFamily: 'monospace', height: 1)),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 2),
+                Text(unit, style: TextStyle(fontSize: 11, color: AppColors.textLow)),
+              ],
             ],
-          ],
-        ),
-      ]),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
     );
   }
 
