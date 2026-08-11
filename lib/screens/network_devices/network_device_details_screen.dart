@@ -855,12 +855,21 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   }
 }
 
-/// airFiber 60 يُكتشف من model (المستخدم يكتب "airFiber 60 LR" أو "AF-60-LR").
-/// نُفضّل الاختيار حسب الـmodel لأنّه معروف قبل الاتصال (بدل انتظار wstalist).
+/// airFiber 60 يُكتشف من model أو name — المستخدم يكتب أي variation:
+/// "airFiber 60 LR" / "AF-60-LR" / "LR 60" / "60 GP" / "GP60" ...
+/// نبحث في الحقلين معاً لتغطية كل الحالات.
 bool _isAirFiber60(NetworkDevice d) {
-  final m = (d.model ?? '').toLowerCase();
-  if (m.isEmpty) return false;
-  return m.contains('airfiber 60') || m.contains('af-60') || m.contains('af60');
+  final combined = '${d.model ?? ''} ${d.name}'.toLowerCase();
+  if (combined.trim().isEmpty) return false;
+  return combined.contains('airfiber 60') ||
+      combined.contains('af-60') ||
+      combined.contains('af60') ||
+      combined.contains('lr 60') ||
+      combined.contains('60 lr') ||
+      combined.contains('gp 60') ||
+      combined.contains('60 gp') ||
+      combined.contains('60ghz') ||
+      combined.contains('60 ghz');
 }
 
 extension _UbntHint on _NetworkDeviceDetailsScreenState {

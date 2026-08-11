@@ -160,7 +160,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (s.wireless != null) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
-          initiallyExpanded: false,
+          initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.wifi, size: 14, color: const Color(0xFF0559C9)),
             const SizedBox(width: 6),
@@ -173,7 +173,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (s.interfaces.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
-          initiallyExpanded: false,
+          initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
             const SizedBox(width: 6),
@@ -189,7 +189,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (s.stations.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
-          initiallyExpanded: false,
+          initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.users, size: 14, color: const Color(0xFF0559C9)),
             const SizedBox(width: 6),

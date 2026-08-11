@@ -878,7 +878,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     final fwShort = _extractVersion(fw);
 
     return ExpandableSection(
-      initiallyExpanded: false,
+      initiallyExpanded: true,
       header: Row(children: [
         Icon(LucideIcons.info, size: 16, color: AppColors.brand),
         const SizedBox(width: 6),

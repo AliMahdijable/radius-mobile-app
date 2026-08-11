@@ -244,7 +244,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (ethers.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
-          initiallyExpanded: false,
+          initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.network, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
@@ -257,7 +257,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (s.hasWireless) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
-          initiallyExpanded: false,
+          initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
@@ -272,7 +272,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (s.wirelessClients.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
-          initiallyExpanded: false,
+          initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.users, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
