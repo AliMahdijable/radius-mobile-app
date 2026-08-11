@@ -317,6 +317,9 @@ class MikrotikWirelessClient {
     String? hostname,
     String? ip,
   }) {
+    // radio-name = اسم الجهاز البعيد (لو Mikrotik→Mikrotik) — يظهر في WinBox
+    // كـidentity للـsector/client. أولويّة عالية للعرض.
+    final radioName = _nonEmpty(j['radio-name']);
     return MikrotikWirelessClient(
       mac: j['mac-address'] ?? '',
       iface: j['interface'] ?? '',
@@ -327,8 +330,9 @@ class MikrotikWirelessClient {
       txRate: _parseRate(j['tx-rate']),
       rxRate: _parseRate(j['rx-rate']),
       uptime: _parseUptimeSeconds(j['uptime']),
-      comment: (j['comment']?.isNotEmpty ?? false) ? j['comment'] : null,
-      hostname: hostname,
+      comment: _nonEmpty(j['comment']),
+      // نُفضّل: DHCP hostname > radio-name (Mikrotik identity) > wireless comment > null
+      hostname: hostname ?? radioName,
       ip: ip,
     );
   }
