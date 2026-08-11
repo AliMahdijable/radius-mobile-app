@@ -390,7 +390,8 @@ class UbntApi {
     }
   }
 
-  /// دمج stations من wstalist JSON — أشمل من mca-status/dump
+  /// دمج stations من wstalist JSON — يدعم airMax و airFiber 60.
+  /// airFiber 60 يستعمل prs_sta nested object فيه signal + capacity + snr.
   static void _mergeStationsFromWstalist(Map<String, String> map, String jsonStr) {
     try {
       final data = json.decode(jsonStr);
@@ -399,27 +400,59 @@ class UbntApi {
         final s = data[i];
         if (s is! Map) continue;
         final j = s.cast<String, dynamic>();
+        final prs = (j['prs_sta'] as Map?)?.cast<String, dynamic>();
         final idx = i + 1;
+
         _set(map, 'station${idx}_mac', j['mac']);
-        _set(map, 'station${idx}_ip', j['lastip']);
-        _set(map, 'station${idx}_name', j['name']);
-        _set(map, 'station${idx}_signal', j['signal']);
-        _set(map, 'station${idx}_noise', j['noisefloor']);
+        _set(map, 'station${idx}_ip', j['lastip'] ?? j['ip']);
+        _set(map, 'station${idx}_name', j['name'] ?? j['hostname']);
+        _set(map, 'station${idx}_uptime', j['uptime'] ?? prs?['uptime']);
+
+        // Signal: airFiber → prs_sta.rssi_data (-54)، airMax → j['signal']
+        final signal = prs?['rssi_data'] ?? j['signal'] ?? j['rssi'];
+        _set(map, 'station${idx}_signal', signal);
+
+        // Noise
+        _set(map, 'station${idx}_noise', j['noisefloor'] ?? j['noise']);
+
+        // SNR (airFiber يعطيه صراحة، airMax نحسبه من signal-noise)
+        _set(map, 'station${idx}_snr', prs?['snr']);
+
+        // CCQ (airMax فقط، airFiber ما فيه)
         _set(map, 'station${idx}_ccq', j['ccq']);
-        // tx/rx قد تكون nested في tx_ratedata أو مباشرة
-        final txr = j['tx'];
-        if (txr is Map) {
-          _set(map, 'station${idx}_tx', txr['rate']);
-        } else {
-          _set(map, 'station${idx}_tx', txr);
+
+        // tx/rx — الأولوية:
+        //   1. prs_sta.dl_capacity/ul_capacity (airFiber، Kbps)
+        //   2. prs_sta.tx_mcs/rx_mcs (airFiber MCS index)
+        //   3. j['tx']/j['rx'] direct (airMax)
+        //   4. j['tx']['rate'] nested
+        final dlCap = prs?['dl_capacity'];    // Kbps
+        final ulCap = prs?['ul_capacity'];
+        if (dlCap != null) {
+          // Kbps → Mbps
+          _set(map, 'station${idx}_rx', (_n(dlCap) ~/ 1000).toString());
+          _set(map, 'station${idx}_rx_capacity', dlCap);
         }
-        final rxr = j['rx'];
-        if (rxr is Map) {
-          _set(map, 'station${idx}_rx', rxr['rate']);
-        } else {
-          _set(map, 'station${idx}_rx', rxr);
+        if (ulCap != null) {
+          _set(map, 'station${idx}_tx', (_n(ulCap) ~/ 1000).toString());
+          _set(map, 'station${idx}_tx_capacity', ulCap);
         }
-        _set(map, 'station${idx}_uptime', j['uptime']);
+        // fallback: direct tx/rx (airMax)
+        if (dlCap == null) {
+          final rxr = j['rx'];
+          if (rxr is Map) _set(map, 'station${idx}_rx', rxr['rate']);
+          else _set(map, 'station${idx}_rx', rxr);
+        }
+        if (ulCap == null) {
+          final txr = j['tx'];
+          if (txr is Map) _set(map, 'station${idx}_tx', txr['rate']);
+          else _set(map, 'station${idx}_tx', txr);
+        }
+
+        // Distance (airFiber يعطي prs_sta.distance بالأمتار)
+        if (prs?['distance'] != null) {
+          _set(map, 'station${idx}_distance', prs!['distance']);
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ wstalist parse failed: $e');
@@ -595,29 +628,67 @@ class UbntStats {
     // wlanConnections, wlanTxPower
     // + إذا AP: station1_mac, station1_signal, station1_ccq, station1_ip, ...
 
+    // CPU:
+    // - airOS 5/6/7/8 traditional: cpuload=12 (int) أو cpuLoadAvg=(0.05 0.03 0.00)
+    // - airFiber 60 GP: cpuUsage=12.5 (float مباشرة كنسبة مئويّة)
+    //   بينما loadavg=54 (نسبة مئويّة أيضاً، NOT decimal load)
+    int cpuValue = 0;
+    if (m['cpuUsage'] != null) {
+      cpuValue = (double.tryParse(m['cpuUsage']!) ?? 0).round();
+    } else if (m['cpuload'] != null) {
+      cpuValue = _n(m['cpuload']);
+    } else if (m['loadavg'] != null) {
+      final la = double.tryParse(m['loadavg']!) ?? 0;
+      // heuristic: لو > 10 فهي نسبة مئويّة، وإلا decimal load (×100)
+      cpuValue = la > 10 ? la.round() : (la * 100).round();
+    } else {
+      cpuValue = _cpuFromLoadAvg(m['cpuLoadAvg']) ?? 0;
+    }
+
     final host = UbntHost(
-      hostname: m['deviceName'] ?? m['hostname'] ?? '',
-      devmodel: m['platform'] ?? m['deviceId'] ?? '',  // deviceId هو MAC عادة
+      hostname: m['deviceName'] ?? m['hostname'] ?? m['essid'] ?? '',
+      devmodel: m['platform'] ?? m['deviceId'] ?? '',
       fwversion: m['firmwareVersion'] ?? m['fwVersion'] ?? '',
       uptime: _n(m['uptime']),
-      cpuload: _cpuFromLoadAvg(m['cpuLoadAvg']) ?? _n(m['cpuload']),
+      cpuload: cpuValue,
       temperature: _n(m['temperature']),
     );
 
+    // Wireless:
+    // - airMax/airOS: wlanSignal/wlanEssid/wlanTxRate...
+    // - airFiber 60 GP: signal/essid/wlanTxRate=0 (real rates from wstalist.prs_sta)
+    // نتقبّل essid من أي مصدر
+    final essid = m['wlanEssid'] ?? m['essid'] ?? '';
     UbntWireless? wireless;
-    if (m.containsKey('wlanSignal') || m.containsKey('wlanEssid')) {
+    if (essid.isNotEmpty || m.containsKey('wlanSignal') || m.containsKey('signal')) {
+      // signal الرئيسي: airFiber يعطي signal=-93 (WLAN إدارة) والحقيقي في prs_sta
+      // نُفضّل signal من station لو موجود بقيمة معقولة
+      int signal = _n(m['wlanSignal']);
+      if (signal == 0 || signal == -93) {
+        // fallback لـstation1 لو mca-status ما جاب signal معقول
+        final stSig = _n(m['station1_signal']);
+        if (stSig != 0 && stSig > -95) signal = stSig;
+      }
+      if (signal == 0) signal = _n(m['signal']);
+
+      // rates: airFiber يعطي 0 في mca-status، الحقيقي في station.prs_sta.capacity
+      int txRate = _n(m['wlanTxRate']);
+      int rxRate = _n(m['wlanRxRate']);
+      if (txRate == 0) txRate = _n(m['station1_tx_capacity']) ~/ 1000; // Kbps → Mbps
+      if (rxRate == 0) rxRate = _n(m['station1_rx_capacity']) ~/ 1000;
+
       wireless = UbntWireless(
-        essid: m['wlanEssid'] ?? '',
-        mode: _normalizeMode(m['wlanMode'] ?? ''),
-        signal: _n(m['wlanSignal']),
-        noise: _n(m['wlanNoiseFloor']),
+        essid: essid,
+        mode: _normalizeMode(m['wlanMode'] ?? m['wlanOpmode'] ?? ''),
+        signal: signal,
+        noise: _n(m['wlanNoiseFloor']) != 0 ? _n(m['wlanNoiseFloor']) : _n(m['noise']),
         ccq: _n(m['wlanCcq']),
-        txRate: _n(m['wlanTxRate']),
-        rxRate: _n(m['wlanRxRate']),
+        txRate: txRate,
+        rxRate: rxRate,
         channel: _n(m['wlanChan']),
-        frequency: _n(m['wlanFrequency']),
-        distance: _n(m['wlanDistance']),
-        chanbw: _n(m['wlanChanWidth']),
+        frequency: _n(m['wlanFrequency']) != 0 ? _n(m['wlanFrequency']) : _n(m['freq']),
+        distance: _n(m['wlanDistance']) != 0 ? _n(m['wlanDistance']) : _n(m['station1_distance']),
+        chanbw: _n(m['wlanChanWidth']) != 0 ? _n(m['wlanChanWidth']) : _n(m['chanbw']),
       );
     }
 
