@@ -643,13 +643,28 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           item.value,
           style: TextStyle(
             fontSize: 12,
-            fontFamily: 'monospace',
+            // monospace فقط للقيم التقنيّة (IP/MAC/أرقام)، Cairo للنصّ العربي
+            fontFamily: _isTechnicalValue(item.value) ? 'monospace' : null,
             fontWeight: FontWeight.w600,
             color: AppColors.textHi,
           ),
         ),
       ]),
     );
+  }
+
+  /// يكشف لو القيمة تقنيّة (IP/MAC/hex/رقم فقط) → monospace
+  /// أو نصّ (اسم موقع بالعربي) → Cairo
+  static bool _isTechnicalValue(String v) {
+    final s = v.trim();
+    if (s.isEmpty) return false;
+    // IP address
+    if (RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(s)) return true;
+    // MAC address
+    if (RegExp(r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$').hasMatch(s)) return true;
+    // أرقام فقط أو نصّ لاتيني/أرقام (موديل RB4011، PBE-5AC، إلخ)
+    if (RegExp(r'^[A-Za-z0-9\-_./+]+$').hasMatch(s)) return true;
+    return false;
   }
 
   // ══════════════════════════════════════════════════════════════

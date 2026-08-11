@@ -97,17 +97,59 @@ class UbntApi {
         ifaceRaws = _parseIfconfig(r);
       } catch (_) {}
 
-      // /sys/class/net/eth*/speed — link speed لكل ether
+      // link speed لكل ether — نجرّب عدّة مصادر (تختلف بين إصدارات airOS):
+      //   1. /sys/class/net/eth0/speed (Linux حديث)
+      //   2. mii-tool (airOS القديم — Atheros)
+      //   3. ethtool (لو موجود)
+      //   4. mca-status لو فيه wanSpeed
       for (final iface in ifaceRaws) {
         final name = iface['name'] ?? '';
         if (name.isEmpty || !name.startsWith('eth')) continue;
+
+        // 1) /sys/class/net
         try {
           final r = utf8.decode(await client.run('cat /sys/class/net/$name/speed 2>/dev/null')
               .timeout(const Duration(seconds: 2)), allowMalformed: true).trim();
-          if (r.isNotEmpty && int.tryParse(r) != null) {
+          if (r.isNotEmpty && int.tryParse(r) != null && int.parse(r) > 0) {
             iface['speed'] = r;
+            continue;
           }
         } catch (_) {}
+
+        // 2) mii-tool — الأشهر على airOS 5/6 القديم
+        try {
+          final r = utf8.decode(await client.run('mii-tool $name 2>/dev/null')
+              .timeout(const Duration(seconds: 2)), allowMalformed: true).trim();
+          // نموذج: "eth0: negotiated 100baseTx-FD flow-control, link ok"
+          final m = RegExp(r'(\d+)base').firstMatch(r);
+          if (m != null) {
+            iface['speed'] = m.group(1)!;
+            continue;
+          }
+        } catch (_) {}
+
+        // 3) ethtool
+        try {
+          final r = utf8.decode(await client.run('ethtool $name 2>/dev/null')
+              .timeout(const Duration(seconds: 2)), allowMalformed: true);
+          // "Speed: 1000Mb/s"
+          final m = RegExp(r'Speed:\s*(\d+)').firstMatch(r);
+          if (m != null) {
+            iface['speed'] = m.group(1)!;
+            continue;
+          }
+        } catch (_) {}
+      }
+
+      // fallback: mca-status قد يعرض wanSpeed أو lanSpeed
+      if (parsed['wanSpeed'] != null) {
+        final s = int.tryParse(parsed['wanSpeed']!);
+        if (s != null && s > 0) {
+          final eth0 = ifaceRaws.where((i) => i['name'] == 'eth0').toList();
+          if (eth0.isNotEmpty && eth0.first['speed'] == null) {
+            eth0.first['speed'] = s.toString();
+          }
+        }
       }
 
       // wstalist — قائمة المحطّات المتّصلة (لـAP mode) بصيغة JSON
