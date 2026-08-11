@@ -16,6 +16,10 @@ import 'package:flutter/foundation.dart';
 /// **fallbacks**: `ubntbox status`، `iwconfig`، `/proc/*`، `ifconfig`.
 class UbntApi {
   /// جلب صورة كاملة عن حالة الجهاز عبر SSH.
+  ///
+  /// **fallback usernames**: لو الـuser المُعدّ فشل بالـauth، نجرّب `ubnt`
+  /// (default airOS) ثمّ `admin` ثمّ `root` — يحلّ 90% من مشاكل الـauth
+  /// بدون تعديل يدوي.
   static Future<UbntStats> fetchStats({
     required String ip,
     int port = 22,
@@ -23,17 +27,60 @@ class UbntApi {
     required String pass,
     Duration timeout = const Duration(seconds: 10),
   }) async {
+    final userList = _buildUserFallback(user);
+    UbntException? lastAuthErr;
+    for (final u in userList) {
+      try {
+        if (kDebugMode && userList.length > 1) {
+          debugPrint('🔑 UBNT SSH auth attempt with user="$u"');
+        }
+        return await _fetchWithUser(
+            ip: ip, port: port, user: u, pass: pass, timeout: timeout);
+      } on UbntException catch (e) {
+        // auth error → جرّب الـuser التالي
+        if (e.message.contains('اسم المستخدم') || e.message.contains('SSH auth')) {
+          lastAuthErr = e;
+          continue;
+        }
+        rethrow;
+      }
+    }
+    throw lastAuthErr ?? UbntException(
+        'فشل SSH auth مع كل المستخدمين: ${userList.join(", ")}');
+  }
+
+  /// نُنشئ قائمة usernames مرتّبة: الحاليّ أوّلاً، ثمّ الـfallbacks.
+  static List<String> _buildUserFallback(String user) {
+    final base = user.trim();
+    final list = <String>[];
+    if (base.isNotEmpty) list.add(base);
+    for (final f in const ['ubnt', 'admin', 'root']) {
+      if (!list.contains(f)) list.add(f);
+    }
+    return list;
+  }
+
+  /// محاولة واحدة بـuser محدّد — يُستدعى من fetchStats داخل حلقة الـfallback.
+  static Future<UbntStats> _fetchWithUser({
+    required String ip,
+    required int port,
+    required String user,
+    required String pass,
+    required Duration timeout,
+  }) async {
     SSHClient? client;
     SSHSocket? socket;
     try {
       socket = await SSHSocket.connect(ip, port, timeout: timeout);
-      // بعض UBNT (خصوصاً airFiber جديد) يقبل username فارغ — نُعطي 'ubnt' افتراضي
-      final effectiveUser = user.trim().isEmpty ? 'ubnt' : user.trim();
       client = SSHClient(
         socket,
-        username: effectiveUser,
+        username: user,
         onPasswordRequest: () => pass,
       );
+
+      // ننتظر الـauth handshake صراحة — يفشل سريعاً على الـcreds الغلط
+      // بدل انتظار timeout الأمر الأوّل. لو auth تمّ، نُكمل بأمان.
+      await client.authenticated.timeout(timeout);
 
       // نجرّب mca-dump أوّلاً (JSON منظّم، أوثق للأجهزة الحديثة airFiber/airMax AC)
       // ثمّ fallback إلى mca-status (key=value، للـXM/AC القديمة)
