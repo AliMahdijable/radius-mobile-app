@@ -67,10 +67,12 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       _error = null;
     });
     try {
-      final result = await NetworkDevicesApi.getCredentials(widget.device.id);
-      final creds = result['credentials'] as Map<String, dynamic>?;
-      final user = (creds?['username'] ?? '').toString();
-      final pass = (creds?['password'] ?? '').toString();
+      final creds = await NetworkDevicesApi.getCredentials(widget.device.id);
+      final user = (creds['user'] ?? '').toString();
+      final pass = (creds['pass'] ?? '').toString();
+      if (user.isEmpty || pass.isEmpty) {
+        throw UbntException('لم يتم إعداد credentials للجهاز');
+      }
       final port = widget.device.apiPort ?? 22;
 
       final s = await UbntApi.fetchStats(
