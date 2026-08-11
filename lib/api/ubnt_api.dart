@@ -39,7 +39,6 @@ class UbntApi {
         final result = await client.run('mca-status').timeout(timeout);
         output = utf8.decode(result, allowMalformed: true);
       } catch (e) {
-        // fallback لو mca-status غير موجود (نادر)
         if (kDebugMode) debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
         final result = await client.run('ubntbox status').timeout(timeout);
         output = utf8.decode(result, allowMalformed: true);
@@ -49,36 +48,69 @@ class UbntApi {
         throw UbntException('mca-status رجع فارغ — تحقّق من صلاحيّات المستخدم');
       }
 
-      // نستخرج أيضاً uptime + load (بعض الأجهزة ما ترجعها في mca-status)
-      String? extraUptime;
-      String? extraLoad;
-      try {
-        extraUptime = utf8.decode(
-          await client.run('cat /proc/uptime').timeout(const Duration(seconds: 3)),
-          allowMalformed: true,
-        ).trim();
-      } catch (_) {}
-      try {
-        extraLoad = utf8.decode(
-          await client.run('cat /proc/loadavg').timeout(const Duration(seconds: 3)),
-          allowMalformed: true,
-        ).trim();
-      } catch (_) {}
+      if (kDebugMode) {
+        debugPrint('══════ mca-status output ══════');
+        debugPrint(output.substring(0, output.length > 1500 ? 1500 : output.length));
+        debugPrint('════════════════════════════════');
+      }
 
       final parsed = _parseMcaStatus(output);
-      if (extraUptime != null && parsed['uptime'] == null) {
-        parsed['uptime'] = extraUptime.split(' ').first;
-      }
-      if (extraLoad != null && parsed['cpuload'] == null) {
-        // /proc/loadavg: "0.05 0.03 0.00 1/45 12345"
-        final parts = extraLoad.split(RegExp(r'\s+'));
-        if (parts.isNotEmpty) {
-          final load1 = double.tryParse(parts[0]) ?? 0;
-          parsed['cpuload'] = (load1 * 100).round().toString();
+
+      // — إضافات من أوامر منفصلة لتكميل ما ينقص —
+      // /proc/uptime
+      try {
+        final r = utf8.decode(await client.run('cat /proc/uptime')
+            .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
+        if (parsed['uptime'] == null && r.isNotEmpty) {
+          parsed['uptime'] = r.split(' ').first;
         }
+      } catch (_) {}
+
+      // /proc/loadavg
+      try {
+        final r = utf8.decode(await client.run('cat /proc/loadavg')
+            .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
+        if (parsed['cpuload'] == null && r.isNotEmpty) {
+          final parts = r.split(RegExp(r'\s+'));
+          if (parts.isNotEmpty) {
+            final load1 = double.tryParse(parts[0]) ?? 0;
+            parsed['cpuload'] = (load1 * 100).round().toString();
+          }
+        }
+      } catch (_) {}
+
+      // iwconfig — wireless info لو mca-status ما جاب wlan*
+      String? iwconfigOut;
+      try {
+        iwconfigOut = utf8.decode(await client.run('iwconfig 2>/dev/null')
+            .timeout(const Duration(seconds: 4)), allowMalformed: true);
+      } catch (_) {}
+      if (iwconfigOut != null && iwconfigOut.isNotEmpty) {
+        _enrichFromIwconfig(iwconfigOut, parsed);
       }
 
-      return UbntStats.fromMcaStatus(parsed);
+      // ifconfig — interfaces + RX/TX bytes
+      List<Map<String, String>> ifaceRaws = const [];
+      try {
+        final r = utf8.decode(await client.run('ifconfig')
+            .timeout(const Duration(seconds: 4)), allowMalformed: true);
+        ifaceRaws = _parseIfconfig(r);
+      } catch (_) {}
+
+      // /sys/class/net/eth*/speed — link speed لكل ether
+      for (final iface in ifaceRaws) {
+        final name = iface['name'] ?? '';
+        if (name.isEmpty || !name.startsWith('eth')) continue;
+        try {
+          final r = utf8.decode(await client.run('cat /sys/class/net/$name/speed 2>/dev/null')
+              .timeout(const Duration(seconds: 2)), allowMalformed: true).trim();
+          if (r.isNotEmpty && int.tryParse(r) != null) {
+            iface['speed'] = r;
+          }
+        } catch (_) {}
+      }
+
+      return UbntStats.fromMcaStatus(parsed, interfaces: ifaceRaws);
     } on SSHAuthAbortError {
       throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
     } on SSHAuthFailError {
@@ -117,6 +149,102 @@ class UbntApi {
     }
     return map;
   }
+
+  /// iwconfig output فيه معلومات wireless
+  /// نموذج:
+  ///   ath0    IEEE 802.11an  ESSID:"MyWisp"  Mode:Master
+  ///           Frequency:5.180 GHz  Access Point: AA:BB:CC:...
+  ///           Bit Rate:270 Mb/s   Tx-Power:25 dBm
+  ///           Link Quality=54/70  Signal level=-56 dBm  Noise level=-95 dBm
+  static void _enrichFromIwconfig(String output, Map<String, String> map) {
+    final essid = RegExp(r'ESSID:"?([^"\n]+)"?').firstMatch(output)?.group(1)?.trim();
+    if (essid != null && essid.isNotEmpty && map['wlanEssid'] == null) {
+      map['wlanEssid'] = essid;
+    }
+    final mode = RegExp(r'Mode:(\S+)').firstMatch(output)?.group(1)?.trim();
+    if (mode != null && map['wlanMode'] == null) {
+      map['wlanMode'] = mode;
+    }
+    final freq = RegExp(r'Frequency:([\d.]+)\s*GHz').firstMatch(output)?.group(1);
+    if (freq != null && map['wlanFrequency'] == null) {
+      // GHz → MHz
+      final ghz = double.tryParse(freq);
+      if (ghz != null) map['wlanFrequency'] = (ghz * 1000).round().toString();
+    }
+    final signal = RegExp(r'Signal level=(-?\d+)').firstMatch(output)?.group(1);
+    if (signal != null && map['wlanSignal'] == null) {
+      map['wlanSignal'] = signal;
+    }
+    final noise = RegExp(r'Noise level=(-?\d+)').firstMatch(output)?.group(1);
+    if (noise != null && map['wlanNoiseFloor'] == null) {
+      map['wlanNoiseFloor'] = noise;
+    }
+    final bitrate = RegExp(r'Bit Rate[:=]\s*([\d.]+)\s*Mb/s').firstMatch(output)?.group(1);
+    if (bitrate != null) {
+      final rate = double.tryParse(bitrate)?.round().toString();
+      if (rate != null) {
+        if (map['wlanTxRate'] == null) map['wlanTxRate'] = rate;
+        if (map['wlanRxRate'] == null) map['wlanRxRate'] = rate;
+      }
+    }
+  }
+
+  /// ifconfig output → list of interface maps مع RX/TX bytes
+  /// نموذج (busybox / Linux):
+  ///   eth0      Link encap:Ethernet  HWaddr AA:BB:CC:...
+  ///             UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+  ///             RX packets:12345 errors:0
+  ///             RX bytes:1234567 (1.1 MB)  TX bytes:987654 (964.5 KB)
+  static List<Map<String, String>> _parseIfconfig(String output) {
+    final result = <Map<String, String>>[];
+    // نقسّم على blocks بحيث كل block يبدأ باسم interface في العمود 0
+    final lines = output.split('\n');
+    Map<String, String>? current;
+    for (final line in lines) {
+      if (line.isEmpty) continue;
+      // interface header (يبدأ بحرف في العمود 0، ليس space)
+      if (!line.startsWith(' ') && !line.startsWith('\t')) {
+        // نحفظ الـinterface السابق
+        if (current != null && current['name'] != null) {
+          result.add(current);
+        }
+        // اسم الـinterface هو أوّل token
+        final name = line.split(RegExp(r'\s+')).first;
+        current = {'name': name};
+        // hwaddr قد يكون في نفس السطر
+        final hw = RegExp(r'HWaddr\s+([0-9A-Fa-f:]+)').firstMatch(line)?.group(1);
+        if (hw != null) current['hwaddr'] = hw;
+        // flags
+        final up = line.contains('UP') || line.contains('RUNNING');
+        current['up'] = up ? 'true' : 'false';
+      } else if (current != null) {
+        // detail line
+        if (current['hwaddr'] == null) {
+          final hw = RegExp(r'HWaddr\s+([0-9A-Fa-f:]+)|ether\s+([0-9A-Fa-f:]+)')
+              .firstMatch(line);
+          if (hw != null) current['hwaddr'] = hw.group(1) ?? hw.group(2) ?? '';
+        }
+        final rxBytes = RegExp(r'RX\s+bytes:(\d+)|RX packets \d+\s+bytes\s+(\d+)')
+            .firstMatch(line);
+        if (rxBytes != null) {
+          current['rx_bytes'] = rxBytes.group(1) ?? rxBytes.group(2) ?? '';
+        }
+        final txBytes = RegExp(r'TX\s+bytes:(\d+)|TX packets \d+\s+bytes\s+(\d+)')
+            .firstMatch(line);
+        if (txBytes != null) {
+          current['tx_bytes'] = txBytes.group(1) ?? txBytes.group(2) ?? '';
+        }
+        // flags جميعاً في السطر الثاني عادة
+        if (line.contains('UP') || line.contains('RUNNING')) {
+          current['up'] = 'true';
+        }
+      }
+    }
+    if (current != null && current['name'] != null) {
+      result.add(current);
+    }
+    return result;
+  }
 }
 
 class UbntException implements Exception {
@@ -150,8 +278,11 @@ class UbntStats {
   bool get isStation => wireless?.mode.toLowerCase().contains('sta') ?? false ||
       wireless?.mode.toLowerCase().contains('managed') == true;
 
-  /// يبني من mca-status output map
-  factory UbntStats.fromMcaStatus(Map<String, String> m) {
+  /// يبني من mca-status output map + interfaces من ifconfig (اختياري)
+  factory UbntStats.fromMcaStatus(
+    Map<String, String> m, {
+    List<Map<String, String>> interfaces = const [],
+  }) {
     // mca-status keys شائعة (تختلف قليلاً حسب الإصدار):
     // deviceId, firmwareVersion, deviceName, uptime,
     // cpuLoadAvg, temperature, memTotal, memFree, memBuffers, memCached,
@@ -204,11 +335,24 @@ class UbntStats {
       ));
     }
 
-    // Interfaces من mca-status محدودة — عادةً نجيبها بأمر ifconfig منفصل لاحقاً.
-    // للـSlice الحالي، نتركها فارغة (الـwireless هو الأهمّ لـUBNT).
+    // Interfaces من ifconfig
+    final ifs = interfaces.map((raw) {
+      final speed = _n(raw['speed']);
+      return UbntInterface(
+        ifname: raw['name'] ?? '',
+        hwaddr: raw['hwaddr'] ?? '',
+        enabled: raw['up'] == 'true',
+        plugged: raw['up'] == 'true',
+        rxBytes: int.tryParse(raw['rx_bytes'] ?? ''),
+        txBytes: int.tryParse(raw['tx_bytes'] ?? ''),
+        speed: speed > 0 ? speed : null,
+      );
+    }).where((i) => i.ifname.isNotEmpty && i.ifname != 'lo').toList();
+
     return UbntStats(
       host: host,
       wireless: wireless,
+      interfaces: ifs,
       stations: stations,
     );
   }
