@@ -112,17 +112,20 @@ class _ExpandableSectionState extends State<ExpandableSection>
   }
 }
 
-/// خط فصل منقّط رصاصي خفيف — بديل عن Divider الأسود الافتراضي.
+/// خط فصل منقّط رصاصي واضح — شرطات ظاهرة بلون رصاصي خفيف.
 class _DottedDivider extends StatelessWidget {
   const _DottedDivider();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 1,
-      child: CustomPaint(
-        painter: _DottedLinePainter(
-          color: AppColors.border.withValues(alpha: 0.6),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+      child: SizedBox(
+        height: 2,
+        child: CustomPaint(
+          painter: _DottedLinePainter(
+            color: AppColors.textLow.withValues(alpha: 0.55),
+          ),
         ),
       ),
     );
@@ -137,13 +140,15 @@ class _DottedLinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 1
+      ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
-    const dashWidth = 2.0;
-    const dashGap = 3.0;
+    const dashWidth = 6.0;
+    const dashGap = 5.0;
     double x = 0;
+    final y = size.height / 2;
     while (x < size.width) {
-      canvas.drawLine(Offset(x, 0), Offset(x + dashWidth, 0), paint);
+      final end = (x + dashWidth).clamp(0.0, size.width);
+      canvas.drawLine(Offset(x, y), Offset(end, y), paint);
       x += dashWidth + dashGap;
     }
   }
