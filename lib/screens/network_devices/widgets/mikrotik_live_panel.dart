@@ -566,28 +566,27 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Header: label
+          // Header row: [icon + label] على اليمين + اسم الـiface على اليسار (RTL)
           Row(children: [
             Icon(
               label.contains('↓') ? LucideIcons.arrowDown : LucideIcons.arrowUp,
               size: 12, color: color,
             ),
             const SizedBox(width: 4),
-            Flexible(
-              child: Text(label.replaceAll(RegExp(r'[↓↑]'), '').trim(),
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid),
-                  overflow: TextOverflow.ellipsis),
-            ),
+            Text(label.replaceAll(RegExp(r'[↓↑]'), '').trim(),
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+            const Spacer(),
+            if (hasData)
+              Flexible(
+                child: Text(iface.name,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                        color: AppColors.textHi, fontFamily: 'monospace'),
+                    overflow: TextOverflow.ellipsis),
+              ),
           ]),
-          // Middle: interface name (لو موجود)
-          if (hasData)
-            Text(iface.name,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                    color: AppColors.textMid, fontFamily: 'monospace'),
-                overflow: TextOverflow.ellipsis),
-          // Bottom: value
+          // Bottom: value (big number)
           Text(hasData ? _formatBps(iface.bps) : '—',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
                   color: hasData ? color : AppColors.textLow,
                   fontFamily: 'monospace', height: 1)),
           const SizedBox(height: 4),
