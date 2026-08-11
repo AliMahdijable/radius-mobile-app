@@ -739,10 +739,27 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           ]),
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('${s.signal} dBm',
-              textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-                  color: signalColor, fontFamily: 'monospace')),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('${s.signal} dBm',
+                textDirection: TextDirection.ltr,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+                    color: signalColor, fontFamily: 'monospace')),
+            if (s.ccq > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _percentColor(s.ccq.toDouble()).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('${s.ccq}%',
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900,
+                        color: _percentColor(s.ccq.toDouble()), fontFamily: 'monospace')),
+              ),
+            ],
+          ]),
+          const SizedBox(height: 2),
           Text('↓${s.rxRate} / ↑${s.txRate} Mbps',
               textDirection: TextDirection.ltr,
               style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),

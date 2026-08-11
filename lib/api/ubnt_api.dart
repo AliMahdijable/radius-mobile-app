@@ -479,8 +479,24 @@ class UbntApi {
         // SNR (airFiber يعطيه صراحة، airMax نحسبه من signal-noise)
         _set(map, 'station${idx}_snr', prs?['snr']);
 
-        // CCQ (airMax فقط، airFiber ما فيه)
-        _set(map, 'station${idx}_ccq', j['ccq']);
+        // CCQ (airMax فقط، airFiber ما فيه) — أسماء متعدّدة حسب إصدار airOS:
+        //   airOS 5/6 (XM): "ccq":95 (top level)
+        //   airOS 7+ (AC):  "airmax": {"ccq": 95}
+        //   airOS 8:        "tx": {"ccq": 95}, "rx": {...}
+        dynamic ccqVal = j['ccq'];
+        if (ccqVal == null || _n(ccqVal) == 0) {
+          final airmax = j['airmax'];
+          if (airmax is Map) ccqVal = airmax['ccq'];
+        }
+        if (ccqVal == null || _n(ccqVal) == 0) {
+          final txMap = j['tx'];
+          if (txMap is Map) ccqVal = txMap['ccq'];
+        }
+        if (ccqVal == null || _n(ccqVal) == 0) {
+          final rxMap = j['rx'];
+          if (rxMap is Map) ccqVal = rxMap['ccq'];
+        }
+        if (ccqVal != null) _set(map, 'station${idx}_ccq', ccqVal);
 
         // tx/rx — الأولوية:
         //   1. prs_sta.dl_capacity/ul_capacity (airFiber، Kbps)
@@ -857,13 +873,28 @@ class UbntStats {
             ? (ulCap / 1000).round()
             : _n(_extractRate(s['rx']));
 
+        // CCQ من أماكن متعدّدة — نفس منطق _mergeStationsFromWstalist
+        int ccqValue = _n(s['ccq']);
+        if (ccqValue == 0 && s['airmax'] is Map) {
+          ccqValue = _n((s['airmax'] as Map)['ccq']);
+        }
+        if (ccqValue == 0 && s['tx'] is Map) {
+          ccqValue = _n((s['tx'] as Map)['ccq']);
+        }
+        if (ccqValue == 0 && s['rx'] is Map) {
+          ccqValue = _n((s['rx'] as Map)['ccq']);
+        }
+        // بعض إصدارات airOS ترجع CCQ ×10 (961 → 96.1%)
+        if (ccqValue > 100 && ccqValue <= 1000) ccqValue = (ccqValue / 10).round();
+        if (ccqValue > 100) ccqValue = 100;
+
         stations.add(UbntStation(
           mac: (s['mac'] ?? '').toString(),
           ip: _strOrNull(s['lastip']) ?? _strOrNull(remote['ip']),
           hostname: _strOrNull(s['name']) ?? _strOrNull(remote['hostname']),
           signal: signal,
           noise: _n(s['noisefloor']),
-          ccq: _n(s['ccq']),
+          ccq: ccqValue,
           txRate: txRateMbps,
           rxRate: rxRateMbps,
           connTime: _n(s['uptime'] ?? s['conn_time']),
