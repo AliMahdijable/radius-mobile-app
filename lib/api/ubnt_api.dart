@@ -32,29 +32,42 @@ class UbntApi {
     String? cookie;
     int apiVersion = 8;
 
-    // 1) جرّب airOS 8 login
+    // 1) جرّب airOS 8 login (POST /api/auth)
     try {
       final r = await dio.post(
         '/api/auth',
         data: {'username': user, 'password': pass},
         options: Options(
           contentType: Headers.jsonContentType,
+          followRedirects: false,  // ما نتبع redirects حتى نفحص الـcookie
           validateStatus: (s) => s != null && s < 500,
         ),
       );
+      // 200 = airOS 8 نجاح مباشر
       if (r.statusCode == 200) {
         cookie = _extractAirosCookie(r.headers);
         if (cookie == null) {
           throw UbntException('لم يرجع الراوتر cookie صالح — تحقّق من user/pass');
         }
+      }
+      // 302 = airOS 8 قديم أو مسار مختلف — لو معه cookie نجاح، وإلا نجرّب v6
+      else if (r.statusCode == 302) {
+        final maybeCookie = _extractAirosCookie(r.headers);
+        if (maybeCookie != null) {
+          cookie = maybeCookie;
+        } else {
+          apiVersion = 6;
+          cookie = await _loginV6(dio, baseUrl, user, pass);
+        }
       } else if (r.statusCode == 401 || r.statusCode == 403) {
         throw UbntException('اسم المستخدم أو كلمة المرور خطأ');
       } else if (r.statusCode == 404) {
-        // Fallback to v6
         apiVersion = 6;
         cookie = await _loginV6(dio, baseUrl, user, pass);
       } else {
-        throw UbntException('استجابة غير متوقّعة: ${r.statusCode}');
+        // أي رمز آخر — نجرّب v6 كـfallback
+        apiVersion = 6;
+        cookie = await _loginV6(dio, baseUrl, user, pass);
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
@@ -71,14 +84,36 @@ class UbntApi {
     try {
       final r = await dio.get(
         '/status.cgi',
-        options: Options(headers: {'Cookie': cookie}),
+        options: Options(
+          headers: {'Cookie': cookie},
+          responseType: ResponseType.plain,   // نستقبل نصّاً ثم نُحلّل
+          followRedirects: false,
+          validateStatus: (s) => s != null && s < 500,
+        ),
       );
+      if (r.statusCode == 302 || r.statusCode == 401 || r.statusCode == 403) {
+        throw UbntException(
+          'الجلسة انتهت أو غير مصرّح — تحقّق من user/pass وصلاحيّة القراءة',
+        );
+      }
       if (r.statusCode != 200) {
         throw UbntException('/status.cgi رجع ${r.statusCode}');
       }
-      final data = r.data is Map ? r.data as Map<String, dynamic>
-          : json.decode(r.data.toString()) as Map<String, dynamic>;
-      return UbntStats.fromJson(data, apiVersion: apiVersion);
+      final raw = (r.data ?? '').toString().trim();
+      if (raw.isEmpty) {
+        throw UbntException('استجابة فارغة من /status.cgi');
+      }
+      // لو الردّ HTML بدل JSON (يحدث لو الـcookie انتهت)
+      if (raw.startsWith('<')) {
+        throw UbntException('الجهاز رجع HTML بدل JSON — الجلسة انتهت أو الحساب بلا صلاحيّة');
+      }
+      final decoded = json.decode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw UbntException('صيغة الردّ غير متوقّعة');
+      }
+      return UbntStats.fromJson(decoded, apiVersion: apiVersion);
+    } on FormatException {
+      throw UbntException('فشل تحليل JSON من الجهاز');
     } on DioException catch (e) {
       _throwDio(e);
       rethrow;
