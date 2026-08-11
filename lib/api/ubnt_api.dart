@@ -31,12 +31,14 @@ class UbntApi {
     UbntException? lastAuthErr;
     for (final u in userList) {
       try {
-        if (kDebugMode && userList.length > 1) {
-          debugPrint('🔑 UBNT SSH auth attempt with user="$u"');
+        if (kDebugMode) {
+          debugPrint('🔑 UBNT SSH try user="$u" pass_len=${pass.length} '
+              'ip=$ip:$port');
         }
         return await _fetchWithUser(
             ip: ip, port: port, user: u, pass: pass, timeout: timeout);
       } on UbntException catch (e) {
+        if (kDebugMode) debugPrint('   ❌ $e');
         // auth error → جرّب الـuser التالي
         if (e.message.contains('اسم المستخدم') || e.message.contains('SSH auth')) {
           lastAuthErr = e;
@@ -45,8 +47,13 @@ class UbntApi {
         rethrow;
       }
     }
-    throw lastAuthErr ?? UbntException(
-        'فشل SSH auth مع كل المستخدمين: ${userList.join(", ")}');
+    // كل الـusernames فشلت — رسالة واضحة للمستخدم
+    throw UbntException(
+        'فشل SSH auth مع كل الـusernames (${userList.join(", ")}).\n'
+        'تحقّق من:\n'
+        '  • SSH مفعّل على الجهاز (Services → SSH Server)\n'
+        '  • الـpassword المدخل صحيح (طول=${pass.length})\n'
+        '  • بعض airFiber يستعمل SSH-user منفصل عن web-user');
   }
 
   /// نُنشئ قائمة usernames مرتّبة: الحاليّ أوّلاً، ثمّ الـfallbacks.
