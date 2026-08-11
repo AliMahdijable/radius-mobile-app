@@ -9,6 +9,7 @@ import '../../../api/ubnt_api.dart';
 import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import 'expandable_section.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -125,35 +126,88 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     if (_stats == null && _error == null) {
       return _connectingBox();
     }
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+    return Column(children: [
+      // Main card: header + banner + metrics + signal (always visible)
+      Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(children: [
+          _header(),
+          if (_error != null) _errorBox(),
+          if (_stats != null) ...[
+            const Divider(height: 1),
+            _boardBanner(),
+            _systemMetrics(),
+            if (_stats!.wireless != null) ...[
+              const SizedBox(height: 4),
+              _signalHero(_stats!.wireless!),
+            ],
+            const SizedBox(height: Sp.md),
+          ],
+        ]),
       ),
-      child: Column(children: [
-        _header(),
-        if (_error != null) _errorBox(),
-        if (_stats != null) ...[
-          const Divider(height: 1),
-          _boardBanner(),
-          _systemMetrics(),
-          if (_stats!.wireless != null) ...[
-            const SizedBox(height: 4),
-            _signalHero(_stats!.wireless!),
-            _wirelessDetails(_stats!.wireless!),
-          ],
-          if (_stats!.interfaces.isNotEmpty) ...[
-            const Divider(height: 1),
-            _interfacesSection(),
-          ],
-          if (_stats!.stations.isNotEmpty) ...[
-            const Divider(height: 1),
-            _stationsSection(),
-          ],
-        ],
-      ]),
-    );
+      // Expandable sections
+      if (_stats != null) ..._buildExpandables(),
+    ]);
+  }
+
+  List<Widget> _buildExpandables() {
+    final s = _stats!;
+    return [
+      if (s.wireless != null) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          initiallyExpanded: false,
+          header: Row(children: [
+            Icon(LucideIcons.wifi, size: 14, color: const Color(0xFF0559C9)),
+            const SizedBox(width: 6),
+            Text('تفاصيل Wireless',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          ]),
+          content: _wirelessDetails(s.wireless!),
+        ),
+      ],
+      if (s.interfaces.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          initiallyExpanded: false,
+          header: Row(children: [
+            Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
+            const SizedBox(width: 6),
+            Text('Ethernet (${s.interfaces.where((i) => i.ifname.startsWith("eth")).length})',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          ]),
+          content: Column(children: [
+            for (final iface in s.interfaces.where((i) => i.ifname.startsWith('eth')))
+              _interfaceRow(iface),
+          ]),
+        ),
+      ],
+      if (s.stations.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          initiallyExpanded: false,
+          header: Row(children: [
+            Icon(LucideIcons.users, size: 14, color: const Color(0xFF0559C9)),
+            const SizedBox(width: 6),
+            Text('العملاء المتّصلون (${s.stations.length})',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          ]),
+          content: Column(children: [
+            for (final st in s.stations.take(20)) _stationRow(st),
+            if (s.stations.length > 20)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('+ ${s.stations.length - 20} عميل آخر',
+                    style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+              ),
+          ]),
+        ),
+      ],
+    ];
   }
 
   Widget _connectingBox() {

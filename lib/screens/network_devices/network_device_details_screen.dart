@@ -153,6 +153,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         _ => AppColors.textLow,
       };
 
+  IconData _protocolIcon(String p) => switch (p) {
+        'api' => LucideIcons.globe,
+        'ssh' => LucideIcons.terminal,
+        'telnet' => LucideIcons.monitor,
+        'snmp' => LucideIcons.activity,
+        _ => LucideIcons.plug,
+      };
+
   IconData get _typeIcon => switch (_d.type) {
         'link' => LucideIcons.satellite,
         'switch' => LucideIcons.network,
@@ -212,12 +220,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             else
               _ubntHint(),
           ],
-          const SizedBox(height: Sp.md),
-          _infoGrid(),
-          if (_d.protocol != null) ...[
-            const SizedBox(height: Sp.md),
-            _protocolCard(),
-          ],
+          // معلومات الجهاز + protocol انتقلا للـhero card (2026-08-12)
           if (_d.notes != null && _d.notes!.isNotEmpty) ...[
             const SizedBox(height: Sp.md),
             _notesCard(),
@@ -303,27 +306,74 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 ),
               ]),
               const SizedBox(height: 4),
-              Text(
-                NetworkDeviceLabels.typeLabel(_d.type),
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textMid,
+              // Type + Model على نفس السطر (لو model موجود)
+              Row(children: [
+                Text(
+                  NetworkDeviceLabels.typeLabel(_d.type),
+                  style: TextStyle(fontSize: 13, color: AppColors.textMid),
                 ),
-              ),
+                if (_d.model != null && _d.model!.isNotEmpty) ...[
+                  Text(' • ',
+                      style: TextStyle(fontSize: 11, color: AppColors.textLow)),
+                  Flexible(
+                    child: Text(_d.model!,
+                        style: TextStyle(fontSize: 12,
+                            color: AppColors.textMid,
+                            fontFamily: 'monospace'),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ]),
               const SizedBox(height: 2),
+              // IP
               Row(children: [
                 Icon(LucideIcons.globe, size: 12, color: AppColors.textLow),
                 const SizedBox(width: 4),
-                Text(
-                  _d.ip,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textHi,
-                  ),
-                ),
+                Text(_d.ip,
+                    style: TextStyle(
+                      fontSize: 12, fontFamily: 'monospace',
+                      fontWeight: FontWeight.w600, color: AppColors.textHi,
+                    )),
               ]),
+              // Location (لو موجود)
+              if (_d.location != null && _d.location!.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Row(children: [
+                  Icon(LucideIcons.mapPin, size: 12, color: AppColors.textLow),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(_d.location!,
+                        style: TextStyle(fontSize: 11, color: AppColors.textMid),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
+              ],
+              // Protocol chip (لو محدَّد)
+              if (_d.protocol != null) ...[
+                const SizedBox(height: 6),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.brand.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(_protocolIcon(_d.protocol!), size: 10, color: AppColors.brand),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}${_d.apiPort != null ? ":${_d.apiPort}" : ""}',
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                            color: AppColors.brand, fontFamily: 'monospace'),
+                      ),
+                      if (_d.hasCredentials) ...[
+                        const SizedBox(width: 4),
+                        Icon(LucideIcons.keyRound, size: 9, color: const Color(0xFF10B981)),
+                      ],
+                    ]),
+                  ),
+                ]),
+              ],
             ]),
           ),
           // Response time + compact ICMP ping button

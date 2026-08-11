@@ -10,6 +10,7 @@ import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import 'expandable_section.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -208,36 +209,103 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+    return Column(children: [
+      // Main card: header + metrics + graph (دائماً ظاهر)
+      Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(children: [
+          _header(),
+          if (_error != null) _errorBox(),
+          if (_stats != null) ...[
+            const Divider(height: 1),
+            _boardBanner(),
+            _metricsRow(),
+            if (_history.length >= 2) ...[
+              const SizedBox(height: 4),
+              _trafficGraph(),
+            ],
+            const SizedBox(height: Sp.md),
+          ],
+        ]),
       ),
-      child: Column(children: [
-        _header(),
-        if (_error != null) _errorBox(),
-        if (_stats != null) ...[
-          const Divider(height: 1),
-          _boardBanner(),
-          _metricsRow(),
-          if (_history.length >= 2) ...[
-            const SizedBox(height: 4),
-            _trafficGraph(),
-          ],
-          const Divider(height: 1),
-          _interfacesSection(),
-          if (_stats!.hasWireless) ...[
-            const Divider(height: 1),
-            _wirelessSection(),
-          ],
-          if (_stats!.wirelessClients.isNotEmpty) ...[
-            const Divider(height: 1),
-            _wirelessClientsSection(),
-          ],
-        ],
-      ]),
-    );
+      // Expandable sections (تُطوى/تُفتح)
+      if (_stats != null) ..._buildExpandables(),
+    ]);
+  }
+
+  List<Widget> _buildExpandables() {
+    final s = _stats!;
+    final ethers = s.interfaces.where(_isEther).toList();
+    return [
+      if (ethers.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          initiallyExpanded: false,
+          header: Row(children: [
+            Icon(LucideIcons.network, size: 14, color: AppColors.brand),
+            const SizedBox(width: 6),
+            Text('Ethernet Interfaces (${ethers.length})',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          ]),
+          content: _interfacesContent(ethers),
+        ),
+      ],
+      if (s.hasWireless) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          initiallyExpanded: false,
+          header: Row(children: [
+            Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
+            const SizedBox(width: 6),
+            Text('Wireless (${s.wirelessInterfaces.length})',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          ]),
+          content: Column(children: [
+            for (final w in s.wirelessInterfaces) _wirelessCard(w),
+          ]),
+        ),
+      ],
+      if (s.wirelessClients.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          initiallyExpanded: false,
+          header: Row(children: [
+            Icon(LucideIcons.users, size: 14, color: AppColors.brand),
+            const SizedBox(width: 6),
+            Text('العملاء المتّصلون (${s.wirelessClients.length})',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          ]),
+          content: _clientsContent(s.wirelessClients),
+        ),
+      ],
+    ];
+  }
+
+  Widget _interfacesContent(List<MikrotikInterface> ethers) {
+    int maxRate = 0;
+    for (final iface in ethers) {
+      final r = _rates[iface.name];
+      if (r != null) maxRate = math.max(maxRate, math.max(r.rxBps, r.txBps));
+    }
+    return Column(children: [
+      for (final iface in ethers) _interfaceRow(iface, maxRate),
+    ]);
+  }
+
+  Widget _clientsContent(List<MikrotikWirelessClient> cs) {
+    return Column(children: [
+      for (final c in cs.take(30)) _clientRow(c),
+      if (cs.length > 30)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text('+ ${cs.length - 30} عميل آخر',
+              style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+        ),
+    ]);
   }
 
   // ══════════════════════════════════════════════════════════════
