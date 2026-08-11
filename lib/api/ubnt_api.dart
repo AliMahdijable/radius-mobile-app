@@ -689,6 +689,8 @@ class UbntStats {
         mode: _normalizeMode(m['wlanMode'] ?? m['wlanOpmode'] ?? ''),
         signal: signal,
         noise: _n(m['wlanNoiseFloor']) != 0 ? _n(m['wlanNoiseFloor']) : _n(m['noise']),
+        // explicit SNR من station لو موجود (airFiber 60 يعطي prs_sta.snr)
+        explicitSnr: _n(m['station1_snr']),
         ccq: ccq,
         txRate: txRate,
         rxRate: rxRate,
@@ -804,8 +806,9 @@ class UbntWireless {
   final String essid;
   final String mode;
   final int signal;
-  final int noise;
-  final int ccq;
+  final int noise;             // 0 = غير متوفّر (airFiber 60GHz)
+  final int explicitSnr;       // من station.prs_sta.snr (0 = غير متوفّر)
+  final int ccq;               // 0 = غير متوفّر
   final int txRate;
   final int rxRate;
   final int channel;
@@ -818,6 +821,7 @@ class UbntWireless {
     required this.mode,
     required this.signal,
     required this.noise,
+    this.explicitSnr = 0,
     required this.ccq,
     required this.txRate,
     required this.rxRate,
@@ -827,7 +831,15 @@ class UbntWireless {
     required this.chanbw,
   });
 
-  int get snr => (signal - noise).abs();
+  /// SNR — يُفضّل explicit من الجهاز (wstalist prs_sta.snr) على المحسوب
+  int? get snr {
+    if (explicitSnr > 0) return explicitSnr;
+    if (noise != 0 && signal != 0) return (signal - noise).abs();
+    return null;  // غير متوفّر
+  }
+
+  bool get hasNoise => noise != 0;
+  bool get hasCcq => ccq != 0;
 
   double get signalQualityPercent {
     if (signal >= -40) return 100.0;
