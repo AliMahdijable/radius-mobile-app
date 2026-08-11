@@ -28,6 +28,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   String? _error;
   String? _typeFilter;
   String? _statusFilter;
+  String _search = '';
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -64,10 +66,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     if (changed == true) _load();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   List<NetworkDevice> get _filtered {
+    final q = _search.trim().toLowerCase();
     return _all.where((d) {
       if (_typeFilter != null && d.type != _typeFilter) return false;
       if (_statusFilter != null && d.lastStatus != _statusFilter) return false;
+      if (q.isNotEmpty) {
+        final haystack = '${d.name} ${d.ip} ${d.mac ?? ''} ${d.location ?? ''} ${d.model ?? ''}'.toLowerCase();
+        if (!haystack.contains(q)) return false;
+      }
       return true;
     }).toList();
   }
@@ -125,6 +138,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                   onRefresh: _load,
                   child: Column(
                     children: [
+                      _searchBar(),
                       _typeFilterRow(),
                       _statusFilterRow(),
                       const Divider(height: 1),
@@ -132,6 +146,46 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _searchBar() {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _search = v),
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
+          hintStyle: TextStyle(fontSize: 12, color: AppColors.textLow),
+          prefixIcon: Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
+          suffixIcon: _search.isEmpty ? null : IconButton(
+            icon: Icon(LucideIcons.x, size: 16, color: AppColors.textMid),
+            onPressed: () {
+              _searchCtrl.clear();
+              setState(() => _search = '');
+            },
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: AppColors.surfaceInput,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: AppColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: AppColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: AppColors.brand, width: 1.5),
+          ),
+        ),
+      ),
     );
   }
 
