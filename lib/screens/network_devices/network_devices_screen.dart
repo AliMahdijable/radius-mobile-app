@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
 import '../../models/network_device.dart';
+import '../../services/device_alerts_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import 'device_alerts_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'widgets/brand_badge.dart';
@@ -25,16 +29,36 @@ class NetworkDevicesScreen extends StatefulWidget {
 class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   List<NetworkDevice> _all = [];
   bool _loading = true;
+  bool _probing = false;
   String? _error;
   String? _typeFilter;
   String? _statusFilter;
   String _search = '';
   final _searchCtrl = TextEditingController();
 
+  /// آخر حالة معروفة لكل جهاز (لرصد transition). key = device.id
+  final Map<int, String> _lastKnownStatus = {};
+
+  Timer? _probeTimer;
+  static const _probeInterval = Duration(seconds: 60);
+
   @override
   void initState() {
     super.initState();
     _load();
+    // نطلب صلاحيّة الإشعارات مرّة واحدة (Android 13+/iOS)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeviceAlertsService.instance.requestPermission();
+    });
+    // Periodic probe كل 60s طالما الشاشة مفتوحة
+    _probeTimer = Timer.periodic(_probeInterval, (_) => _probeAll());
+  }
+
+  @override
+  void dispose() {
+    _probeTimer?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -42,10 +66,73 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     try {
       final rows = await NetworkDevicesApi.list();
       if (!mounted) return;
+      // نحفظ الحالات الحاليّة كـbaseline (بدون رصد transition — أوّل تحميل)
+      for (final d in rows) {
+        _lastKnownStatus[d.id] = d.lastStatus;
+      }
       setState(() { _all = rows; _loading = false; });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = 'فشل التحميل: $e'; _loading = false; });
+    }
+  }
+
+  /// probe كل الأجهزة بالتوازي (batch) + قارن مع الحالة السابقة + أنشئ alerts.
+  Future<void> _probeAll() async {
+    if (_probing || _all.isEmpty) return;
+    _probing = true;
+    try {
+      // parallel probes — كل جهاز مستقل
+      await Future.wait(_all.map((d) async {
+        try {
+          final r = await NetworkDevicesApi.localIcmpPing(ip: d.ip);
+          final oldStatus = _lastKnownStatus[d.id] ?? d.lastStatus;
+          final newStatus = r.status;
+
+          // رصد transition (لا نعمل alert للـfetch الأولي)
+          if (oldStatus != newStatus && oldStatus != 'unknown') {
+            await DeviceAlertsService.instance.checkTransition(
+              deviceId: d.id,
+              deviceName: d.name,
+              deviceIp: d.ip,
+              oldStatus: oldStatus,
+              newStatus: newStatus,
+            );
+          }
+          _lastKnownStatus[d.id] = newStatus;
+
+          // احفظ في backend (fire-and-forget)
+          NetworkDevicesApi.saveProbeResult(
+            deviceId: d.id,
+            status: newStatus,
+            responseMs: r.responseMs,
+          );
+
+          // حدّث الـcard محلياً
+          if (mounted) {
+            final idx = _all.indexWhere((x) => x.id == d.id);
+            if (idx >= 0) {
+              setState(() {
+                _all[idx] = NetworkDevice(
+                  id: d.id, adminId: d.adminId, regionId: d.regionId,
+                  name: d.name, type: d.type, brand: d.brand, model: d.model,
+                  ip: d.ip, port: d.port, apiPort: d.apiPort,
+                  protocol: d.protocol, mac: d.mac, location: d.location,
+                  notes: d.notes, hasCredentials: d.hasCredentials,
+                  lastProbedAt: DateTime.now(),
+                  lastStatus: newStatus,
+                  lastResponseMs: r.responseMs,
+                  createdAt: d.createdAt,
+                );
+              });
+            }
+          }
+        } catch (_) {
+          // فشل probe لجهاز واحد ما يوقف الباقي
+        }
+      }));
+    } finally {
+      _probing = false;
     }
   }
 
@@ -66,10 +153,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     if (changed == true) _load();
   }
 
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
+  void _openAlerts() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DeviceAlertsScreen()),
+    );
   }
 
   List<NetworkDevice> get _filtered {
@@ -116,6 +203,46 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
         foregroundColor: AppColors.textHi,
         elevation: 0,
         actions: [
+          // Bell icon مع badge لعدد الـalerts غير المقروءة
+          ValueListenableBuilder<int>(
+            valueListenable: DeviceAlertsService.instance.unreadCount,
+            builder: (context, count, _) {
+              return Stack(clipBehavior: Clip.none, children: [
+                IconButton(
+                  icon: Icon(
+                    count > 0 ? LucideIcons.bellDot : LucideIcons.bell,
+                    size: 18,
+                    color: count > 0 ? AppColors.error : null,
+                  ),
+                  onPressed: _openAlerts,
+                  tooltip: 'التنبيهات',
+                ),
+                if (count > 0)
+                  Positioned(
+                    right: 4, top: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.error,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.surface, width: 1),
+                      ),
+                      constraints: const BoxConstraints(
+                          minWidth: 16, minHeight: 16),
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ]);
+            },
+          ),
           IconButton(
             icon: const Icon(LucideIcons.refreshCw, size: 18),
             onPressed: _load,

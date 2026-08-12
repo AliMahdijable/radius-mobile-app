@@ -123,20 +123,9 @@ class _BrandGlyphPainter extends CustomPainter {
     ));
   }
 
-  /// Mikrotik: M عريض + شريط أحمر تحت (توقيع براندهم — دون نسخ الـwordmark).
+  /// Mikrotik: M عريض بس (المستخدم فضّل بلا شريط أحمر — أنظف).
   void _paintMikrotik(Canvas canvas, Size size) {
-    _paintLetter(canvas, size, 'M', sizeFactor: 0.60);
-    // شريط أحمر تحت الحرف
-    final barPaint = Paint()..color = const Color(0xFFED2E38);
-    final barY = size.height * 0.78;
-    final barRect = Rect.fromLTWH(
-      size.width * 0.20, barY,
-      size.width * 0.60, size.height * 0.08,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(barRect, Radius.circular(size.width * 0.04)),
-      barPaint,
-    );
+    _paintLetter(canvas, size, 'M', sizeFactor: 0.62);
   }
 
   /// UBNT: حرف U داخل حلقة رفيعة (نمط مينيمالي).

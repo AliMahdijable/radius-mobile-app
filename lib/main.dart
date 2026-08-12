@@ -12,6 +12,7 @@ import 'screens/splash_screen.dart';
 import 'api/device_probe_api.dart';
 import 'api/subscribers_api.dart';
 import 'services/app_resumed_signal.dart';
+import 'services/device_alerts_service.dart';
 import 'services/fcm_service.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
@@ -53,6 +54,9 @@ void main() async {
     BadgeService.init(),
     // Device probe — snapshot cache لقائمة المشتركين (instant load).
     DeviceProbeApi.hydrateFromPrefs(),
+    // Device alerts — client-side فقط (لا سيرفر). يحمّل الـalerts المحفوظة
+    // + يهيّئ OS notifications channel. مطلوب قبل ما شاشة الأجهزة تشتغل.
+    DeviceAlertsService.instance.init(),
     // Firebase — options baked في firebase_options.dart. Wrapped catchError
     // حتى TestFlight ما يصير white-screen لو plist مو registered.
     // 2026-08-05: أضفنا Crashlytics wiring داخل نفس الـchain — يبدأ
