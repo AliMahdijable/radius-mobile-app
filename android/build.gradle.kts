@@ -32,8 +32,17 @@ subprojects {
     // plugins.withId يشتغل فوراً لما يُطبَّق الـplugin — لا نحتاج
     // afterEvaluate (يرمي "already evaluated" لبعض الـsubprojects
     // التي انتهت مبكراً بسبب evaluationDependsOn(":app") أعلاه).
-    plugins.withId("com.android.library") { fixNamespace(); fixCompileSdk() }
-    plugins.withId("com.android.application") { fixNamespace(); fixCompileSdk() }
+    plugins.withId("com.android.library") { fixNamespace() }
+    plugins.withId("com.android.application") { fixNamespace() }
+
+    // compileSdk يُضبط داخل الـandroid {} block الي في build.gradle الـplugin
+    // نفسه — بعد plugins.withId. لهذا نستعمل afterEvaluate: يفشل لو الـsubproject
+    // انتهى evaluation مبكراً (evaluationDependsOn أعلاه)، فنُحيط بـtry/catch.
+    afterEvaluate {
+        try {
+            fixCompileSdk()
+        } catch (_: Throwable) { /* subproject may have finished earlier */ }
+    }
 }
 
 fun Project.fixNamespace() {
@@ -55,17 +64,39 @@ fun Project.fixNamespace() {
 // أُضيف في API 31 (Android 12) وموجود في androidx.core:core:1.7.0+.
 // الرسالة: "resource android:attr/lStar not found".
 // الحل: نُجبر compileSdk = 34 على كل plugin بـcompileSdk أقل من 34.
+//
+// نُشغّلها في afterEvaluate — لأن الـandroid {} block في build.gradle الـplugin
+// نفسه يضبط compileSdk بعد ما نصل هنا (لو استعملنا plugins.withId يُلغى تعديلنا).
+//
+// الـsetter في AGP الحديث (8.x+) يقبل Integer/int. reflection يحمينا من
+// اختلافات AGP API عبر الإصدارات.
 fun Project.fixCompileSdk() {
     val android = extensions.findByName("android") ?: return
+    val target = 34
     try {
-        val get = android.javaClass.getMethod("getCompileSdk")
-        val current = get.invoke(android) as Int?
-        if (current == null || current < 34) {
-            android.javaClass.getMethod("setCompileSdk", Int::class.javaPrimitiveType)
-                .invoke(android, 34)
-            println("🔧 [patched-compileSdk] ${project.name}: $current → 34")
+        val getMethod = android.javaClass.methods.firstOrNull { it.name == "getCompileSdk" }
+        val current = getMethod?.invoke(android) as? Int
+
+        if (current == null || current < target) {
+            // setCompileSdk موجود بـ overloads: int, Integer — نجرّب كليهما.
+            val setters = android.javaClass.methods.filter { it.name == "setCompileSdk" }
+            var applied = false
+            for (setter in setters) {
+                try {
+                    setter.invoke(android, target)
+                    applied = true
+                    break
+                } catch (_: Throwable) { /* try next overload */ }
+            }
+            if (applied) {
+                println("🔧 [patched-compileSdk] ${project.name}: $current → $target")
+            } else {
+                println("⚠️ [patched-compileSdk] ${project.name}: no setter matched (current=$current)")
+            }
         }
-    } catch (_: Throwable) { /* API might differ across AGP versions */ }
+    } catch (e: Throwable) {
+        println("⚠️ [patched-compileSdk] ${project.name}: ${e.javaClass.simpleName}: ${e.message}")
+    }
 }
 
 tasks.register<Delete>("clean") {
