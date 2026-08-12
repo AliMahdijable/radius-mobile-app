@@ -234,7 +234,6 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           _header(),
           if (_error != null) _errorBox(),
           if (_stats != null) ...[
-            const Divider(height: 1),
             _boardBanner(),
             _metricsRow(),
             if (_history.length >= 2) ...[

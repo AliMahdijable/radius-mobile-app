@@ -177,7 +177,6 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         child: Column(children: [
           _dragHandle(),
           _header(),
-          const Divider(height: 1),
           Expanded(
             child: Form(
               key: _formKey,

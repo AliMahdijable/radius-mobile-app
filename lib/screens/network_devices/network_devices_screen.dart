@@ -41,17 +41,19 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   final Map<int, String> _lastKnownStatus = {};
 
   Timer? _probeTimer;
-  static const _probeInterval = Duration(seconds: 60);
+  // Probe أسرع (20s بدل 60s) — المستخدم يشتكي إن التحديث بطيء.
+  // 20s = توازن بين responsiveness والـbattery/network.
+  static const _probeInterval = Duration(seconds: 20);
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _initialLoad();
     // نطلب صلاحيّة الإشعارات مرّة واحدة (Android 13+/iOS)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeviceAlertsService.instance.requestPermission();
     });
-    // Periodic probe كل 60s طالما الشاشة مفتوحة
+    // Periodic probe طالما الشاشة مفتوحة
     _probeTimer = Timer.periodic(_probeInterval, (_) => _probeAll());
   }
 
@@ -62,20 +64,36 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// أول تحميل عند فتح الشاشة: قائمة من backend + probe فوري.
+  /// الفرق عن _refresh: يظهر spinner كبير في المنتصف (الشاشة فارغة).
+  Future<void> _initialLoad() async {
     setState(() { _loading = true; _error = null; });
     try {
       final rows = await NetworkDevicesApi.list();
       if (!mounted) return;
-      // نحفظ الحالات الحاليّة كـbaseline (بدون رصد transition — أوّل تحميل)
+      // baseline (بدون رصد transition — أوّل تحميل)
       for (final d in rows) {
         _lastKnownStatus[d.id] = d.lastStatus;
       }
       setState(() { _all = rows; _loading = false; });
+      // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
+      // المستخدم يشتكي إن دخول الشاشة ما يعطي حالة محدّثة.
+      _probeAll();
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = 'فشل التحميل: $e'; _loading = false; });
     }
+  }
+
+  /// Refresh يدوي (زر أو pull-to-refresh): مباشرة probe بلا list fetch.
+  /// السبب: backend عنده الحالة القديمة، الـprobe الجديد هو مصدر الحقيقة.
+  Future<void> _refresh() async {
+    if (_all.isEmpty) {
+      // لسّه ما فيه أجهزة — اجلب القائمة أوّلاً
+      await _initialLoad();
+      return;
+    }
+    await _probeAll();
   }
 
   /// probe كل الأجهزة بالتوازي (batch) + قارن مع الحالة السابقة + أنشئ alerts.
@@ -144,14 +162,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => NetworkDeviceFormSheet(existing: existing),
     );
-    if (result != null) _load();
+    if (result != null) _initialLoad();
   }
 
   Future<void> _openDetails(NetworkDevice d) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)),
     );
-    if (changed == true) _load();
+    if (changed == true) _initialLoad();
   }
 
   void _openAlerts() {
@@ -264,11 +282,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
               ]);
             },
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.refreshCw, size: 20),
-            onPressed: _load,
-            tooltip: 'تحديث',
-          ),
+          // زر تحديث — يظهر animation دوران أثناء الـprobe
+          _probing
+              ? Container(
+                  padding: const EdgeInsets.all(10),
+                  width: 40, height: 40,
+                  child: const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : IconButton(
+                  icon: const Icon(LucideIcons.refreshCw, size: 20),
+                  onPressed: _refresh,
+                  tooltip: 'تحديث فوري',
+                ),
           // زر "+" إضافة جهاز — في الـappBar (بدل FAB الي كان يختفي وراء البيل)
           Padding(
             padding: const EdgeInsets.only(left: 4, right: 8),
@@ -292,7 +319,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
           : _error != null
               ? Center(child: Text(_error!, style: TextStyle(color: AppColors.textMid)))
               : RefreshIndicator(
-                  onRefresh: _load,
+                  onRefresh: _refresh,
                   child: CustomScrollView(
                     slivers: [
                       // Search bar (sticky-ish أعلى)
