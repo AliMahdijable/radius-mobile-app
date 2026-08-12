@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
@@ -159,6 +160,27 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     );
   }
 
+  /// اختبار تجريبي — يطلق alert فوري (بدون انتظار probe حقيقي).
+  /// يُستدعى بـlong-press على البيل. مفيد لتأكيد إن الإشعارات مسموحة والقناة تعمل.
+  Future<void> _testAlert() async {
+    HapticFeedback.mediumImpact();
+    final sample = _all.isNotEmpty ? _all.first : null;
+    await DeviceAlertsService.instance.checkTransition(
+      deviceId: sample?.id ?? 0,
+      deviceName: sample?.name ?? 'جهاز تجريبي',
+      deviceIp: sample?.ip ?? '192.168.1.1',
+      oldStatus: 'online',
+      newStatus: 'offline',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('تمّ إطلاق إشعار تجريبي — تحقّق من شريط الإشعارات'),
+      duration: const Duration(seconds: 3),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.brand,
+    ));
+  }
+
   List<NetworkDevice> get _filtered {
     final q = _search.trim().toLowerCase();
     return _all.where((d) {
@@ -203,19 +225,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
         foregroundColor: AppColors.textHi,
         elevation: 0,
         actions: [
-          // Bell icon مع badge
+          // Bell icon مع badge — long-press = اختبار إشعار تجريبي
           ValueListenableBuilder<int>(
             valueListenable: DeviceAlertsService.instance.unreadCount,
             builder: (context, count, _) {
               return Stack(clipBehavior: Clip.none, children: [
-                IconButton(
-                  icon: Icon(
-                    count > 0 ? LucideIcons.bellDot : LucideIcons.bell,
-                    size: 20,
-                    color: count > 0 ? AppColors.error : AppColors.textMid,
+                GestureDetector(
+                  onLongPress: _testAlert,
+                  child: IconButton(
+                    icon: Icon(
+                      count > 0 ? LucideIcons.bellDot : LucideIcons.bell,
+                      size: 20,
+                      color: count > 0 ? AppColors.error : AppColors.textMid,
+                    ),
+                    onPressed: _openAlerts,
+                    tooltip: 'التنبيهات (اضغط مطوّلاً للاختبار)',
                   ),
-                  onPressed: _openAlerts,
-                  tooltip: 'التنبيهات',
                 ),
                 if (count > 0)
                   Positioned(
