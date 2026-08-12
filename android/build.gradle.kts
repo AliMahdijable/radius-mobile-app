@@ -32,8 +32,8 @@ subprojects {
     // plugins.withId يشتغل فوراً لما يُطبَّق الـplugin — لا نحتاج
     // afterEvaluate (يرمي "already evaluated" لبعض الـsubprojects
     // التي انتهت مبكراً بسبب evaluationDependsOn(":app") أعلاه).
-    plugins.withId("com.android.library") { fixNamespace() }
-    plugins.withId("com.android.application") { fixNamespace() }
+    plugins.withId("com.android.library") { fixNamespace(); fixCompileSdk() }
+    plugins.withId("com.android.application") { fixNamespace(); fixCompileSdk() }
 }
 
 fun Project.fixNamespace() {
@@ -48,6 +48,24 @@ fun Project.fixNamespace() {
             println("🔧 [patched-namespace] ${project.name} → $fallback")
         }
     } catch (_: Throwable) { /* method missing on old AGP = safe skip */ }
+}
+
+// 2026-08-12: بعض plugins القديمة (flutter_app_badger_plus مثلاً) تستعمل
+// compileSdk < 31 → مما يفشل resource linking لأن android:attr/lStar
+// أُضيف في API 31 (Android 12) وموجود في androidx.core:core:1.7.0+.
+// الرسالة: "resource android:attr/lStar not found".
+// الحل: نُجبر compileSdk = 34 على كل plugin بـcompileSdk أقل من 34.
+fun Project.fixCompileSdk() {
+    val android = extensions.findByName("android") ?: return
+    try {
+        val get = android.javaClass.getMethod("getCompileSdk")
+        val current = get.invoke(android) as Int?
+        if (current == null || current < 34) {
+            android.javaClass.getMethod("setCompileSdk", Int::class.javaPrimitiveType)
+                .invoke(android, 34)
+            println("🔧 [patched-compileSdk] ${project.name}: $current → 34")
+        }
+    } catch (_: Throwable) { /* API might differ across AGP versions */ }
 }
 
 tasks.register<Delete>("clean") {
