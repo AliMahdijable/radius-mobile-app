@@ -107,21 +107,44 @@ class MikrotikApi {
       } catch (_) {}
 
       // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
-      // عبر /interface/ethernet/monitor لكل ether بشكل منفصل (أضمن).
+      // عبر /interface/ethernet/monitor. **مهم**: نستعمل query واحدة مع
+      // كل الأسماء comma-separated بدل loop تسلسلي — كان يسبّب ANR على
+      // راوترات كبيرة (CCR1016-12G = 12 interface × 200ms = 2.4s block).
+      // RouterOS يقبل =numbers=ether1,ether2,ether3... ويرجع كل الـmonitors
+      // في response واحد.
       final Map<String, Map<String, String>> ethMonitorByName = {};
-      for (final row in interfaceRows) {
-        final name = row['name'];
-        if (name == null || name.isEmpty) continue;
-        final type = row['type'] ?? '';
-        if (type != 'ether' && type != 'sfp') continue;
+      final etherNames = interfaceRows
+          .where((r) {
+            final t = r['type'] ?? '';
+            final n = r['name'] ?? '';
+            return n.isNotEmpty && (t == 'ether' || t == 'sfp');
+          })
+          .map((r) => r['name']!)
+          .toList();
+      if (etherNames.isNotEmpty) {
         try {
-          final monResult = await client.query([
-            '/interface/ethernet/monitor',
-            '=numbers=$name',
-            '=once=',
-          ]);
-          if (monResult.isNotEmpty) {
-            ethMonitorByName[name] = monResult.first;
+          // بدل loop تسلسلي، نستعمل Future.wait مع chunks صغيرة
+          // (RouterOS binary API عنده حدود على packet size).
+          // chunks بحجم 4 = compromise بين parallelism و request size.
+          const chunkSize = 4;
+          for (int i = 0; i < etherNames.length; i += chunkSize) {
+            final chunk = etherNames.sublist(
+                i, (i + chunkSize).clamp(0, etherNames.length));
+            final results = await Future.wait(chunk.map((name) async {
+              try {
+                final r = await client.query([
+                  '/interface/ethernet/monitor',
+                  '=numbers=$name',
+                  '=once=',
+                ]);
+                return MapEntry(name, r.isNotEmpty ? r.first : <String, String>{});
+              } catch (_) {
+                return MapEntry(name, <String, String>{});
+              }
+            }));
+            for (final e in results) {
+              if (e.value.isNotEmpty) ethMonitorByName[e.key] = e.value;
+            }
           }
         } catch (_) {}
       }
