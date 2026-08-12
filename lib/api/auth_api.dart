@@ -99,21 +99,52 @@ class AuthApi {
       final isSuperAdmin = user['isSuperAdmin'] == true ||
           user['is_super_admin'] == true ||
           (user['role']?.toString() == 'super_admin');
-      // canAccessManagers / canAccessPackages derived from the raw
-      // permissions array (same pattern as v1 mobile-app/lib/providers/
-      // auth_provider.dart:141-143). Super-admins get both implicitly.
-      final perms = (user['permissions'] ?? body['permissions']) as List?;
-      final permSet = perms?.map((e) => e.toString()).toSet() ?? const <String>{};
-      final canAccessManagers = isSuperAdmin ||
-          permSet.contains('prm_managers_create');
-      final canAccessPackages = isSuperAdmin ||
-          permSet.contains('prm_profiles_create');
+      // canAccessManagers / canAccessPackages — مصدرها مختلف حسب نوع
+      // المستخدم:
+      //  • أدمن عادي: user.permissions = List من رموز SAS4 مثل
+      //    'prm_managers_create' / 'prm_profiles_create' (v1 pattern)
+      //  • موظف: user.employee.permissions = Map من مفاتيحنا الداخليّة
+      //    مثل {'subscribers.add': true, 'packages.view': true, ...}
+      //    الرموز SAS4 لا تصل للموظف — كنّا نحسبها = false دائماً وهذا
+      //    يمنع _canEditExpiration من الظهور ويكسر flow التفعيل عند الإضافة.
+      //
+      // super-admin دائماً true (fast path).
+      final isEmployee = user['role']?.toString() == 'employee';
+      bool canAccessManagers;
+      bool canAccessPackages;
+      if (isSuperAdmin) {
+        canAccessManagers = true;
+        canAccessPackages = true;
+      } else if (isEmployee) {
+        // employee: نقرأ Map من user.employee.permissions
+        final empBlock = user['employee'];
+        final Map<String, dynamic> empPerms = (empBlock is Map)
+            ? Map<String, dynamic>.from(
+                empBlock['permissions'] as Map? ?? const {})
+            : const {};
+        bool has(String k) => empPerms[k] == true;
+        // الموظف لا يقدر يُنشئ مدير فرعي بشكل طبيعي — parent picker يبقى مخفي.
+        // نُبقيها strict على managers.add عشان ما نظهر UI ما يقدر يستعمله.
+        canAccessManagers = has('managers.add');
+        // packages access = عرض الباقات + أي صلاحيّة تحتاج ضبط expiration
+        // (add/edit/activate/extend) — عشان يظهر حقل التاريخ عند الحاجة.
+        canAccessPackages = has('packages.view') ||
+            has('subscribers.add') ||
+            has('subscribers.edit') ||
+            has('subscribers.activate') ||
+            has('subscribers.extend');
+      } else {
+        // admin عادي: List من رموز SAS4 (المسار الأصلي — بلا تغيير)
+        final perms = (user['permissions'] ?? body['permissions']) as List?;
+        final permSet = perms?.map((e) => e.toString()).toSet() ?? const <String>{};
+        canAccessManagers = permSet.contains('prm_managers_create');
+        canAccessPackages = permSet.contains('prm_profiles_create');
+      }
       // مطلب 2026-06-11: لو الدخول كموظف، نعرض اسم الموظف لا اسم
       // المدير الأب في الـgreeting. الـbackend يميّز هذي الحالة بحقل
       // user.role='employee' + user.employee.{full_name, username}.
       // الـdisplay name ياخذ الأولوية للموظف؛ فاضي = نسقط للـusername
       // العادي وفي النهاية 'مستخدم'.
-      final isEmployee = user['role']?.toString() == 'employee';
       final empBlock = user['employee'];
       String displayName;
       if (isEmployee && empBlock is Map) {
