@@ -59,7 +59,20 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   Future<void> _startMonitoring() async {
     setState(() => _monitoring = true);
+    // fetch أوّل — baseline (bytes counters بلا rates)
     await _fetch();
+    // Fast bootstrap: fetch سريع بعد 2s ثمّ آخر بعد 5s — يعطي:
+    //   t=0:  baseline
+    //   t=2:  أوّل rate → history 1 sample
+    //   t=5:  ثاني rate → history 2 samples → **الرسم البياني يظهر**
+    //   t=15: عادي (تلقائياً من _timer)
+    // بدون هذا: الرسم ينتظر 15s + 15s = 30s قبل ما يبان.
+    Timer(const Duration(seconds: 2), () {
+      if (mounted && _monitoring) _fetch();
+    });
+    Timer(const Duration(seconds: 5), () {
+      if (mounted && _monitoring) _fetch();
+    });
     _timer?.cancel();
     _timer = Timer.periodic(_refreshInterval, (_) => _fetch());
   }
