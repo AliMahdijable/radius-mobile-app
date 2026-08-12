@@ -324,7 +324,8 @@ class MikrotikWireless {
 class MikrotikWirelessClient {
   final String mac;
   final String iface;             // wlan1, wlan2 — أي wireless انضمّ عليه
-  final int signalStrength;       // dBm
+  final int signalStrength;       // dBm — RX (كيف نستقبل من العميل)
+  final int txSignalStrength;     // dBm — TX (كيف العميل يستقبل منّا). 0 = غير متوفّر
   final int signalToNoise;        // dB (SNR)
   final int txCcq;                // Client Connection Quality % (0-100)
   final int rxCcq;                // %
@@ -339,6 +340,7 @@ class MikrotikWirelessClient {
     required this.mac,
     required this.iface,
     required this.signalStrength,
+    this.txSignalStrength = 0,
     required this.signalToNoise,
     required this.txCcq,
     required this.rxCcq,
@@ -353,6 +355,13 @@ class MikrotikWirelessClient {
   /// أفضل اسم لعرض العميل: hostname (DHCP) > comment (registration) > MAC
   String get displayName => hostname ?? comment ?? mac;
 
+  /// عرض الإشارة كما WinBox: "TX/RX" مثل "-36/-51". لو txSignal غير متوفّر
+  /// نعرض الـRX فقط.
+  String get signalDisplay {
+    if (txSignalStrength != 0) return '$txSignalStrength/$signalStrength';
+    return '$signalStrength';
+  }
+
   factory MikrotikWirelessClient.fromApiMap(
     Map<String, String> j, {
     String? hostname,
@@ -364,7 +373,11 @@ class MikrotikWirelessClient {
     return MikrotikWirelessClient(
       mac: j['mac-address'] ?? '',
       iface: j['interface'] ?? '',
+      // RX = signal-strength (نستقبل من العميل)
       signalStrength: _parseSignal(j['signal-strength'] ?? j['signal']),
+      // TX = tx-signal-strength (العميل يستقبل منّا) — يظهر في WinBox
+      // كنصف "Tx/Rx Signal Strength" الأيسر
+      txSignalStrength: _parseSignal(j['tx-signal-strength']),
       signalToNoise: _iOrZero(j['signal-to-noise']),
       txCcq: _iOrZero(j['tx-ccq']),
       rxCcq: _iOrZero(j['rx-ccq']),

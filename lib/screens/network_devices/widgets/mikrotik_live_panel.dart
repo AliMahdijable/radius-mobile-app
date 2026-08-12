@@ -1130,7 +1130,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         // Signal + CCQ + rates
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('${c.signalStrength}',
+            Text(c.signalDisplay,
                 textDirection: TextDirection.ltr,
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
                     color: signalColor, fontFamily: 'monospace')),

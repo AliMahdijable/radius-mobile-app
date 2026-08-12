@@ -863,6 +863,14 @@ class UbntStats {
 
         // إشارة: airFiber → prs_sta.rssi_data | airMax → s.signal
         final signal = _n(prs?['rssi_data'] ?? s['signal'] ?? s['rssi']);
+        // TX signal (كيف العميل يستقبل منّا) — أسماء متعدّدة حسب الإصدار:
+        //   airOS 5/6:  s['remote_signal'] أو s['ap_signal']
+        //   airOS 7+:   s['tx']['signal'] أو s['tx_signal']
+        //   airFiber:   prs_sta.dl_signal_expect (متوقّع، أقرب مؤشّر)
+        int txSig = _n(s['remote_signal'] ?? s['ap_signal'] ?? s['tx_signal']);
+        if (txSig == 0 && s['tx'] is Map) {
+          txSig = _n((s['tx'] as Map)['signal']);
+        }
         // معدّلات: airFiber → prs_sta.capacity Kbps → Mbps
         final dlCap = prs?['dl_capacity'] != null ? _n(prs!['dl_capacity']) : null;
         final ulCap = prs?['ul_capacity'] != null ? _n(prs!['ul_capacity']) : null;
@@ -893,6 +901,7 @@ class UbntStats {
           ip: _strOrNull(s['lastip']) ?? _strOrNull(remote['ip']),
           hostname: _strOrNull(s['name']) ?? _strOrNull(remote['hostname']),
           signal: signal,
+          txSignal: txSig,
           noise: _n(s['noisefloor']),
           ccq: ccqValue,
           txRate: txRateMbps,
@@ -1080,7 +1089,8 @@ class UbntStation {
   final String mac;
   final String? ip;
   final String? hostname;
-  final int signal;
+  final int signal;             // RX: كيف الـAP يستقبل من هذا العميل
+  final int txSignal;           // TX: كيف العميل يستقبل منّا. 0 = غير متوفّر
   final int noise;
   final int ccq;
   final int txRate;
@@ -1107,6 +1117,7 @@ class UbntStation {
     this.ip,
     this.hostname,
     required this.signal,
+    this.txSignal = 0,
     required this.noise,
     required this.ccq,
     required this.txRate,
@@ -1127,6 +1138,13 @@ class UbntStation {
     this.rxSector,
     this.isLinked60 = false,
   });
+
+  /// عرض الإشارة كما WinBox: "TX/RX" مثل "-36/-51". لو txSignal غير متوفّر
+  /// نعرض الـRX فقط.
+  String get signalDisplay {
+    if (txSignal != 0) return '$txSignal/$signal';
+    return '$signal';
+  }
 
   /// SNR — يُفضّل explicit من prs_sta على المحسوب
   int? get snr {

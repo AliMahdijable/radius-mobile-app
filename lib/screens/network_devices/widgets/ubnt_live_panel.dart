@@ -740,7 +740,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('${s.signal} dBm',
+            Text('${s.signalDisplay} dBm',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
                     color: signalColor, fontFamily: 'monospace')),
