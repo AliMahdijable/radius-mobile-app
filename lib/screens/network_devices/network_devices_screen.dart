@@ -71,13 +71,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     try {
       final rows = await NetworkDevicesApi.list();
       if (!mounted) return;
-      // baseline (بدون رصد transition — أوّل تحميل)
-      for (final d in rows) {
-        _lastKnownStatus[d.id] = d.lastStatus;
-      }
+      // **مهم**: نعمل reset لـ _lastKnownStatus بلا القيم القديمة من backend.
+      // السبب: backend يحمل last_status من ساعات مضت (cache). لو استعملناه
+      // كـbaseline، أوّل probe يعطي transitions وهميّة (لو المدير قفل
+      // التطبيق ورجع بعد وقت طويل، سيرى spam إشعارات لأشياء قديمة).
+      // نمرّرها 'unknown' → checkTransition يتخطّاها → baseline نظيف.
+      _lastKnownStatus.clear();
       setState(() { _all = rows; _loading = false; });
       // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
-      // المستخدم يشتكي إن دخول الشاشة ما يعطي حالة محدّثة.
       _probeAll();
     } catch (e) {
       if (!mounted) return;
@@ -97,37 +98,35 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   }
 
   /// probe كل الأجهزة بالتوازي (batch) + قارن مع الحالة السابقة + أنشئ alerts.
+  ///
+  /// **مهم**: نجمع كل الـtransitions أوّلاً، ثمّ نقرّر جماعياً هل نُطلق
+  /// alerts أم نتخطّاها. السبب: لو المدير خرج من شبكة الـWiFi (رجع لسيلولار
+  /// مثلاً)، **كل** الأجهزة رح تفشل في نفس الجولة — هذا مو "أعطال أجهزة"
+  /// بل تغيير شبكة عند الهاتف. نتخطّى الـalerts في هذي الحالة.
   Future<void> _probeAll() async {
     if (_probing || _all.isEmpty) return;
     _probing = true;
     try {
-      // parallel probes — كل جهاز مستقل
+      // اجمع الـtransitions المُحتملة (بلا إطلاق alerts في الحلقة)
+      final pendingTransitions = <_PendingTransition>[];
+
       await Future.wait(_all.map((d) async {
         try {
           final r = await NetworkDevicesApi.localIcmpPing(ip: d.ip);
-          final oldStatus = _lastKnownStatus[d.id] ?? d.lastStatus;
+          final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
           final newStatus = r.status;
 
-          // رصد transition (لا نعمل alert للـfetch الأولي)
           if (oldStatus != newStatus && oldStatus != 'unknown') {
-            await DeviceAlertsService.instance.checkTransition(
-              deviceId: d.id,
-              deviceName: d.name,
-              deviceIp: d.ip,
-              oldStatus: oldStatus,
-              newStatus: newStatus,
-            );
+            pendingTransitions.add(_PendingTransition(
+              device: d, oldStatus: oldStatus, newStatus: newStatus,
+            ));
           }
           _lastKnownStatus[d.id] = newStatus;
 
-          // احفظ في backend (fire-and-forget)
           NetworkDevicesApi.saveProbeResult(
-            deviceId: d.id,
-            status: newStatus,
-            responseMs: r.responseMs,
+            deviceId: d.id, status: newStatus, responseMs: r.responseMs,
           );
 
-          // حدّث الـcard محلياً
           if (mounted) {
             final idx = _all.indexWhere((x) => x.id == d.id);
             if (idx >= 0) {
@@ -150,6 +149,37 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
           // فشل probe لجهاز واحد ما يوقف الباقي
         }
       }));
+
+      // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
+      // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
+      // - "عودة للشبكة": ≥70% من الأجهزة رجعت online في جولة واحدة → suppress
+      final totalDevices = _all.length;
+      final offlineTransitions = pendingTransitions
+          .where((t) => t.newStatus == 'offline').length;
+      final onlineTransitions = pendingTransitions
+          .where((t) => t.newStatus == 'online').length;
+      final threshold = (totalDevices * 0.7).ceil();
+
+      final phoneLeftNetwork = offlineTransitions >= threshold &&
+          offlineTransitions > 1;
+      final phoneRejoinedNetwork = onlineTransitions >= threshold &&
+          onlineTransitions > 1;
+
+      if (phoneLeftNetwork || phoneRejoinedNetwork) {
+        // suppress — تغيير شبكة عند الهاتف، مو أعطال حقيقيّة
+        return;
+      }
+
+      // أطلق alerts للـtransitions المتبقّية
+      for (final t in pendingTransitions) {
+        await DeviceAlertsService.instance.checkTransition(
+          deviceId: t.device.id,
+          deviceName: t.device.name,
+          deviceIp: t.device.ip,
+          oldStatus: t.oldStatus,
+          newStatus: t.newStatus,
+        );
+      }
     } finally {
       _probing = false;
     }
@@ -734,6 +764,18 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
       ),
     );
   }
+}
+
+/// Transition مؤقّت داخل probe round — قبل قرار suppress/fire.
+class _PendingTransition {
+  final NetworkDevice device;
+  final String oldStatus;
+  final String newStatus;
+  _PendingTransition({
+    required this.device,
+    required this.oldStatus,
+    required this.newStatus,
+  });
 }
 
 /// Empty state — يظهر لو ما في أجهزة أصلاً أو ما في نتائج للفلتر.

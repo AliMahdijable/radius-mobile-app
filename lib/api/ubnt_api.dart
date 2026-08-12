@@ -896,10 +896,24 @@ class UbntStats {
         if (ccqValue > 100 && ccqValue <= 1000) ccqValue = (ccqValue / 10).round();
         if (ccqValue > 100) ccqValue = 100;
 
+        // Hostname resolution — تعقيدات firmware:
+        //   - airFiber 60 PtP (station واحد): s['name'] = اسم الـpeer الحقيقي ("pola")
+        //   - airMax AC PtMP (stations متعدّدة): s['name'] = ESSID للـAP نفسه!
+        //     (كل الـclients يشتركون بنفس القيمة — مضلّل)
+        // الحل: نُفضّل s['hostname'] (DHCP hostname الحقيقي).
+        //   ثمّ remote.hostname / device_name.
+        //   ثمّ s['name'] فقط لو الجهاز single-station (airFiber).
+        //   وإلا نتركه null → الـUI يعرض MAC.
+        final isSingleStation = wstalistStations.length == 1;
+        final hostRaw = _strOrNull(s['hostname'])
+            ?? _strOrNull(remote['hostname'])
+            ?? _strOrNull(remote['device_name'])
+            ?? (isSingleStation ? _strOrNull(s['name']) : null);
+
         stations.add(UbntStation(
           mac: (s['mac'] ?? '').toString(),
           ip: _strOrNull(s['lastip']) ?? _strOrNull(remote['ip']),
-          hostname: _strOrNull(s['name']) ?? _strOrNull(remote['hostname']),
+          hostname: hostRaw,
           signal: signal,
           txSignal: txSig,
           noise: _n(s['noisefloor']),
