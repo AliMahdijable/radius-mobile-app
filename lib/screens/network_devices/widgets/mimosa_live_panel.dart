@@ -67,6 +67,11 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       // في نسخ قديمة كان يحفظ في مفتاح مختلف.
       final community = (creds['community'] ?? creds['pass'] ?? '')
           .toString().trim();
+      // diagnostic — بدون كشف قيمة كاملة (بس أوّل حرف + طول) للتأكّد
+      // من التطابق مع الجهاز
+      // ignore: avoid_print
+      print('🔵 Mimosa creds: community="$community" '
+          '(keys: ${creds.keys.toList()}) port=${widget.device.apiPort ?? 161}');
       if (community.isEmpty) {
         throw MimosaException(
             'لم يتم إعداد SNMP community string. '
