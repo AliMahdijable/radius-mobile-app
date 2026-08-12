@@ -36,12 +36,16 @@ subprojects {
     plugins.withId("com.android.application") { fixNamespace() }
 
     // compileSdk يُضبط داخل الـandroid {} block الي في build.gradle الـplugin
-    // نفسه — بعد plugins.withId. لهذا نستعمل afterEvaluate: يفشل لو الـsubproject
-    // انتهى evaluation مبكراً (evaluationDependsOn أعلاه)، فنُحيط بـtry/catch.
-    afterEvaluate {
-        try {
-            fixCompileSdk()
-        } catch (_: Throwable) { /* subproject may have finished earlier */ }
+    // نفسه — بعد plugins.withId. لهذا نستعمل afterEvaluate.
+    //
+    // مشكلة: evaluationDependsOn(":app") أعلاه يُنهي evaluation لبعض
+    // الـsubprojects مبكراً — وقت وصولنا هنا state.executed = true،
+    // وإضافة afterEvaluate يرمي "already evaluated". الحل: نفحص state
+    // ونشغّل مباشرة لو انتهى، وإلا نسجّل callback.
+    if (state.executed) {
+        fixCompileSdk()
+    } else {
+        afterEvaluate { fixCompileSdk() }
     }
 }
 
