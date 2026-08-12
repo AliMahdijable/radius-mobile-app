@@ -119,7 +119,8 @@ class NetworkDeviceLabels {
 
   /// المنفذ المناسب حسب الـbrand + protocol.
   /// Mikrotik API = 8728 binary. UBNT API = 22 SSH (mca-status، أوثق من HTTP).
-  /// Mimosa API = 443 HTTPS.
+  /// Mimosa: SSH مقفول في firmware → SNMP فقط (161). لو المستخدم اختار 'api'
+  /// نعطي 443 (REST XML) لكن نُحذّر في UI أنه SNMP أفضل.
   static int portForBrandProtocol(String brand, String? protocol) {
     if (protocol == null) return 80;
     if (protocol == 'api') {
@@ -130,6 +131,7 @@ class NetworkDeviceLabels {
         _ => 80,
       };
     }
+    if (protocol == 'snmp') return 161;
     return protocolPorts[protocol] ?? 80;
   }
 

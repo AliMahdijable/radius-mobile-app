@@ -14,6 +14,7 @@ import 'network_device_form_sheet.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/airfiber60_live_panel.dart';
 import 'widgets/mikrotik_live_panel.dart';
+import 'widgets/mimosa_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
@@ -222,6 +223,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   : UbntLivePanel(device: _d)
             else
               _ubntHint(),
+          ] else if (_d.brand == 'mimosa') ...[
+            const SizedBox(height: Sp.md),
+            if (_d.protocol == 'snmp' && _d.hasCredentials)
+              MimosaLivePanel(device: _d)
+            else
+              _mimosaHint(),
           ],
           // معلومات الجهاز + protocol انتقلا للـhero card (2026-08-12)
           if (_d.notes != null && _d.notes!.isNotEmpty) ...[
@@ -949,6 +956,54 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
           icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
           onPressed: _edit,
           tooltip: 'تعديل',
+        ),
+      ]),
+    );
+  }
+}
+
+extension _MimosaHint on _NetworkDeviceDetailsScreenState {
+  Widget _mimosaHint() {
+    final needsSnmp = _d.protocol != 'snmp';
+    final needsCreds = _d.protocol == 'snmp' && !_d.hasCredentials;
+    final msg = needsSnmp
+        ? 'اختر بروتوكول SNMP + أدخل الـcommunity string (في حقل كلمة المرور) لعرض signal + throughput + margin.\n'
+          'Mimosa يعطّل SSH/Telnet بشكل نهائي — SNMP هو الخيار الوحيد.'
+        : (needsCreds ? 'أدخل SNMP community string (default: public). '
+          'فعّل SNMP من web UI للجهاز: Preferences → Management → SNMP.' : '');
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEA580C).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEA580C).withValues(alpha: 0.25)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEA580C).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Center(
+            child: Text('M',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
+                    color: Color(0xFFEA580C))),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('مراقبة Mimosa عبر SNMP',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+          ]),
+        ),
+        IconButton(
+          icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
+          onPressed: _edit,
         ),
       ]),
     );
