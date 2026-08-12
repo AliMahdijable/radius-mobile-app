@@ -1,27 +1,23 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-/// Brand badge — أيقونة أصليّة مرسومة يدوياً لكل brand.
+/// Brand badge — تصميم قريب من هويّة كل براند بدون نسخ اللوقو الفعلي.
 ///
-/// **لماذا رسم يدوي وليس logos الشركات؟**
-/// استعمال شعارات الشركات (Mikrotik/UBNT/Cisco…) يعرّض التطبيق للرفض
-/// من App Store/Play Store بسبب انتهاك trademark. الحل: أشكال هندسيّة
-/// أصليّة تُوحي بالبراند بدون نسخ الشعار الفعلي.
+/// **الآمن قانونياً**:
+/// - الحرف الواحد (M/U/R) ليس trademark
+/// - الألوان بحدّ ذاتها ليست trademark
+/// - الأشكال الهندسيّة العامّة (شرائط، دوائر) generic
 ///
-/// **التصميم** — كل brand له:
-/// - لون توقيعي (color) — الألوان بحدّ ذاتها ليست trademark
-/// - شكل هندسي مميّز (custom painter) — 100% أصلي
-/// - gradient خفيف للعمق
+/// **الخطر**: نسخ الـwordmark الكامل ("MIKROTIK"/"UBIQUITI") أو استعمال
+/// نفس الـfont الرسمي أو نفس التركيب الدقيق. نتجنّب كل هذا.
 ///
-/// **الأشكال**:
-/// - Mikrotik: قمّتان مثلّثتان (توحي بالحرف M وبراج البثّ)
-/// - UBNT:     أقواس متحدة المركز (موجات wifi)
-/// - Mimosa:   زهرة سداسيّة (mimosa = زهرة النبات)
-/// - Cisco:    3 أعمدة رأسيّة متدرّجة (توحي بجسر الشبكة)
-/// - Roji:     دائرة مع نقطة مركزيّة (نمط بسيط)
-/// - Other:    شبكة نقاط (generic device)
+/// **الاستراتيجيّة لكل براند**:
+/// - Mikrotik  → حرف M عريض + شريط أحمر (يوحي بالبراند بدون نسخ الـwordmark)
+/// - Ubiquiti  → حرف U عريض داخل حلقة (نمط مينيمالي مثل هويّتهم)
+/// - Mimosa    → حرف M مع نقطة (mimosa = زهرة، نقطة توحي بذلك)
+/// - Cisco     → أعمدة رأسيّة متدرّجة (توحي بجسر الشبكة)
+/// - Roji      → حرف R نظيف
+/// - Other     → 3 نقاط generic
 class BrandBadge extends StatelessWidget {
   final String brand;
   final double size;
@@ -33,12 +29,12 @@ class BrandBadge extends StatelessWidget {
   });
 
   static const _brands = {
-    'mikrotik': (color: Color(0xFF293251), accent: Color(0xFFED2E38)),
-    'ubnt':     (color: Color(0xFF0559C9), accent: Color(0xFF00A2E1)),
-    'mimosa':   (color: Color(0xFFEA580C), accent: Color(0xFFFB923C)),
+    'mikrotik': (color: Color(0xFF293251), accent: Color(0xFF3D4A73)),
+    'ubnt':     (color: Color(0xFF0559C9), accent: Color(0xFF0074E8)),
+    'mimosa':   (color: Color(0xFFEA580C), accent: Color(0xFFF97316)),
     'cisco':    (color: Color(0xFF049FD9), accent: Color(0xFF00BCEB)),
     'roji':     (color: Color(0xFF1F7A3D), accent: Color(0xFF34C759)),
-    'other':    (color: Color(0xFF6B7280), accent: Color(0xFF9CA3AF)),
+    'other':    (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
   };
 
   @override
@@ -52,10 +48,10 @@ class BrandBadge extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [info.color, info.accent],
         ),
-        borderRadius: BorderRadius.circular(size * 0.24),
+        borderRadius: BorderRadius.circular(size * 0.22),
         boxShadow: [
           BoxShadow(
-            color: info.color.withValues(alpha: 0.25),
+            color: info.color.withValues(alpha: 0.28),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -73,146 +69,134 @@ class BrandBadge extends StatelessWidget {
   }
 }
 
-/// يرسم الشكل الهندسي المميّز لكل brand داخل حدود الـContainer.
+// ═══════════════════════════════════════════════════════════
+// Custom painters — رسم بحروف + عناصر تصميم لكل براند
+// ═══════════════════════════════════════════════════════════
+
 class _BrandGlyphPainter extends CustomPainter {
   final String brand;
   const _BrandGlyphPainter({required this.brand});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final white = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.09
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    final whiteFill = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
     switch (brand) {
       case 'mikrotik':
-        _paintMikrotik(canvas, size, white);
+        _paintMikrotik(canvas, size);
         break;
       case 'ubnt':
-        _paintUbnt(canvas, size, white);
+        _paintUbnt(canvas, size);
         break;
       case 'mimosa':
-        _paintMimosa(canvas, size, whiteFill);
+        _paintMimosa(canvas, size);
         break;
       case 'cisco':
-        _paintCisco(canvas, size, white);
+        _paintCisco(canvas, size);
         break;
       case 'roji':
-        _paintRoji(canvas, size, white, whiteFill);
+        _paintLetter(canvas, size, 'R');
         break;
       default:
-        _paintOther(canvas, size, whiteFill);
+        _paintOther(canvas, size);
     }
   }
 
-  /// Mikrotik: قمّتان مثلّثتان — توحي بالحرف M وبراج البثّ.
-  /// شكل هندسي أصلي، لا يشبه اللوقو الفعلي.
-  void _paintMikrotik(Canvas canvas, Size size, Paint p) {
-    final w = size.width;
-    final h = size.height;
-    final path = Path()
-      ..moveTo(w * 0.20, h * 0.75)
-      ..lineTo(w * 0.35, h * 0.30)
-      ..lineTo(w * 0.50, h * 0.55)
-      ..lineTo(w * 0.65, h * 0.30)
-      ..lineTo(w * 0.80, h * 0.75);
-    canvas.drawPath(path, p);
-    // dot صغير فوق للتأكيد على "قمّة"
-    final dotPaint = Paint()..color = Colors.white..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(w * 0.35, h * 0.22), w * 0.05, dotPaint);
-    canvas.drawCircle(Offset(w * 0.65, h * 0.22), w * 0.05, dotPaint);
+  /// كتابة حرف مركزي (helper مشترك)
+  void _paintLetter(Canvas canvas, Size size, String letter,
+      {Color color = Colors.white, double sizeFactor = 0.55}) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: letter,
+        style: TextStyle(
+          color: color,
+          fontSize: size.width * sizeFactor,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -1,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    )..layout();
+    tp.paint(canvas, Offset(
+      (size.width - tp.width) / 2,
+      (size.height - tp.height) / 2,
+    ));
   }
 
-  /// UBNT: 3 أقواس متّحدة المركز (موجات wifi) — يوحي بالبثّ اللاسلكي.
-  void _paintUbnt(Canvas canvas, Size size, Paint p) {
-    final w = size.width;
-    final h = size.height;
-    final center = Offset(w * 0.5, h * 0.72);
-    final radii = [w * 0.16, w * 0.28, w * 0.40];
-    for (final r in radii) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: r),
-        math.pi + math.pi * 0.15,     // start slightly before top
-        math.pi - math.pi * 0.30,     // sweep about 150 degrees
-        false, p,
-      );
-    }
-    // dot عند القاعدة
-    final dot = Paint()..color = Colors.white..style = PaintingStyle.fill;
-    canvas.drawCircle(center, w * 0.05, dot);
+  /// Mikrotik: M عريض + شريط أحمر تحت (توقيع براندهم — دون نسخ الـwordmark).
+  void _paintMikrotik(Canvas canvas, Size size) {
+    _paintLetter(canvas, size, 'M', sizeFactor: 0.60);
+    // شريط أحمر تحت الحرف
+    final barPaint = Paint()..color = const Color(0xFFED2E38);
+    final barY = size.height * 0.78;
+    final barRect = Rect.fromLTWH(
+      size.width * 0.20, barY,
+      size.width * 0.60, size.height * 0.08,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(barRect, Radius.circular(size.width * 0.04)),
+      barPaint,
+    );
   }
 
-  /// Mimosa: زهرة سداسيّة — mimosa هو اسم نبات، هذا الشكل يذكّر بالزهرة.
-  void _paintMimosa(Canvas canvas, Size size, Paint fill) {
+  /// UBNT: حرف U داخل حلقة رفيعة (نمط مينيمالي).
+  void _paintUbnt(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final center = Offset(w * 0.5, h * 0.5);
-    final petalRadius = w * 0.18;
-    final orbitRadius = w * 0.22;
-    // 6 بتلات دائريّة
-    for (int i = 0; i < 6; i++) {
-      final angle = (math.pi * 2 * i / 6) - math.pi / 2;
-      final pos = Offset(
-        center.dx + math.cos(angle) * orbitRadius,
-        center.dy + math.sin(angle) * orbitRadius,
-      );
-      canvas.drawCircle(pos, petalRadius, fill);
-    }
-    // مركز أغمق قليلاً للتباين
-    final centerPaint = Paint()..color = const Color(0xFFEA580C);
-    canvas.drawCircle(center, w * 0.13, centerPaint);
+    final ring = Paint()
+      ..color = Colors.white.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.05;
+    canvas.drawCircle(Offset(w / 2, h / 2), w * 0.38, ring);
+    _paintLetter(canvas, size, 'U', sizeFactor: 0.52);
   }
 
-  /// Cisco: 4 أعمدة رأسيّة متدرّجة (توحي بمعمار جسر — بدون نسخ).
-  void _paintCisco(Canvas canvas, Size size, Paint p) {
+  /// Mimosa: حرف M + نقطة (mimosa = زهرة، النقطة تُلمّح بذلك).
+  void _paintMimosa(Canvas canvas, Size size) {
+    _paintLetter(canvas, size, 'M', sizeFactor: 0.55);
+    // نقطة صغيرة أعلى-يمين للتمييز
+    final dot = Paint()..color = Colors.white;
+    canvas.drawCircle(
+      Offset(size.width * 0.78, size.height * 0.24),
+      size.width * 0.07,
+      dot,
+    );
+  }
+
+  /// Cisco: 5 أعمدة رأسيّة متدرّجة (توحي بجسر — بدون نسخ اللوقو الأصلي).
+  void _paintCisco(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final baseY = h * 0.80;
-    final barWidth = w * 0.06;
-    final gap = w * 0.06;
-    final startX = w * 0.5 - (barWidth * 4 + gap * 3) / 2;
-    // ارتفاعات متدرّجة (ملحوظة تصميميّة: تبدأ منخفضة → عالية → منخفضة)
-    final heights = [h * 0.35, h * 0.55, h * 0.55, h * 0.35];
-    for (int i = 0; i < 4; i++) {
+    final baseY = h * 0.78;
+    final barWidth = w * 0.08;
+    final gap = w * 0.05;
+    final startX = w * 0.5 - (barWidth * 5 + gap * 4) / 2;
+    // أعمدة بارتفاع متدرّج: قصير-متوسّط-عالي-متوسّط-قصير (bell curve بسيط)
+    final heights = <double>[
+      h * 0.28, h * 0.42, h * 0.52, h * 0.42, h * 0.28,
+    ];
+    final paint = Paint()..color = Colors.white;
+    for (int i = 0; i < 5; i++) {
       final x = startX + i * (barWidth + gap);
       final rect = Rect.fromLTRB(x, baseY - heights[i], x + barWidth, baseY);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, Radius.circular(barWidth * 0.4)),
-        Paint()..color = Colors.white,
+        RRect.fromRectAndRadius(rect, Radius.circular(barWidth * 0.3)),
+        paint,
       );
     }
   }
 
-  /// Roji: دائرة كبيرة بحدود + نقطة مركزيّة (نمط بسيط لبراند صغير).
-  void _paintRoji(Canvas canvas, Size size, Paint stroke, Paint fill) {
+  /// Other: 3 نقاط أفقيّة generic device.
+  void _paintOther(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final center = Offset(w * 0.5, h * 0.5);
-    canvas.drawCircle(center, w * 0.32, stroke);
-    canvas.drawCircle(center, w * 0.10, fill);
-  }
-
-  /// Other: 3x3 شبكة نقاط — generic device grid.
-  void _paintOther(Canvas canvas, Size size, Paint fill) {
-    final w = size.width;
-    final h = size.height;
-    final startX = w * 0.28;
-    final startY = h * 0.28;
-    final step = w * 0.22;
-    final radius = w * 0.055;
+    final paint = Paint()..color = Colors.white;
     for (int i = 0; i < 3; i++) {
-      for (int j = 0; j < 3; j++) {
-        canvas.drawCircle(
-          Offset(startX + j * step, startY + i * step),
-          radius, fill,
-        );
-      }
+      canvas.drawCircle(
+        Offset(w * (0.30 + i * 0.20), h * 0.50),
+        w * 0.06,
+        paint,
+      );
     }
   }
 
@@ -220,8 +204,10 @@ class _BrandGlyphPainter extends CustomPainter {
   bool shouldRepaint(covariant _BrandGlyphPainter old) => old.brand != brand;
 }
 
-/// Type icon — أيقونة صغيرة تدلّ على نوع الجهاز (router/switch/link/sector/ap)
-/// تُعرض إلى جانب brand badge أو داخله.
+// ═══════════════════════════════════════════════════════════
+// Type icon (لم يتغيّر)
+// ═══════════════════════════════════════════════════════════
+
 class TypeIcon extends StatelessWidget {
   final String type;
   final double size;
@@ -251,3 +237,4 @@ class TypeIcon extends StatelessWidget {
     return Icon(iconFor(type), size: size, color: color);
   }
 }
+
