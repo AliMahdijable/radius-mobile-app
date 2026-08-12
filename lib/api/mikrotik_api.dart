@@ -106,12 +106,14 @@ class MikrotikApi {
         }
       } catch (_) {}
 
-      // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet
-      // عبر /interface/ethernet/monitor. **مهم**: نستعمل query واحدة مع
-      // كل الأسماء comma-separated بدل loop تسلسلي — كان يسبّب ANR على
-      // راوترات كبيرة (CCR1016-12G = 12 interface × 200ms = 2.4s block).
-      // RouterOS يقبل =numbers=ether1,ether2,ether3... ويرجع كل الـmonitors
-      // في response واحد.
+      // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet.
+      // **مهم — سبب ANR سابق**: RouterOS Binary API socket بلا tags للـreads
+      // → Future.wait على نفس الـclient يسبّب race condition (reads تتداخل،
+      // parser يقرأ garbage). لذلك نُبقي الـloop تسلسلي.
+      //
+      // **الحل الحقيقي للـANR**: RouterOS يقبل قائمة interfaces مفصولة
+      // بفواصل في نفس الأمر — request واحد بدل N. يرجع كل monitors في
+      // response واحد → نقلّل من N calls إلى 1 call = 200ms بدل 2400ms.
       final Map<String, Map<String, String>> ethMonitorByName = {};
       final etherNames = interfaceRows
           .where((r) {
@@ -123,30 +125,32 @@ class MikrotikApi {
           .toList();
       if (etherNames.isNotEmpty) {
         try {
-          // بدل loop تسلسلي، نستعمل Future.wait مع chunks صغيرة
-          // (RouterOS binary API عنده حدود على packet size).
-          // chunks بحجم 4 = compromise بين parallelism و request size.
-          const chunkSize = 4;
-          for (int i = 0; i < etherNames.length; i += chunkSize) {
-            final chunk = etherNames.sublist(
-                i, (i + chunkSize).clamp(0, etherNames.length));
-            final results = await Future.wait(chunk.map((name) async {
-              try {
-                final r = await client.query([
-                  '/interface/ethernet/monitor',
-                  '=numbers=$name',
-                  '=once=',
-                ]);
-                return MapEntry(name, r.isNotEmpty ? r.first : <String, String>{});
-              } catch (_) {
-                return MapEntry(name, <String, String>{});
-              }
-            }));
-            for (final e in results) {
-              if (e.value.isNotEmpty) ethMonitorByName[e.key] = e.value;
-            }
+          // request واحد مع كل الـinterfaces — RouterOS يرجع !re per interface
+          final monResult = await client.query([
+            '/interface/ethernet/monitor',
+            '=numbers=${etherNames.join(",")}',
+            '=once=',
+          ]);
+          // كل row يحمل اسم الـinterface؛ لو ما موجود نستعمل الترتيب.
+          for (int i = 0; i < monResult.length; i++) {
+            final r = monResult[i];
+            final key = r['name'] ?? (i < etherNames.length ? etherNames[i] : '');
+            if (key.isNotEmpty) ethMonitorByName[key] = r;
           }
-        } catch (_) {}
+        } catch (_) {
+          // fallback: لو RouterOS الإصدار ما يقبل قائمة، رجعنا للـloop
+          // (سابقاً كان كل جهاز على حدة، بطيء لكن يشتغل)
+          for (final name in etherNames) {
+            try {
+              final r = await client.query([
+                '/interface/ethernet/monitor',
+                '=numbers=$name',
+                '=once=',
+              ]);
+              if (r.isNotEmpty) ethMonitorByName[name] = r.first;
+            } catch (_) {}
+          }
+        }
       }
 
       if (resourceRows.isEmpty) {

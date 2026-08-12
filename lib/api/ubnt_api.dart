@@ -150,59 +150,102 @@ class UbntApi {
         }
       } catch (_) {}
 
-      // wstalist — قائمة العملاء (JSON) لكل الأجهزة UBNT
+      // **Batched command** — بدل 4 SSH round-trips منفصلة (wstalist + uptime +
+      // loadavg + iwconfig + ifconfig) الي كانت تستهلك ~15s على أجهزة بطيئة،
+      // نجمعهم في shell command واحد مع فاصل مُميّز. RouterOS SSH يدعم `;`
+      // لتسلسل الأوامر. الفاصل ==SECTION== يساعد الـparser يفصل الأقسام.
+      //
+      // fallback: لو الأمر المُجمَّع فشل (بعض airOS القديم يقفل shell)،
+      // نرجع لسلوك القديم بأوامر منفصلة.
+      String batchedOut = '';
+      final marker = '===MYSVCS_SECTION===';
       try {
-        final wstaOut = utf8.decode(await client.run('wstalist 2>/dev/null')
-            .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
-        if (wstaOut.startsWith('[')) {
-          if (kDebugMode) {
-            debugPrint('🔵 wstalist output (first 800 chars):');
-            debugPrint(wstaOut.substring(0, wstaOut.length > 800 ? 800 : wstaOut.length));
-          }
-          _mergeStationsFromWstalist(parsed, wstaOut);
-        }
-      } catch (_) {}
-
-      // — إضافات من أوامر منفصلة لتكميل ما ينقص —
-      // /proc/uptime
-      try {
-        final r = utf8.decode(await client.run('cat /proc/uptime')
-            .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
-        if (parsed['uptime'] == null && r.isNotEmpty) {
-          parsed['uptime'] = r.split(' ').first;
-        }
-      } catch (_) {}
-
-      // /proc/loadavg
-      try {
-        final r = utf8.decode(await client.run('cat /proc/loadavg')
-            .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
-        if (parsed['cpuload'] == null && r.isNotEmpty) {
-          final parts = r.split(RegExp(r'\s+'));
-          if (parts.isNotEmpty) {
-            final load1 = double.tryParse(parts[0]) ?? 0;
-            parsed['cpuload'] = (load1 * 100).round().toString();
-          }
-        }
-      } catch (_) {}
-
-      // iwconfig — wireless info لو mca-status ما جاب wlan*
-      String? iwconfigOut;
-      try {
-        iwconfigOut = utf8.decode(await client.run('iwconfig 2>/dev/null')
-            .timeout(const Duration(seconds: 4)), allowMalformed: true);
-      } catch (_) {}
-      if (iwconfigOut != null && iwconfigOut.isNotEmpty) {
-        _enrichFromIwconfig(iwconfigOut, parsed);
+        final cmd = [
+          'wstalist 2>/dev/null',
+          'echo $marker',
+          'cat /proc/uptime',
+          'echo $marker',
+          'cat /proc/loadavg',
+          'echo $marker',
+          'iwconfig 2>/dev/null',
+          'echo $marker',
+          'ifconfig',
+        ].join(';');
+        batchedOut = utf8.decode(
+          await client.run(cmd).timeout(const Duration(seconds: 8)),
+          allowMalformed: true,
+        );
+      } catch (_) {
+        batchedOut = '';
       }
 
-      // ifconfig — interfaces + RX/TX bytes
+      String wstaOut = '', uptimeOut = '', loadOut = '', iwOut = '', ifOut = '';
+      if (batchedOut.isNotEmpty) {
+        final parts = batchedOut.split(marker);
+        wstaOut = parts.isNotEmpty ? parts[0].trim() : '';
+        uptimeOut = parts.length > 1 ? parts[1].trim() : '';
+        loadOut = parts.length > 2 ? parts[2].trim() : '';
+        iwOut = parts.length > 3 ? parts[3] : '';
+        ifOut = parts.length > 4 ? parts[4] : '';
+      } else {
+        // fallback: أوامر منفصلة (سلوك قديم)
+        try {
+          wstaOut = utf8.decode(await client.run('wstalist 2>/dev/null')
+              .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
+        } catch (_) {}
+        try {
+          uptimeOut = utf8.decode(await client.run('cat /proc/uptime')
+              .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
+        } catch (_) {}
+        try {
+          loadOut = utf8.decode(await client.run('cat /proc/loadavg')
+              .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
+        } catch (_) {}
+        try {
+          iwOut = utf8.decode(await client.run('iwconfig 2>/dev/null')
+              .timeout(const Duration(seconds: 4)), allowMalformed: true);
+        } catch (_) {}
+        try {
+          ifOut = utf8.decode(await client.run('ifconfig')
+              .timeout(const Duration(seconds: 4)), allowMalformed: true);
+        } catch (_) {}
+      }
+
+      // wstalist — نحفظه أوّلاً للاستعمال في الـstations lookup (المكرّر السابق)
+      List<Map<String, dynamic>> stations = const [];
+      if (wstaOut.startsWith('[')) {
+        _mergeStationsFromWstalist(parsed, wstaOut);
+        try {
+          final parsedJson = json.decode(wstaOut);
+          if (parsedJson is List) {
+            stations = parsedJson.whereType<Map>()
+                .map((e) => e.cast<String, dynamic>()).toList();
+          }
+        } catch (_) {}
+      }
+
+      // uptime
+      if (parsed['uptime'] == null && uptimeOut.isNotEmpty) {
+        parsed['uptime'] = uptimeOut.split(' ').first;
+      }
+
+      // loadavg → cpuload
+      if (parsed['cpuload'] == null && loadOut.isNotEmpty) {
+        final loadParts = loadOut.split(RegExp(r'\s+'));
+        if (loadParts.isNotEmpty) {
+          final load1 = double.tryParse(loadParts[0]) ?? 0;
+          parsed['cpuload'] = (load1 * 100).round().toString();
+        }
+      }
+
+      // iwconfig
+      if (iwOut.isNotEmpty) _enrichFromIwconfig(iwOut, parsed);
+
+      // ifconfig
       List<Map<String, String>> ifaceRaws = const [];
-      try {
-        final r = utf8.decode(await client.run('ifconfig')
-            .timeout(const Duration(seconds: 4)), allowMalformed: true);
-        ifaceRaws = _parseIfconfig(r);
-      } catch (_) {}
+      if (ifOut.isNotEmpty) {
+        ifaceRaws = _parseIfconfig(ifOut);
+      }
 
       // link speed لكل ether — نجرّب عدّة مصادر (تختلف بين إصدارات airOS):
       //   1. /sys/class/net/eth0/speed (Linux حديث)
@@ -259,22 +302,8 @@ class UbntApi {
         }
       }
 
-      // wstalist — قائمة المحطّات المتّصلة (لـAP mode) بصيغة JSON
-      // موجود على airOS 5.5+ (كل الأجهزة الحديثة نسبيّاً)
-      List<Map<String, dynamic>> stations = const [];
-      try {
-        final r = utf8.decode(await client.run('wstalist 2>/dev/null')
-            .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
-        if (r.isNotEmpty && r.startsWith('[')) {
-          final parsedJson = json.decode(r);
-          if (parsedJson is List) {
-            stations = parsedJson.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ wstalist not available: $e');
-      }
-
+      // wstalist سبق واستخرجناه أعلاه من الـbatched command (stations متغيّر
+      // مُعبّأ فوق). لا نُكرّر الأمر — كان يستهلك 4s إضافيّة بلا فائدة.
       return UbntStats.fromMcaStatus(parsed, interfaces: ifaceRaws, wstalistStations: stations);
     } on SSHAuthAbortError {
       throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');

@@ -101,7 +101,10 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
         child: Icon(LucideIcons.trash2, color: AppColors.error),
       ),
       direction: DismissDirection.endToStart,
-      onDismissed: (_) => DeviceAlertsService.instance.dismiss(a.id),
+      onDismissed: (_) async {
+        await DeviceAlertsService.instance.dismiss(a.id);
+        if (mounted) setState(() {});  // إعادة بناء بعد الحذف
+      },
       child: Container(
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(

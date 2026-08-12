@@ -31,6 +31,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   bool _loading = false;
   String? _error;
   Timer? _timer;
+  Timer? _bootstrapT1, _bootstrapT2;   // fast-bootstrap timers — لازم dispose
   bool _monitoring = false;
   DateTime? _lastFetch;
 
@@ -54,6 +55,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   @override
   void dispose() {
     _timer?.cancel();
+    _bootstrapT1?.cancel();
+    _bootstrapT2?.cancel();
     super.dispose();
   }
 
@@ -67,10 +70,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     //   t=5:  ثاني rate → history 2 samples → **الرسم البياني يظهر**
     //   t=15: عادي (تلقائياً من _timer)
     // بدون هذا: الرسم ينتظر 15s + 15s = 30s قبل ما يبان.
-    Timer(const Duration(seconds: 2), () {
+    _bootstrapT1?.cancel();
+    _bootstrapT2?.cancel();
+    _bootstrapT1 = Timer(const Duration(seconds: 2), () {
       if (mounted && _monitoring) _fetch();
     });
-    Timer(const Duration(seconds: 5), () {
+    _bootstrapT2 = Timer(const Duration(seconds: 5), () {
       if (mounted && _monitoring) _fetch();
     });
     _timer?.cancel();

@@ -50,7 +50,10 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
-    )..repeat();
+    );
+    // pulse فقط لو الجهاز online — لأنّه animation مستمرّ (كل frame = rebuild)
+    // ولا معنى للـpulse على جهاز offline. سنُعيد تشغيله لو تغيّرت الحالة.
+    if (_d.lastStatus == 'online') _pulseCtrl.repeat();
     // نضيف الحالة الحاليّة كأوّل نقطة لو معروفة
     if (_d.lastResponseMs != null) {
       _history.add(_PingSample(
@@ -101,6 +104,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         _probing = false;
         _changed = true;
       });
+      // بدّل pulse حسب الحالة — ما يشتغل عبثاً على offline
+      if (r.status == 'online' && !_pulseCtrl.isAnimating) {
+        _pulseCtrl.repeat();
+      } else if (r.status != 'online' && _pulseCtrl.isAnimating) {
+        _pulseCtrl.stop();
+      }
       HapticFeedback.selectionClick();
     } catch (_) {
       if (mounted) setState(() => _probing = false);

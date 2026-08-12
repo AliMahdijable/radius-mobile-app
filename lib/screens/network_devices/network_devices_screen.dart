@@ -107,8 +107,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     if (_probing || _all.isEmpty) return;
     _probing = true;
     try {
-      // اجمع الـtransitions المُحتملة (بلا إطلاق alerts في الحلقة)
+      // اجمع الـtransitions المُحتملة + التحديثات (بلا setState لكل جهاز).
+      // كان: N setState = N × rebuild كامل للـCustomScrollView (dropped frames)
+      // الآن: 1 setState بعد كل الـFuture.wait
       final pendingTransitions = <_PendingTransition>[];
+      final updates = <int, NetworkDevice>{};   // id → updated device
 
       await Future.wait(_all.map((d) async {
         try {
@@ -123,32 +126,36 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
           }
           _lastKnownStatus[d.id] = newStatus;
 
-          NetworkDevicesApi.saveProbeResult(
+          // fire-and-forget — نُصرّح unawaited لتوضيح النية
+          unawaited(NetworkDevicesApi.saveProbeResult(
             deviceId: d.id, status: newStatus, responseMs: r.responseMs,
-          );
+          ).catchError((_) {}));
 
-          if (mounted) {
-            final idx = _all.indexWhere((x) => x.id == d.id);
-            if (idx >= 0) {
-              setState(() {
-                _all[idx] = NetworkDevice(
-                  id: d.id, adminId: d.adminId, regionId: d.regionId,
-                  name: d.name, type: d.type, brand: d.brand, model: d.model,
-                  ip: d.ip, port: d.port, apiPort: d.apiPort,
-                  protocol: d.protocol, mac: d.mac, location: d.location,
-                  notes: d.notes, hasCredentials: d.hasCredentials,
-                  lastProbedAt: DateTime.now(),
-                  lastStatus: newStatus,
-                  lastResponseMs: r.responseMs,
-                  createdAt: d.createdAt,
-                );
-              });
-            }
-          }
+          updates[d.id] = NetworkDevice(
+            id: d.id, adminId: d.adminId, regionId: d.regionId,
+            name: d.name, type: d.type, brand: d.brand, model: d.model,
+            ip: d.ip, port: d.port, apiPort: d.apiPort,
+            protocol: d.protocol, mac: d.mac, location: d.location,
+            notes: d.notes, hasCredentials: d.hasCredentials,
+            lastProbedAt: DateTime.now(),
+            lastStatus: newStatus,
+            lastResponseMs: r.responseMs,
+            createdAt: d.createdAt,
+          );
         } catch (_) {
           // فشل probe لجهاز واحد ما يوقف الباقي
         }
       }));
+
+      // setState **واحد** لكل التحديثات
+      if (mounted && updates.isNotEmpty) {
+        setState(() {
+          for (int i = 0; i < _all.length; i++) {
+            final u = updates[_all[i].id];
+            if (u != null) _all[i] = u;
+          }
+        });
+      }
 
       // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress

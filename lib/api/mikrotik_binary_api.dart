@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -21,8 +22,15 @@ class MikrotikBinaryClient {
   final Duration timeout;
 
   Socket? _socket;
-  final _receivedBytes = <int>[];
+  // Queue بدل List — removeFirst = O(1) (بدلاً من removeAt(0) = O(N)).
+  // مهمّ جداً: response كبيرة (ARP بـ1000 مدخل، registration-table بـ100 عميل)
+  // تعطي byte queues بحجم 50-100KB. List removeAt(0) على هذي = O(N²)
+  // إجمالي → ANR واضح. Queue يحل هذا.
+  final Queue<int> _receivedBytes = Queue<int>();
   StreamSubscription<Uint8List>? _sub;
+  // Completer نُطلقه في listen callback → القارئ ينتظر بلا busy-poll 8ms.
+  // كل _readByte/_readBytes يُنشئ Completer، الـsocket data يُنبّهه فوراً.
+  Completer<void>? _bytesAvailable;
 
   MikrotikBinaryClient({
     required this.host,
@@ -35,9 +43,16 @@ class MikrotikBinaryClient {
   Future<void> connect() async {
     _socket = await Socket.connect(host, port, timeout: timeout);
     _sub = _socket!.listen(
-      (data) => _receivedBytes.addAll(data),
+      (data) {
+        _receivedBytes.addAll(data);
+        // نُنبّه أي قارئ منتظر — بدل busy-poll كل 8ms
+        final c = _bytesAvailable;
+        if (c != null && !c.isCompleted) c.complete();
+      },
       onError: (e) {
         if (kDebugMode) debugPrint('❌ Mikrotik socket error: $e');
+        final c = _bytesAvailable;
+        if (c != null && !c.isCompleted) c.completeError(e);
       },
     );
   }
@@ -178,25 +193,36 @@ class MikrotikBinaryClient {
     return (b1 << 24) | (b2 << 16) | (b3 << 8) | b4;
   }
 
+  /// ينتظر حتى تصل بايتات جديدة من الـsocket أو ينفد الـdeadline.
+  /// event-driven بدل polling — لا CPU مهدر ولا 8ms latency.
+  Future<void> _waitForBytes(DateTime deadline) async {
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining.isNegative) {
+      throw MikrotikBinaryException('انتهت مهلة القراءة (timeout)');
+    }
+    _bytesAvailable = Completer<void>();
+    try {
+      await _bytesAvailable!.future.timeout(remaining);
+    } on TimeoutException {
+      throw MikrotikBinaryException('انتهت مهلة القراءة (timeout)');
+    } finally {
+      _bytesAvailable = null;
+    }
+  }
+
   Future<int> _readByte(DateTime deadline) async {
     while (_receivedBytes.isEmpty) {
-      if (DateTime.now().isAfter(deadline)) {
-        throw MikrotikBinaryException('انتهت مهلة القراءة (timeout)');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 8));
+      await _waitForBytes(deadline);
     }
-    return _receivedBytes.removeAt(0);
+    return _receivedBytes.removeFirst();      // O(1) على Queue
   }
 
   Future<List<int>> _readBytes(int n, DateTime deadline) async {
     while (_receivedBytes.length < n) {
-      if (DateTime.now().isAfter(deadline)) {
-        throw MikrotikBinaryException('انتهت مهلة القراءة أثناء استلام كلمة');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 8));
+      await _waitForBytes(deadline);
     }
-    final out = _receivedBytes.sublist(0, n);
-    _receivedBytes.removeRange(0, n);
+    // نبني List من n بايت مباشرة من الـQueue (removeFirst O(1) لكل واحد)
+    final out = List<int>.generate(n, (_) => _receivedBytes.removeFirst());
     return out;
   }
 

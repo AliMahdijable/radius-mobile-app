@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -70,10 +71,11 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       final creds = await NetworkDevicesApi.getCredentials(widget.device.id);
       final user = (creds['user'] ?? '').toString();
       final pass = (creds['pass'] ?? '').toString();
-      // diagnostic — بدون كشف الـpass، بس طوله لنتأكّد إنّه واصل
-      // ignore: avoid_print
-      print('🔵 airFiber creds fetched: user="$user" pass_len=${pass.length} '
-          'port=${widget.device.apiPort ?? 22}');
+      // diagnostic (debug فقط — لا يُطبع في release لتفادي كشف الـuser)
+      if (kDebugMode) {
+        debugPrint('🔵 airFiber creds user_len=${user.length} '
+            'pass_len=${pass.length} port=${widget.device.apiPort ?? 22}');
+      }
       if (user.isEmpty || pass.isEmpty) {
         throw UbntException('لم يتم إعداد credentials للجهاز '
             '(user="$user" pass_len=${pass.length})');
