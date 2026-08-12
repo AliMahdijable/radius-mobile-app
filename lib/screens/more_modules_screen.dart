@@ -13,9 +13,9 @@ import 'message_logs/message_logs_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
-import 'network_devices/network_devices_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
+import 'reports_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -38,6 +38,24 @@ class MoreModulesScreen extends StatelessWidget {
       valueListenable: PermissionsService.changes,
       builder: (context, _, __) {
         final cards = <Widget>[
+          // مطلب 2026-08-12: التقارير صارت أوّل عنصر (نُقلت من tab رئيسي
+          // لأن أجهزة الشبكة أكثر استعمالاً يومياً للـWISP).
+          // تظهر لأي مدير عادي، وللموظّف لو عنده أي صلاحيّة reports.*
+          if (Perms.hasAny([
+            'reports.financial', 'reports.activations',
+            'reports.daily_activations', 'reports.expenses',
+            'reports.manager_debts', 'reports.account_statement',
+            'reports.sessions', 'reports.activity_log',
+          ]))
+            _ModuleCard(
+              icon: LucideIcons.chartLine,
+              color: const Color(0xFF10B981),
+              title: 'nav.reports'.tr(),
+              subtitle: 'more.reports_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReportsScreen()),
+              ),
+            ),
           if (Perms.has('reports.expenses'))
             _ModuleCard(
               icon: LucideIcons.receipt,
@@ -140,16 +158,7 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          // 2026-08-09: الأجهزة — inventory + LAN monitoring (Slice 1: TCP probe)
-          _ModuleCard(
-            icon: LucideIcons.router,
-            color: const Color(0xFF06B6D4),
-            title: 'الأجهزة',
-            subtitle: 'مراقبة أجهزة الشبكة (Mikrotik/UBNT/Mimosa)',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NetworkDevicesScreen()),
-            ),
-          ),
+          // 2026-08-12: الأجهزة انتقلت لـtab رئيسي (استعمالها يومي للـWISP)
         ];
 
         return Scaffold(

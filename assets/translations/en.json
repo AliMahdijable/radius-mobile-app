@@ -54,6 +54,7 @@
     "home": "Home",
     "subscribers": "Subscribers",
     "reports": "Reports",
+    "devices": "Devices",
     "more": "More",
     "search": "Search"
   },
@@ -542,6 +543,7 @@
   "more": {
     "title": "More",
     "subtitle": "Additional modules",
+    "reports_hint": "Financial, activations, sessions & activity log",
     "expenses": "Expenses",
     "expenses_hint": "Log and track expenses",
     "managers": "Managers",

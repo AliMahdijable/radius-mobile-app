@@ -11,7 +11,8 @@ import '../theme/typography.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'login_screen.dart';
 import 'more_modules_screen.dart';
-import 'reports_screen.dart';
+import 'network_devices/network_devices_screen.dart';
+import 'reports_screen.dart';  // نستوردها لأنّ more_modules_screen يفتحها كصفحة كاملة
 import 'search/quick_search_overlay.dart';
 import 'expenses/sheets/add_expense_sheet.dart';
 import 'subscribers/sheets/activate_sheet.dart';
@@ -196,7 +197,10 @@ class _MainShellState extends State<MainShell> {
     final tabs = <Widget>[
       DashboardScreen(onOpenSubscribers: _openSubscribers),
       SubscribersScreen(filterCmd: _subsFilterCmd),
-      const ReportsScreen(),
+      // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
+      // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت
+      // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ).
+      const NetworkDevicesScreen(),
       // مطلب 2026-06-10: الـtab السفلي الأخير صار "قوائم أخرى" يعرض
       // مديولات إضافية (صرفيات/مدراء/تسعير). شاشة الإعدادات الفعلية
       // انتقلت لزر الـgear بالشريط العلوي على Home.
@@ -311,8 +315,9 @@ class _PillBar extends StatelessWidget {
               ),
               _FabSlot(slotWidth: slotWidth, onTap: onFabTap),
               _TabSlot(
-                icon: Icons.insert_chart_rounded,
-                label: 'nav.reports'.tr(),
+                // مطلب 2026-08-12: أجهزة الشبكة بدل التقارير
+                icon: Icons.router_rounded,
+                label: 'nav.devices'.tr(),
                 slotWidth: slotWidth,
                 selected: current == 2,
                 onTap: () => _select(2),
