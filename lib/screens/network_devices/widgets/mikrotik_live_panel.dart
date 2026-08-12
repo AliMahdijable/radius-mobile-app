@@ -1139,13 +1139,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             if (ccq > 0) ...[
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: ccqColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text('$ccq%',
-                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800,
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
                         color: ccqColor, fontFamily: 'monospace')),
               ),
             ],

@@ -747,14 +747,14 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             if (s.ccq > 0) ...[
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: _percentColor(s.ccq.toDouble()).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text('${s.ccq}%',
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900,
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900,
                         color: _percentColor(s.ccq.toDouble()), fontFamily: 'monospace')),
               ),
             ],
