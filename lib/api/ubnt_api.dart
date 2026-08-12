@@ -485,6 +485,16 @@ class UbntApi {
   static void _mergeStationsFromWstalist(Map<String, String> map, String jsonStr) {
     try {
       final data = json.decode(jsonStr);
+      // Debug: نطبع أسماء fields لأوّل station — يساعدنا نضبط CCQ للـAC
+      if (kDebugMode && data is List && data.isNotEmpty && data[0] is Map) {
+        final first = (data[0] as Map).cast<String, dynamic>();
+        debugPrint('🔵 [wstalist] first station keys: ${first.keys.toList()}');
+        if (first['airmax'] is Map) {
+          debugPrint('🔵 [wstalist] airmax keys: '
+              '${(first['airmax'] as Map).keys.toList()}');
+          debugPrint('🔵 [wstalist] airmax full: ${first['airmax']}');
+        }
+      }
       if (data is! List) return;
       for (int i = 0; i < data.length; i++) {
         final s = data[i];
@@ -509,13 +519,18 @@ class UbntApi {
         _set(map, 'station${idx}_snr', prs?['snr']);
 
         // CCQ (airMax فقط، airFiber ما فيه) — أسماء متعدّدة حسب إصدار airOS:
-        //   airOS 5/6 (XM): "ccq":95 (top level)
-        //   airOS 7+ (AC):  "airmax": {"ccq": 95}
-        //   airOS 8:        "tx": {"ccq": 95}, "rx": {...}
-        dynamic ccqVal = j['ccq'];
+        //   XM (5/6):  s['ccq']                = 95
+        //   AC (7+):   s['airmax']['ccq']      = 95
+        //              أو ['airmax']['quality']  (بعض AC firmware)
+        //              أو ['airmax']['priority']
+        //              أو top-level s['quality']
+        //   airOS 8:   s['tx']['ccq']، s['rx']['ccq']
+        dynamic ccqVal = j['ccq'] ?? j['quality'];
         if (ccqVal == null || _n(ccqVal) == 0) {
           final airmax = j['airmax'];
-          if (airmax is Map) ccqVal = airmax['ccq'];
+          if (airmax is Map) {
+            ccqVal = airmax['ccq'] ?? airmax['quality'] ?? airmax['priority'];
+          }
         }
         if (ccqVal == null || _n(ccqVal) == 0) {
           final txMap = j['tx'];
@@ -856,8 +871,19 @@ class UbntStats {
       if (ccq == 0) ccq = _n(m['wlanTxCcq']);
       if (ccq == 0) ccq = _n(m['tx_ccq']);
       if (ccq == 0) ccq = _n(m['station1_ccq']);
+      // AC firmware ما يعطي wlanCcq، لكن يعطي wlanDownlinkCapacity + wlanTxRate.
+      // نحسب quality% من ratio: (currentRate / maxCapacity) * 100
+      // مثال: TxRate=138 Mbps، DownlinkCapacity=106700 Kbps=106.7 Mbps
+      //   ratio = min(138/106.7, 1.0) = 1.0 → 100%
+      // ratio أقلّ من 100% يعني الجهاز مو يستغلّ السعة الكاملة → quality أقلّ.
+      if (ccq == 0) {
+        final txRateKbps = ((double.tryParse(m['wlanTxRate'] ?? '0') ?? 0) * 1000).round();
+        final dlCapKbps = _n(m['wlanDownlinkCapacity']);
+        if (txRateKbps > 0 && dlCapKbps > 0) {
+          ccq = ((txRateKbps / dlCapKbps) * 100).clamp(0, 100).round();
+        }
+      }
       // بعض إصدارات airOS ترجع CCQ ×10 (مثل 961 يعني 96.1%)
-      // نُقسّم على 10 لو القيمة > 100 (لأن CCQ الحقيقي 0-100)
       if (ccq > 100 && ccq <= 1000) ccq = (ccq / 10).round();
       if (ccq > 100) ccq = 100;
 
@@ -911,9 +937,20 @@ class UbntStats {
             : _n(_extractRate(s['rx']));
 
         // CCQ من أماكن متعدّدة — نفس منطق _mergeStationsFromWstalist
+        // CCQ للـclients — أسماء متعدّدة حسب firmware:
+        //   XM (5/6):  s['ccq']                      = 95
+        //   AC (7+):   s['airmax']['ccq']            = 95
+        //              أو s['airmax']['quality']     = 95 (اسم بديل شائع في AC)
+        //              أو s['airmax']['priority']    = 95 (بعض إصدارات AC)
+        //   airOS 8:   s['tx']['ccq']، s['rx']['ccq']
+        //   airMax AC: أحياناً quality في top-level
         int ccqValue = _n(s['ccq']);
+        if (ccqValue == 0) ccqValue = _n(s['quality']);
         if (ccqValue == 0 && s['airmax'] is Map) {
-          ccqValue = _n((s['airmax'] as Map)['ccq']);
+          final am = s['airmax'] as Map;
+          ccqValue = _n(am['ccq']);
+          if (ccqValue == 0) ccqValue = _n(am['quality']);
+          if (ccqValue == 0) ccqValue = _n(am['priority']);
         }
         if (ccqValue == 0 && s['tx'] is Map) {
           ccqValue = _n((s['tx'] as Map)['ccq']);
@@ -924,6 +961,14 @@ class UbntStats {
         // بعض إصدارات airOS ترجع CCQ ×10 (961 → 96.1%)
         if (ccqValue > 100 && ccqValue <= 1000) ccqValue = (ccqValue / 10).round();
         if (ccqValue > 100) ccqValue = 100;
+
+        // Debug (مرّة واحدة لأوّل station) — نعرف أسماء fields الحقيقيّة
+        if (kDebugMode && ccqValue == 0 && wstalistStations.indexOf(s) == 0) {
+          debugPrint('🔵 [ubnt CCQ] first station keys: ${s.keys.toList()}');
+          if (s['airmax'] is Map) {
+            debugPrint('🔵 [ubnt CCQ] airmax keys: ${(s['airmax'] as Map).keys.toList()}');
+          }
+        }
 
         // Hostname resolution — تعقيدات firmware:
         //   - airFiber 60 PtP (station واحد): s['name'] = اسم الـpeer الحقيقي ("pola")
