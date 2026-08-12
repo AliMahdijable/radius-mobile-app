@@ -336,7 +336,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           child: Text(peer.mac,
               textDirection: TextDirection.ltr,
               style: TextStyle(
-                  fontSize: 10, color: AppColors.textLow, fontFamily: 'monospace')),
+                  fontSize: 10, color: AppColors.textLow)),
         ),
       ]),
     );
@@ -364,7 +364,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             textDirection: TextDirection.ltr,
             style: TextStyle(
                 fontSize: 10, fontWeight: FontWeight.w800,
-                color: color, fontFamily: 'monospace')),
+                color: color)),
       ]),
       const SizedBox(height: 4),
       LayoutBuilder(builder: (context, constraints) {
@@ -418,7 +418,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           textDirection: TextDirection.ltr,
           style: TextStyle(
               fontSize: 18, fontWeight: FontWeight.w900,
-              color: color, fontFamily: 'monospace', height: 1)),
+              color: color, height: 1)),
       if (unit.isNotEmpty)
         Text(unit,
             style: TextStyle(
@@ -496,8 +496,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             Text('${utilization.round()}%',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w900, color: utilColor,
-                    fontFamily: 'monospace')),
+                    fontSize: 12, fontWeight: FontWeight.w900, color: utilColor)),
           ]),
           const SizedBox(height: 4),
           ClipRRect(
@@ -531,7 +530,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 16, fontWeight: FontWeight.w900,
-                  color: color, fontFamily: 'monospace', height: 1)),
+                  color: color, height: 1)),
           const SizedBox(width: 2),
           Text(unit,
               style: TextStyle(
@@ -649,8 +648,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                       fontSize: 11, fontWeight: FontWeight.w800,
-                      color: _tempColor(s.host.temperature),
-                      fontFamily: 'monospace')),
+                      color: _tempColor(s.host.temperature))),
             ]),
         ]),
         const SizedBox(height: 12),
@@ -683,7 +681,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w800,
-                  color: AppColors.textHi, fontFamily: 'monospace')),
+                  color: AppColors.textHi)),
         ]),
       ]),
     );
@@ -722,7 +720,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             textDirection: TextDirection.ltr,
             style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w800,
-                color: color, fontFamily: 'monospace')),
+                color: color)),
       ),
     ]);
   }
@@ -755,7 +753,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   textDirection: TextDirection.ltr,
                   style: const TextStyle(
                       fontSize: 9, fontWeight: FontWeight.w900,
-                      color: Color(0xFF10B981), fontFamily: 'monospace')),
+                      color: Color(0xFF10B981))),
             ),
         ]),
         const SizedBox(height: 8),
@@ -780,7 +778,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Text(iface.ifname,
             style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w800,
-                color: AppColors.textHi, fontFamily: 'monospace')),
+                color: AppColors.textHi)),
         if (iface.speed != null && iface.speed! > 0) ...[
           const SizedBox(width: 6),
           Container(
@@ -792,7 +790,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             child: Text('${iface.speed}M',
                 style: TextStyle(
                     fontSize: 9, fontWeight: FontWeight.w800,
-                    color: AppColors.brand, fontFamily: 'monospace')),
+                    color: AppColors.brand)),
           ),
         ],
         const Spacer(),
@@ -802,14 +800,14 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 10, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi, fontFamily: 'monospace')),
+                  color: AppColors.textHi)),
           const SizedBox(width: 8),
           Icon(LucideIcons.arrowUp, size: 10, color: const Color(0xFF3B82F6)),
           Text(' ${_formatBps(rate.txBps)}',
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 10, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi, fontFamily: 'monospace')),
+                  color: AppColors.textHi)),
         ]),
       ]),
     );
@@ -841,7 +839,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
                     fontSize: 11, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
+                    color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text('اضغط لنسخ الإحداثيّات',
                 style: TextStyle(fontSize: 9, color: AppColors.textLow)),
@@ -918,7 +916,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             textDirection: TextDirection.ltr,
             style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w800,
-                color: AppColors.textHi, fontFamily: 'monospace'),
+                color: AppColors.textHi),
             overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
       ]),
     );
@@ -970,7 +968,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: valueSize, fontWeight: FontWeight.w900,
-                  color: color, fontFamily: 'monospace', height: 1)),
+                  color: color, height: 1)),
           if (unit.isNotEmpty) ...[
             const SizedBox(width: 2),
             Text(unit,

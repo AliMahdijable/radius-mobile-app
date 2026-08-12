@@ -360,7 +360,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 Text(' • ', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
                 Text(
                   'آخر: ${_lastFetch!.hour.toString().padLeft(2, '0')}:${_lastFetch!.minute.toString().padLeft(2, '0')}:${_lastFetch!.second.toString().padLeft(2, '0')}',
-                  style: TextStyle(fontSize: 10, color: AppColors.textLow, fontFamily: 'monospace'),
+                  style: TextStyle(fontSize: 10, color: AppColors.textLow),
                 ),
               ],
             ]),
@@ -457,7 +457,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             ),
             child: Text('PPP: ${s.pppActiveCount}',
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: const Color(0xFF10B981), fontFamily: 'monospace')),
+                    color: const Color(0xFF10B981))),
           ),
         ],
       ]),
@@ -561,7 +561,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               Text(value,
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
                       color: value == '—' ? AppColors.textLow : color,
-                      fontFamily: 'monospace', height: 1)),
+                      height: 1)),
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
                 Text(unit, style: TextStyle(fontSize: 11, color: AppColors.textLow)),
@@ -615,7 +615,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           children: [
             Text('${percent.round()}',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                    color: AppColors.textHi, fontFamily: 'monospace', height: 1)),
+                    color: AppColors.textHi, height: 1)),
             const SizedBox(width: 2),
             Text('%', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
           ],
@@ -665,12 +665,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           if (hasData)
             Text(iface.name,
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
+                    color: AppColors.textHi)),
           // Row 3: value (big number)
           Text(hasData ? _formatBps(iface.bps) : '—',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
                   color: hasData ? color : AppColors.textLow,
-                  fontFamily: 'monospace', height: 1)),
+                  height: 1)),
         ],
       ),
     );
@@ -741,7 +741,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                     interval: maxY / 3,
                     getTitlesWidget: (value, _) => Text(
                       _formatBpsShort(value.toInt()),
-                      style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
+                      style: TextStyle(fontSize: 9, color: AppColors.textLow),
                     ),
                   ),
                 ),
@@ -767,7 +767,6 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                         color: isRx ? rxColor : txColor,
                         fontWeight: FontWeight.w700,
                         fontSize: 10,
-                        fontFamily: 'monospace',
                       ),
                     );
                   }).toList(),
@@ -812,7 +811,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       ),
       child: Text('$arrow $value',
           style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-              color: color, fontFamily: 'monospace')),
+              color: color)),
     );
   }
 
@@ -870,7 +869,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       ),
       child: Text(text,
           style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-              color: color, fontFamily: 'monospace')),
+              color: color)),
     );
   }
 
@@ -898,7 +897,6 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             iface.name,
             style: TextStyle(
               fontSize: 11,
-              fontFamily: 'monospace',
               fontWeight: FontWeight.w600,
               color: iface.disabled ? AppColors.textLow : AppColors.textHi,
             ),
@@ -917,7 +915,6 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
                   color: _linkSpeedColor(iface.linkSpeed!),
-                  fontFamily: 'monospace',
                 ),
               ),
             ),
@@ -928,16 +925,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             const SizedBox(width: 2),
             Text(_formatBps(rate.rxBps),
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
+                    color: AppColors.textHi)),
             const SizedBox(width: 8),
             Icon(LucideIcons.arrowUp, size: 9, color: const Color(0xFF3B82F6)),
             const SizedBox(width: 2),
             Text(_formatBps(rate.txBps),
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
+                    color: AppColors.textHi)),
           ] else if (iface.running) ...[
             Text('—',
-                style: TextStyle(fontSize: 10, color: AppColors.textLow, fontFamily: 'monospace')),
+                style: TextStyle(fontSize: 10, color: AppColors.textLow)),
           ],
         ]),
         // شريط نسبي حسب أعلى traffic بين كل الـethers
@@ -1003,7 +1000,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           const SizedBox(width: 6),
           Text(w.name,
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi, fontFamily: 'monospace')),
+                  color: AppColors.textHi)),
           const SizedBox(width: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1104,24 +1101,15 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             () {
-              // اختر الـprimary display
-              String primary;
-              bool isMonospace;
-              if (hasName) {
-                primary = c.hostname ?? c.comment!;
-                isMonospace = false;   // Cairo — قد يكون عربي
-              } else if (c.ip != null) {
-                primary = c.ip!;
-                isMonospace = true;
-              } else {
-                primary = c.mac;
-                isMonospace = true;
-              }
+              // اختر الـprimary display — hostname → IP → MAC
+              // Cairo دائماً (feedback_font_cairo_always)
+              final String primary = hasName
+                  ? (c.hostname ?? c.comment!)
+                  : (c.ip ?? c.mac);
               return Text(primary,
                   style: TextStyle(
                     fontSize: 11, fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
-                    fontFamily: isMonospace ? 'monospace' : null,
                   ),
                   overflow: TextOverflow.ellipsis);
             }(),
@@ -1130,14 +1118,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Row(children: [
               if (hasName && c.ip != null) ...[
                 Text(c.ip!,
-                    style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
+                    style: TextStyle(fontSize: 9, color: AppColors.textMid)),
                 const SizedBox(width: 6),
               ],
               // MAC يظهر فقط لو الـprimary مو نفس MAC
               if (hasName || c.ip != null)
                 Flexible(
                   child: Text(c.mac,
-                      style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
+                      style: TextStyle(fontSize: 9, color: AppColors.textLow),
                       overflow: TextOverflow.ellipsis),
                 ),
             ]),
@@ -1150,7 +1138,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Text(c.signalDisplay,
                 textDirection: TextDirection.ltr,
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                    color: signalColor, fontFamily: 'monospace')),
+                    color: signalColor)),
             const SizedBox(width: 2),
             Text('dBm', style: TextStyle(fontSize: 8, color: AppColors.textLow)),
             if (ccq > 0) ...[
@@ -1164,7 +1152,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 child: Text('$ccq%',
                     textDirection: TextDirection.ltr,
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
-                        color: ccqColor, fontFamily: 'monospace')),
+                        color: ccqColor)),
               ),
             ],
           ]),
@@ -1173,12 +1161,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.arrowDown, size: 8, color: const Color(0xFF10B981)),
             Text(' ${c.rxRate}',
                 style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
+                    color: AppColors.textHi)),
             const SizedBox(width: 6),
             Icon(LucideIcons.arrowUp, size: 8, color: const Color(0xFF3B82F6)),
             Text(' ${c.txRate}',
                 style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
-                    color: AppColors.textHi, fontFamily: 'monospace')),
+                    color: AppColors.textHi)),
             Text(' Mbps', style: TextStyle(fontSize: 8, color: AppColors.textLow)),
           ]),
         ]),

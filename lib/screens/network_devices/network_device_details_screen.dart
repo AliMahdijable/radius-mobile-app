@@ -87,16 +87,10 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       );
       if (!mounted) return;
       setState(() {
-        _d = NetworkDevice(
-          id: _d.id, adminId: _d.adminId, regionId: _d.regionId,
-          name: _d.name, type: _d.type, brand: _d.brand, model: _d.model,
-          ip: _d.ip, port: _d.port, apiPort: _d.apiPort, protocol: _d.protocol,
-          mac: _d.mac, location: _d.location, notes: _d.notes,
-          hasCredentials: _d.hasCredentials,
+        _d = _d.copyWith(
           lastProbedAt: DateTime.now(),
           lastStatus: r.status,
           lastResponseMs: r.responseMs,
-          createdAt: _d.createdAt,
         );
         _lastPacketLoss = r.packetLoss;
         _history.add(_PingSample(at: DateTime.now(), ms: r.responseMs, online: r.status == 'online'));
@@ -337,8 +331,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   Flexible(
                     child: Text(_d.model!,
                         style: TextStyle(fontSize: 12,
-                            color: AppColors.textMid,
-                            fontFamily: 'monospace'),
+                            color: AppColors.textMid),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ],
@@ -350,7 +343,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 const SizedBox(width: 4),
                 Text(_d.ip,
                     style: TextStyle(
-                      fontSize: 12, fontFamily: 'monospace',
+                      fontSize: 12,
                       fontWeight: FontWeight.w600, color: AppColors.textHi,
                     )),
               ]),
@@ -383,7 +376,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       Text(
                         '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}${_d.apiPort != null ? ":${_d.apiPort}" : ""}',
                         style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
-                            color: AppColors.brand, fontFamily: 'monospace'),
+                            color: AppColors.brand),
                       ),
                       if (_d.hasCredentials) ...[
                         const SizedBox(width: 4),
@@ -405,7 +398,6 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   fontWeight: FontWeight.w800,
                   color: _statusColor,
                   height: 1,
-                  fontFamily: 'monospace',
                 ),
               ),
               Text('ms', style: TextStyle(fontSize: 9, color: AppColors.textMid)),
@@ -541,7 +533,6 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textHi,
-                fontFamily: 'monospace',
                 height: 1,
               ),
             ),
@@ -712,28 +703,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           item.value,
           style: TextStyle(
             fontSize: 12,
-            // monospace فقط للقيم التقنيّة (IP/MAC/أرقام)، Cairo للنصّ العربي
-            fontFamily: _isTechnicalValue(item.value) ? 'monospace' : null,
             fontWeight: FontWeight.w600,
             color: AppColors.textHi,
           ),
         ),
       ]),
     );
-  }
-
-  /// يكشف لو القيمة تقنيّة (IP/MAC/hex/رقم فقط) → monospace
-  /// أو نصّ (اسم موقع بالعربي) → Cairo
-  static bool _isTechnicalValue(String v) {
-    final s = v.trim();
-    if (s.isEmpty) return false;
-    // IP address
-    if (RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(s)) return true;
-    // MAC address
-    if (RegExp(r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$').hasMatch(s)) return true;
-    // أرقام فقط أو نصّ لاتيني/أرقام (موديل RB4011، PBE-5AC، إلخ)
-    if (RegExp(r'^[A-Za-z0-9\-_./+]+$').hasMatch(s)) return true;
-    return false;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -773,7 +748,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             const SizedBox(height: 2),
             Row(children: [
               Text('port ${_d.apiPort ?? "—"}',
-                  style: TextStyle(fontSize: 11, color: AppColors.textMid, fontFamily: 'monospace')),
+                  style: TextStyle(fontSize: 11, color: AppColors.textMid)),
               if (_d.hasCredentials) ...[
                 const SizedBox(width: 8),
                 Icon(LucideIcons.keyRound, size: 11, color: const Color(0xFF10B981)),

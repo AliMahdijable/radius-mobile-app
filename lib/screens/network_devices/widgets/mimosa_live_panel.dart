@@ -251,8 +251,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               Text('${s.temperatureC!.toStringAsFixed(1)}°C',
                   textDirection: TextDirection.ltr,
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-                      color: _tempColor(s.temperatureC!),
-                      fontFamily: 'monospace')),
+                      color: _tempColor(s.temperatureC!))),
             ]),
         ]),
         const SizedBox(height: 12),
@@ -306,7 +305,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       Text(value,
           textDirection: TextDirection.ltr,
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
-              color: color, fontFamily: 'monospace', height: 1)),
+              color: color, height: 1)),
       if (unit.isNotEmpty)
         Text(unit,
             style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600,
@@ -364,7 +363,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Text(value,
             textDirection: TextDirection.ltr,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900,
-                color: color, fontFamily: 'monospace', height: 1)),
+                color: color, height: 1)),
         const SizedBox(width: 2),
         Text(unit, style: TextStyle(fontSize: 9, color: AppColors.textLow)),
       ]),
@@ -403,7 +402,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           child: Center(
             child: Text('${c.index}',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
-                    color: const Color(0xFFEA580C), fontFamily: 'monospace')),
+                    color: const Color(0xFFEA580C))),
           ),
         ),
         const SizedBox(width: 10),
@@ -428,7 +427,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       Text(value,
           textDirection: TextDirection.ltr,
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-              color: color, fontFamily: 'monospace')),
+              color: color)),
     ]);
   }
 
@@ -539,7 +538,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           Expanded(child: Text('$lat, $lng',
               textDirection: TextDirection.ltr,
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi, fontFamily: 'monospace'))),
+                  color: AppColors.textHi))),
           IconButton(
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: mapsUrl));
@@ -593,7 +592,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Flexible(child: Text(value,
             textDirection: TextDirection.ltr,
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-                color: AppColors.textHi, fontFamily: 'monospace'),
+                color: AppColors.textHi),
             overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
       ]),
     );
@@ -638,7 +637,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           Text(value,
               textDirection: TextDirection.ltr,
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
-                  color: color, fontFamily: 'monospace', height: 1)),
+                  color: color, height: 1)),
           const SizedBox(width: 2),
           Text(unit, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
               color: AppColors.textLow)),

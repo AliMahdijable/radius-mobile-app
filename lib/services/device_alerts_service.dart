@@ -97,6 +97,11 @@ class DeviceAlertsService {
   bool _initialized = false;
   List<DeviceAlert> _alerts = [];
 
+  /// dedup: آخر وقت أُطلق alert لكل (deviceId، kind).
+  /// جهاز يومض (يفصل ويعود كل دقيقة) → alerts تنسدّ إذا < 5 دقائق منذ آخر مماثل.
+  static const _dedupWindow = Duration(minutes: 5);
+  final Map<String, DateTime> _lastFiredAt = {};
+
   /// عدد الـalerts غير المقروءة — يُستعمل للـbell badge.
   final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
@@ -178,6 +183,15 @@ class DeviceAlertsService {
       kind = DeviceAlertKind.online;
     }
     if (kind == null) return;
+
+    // dedup: نمنع نفس (deviceId، kind) خلال 5 دقائق — يحمي من spam جهاز flapping
+    final dedupKey = '$deviceId:${kind.name}';
+    final lastFired = _lastFiredAt[dedupKey];
+    if (lastFired != null && DateTime.now().difference(lastFired) < _dedupWindow) {
+      if (kDebugMode) debugPrint('🔕 dedup: ${dedupKey} فُلتِر (نفس النوع خلال 5د)');
+      return;
+    }
+    _lastFiredAt[dedupKey] = DateTime.now();
 
     final alert = DeviceAlert(
       id: DateTime.now().millisecondsSinceEpoch,

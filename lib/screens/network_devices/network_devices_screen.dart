@@ -27,7 +27,8 @@ class NetworkDevicesScreen extends StatefulWidget {
   State<NetworkDevicesScreen> createState() => _NetworkDevicesScreenState();
 }
 
-class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
+class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
+    with WidgetsBindingObserver {
   List<NetworkDevice> _all = [];
   bool _loading = true;
   bool _probing = false;
@@ -40,6 +41,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   /// آخر حالة معروفة لكل جهاز (لرصد transition). key = device.id
   final Map<int, String> _lastKnownStatus = {};
 
+  /// عدد الفشل المتتالي لكل جهاز — للـexponential backoff.
+  /// جهاز يفشل باستمرار → نتجاهله في بعض الجولات لتوفير باتري وشبكة.
+  final Map<int, int> _consecutiveFailures = {};
+  int _probeRoundCount = 0;
+
   Timer? _probeTimer;
   // Probe أسرع (20s بدل 60s) — المستخدم يشتكي إن التحديث بطيء.
   // 20s = توازن بين responsiveness والـbattery/network.
@@ -48,20 +54,39 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initialLoad();
     // نطلب صلاحيّة الإشعارات مرّة واحدة (Android 13+/iOS)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeviceAlertsService.instance.requestPermission();
     });
-    // Periodic probe طالما الشاشة مفتوحة
-    _probeTimer = Timer.periodic(_probeInterval, (_) => _probeAll());
+    _startProbeTimer();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _probeTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// عند background نوقف الـtimer (توفير باتري) — عند resumed نُشغّله + probe فوري
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _probeTimer?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      _startProbeTimer();
+      // probe فوري لتحديث الحالة بعد العودة
+      if (_all.isNotEmpty) _probeAll();
+    }
+  }
+
+  void _startProbeTimer() {
+    _probeTimer?.cancel();
+    _probeTimer = Timer.periodic(_probeInterval, (_) => _probeAll());
   }
 
   /// أول تحميل عند فتح الشاشة: قائمة من backend + probe فوري.
@@ -103,9 +128,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   /// alerts أم نتخطّاها. السبب: لو المدير خرج من شبكة الـWiFi (رجع لسيلولار
   /// مثلاً)، **كل** الأجهزة رح تفشل في نفس الجولة — هذا مو "أعطال أجهزة"
   /// بل تغيير شبكة عند الهاتف. نتخطّى الـalerts في هذي الحالة.
+  /// هل نُفحص هذا الجهاز في الجولة الحاليّة (backoff)؟
+  /// جهاز بـ0 فشل: كل جولة (20s)
+  /// جهاز بـ2 فشل: كل جولتين (40s)
+  /// جهاز بـ4 فشل: كل 4 جولات (80s)
+  /// جهاز بـ6+ فشل: كل 6 جولات (120s max — يوفّر باتري)
+  bool _shouldProbeInRound(int deviceId) {
+    final fails = _consecutiveFailures[deviceId] ?? 0;
+    if (fails == 0) return true;
+    final skipEvery = fails.clamp(1, 6);
+    return _probeRoundCount % skipEvery == 0;
+  }
+
   Future<void> _probeAll() async {
     if (_probing || _all.isEmpty) return;
     _probing = true;
+    _probeRoundCount++;
     try {
       // اجمع الـtransitions المُحتملة + التحديثات (بلا setState لكل جهاز).
       // كان: N setState = N × rebuild كامل للـCustomScrollView (dropped frames)
@@ -113,7 +151,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
       final pendingTransitions = <_PendingTransition>[];
       final updates = <int, NetworkDevice>{};   // id → updated device
 
-      await Future.wait(_all.map((d) async {
+      await Future.wait(_all.where((d) => _shouldProbeInRound(d.id)).map((d) async {
         try {
           final r = await NetworkDevicesApi.localIcmpPing(ip: d.ip);
           final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
@@ -125,22 +163,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
             ));
           }
           _lastKnownStatus[d.id] = newStatus;
+          // تحديث backoff counter
+          if (newStatus == 'offline') {
+            _consecutiveFailures[d.id] = (_consecutiveFailures[d.id] ?? 0) + 1;
+          } else {
+            _consecutiveFailures[d.id] = 0;
+          }
 
           // fire-and-forget — نُصرّح unawaited لتوضيح النية
           unawaited(NetworkDevicesApi.saveProbeResult(
             deviceId: d.id, status: newStatus, responseMs: r.responseMs,
           ).catchError((_) {}));
 
-          updates[d.id] = NetworkDevice(
-            id: d.id, adminId: d.adminId, regionId: d.regionId,
-            name: d.name, type: d.type, brand: d.brand, model: d.model,
-            ip: d.ip, port: d.port, apiPort: d.apiPort,
-            protocol: d.protocol, mac: d.mac, location: d.location,
-            notes: d.notes, hasCredentials: d.hasCredentials,
+          updates[d.id] = d.copyWith(
             lastProbedAt: DateTime.now(),
             lastStatus: newStatus,
             lastResponseMs: r.responseMs,
-            createdAt: d.createdAt,
           );
         } catch (_) {
           // فشل probe لجهاز واحد ما يوقف الباقي
@@ -692,7 +730,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textMid,
-                          fontFamily: 'monospace',
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -758,7 +795,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: statusCol,
-                        fontFamily: 'monospace',
                       ),
                     ),
                   const SizedBox(height: 4),

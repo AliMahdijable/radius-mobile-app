@@ -43,6 +43,48 @@ class NetworkDevice {
     required this.createdAt,
   });
 
+  /// نسخة بحقول محدَّثة — يحلّ مشكلة نسيان field عند التحديث اليدوي.
+  /// كان قبل: 3 مواقع تُنشئ NetworkDevice(...) بـ15 param → أي field جديد
+  /// يُنسى في أحدها فيصير bug صامت.
+  NetworkDevice copyWith({
+    DateTime? lastProbedAt,
+    String? lastStatus,
+    int? lastResponseMs,
+    bool? hasCredentials,
+    String? name,
+    String? ip,
+    int? port,
+    int? apiPort,
+    String? protocol,
+    String? mac,
+    String? location,
+    String? notes,
+    String? type,
+    String? brand,
+    String? model,
+    int? regionId,
+  }) => NetworkDevice(
+        id: id,
+        adminId: adminId,
+        regionId: regionId ?? this.regionId,
+        name: name ?? this.name,
+        type: type ?? this.type,
+        brand: brand ?? this.brand,
+        model: model ?? this.model,
+        ip: ip ?? this.ip,
+        port: port ?? this.port,
+        apiPort: apiPort ?? this.apiPort,
+        protocol: protocol ?? this.protocol,
+        mac: mac ?? this.mac,
+        location: location ?? this.location,
+        notes: notes ?? this.notes,
+        hasCredentials: hasCredentials ?? this.hasCredentials,
+        lastProbedAt: lastProbedAt ?? this.lastProbedAt,
+        lastStatus: lastStatus ?? this.lastStatus,
+        lastResponseMs: lastResponseMs ?? this.lastResponseMs,
+        createdAt: createdAt,
+      );
+
   factory NetworkDevice.fromJson(Map<String, dynamic> j) => NetworkDevice(
         id: j['id'] as int,
         adminId: (j['admin_id'] ?? '').toString(),

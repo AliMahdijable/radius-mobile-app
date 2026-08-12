@@ -151,13 +151,21 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     });
   }
 
-  /// عند تغيير البراند، لو الـprotocol=api نحدّث المنفذ الافتراضي
-  /// (Mikrotik→8728، UBNT→443).
+  /// عند تغيير البراند: نحدّث المنفذ الافتراضي **فقط** لو المستخدم لم يعدّله
+  /// يدوياً. لو الحقل فاضي أو يحمل قيمة default معروفة → نُحدّثها.
+  /// وإلا نحترم اختيار المستخدم (كان يمسحه بلا سؤال — طلب مستخدم 2026-08-13).
+  static const _defaultApiPorts = {'8728', '22', '443', '80', '161', '23'};
+
   void _onBrandChanged(String v) {
     setState(() {
       _brand = v;
       if (_protocol == 'api') {
-        _apiPortCtrl.text = NetworkDeviceLabels.portForBrandProtocol(v, _protocol).toString();
+        final current = _apiPortCtrl.text.trim();
+        final isDefault = current.isEmpty || _defaultApiPorts.contains(current);
+        if (isDefault) {
+          _apiPortCtrl.text =
+              NetworkDeviceLabels.portForBrandProtocol(v, _protocol).toString();
+        }
       }
     });
   }

@@ -392,7 +392,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           children: [
             Text('${percent.round()}',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                    color: AppColors.textHi, fontFamily: 'monospace', height: 1)),
+                    color: AppColors.textHi, height: 1)),
             const SizedBox(width: 2),
             Text('%', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
           ],
@@ -442,7 +442,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               Text(value,
                   style: TextStyle(fontSize: valueSize, fontWeight: FontWeight.w800,
                       color: value == '—' ? AppColors.textLow : color,
-                      fontFamily: 'monospace', height: 1)),
+                      height: 1)),
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
                 Text(unit, style: TextStyle(fontSize: 11, color: AppColors.textLow)),
@@ -505,7 +505,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                   Text('${w.signal}',
                       textDirection: TextDirection.ltr,
                       style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900,
-                          color: signalColor, height: 1, fontFamily: 'monospace')),
+                          color: signalColor, height: 1)),
                   const SizedBox(height: 2),
                   Text('dBm',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
@@ -552,7 +552,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             style: TextStyle(fontSize: 10, color: AppColors.textLow))),
       Text(value,
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-              color: color, fontFamily: 'monospace')),
+              color: color)),
       const SizedBox(width: 2),
       Text(unit, style: TextStyle(fontSize: 9, color: AppColors.textLow)),
     ]);
@@ -606,7 +606,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         const Spacer(),
         Text(value,
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                color: color ?? AppColors.textHi, fontFamily: 'monospace')),
+                color: color ?? AppColors.textHi)),
         if (suffix != null) ...[
           const SizedBox(width: 3),
           Text(suffix, style: TextStyle(fontSize: 9, color: AppColors.textLow)),
@@ -652,7 +652,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         const SizedBox(width: 6),
         Text(iface.ifname,
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-                color: AppColors.textHi, fontFamily: 'monospace')),
+                color: AppColors.textHi)),
         if (iface.speed != null && up) ...[
           const SizedBox(width: 6),
           Container(
@@ -663,7 +663,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             ),
             child: Text(_speedLabel(iface.speed!),
                 style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
-                    color: _speedColor(iface.speed!), fontFamily: 'monospace')),
+                    color: _speedColor(iface.speed!))),
           ),
         ],
         const Spacer(),
@@ -672,13 +672,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 2),
           Text(_formatBps(rate.rxBps),
               style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi, fontFamily: 'monospace')),
+                  color: AppColors.textHi)),
           const SizedBox(width: 8),
           Icon(LucideIcons.arrowUp, size: 9, color: const Color(0xFF3B82F6)),
           const SizedBox(width: 2),
           Text(_formatBps(rate.txBps),
               style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                  color: AppColors.textHi, fontFamily: 'monospace')),
+                  color: AppColors.textHi)),
         ],
       ]),
     );
@@ -734,7 +734,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 overflow: TextOverflow.ellipsis),
             if (s.ip != null || s.mac.isNotEmpty)
               Text([s.ip, s.mac].where((e) => e != null && e.isNotEmpty).join(' • '),
-                  style: TextStyle(fontSize: 9, color: AppColors.textLow, fontFamily: 'monospace'),
+                  style: TextStyle(fontSize: 9, color: AppColors.textLow),
                   overflow: TextOverflow.ellipsis),
           ]),
         ),
@@ -743,7 +743,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Text('${s.signalDisplay} dBm',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-                    color: signalColor, fontFamily: 'monospace')),
+                    color: signalColor)),
             if (s.ccq > 0) ...[
               const SizedBox(width: 6),
               Container(
@@ -755,14 +755,14 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 child: Text('${s.ccq}%',
                     textDirection: TextDirection.ltr,
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900,
-                        color: _percentColor(s.ccq.toDouble()), fontFamily: 'monospace')),
+                        color: _percentColor(s.ccq.toDouble()))),
               ),
             ],
           ]),
           const SizedBox(height: 2),
           Text('↓${s.rxRate} / ↑${s.txRate} Mbps',
               textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 9, color: AppColors.textMid, fontFamily: 'monospace')),
+              style: TextStyle(fontSize: 9, color: AppColors.textMid)),
         ]),
       ]),
     );
