@@ -203,7 +203,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
         foregroundColor: AppColors.textHi,
         elevation: 0,
         actions: [
-          // Bell icon مع badge لعدد الـalerts غير المقروءة
+          // Bell icon مع badge
           ValueListenableBuilder<int>(
             valueListenable: DeviceAlertsService.instance.unreadCount,
             builder: (context, count, _) {
@@ -211,31 +211,27 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
                 IconButton(
                   icon: Icon(
                     count > 0 ? LucideIcons.bellDot : LucideIcons.bell,
-                    size: 18,
-                    color: count > 0 ? AppColors.error : null,
+                    size: 20,
+                    color: count > 0 ? AppColors.error : AppColors.textMid,
                   ),
                   onPressed: _openAlerts,
                   tooltip: 'التنبيهات',
                 ),
                 if (count > 0)
                   Positioned(
-                    right: 4, top: 4,
+                    right: 4, top: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: AppColors.error,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.surface, width: 1),
+                        border: Border.all(color: AppColors.surface, width: 1.5),
                       ),
-                      constraints: const BoxConstraints(
-                          minWidth: 16, minHeight: 16),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Text(
                         count > 99 ? '99+' : '$count',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w900),
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 9, fontWeight: FontWeight.w900),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -244,18 +240,27 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(LucideIcons.refreshCw, size: 18),
+            icon: const Icon(LucideIcons.refreshCw, size: 20),
             onPressed: _load,
             tooltip: 'تحديث',
           ),
+          // زر "+" إضافة جهاز — في الـappBar (بدل FAB الي كان يختفي وراء البيل)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, right: 8),
+            child: Material(
+              color: AppColors.brand,
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: () => _openForm(),
+                customBorder: const CircleBorder(),
+                child: const SizedBox(
+                  width: 36, height: 36,
+                  child: Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(LucideIcons.plus, size: 18),
-        label: const Text('إضافة جهاز'),
-        backgroundColor: AppColors.brand,
-        foregroundColor: Colors.white,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -263,31 +268,122 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
               ? Center(child: Text(_error!, style: TextStyle(color: AppColors.textMid)))
               : RefreshIndicator(
                   onRefresh: _load,
-                  child: Column(
-                    children: [
-                      _searchBar(),
-                      _typeFilterRow(),
-                      _statusFilterRow(),
-                      const Divider(height: 1),
-                      Expanded(child: _list()),
+                  child: CustomScrollView(
+                    slivers: [
+                      // Search bar (sticky-ish أعلى)
+                      SliverToBoxAdapter(child: _searchBar()),
+                      // Summary row: total + online + offline
+                      SliverToBoxAdapter(child: _summaryRow()),
+                      // Filters
+                      SliverToBoxAdapter(child: _typeFilterRow()),
+                      SliverToBoxAdapter(child: _statusFilterRow()),
+                      const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                      // List
+                      _filtered.isEmpty
+                          ? const SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: _EmptyDevices(),
+                            )
+                          : SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  Sp.md, 0, Sp.md, 90),
+                              sliver: SliverList.separated(
+                                itemCount: _filtered.length,
+                                itemBuilder: (_, i) => _deviceCard(_filtered[i]),
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                              ),
+                            ),
                     ],
                   ),
                 ),
     );
   }
 
+  Widget _summaryRow() {
+    final online = _countByStatus('online');
+    final offline = _countByStatus('offline');
+    final total = _all.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.md, 12, Sp.md, 8),
+      child: Row(children: [
+        _summaryTile(
+          icon: LucideIcons.layers,
+          label: 'الإجمالي',
+          value: '$total',
+          color: AppColors.textHi,
+        ),
+        const SizedBox(width: 8),
+        _summaryTile(
+          icon: LucideIcons.wifi,
+          label: 'متّصل',
+          value: '$online',
+          color: const Color(0xFF10B981),
+        ),
+        const SizedBox(width: 8),
+        _summaryTile(
+          icon: LucideIcons.wifiOff,
+          label: 'مفصول',
+          value: '$offline',
+          color: AppColors.error,
+        ),
+      ]),
+    );
+  }
+
+  Widget _summaryTile({
+    required IconData icon, required String label,
+    required String value, required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(children: [
+          Container(
+            width: 30, height: 30,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 10, color: AppColors.textLow,
+                      fontWeight: FontWeight.w600)),
+              Text(value,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w900,
+                      color: color, height: 1.1)),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
   Widget _searchBar() {
-    return Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 0),
       child: TextField(
         controller: _searchCtrl,
         onChanged: (v) => setState(() => _search = v),
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
-          hintStyle: TextStyle(fontSize: 12, color: AppColors.textLow),
-          prefixIcon: Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
+          hintStyle: TextStyle(fontSize: 13, color: AppColors.textLow),
+          prefixIcon: Icon(LucideIcons.search, size: 18, color: AppColors.textMid),
           suffixIcon: _search.isEmpty ? null : IconButton(
             icon: Icon(LucideIcons.x, size: 16, color: AppColors.textMid),
             onPressed: () {
@@ -297,18 +393,18 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
           ),
           isDense: true,
           filled: true,
-          fillColor: AppColors.surfaceInput,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          fillColor: AppColors.surface,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: AppColors.border),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: AppColors.border),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: AppColors.brand, width: 1.5),
           ),
         ),
@@ -317,9 +413,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   }
 
   Widget _typeFilterRow() {
-    return Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(children: [
@@ -384,9 +479,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
   }
 
   Widget _statusFilterRow() {
-    return Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
       child: Row(children: [
         _statusChip(null, 'الكلّ', _all.length),
         const SizedBox(width: 6),
@@ -439,42 +533,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
     );
   }
 
-  Widget _list() {
-    final data = _filtered;
-    if (data.isEmpty) {
-      return SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            children: [
-              const SizedBox(height: 40),
-              Icon(LucideIcons.router, size: 64, color: AppColors.textLow),
-              const SizedBox(height: Sp.lg),
-              Text(
-                _all.isEmpty ? 'لا توجد أجهزة بعد' : 'لا توجد نتائج للفلتر الحالي',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textMid),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: Sp.sm),
-              if (_all.isEmpty)
-                Text(
-                  'اضغط "إضافة جهاز" لبدء تسجيل أجهزتك',
-                  style: TextStyle(fontSize: 12, color: AppColors.textLow),
-                  textAlign: TextAlign.center,
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
-      itemCount: data.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) => _deviceCard(data[i]),
-    );
-  }
+  // _list() القديمة أُزيلت — استعملنا CustomScrollView + Slivers مباشرة في build.
 
   Widget _deviceCard(NetworkDevice d) {
     final statusCol = _statusColor(d.lastStatus);
@@ -619,6 +678,41 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Empty state — يظهر لو ما في أجهزة أصلاً أو ما في نتائج للفلتر.
+class _EmptyDevices extends StatelessWidget {
+  const _EmptyDevices();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(Sp.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96, height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.brand.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(LucideIcons.router, size: 40, color: AppColors.brand),
+            ),
+            const SizedBox(height: Sp.lg),
+            Text('لا توجد نتائج',
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w800,
+                    color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            Text('جرّب تغيير الفلتر أو أضف جهاز جديد',
+                style: TextStyle(fontSize: 12, color: AppColors.textMid)),
+          ],
         ),
       ),
     );
