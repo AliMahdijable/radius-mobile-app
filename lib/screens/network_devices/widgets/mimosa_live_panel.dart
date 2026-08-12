@@ -62,13 +62,15 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     setState(() { _loading = true; _error = null; });
     try {
       final creds = await NetworkDevicesApi.getCredentials(widget.device.id);
-      // بالنسبة لـSNMP: community string يُخزَّن في حقل الـpassword
-      // (user فارغ لأن SNMP v2c ما يستعمل username).
-      final community = (creds['pass'] ?? '').toString().trim();
+      // فورم الأجهزة يحفظ SNMP كـ{community: "...", version: "v2c"}
+      // (راجع network_device_form_sheet.dart:103). fallback على 'pass' لو
+      // في نسخ قديمة كان يحفظ في مفتاح مختلف.
+      final community = (creds['community'] ?? creds['pass'] ?? '')
+          .toString().trim();
       if (community.isEmpty) {
         throw MimosaException(
             'لم يتم إعداد SNMP community string. '
-            'أدخله في حقل "كلمة المرور" لهذا الجهاز.');
+            'عدّل الجهاز وأدخل الـcommunity (عادةً "public").');
       }
       final port = widget.device.apiPort ?? 161;
       final s = await MimosaApi.fetchStats(
