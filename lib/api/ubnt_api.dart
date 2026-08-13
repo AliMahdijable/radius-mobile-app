@@ -20,12 +20,17 @@ class UbntApi {
   /// **fallback usernames**: لو الـuser المُعدّ فشل بالـauth، نجرّب `ubnt`
   /// (default airOS) ثمّ `admin` ثمّ `root` — يحلّ 90% من مشاكل الـauth
   /// بدون تعديل يدوي.
+  ///
+  /// **Progressive rendering**: [onPartialReady] يُطلق بعد mca-status/dump
+  /// (~500ms-1s) — UI يعرض device name, CPU, RAM, temp, signal فوراً بدل
+  /// انتظار wstalist + ifconfig + link speed (~1-2s إضافيّة).
   static Future<UbntStats> fetchStats({
     required String ip,
     int port = 22,
     required String user,
     required String pass,
     Duration timeout = const Duration(seconds: 10),
+    void Function(UbntStats partial)? onPartialReady,
   }) async {
     final userList = _buildUserFallback(user);
     UbntException? lastAuthErr;
@@ -36,7 +41,8 @@ class UbntApi {
               'ip=$ip:$port');
         }
         return await _fetchWithUser(
-            ip: ip, port: port, user: u, pass: pass, timeout: timeout);
+            ip: ip, port: port, user: u, pass: pass, timeout: timeout,
+            onPartialReady: onPartialReady);
       } on UbntException catch (e) {
         if (kDebugMode) debugPrint('   ❌ $e');
         // auth error → جرّب الـuser التالي
@@ -74,6 +80,7 @@ class UbntApi {
     required String user,
     required String pass,
     required Duration timeout,
+    void Function(UbntStats partial)? onPartialReady,
   }) async {
     SSHClient? client;
     SSHSocket? socket;
@@ -149,6 +156,19 @@ class UbntApi {
           }
         }
       } catch (_) {}
+
+      // ⚡ Tier 1 partial: mca-status + af-status جاهز.
+      // UI يعرض device name/CPU/RAM/temp/signal فوراً بدل انتظار wstalist +
+      // ifconfig + link speeds (~1-2s إضافيّة).
+      if (onPartialReady != null) {
+        try {
+          final partial = UbntStats.fromMcaStatus(
+              Map<String, String>.from(parsed),   // نسخة عشان لا نعدّلها
+              interfaces: const [],
+              wstalistStations: const []);
+          onPartialReady(partial);
+        } catch (_) {}
+      }
 
       // **Batched command** — بدل 4 SSH round-trips منفصلة (wstalist + uptime +
       // loadavg + iwconfig + ifconfig) الي كانت تستهلك ~15s على أجهزة بطيئة،

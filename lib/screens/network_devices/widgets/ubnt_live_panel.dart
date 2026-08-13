@@ -74,6 +74,16 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         port: widget.device.apiPort ?? 22,  // SSH default
         user: user,
         pass: pass,
+        // ⚡ Tier 1 partial بعد mca-status (~500ms-1s): CPU/RAM/temp/signal
+        // بدل انتظار wstalist + ifconfig + link speeds (~2-3s كامل)
+        // ⚠️ **لا** نلمس _lastFetch/_lastBytes هنا (نفس bug Mikrotik السابق —
+        // rate calc يستعمل elapsed مغلوط).
+        onPartialReady: (partial) {
+          if (!mounted) return;
+          setState(() {
+            _stats = partial;
+          });
+        },
       );
       if (!mounted) return;
 

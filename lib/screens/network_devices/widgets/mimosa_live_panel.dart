@@ -83,6 +83,14 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         host: widget.device.ip,
         port: port,
         community: community,
+        // ⚡ Tier 1 partial بعد ~500ms: device name/temp/GPS/uptime
+        // بدل انتظار RF details + chains (~1s إضافيّة)
+        onPartialReady: (partial) {
+          if (!mounted) return;
+          setState(() {
+            _stats = partial;
+          });
+        },
       );
       if (!mounted) return;
       setState(() {

@@ -81,11 +81,16 @@ class MimosaApi {
   static const String _oidChainSnr         = '$_bfive.6.3.1.6';
 
   /// جلب صورة كاملة عن حالة الجهاز عبر SNMP GET متعدّد + GETBULK للـchain table.
+  ///
+  /// **Progressive rendering**: [onPartialReady] يُطلق بعد Tier 1
+  /// (system + GPS + temp — ~500ms) — UI يعرض device name/temp/uptime
+  /// فوراً بدل انتظار Tier 2 (RF details + chains — ~1s إضافيّة).
   static Future<MimosaStats> fetchStats({
     required String host,
     int port = 161,
     required String community,
     Duration timeout = const Duration(seconds: 5),
+    void Function(MimosaStats partial)? onPartialReady,
   }) async {
     final snmp = SnmpV2c(
       host: host,
@@ -94,12 +99,13 @@ class MimosaApi {
       timeout: timeout,
     );
 
-    // نُقسّم الـGET على batches ~10 OIDs (بعض firmwares قديمة يحدّون الحزمة).
+    // ═══ Tier 1 (fast — ~500ms): system + GPS + temp ═══
     final scalarBatch1 = <String>[
       _oidSysDescr, _oidSysName, _oidSysUpTime,
       _oidDeviceName, _oidSerialNumber, _oidFirmwareVersion, _oidInternalTemp,
       _oidLongitude, _oidLatitude, _oidGpsSats,
     ];
+    // ═══ Tier 2 (~500ms إضافيّة): RF details ═══
     final scalarBatch2 = <String>[
       _oidWirelessMode, _oidTdmaMode,
       _oidAntennaGain, _oidTotalTxPower, _oidTotalRxPower, _oidTargetRxPower,
@@ -108,9 +114,18 @@ class MimosaApi {
 
     final results = <String, Varbind>{};
     try {
+      // Tier 1 — نجلبه ونطلق partial فوراً
       for (final vb in await snmp.get(scalarBatch1)) {
         results[vb.oid] = vb;
       }
+      // ⚡ partial: UI يعرض device name/temp/GPS/uptime — RF لا يزال فارغ
+      if (onPartialReady != null) {
+        try {
+          onPartialReady(MimosaStats.fromVarbinds(
+              Map<String, Varbind>.from(results), chains: const []));
+        } catch (_) {}
+      }
+      // Tier 2 — RF details
       for (final vb in await snmp.get(scalarBatch2)) {
         results[vb.oid] = vb;
       }
@@ -120,7 +135,7 @@ class MimosaApi {
           'SNMP مفعّل من web UI للجهاز (Preferences → Management → SNMP)');
     }
 
-    // Chain table via walk (2-4 chains عادة)
+    // Chain table via walk (2-4 chains عادة) — Tier 3 (اختياري)
     final chains = <MimosaChain>[];
     try {
       final rxPowers = await snmp.walk(_oidChainRxPower, chunkSize: 8);

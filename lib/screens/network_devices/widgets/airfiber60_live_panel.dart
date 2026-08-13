@@ -87,6 +87,14 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         port: port,
         user: user,
         pass: pass,
+        // ⚡ Tier 1 partial بعد mca-status/af-status (~500ms-1s):
+        // device name/CPU/RAM/signal فوراً بدل انتظار wstalist (~1-2s كامل).
+        onPartialReady: (partial) {
+          if (!mounted) return;
+          setState(() {
+            _stats = partial;
+          });
+        },
       );
 
       _updateInterfaceRates(s);
