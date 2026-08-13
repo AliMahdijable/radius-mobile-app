@@ -104,21 +104,58 @@ class MikrotikApi {
       final resource = resourceRows.first;
 
       // Health parsing — RouterOS v7 يرجع list of {name, value, type}
-      // بينما v6 قد يرجع flat map {temperature: "45C", voltage: "24V"}
+      // مثال CCR2116:
+      //   cpu-temperature: 38 C
+      //   sfp-temperature: 27 C
+      //   switch-temperature: 29 C
+      //   board-temperature1: 29 C
+      //   fan1-speed: 4185 RPM (× 4)
+      //   psu1-state: ok / psu2-state: fail (dual PSU)
+      // مثال CCR1009:
+      //   voltage: 24V (single value، بلا فانات)
       int? healthTemp;
       double? healthVoltage;
+      final fans = <MikrotikHealthItem>[];
+      final psus = <MikrotikHealthItem>[];
+      final extraTemps = <MikrotikHealthItem>[];
+
       for (final h in healthRows) {
         final name = (h['name'] ?? '').toLowerCase();
         final valueStr = h['value'] ?? '';
+        if (name.isEmpty) continue;
+
         if (name.contains('temp')) {
-          // القيمة قد تكون "45" أو "45C"
+          // كل الحرارات → extraTemps، الأولى (أو cpu) → healthTemp
           final v = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
-          if (v != null && (healthTemp == null || name.contains('cpu'))) {
-            healthTemp = v.round();
+          if (v != null) {
+            extraTemps.add(MikrotikHealthItem(
+              name: name, valueStr: valueStr, intValue: v.round(),
+            ));
+            if (healthTemp == null || name.contains('cpu')) {
+              healthTemp = v.round();
+            }
           }
         } else if (name.contains('voltage') || name == 'v') {
           final v = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
           if (v != null) healthVoltage = v;
+        } else if (name.startsWith('fan') && name.contains('speed')) {
+          // fan1-speed, fan2-speed, ...
+          final rpm = int.tryParse(valueStr.replaceAll(RegExp(r'[^\d]'), ''));
+          if (rpm != null && rpm > 0) {
+            fans.add(MikrotikHealthItem(
+              name: name.replaceAll('-speed', ''),
+              valueStr: '$rpm RPM',
+              intValue: rpm,
+            ));
+          }
+        } else if (name.startsWith('psu') && name.endsWith('-state')) {
+          // psu1-state, psu2-state
+          final v = valueStr.toLowerCase().trim();
+          psus.add(MikrotikHealthItem(
+            name: name.replaceAll('-state', ''),
+            valueStr: valueStr,
+            isOk: v == 'ok',
+          ));
         }
       }
       // fallback: بعض الإصدارات ترجع flat في نفس row واحد بأسماء متعدّدة
@@ -159,6 +196,9 @@ class MikrotikApi {
         cpuFrequencyMhz: _asInt(resource['cpu-frequency']),
         temperature: healthTemp,
         voltage: healthVoltage,
+        fans: fans,
+        psus: psus,
+        extraTemps: extraTemps,
         interfaces: interfaceRows.map((row) {
           final name = row['name'] ?? '';
           final monitor = ethMonitorByName[name];
@@ -288,6 +328,20 @@ class MikrotikApi {
 /// alias حتى الـ UI يبقى نفسه
 typedef MikrotikException = MikrotikBinaryException;
 
+/// حالة مروحة أو PSU
+class MikrotikHealthItem {
+  final String name;      // 'fan1', 'psu1', 'sfp'
+  final String? valueStr; // '4185 RPM' أو 'ok' أو '38 C'
+  final int? intValue;    // RPM أو Temp (لو رقمي)
+  final bool? isOk;       // true=ok، false=fail (لـPSU state)
+  const MikrotikHealthItem({
+    required this.name,
+    this.valueStr,
+    this.intValue,
+    this.isOk,
+  });
+}
+
 class MikrotikStats {
   final int cpuLoad;
   final int memUsedPercent;
@@ -299,8 +353,11 @@ class MikrotikStats {
   final String architectureName;
   final int cpuCount;
   final int cpuFrequencyMhz;
-  final int? temperature;         // °C من /system/health
-  final double? voltage;          // V من /system/health
+  final int? temperature;         // °C من /system/health (CPU-preferred)
+  final double? voltage;          // V (CCR1009 نعم، CCR2116 لا)
+  final List<MikrotikHealthItem> fans;        // fan1-speed, fan2-speed, ...
+  final List<MikrotikHealthItem> psus;        // psu1-state, psu2-state
+  final List<MikrotikHealthItem> extraTemps;  // sfp-temperature، switch-temperature، board-temperature
   final List<MikrotikInterface> interfaces;
   final int pppActiveCount;
   final List<MikrotikWireless> wirelessInterfaces;
@@ -319,6 +376,9 @@ class MikrotikStats {
     required this.cpuFrequencyMhz,
     this.temperature,
     this.voltage,
+    this.fans = const [],
+    this.psus = const [],
+    this.extraTemps = const [],
     required this.interfaces,
     required this.pppActiveCount,
     this.wirelessInterfaces = const [],
@@ -350,6 +410,9 @@ class MikrotikStats {
         cpuFrequencyMhz: cpuFrequencyMhz,
         temperature: temperature,
         voltage: voltage,
+        fans: fans,
+        psus: psus,
+        extraTemps: extraTemps,
         interfaces: interfaces ?? this.interfaces,
         pppActiveCount: pppActiveCount ?? this.pppActiveCount,
         wirelessInterfaces: wirelessInterfaces ?? this.wirelessInterfaces,

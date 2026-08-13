@@ -527,13 +527,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _valueCard(
-                icon: LucideIcons.plug,
-                label: 'فولتيّة',
-                value: s.voltage != null ? s.voltage!.toStringAsFixed(1) : '—',
-                unit: s.voltage != null ? 'V' : '',
-                color: _voltageColor(s.voltage),
-              )),
+              // Polymorphic status card:
+              //   priority: voltage → PSU → fans → dash
+              //   CCR1009 يعطي voltage. CCR2116 يعطي PSU + fans (بلا voltage).
+              //   جهاز صغير قد لا يعطي أي شيء (—).
+              Expanded(child: _powerStatusCard(s)),
               const SizedBox(width: 8),
               Expanded(child: _topRateCard(
                 label: 'أعلى ↓',
@@ -550,6 +548,65 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           ),
         ),
       ]),
+    );
+  }
+
+  /// Power status card — يعرض أفضل مؤشّر متوفّر:
+  ///   1. Voltage (لو الجهاز يعطيه — CCR1009 مثلاً)
+  ///   2. PSU status (dual PSU — CCR2116)
+  ///   3. Fan status (لو الجهاز به مراوح — enterprise routers)
+  ///   4. "—" لو لا شيء متوفّر (RB بسيط)
+  Widget _powerStatusCard(MikrotikStats s) {
+    // #1 Voltage
+    if (s.voltage != null) {
+      return _valueCard(
+        icon: LucideIcons.plug,
+        label: 'فولتيّة',
+        value: s.voltage!.toStringAsFixed(1),
+        unit: 'V',
+        color: _voltageColor(s.voltage),
+      );
+    }
+    // #2 PSU status
+    if (s.psus.isNotEmpty) {
+      final okCount = s.psus.where((p) => p.isOk == true).length;
+      final total = s.psus.length;
+      final allOk = okCount == total;
+      final anyOk = okCount > 0;
+      final color = allOk
+          ? const Color(0xFF10B981)
+          : anyOk
+              ? const Color(0xFFF59E0B)
+              : AppColors.error;
+      return _valueCard(
+        icon: LucideIcons.batteryCharging,
+        label: 'PSU',
+        value: '$okCount/$total',
+        unit: allOk ? 'OK' : 'FAIL',
+        color: color,
+      );
+    }
+    // #3 Fans
+    if (s.fans.isNotEmpty) {
+      final avgRpm = s.fans
+              .map((f) => f.intValue ?? 0)
+              .fold<int>(0, (a, b) => a + b) ~/
+          s.fans.length;
+      return _valueCard(
+        icon: LucideIcons.fan,
+        label: '${s.fans.length} مروحة',
+        value: '${(avgRpm / 100).round() / 10}K',   // 4185 → 4.2K
+        unit: 'RPM',
+        color: const Color(0xFF06B6D4),
+      );
+    }
+    // #4 غير متوفّر
+    return _valueCard(
+      icon: LucideIcons.plug,
+      label: 'فولتيّة',
+      value: '—',
+      unit: '',
+      color: AppColors.textLow,
     );
   }
 
