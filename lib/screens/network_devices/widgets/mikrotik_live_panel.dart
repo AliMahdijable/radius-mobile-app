@@ -534,13 +534,13 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               Expanded(child: _powerStatusCard(s)),
               const SizedBox(width: 8),
               Expanded(child: _topRateCard(
-                label: 'أعلى ↓',
+                label: 'أعلى iface ↓',   // per-interface max ↓
                 iface: maxRx,
                 color: const Color(0xFF10B981),
               )),
               const SizedBox(width: 8),
               Expanded(child: _topRateCard(
-                label: 'أعلى ↑',
+                label: 'أعلى iface ↑',
                 iface: maxTx,
                 color: const Color(0xFF3B82F6),
               )),
@@ -791,7 +791,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Row(children: [
           Icon(LucideIcons.chartLine, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('الحركة الإجماليّة (ether/sfp)',
+          // نُضيف "مجموع" في العنوان — يفصل بصرياً عن كروت "أعلى ↑ ether1"
+          // اللي فوق (تلك per-interface max، هذا total).
+          Text('المجموع الحيّ (كل ether/sfp)',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
