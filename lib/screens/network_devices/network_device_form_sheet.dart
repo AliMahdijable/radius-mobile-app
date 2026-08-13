@@ -172,6 +172,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // keyboard-avoidance: نُضيف padding سفلي بحجم الكيبورد → الـsheet
+    // كامل يرتفع فوقه (نمط activate_sheet + add_debt_sheet).
+    // بدون هذا: الحقول السفليّة تختفي خلف الكيبورد.
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
       minChildSize: 0.5,
@@ -182,6 +186,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           color: AppColors.bg,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
+        padding: EdgeInsets.only(bottom: bottomInset),
         child: Column(children: [
           _dragHandle(),
           _header(),
