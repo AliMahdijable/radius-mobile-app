@@ -44,6 +44,14 @@ class MikrotikApi {
       List<Map<String, String>> healthRows = const [];
       try {
         healthRows = await client.query(['/system/health/print']);
+        // Debug: طباعة كل صفوف health لنعرف بأي أسماء fields يستعمل الراوتر
+        // (CCR2116 مثلاً قد يستعمل psu1-voltage/psu2-voltage بدل voltage)
+        if (kDebugMode && healthRows.isNotEmpty) {
+          debugPrint('🔵 [mikrotik health] rows count=${healthRows.length}');
+          for (final r in healthRows) {
+            debugPrint('   $r');
+          }
+        }
       } catch (_) {}
       List<Map<String, String>> pppRows = const [];
       try {
@@ -113,12 +121,24 @@ class MikrotikApi {
           if (v != null) healthVoltage = v;
         }
       }
-      // fallback: بعض الإصدارات ترجع flat في نفس row واحد
+      // fallback: بعض الإصدارات ترجع flat في نفس row واحد بأسماء متعدّدة
+      // (temperature, board-temperature, cpu-temperature، voltage,
+      // input-voltage, board-voltage, psu-voltage، إلخ)
       if (healthRows.length == 1) {
         final r = healthRows.first;
-        healthTemp ??= _asInt(r['temperature']?.replaceAll(RegExp(r'[^\d-]'), ''));
-        if (healthVoltage == null && r['voltage'] != null) {
-          healthVoltage = double.tryParse(r['voltage']!.replaceAll(RegExp(r'[^\d.-]'), ''));
+        healthTemp ??= _asInt(
+          (r['temperature'] ?? r['board-temperature'] ?? r['cpu-temperature'])
+              ?.replaceAll(RegExp(r'[^\d-]'), ''),
+        );
+        for (final vKey in const [
+          'voltage', 'input-voltage', 'board-voltage',
+          'psu-voltage', 'psu1-voltage', 'power-supply-1-voltage',
+        ]) {
+          if (healthVoltage == null && r[vKey] != null) {
+            healthVoltage = double.tryParse(
+                r[vKey]!.replaceAll(RegExp(r'[^\d.-]'), ''));
+            if (healthVoltage != null) break;
+          }
         }
       }
       // fallback نهائي: system/resource قد يحوي cpu-temperature

@@ -244,7 +244,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)),
     );
-    if (changed == true) _initialLoad();
+    // إذا المستخدم عدّل الجهاز → إعادة تحميل كاملة (list + probe)
+    // وإلا → probe فوري (details شافت حالة جديدة، القائمة لازم تتزامن)
+    if (changed == true) {
+      _initialLoad();
+    } else {
+      // Reset backoff لكل الأجهزة عند الرجوع — يضمن probe فوري بلا تخطّي
+      _consecutiveFailures.clear();
+      _probeAll();
+    }
   }
 
   void _openAlerts() {
