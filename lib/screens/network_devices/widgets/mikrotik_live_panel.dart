@@ -166,18 +166,21 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         }
       }
 
-      // احسب total traffic من الـethers فقط
-      int totalRxBps = 0, totalTxBps = 0;
+      // نحسب **أعلى interface** بدل المجموع — عشان الكراف يُطابق كروت
+      // "أعلى iface ↓" و "أعلى iface ↑" اللي فوق (طلب المستخدم 2026-08-14).
+      // كل سامبل يحمل max rx + max tx عند تلك اللحظة (من أي ether/sfp).
+      int maxRxSampleBps = 0, maxTxSampleBps = 0;
       for (final iface in stats.interfaces) {
         if (!_isEther(iface)) continue;
         final rate = _rates[iface.name];
         if (rate != null) {
-          totalRxBps += rate.rxBps;
-          totalTxBps += rate.txBps;
+          if (rate.rxBps > maxRxSampleBps) maxRxSampleBps = rate.rxBps;
+          if (rate.txBps > maxTxSampleBps) maxTxSampleBps = rate.txBps;
         }
       }
       if (_lastFetch != null) {
-        _history.add(_TrafficSample(at: now, rxBps: totalRxBps, txBps: totalTxBps));
+        _history.add(_TrafficSample(
+            at: now, rxBps: maxRxSampleBps, txBps: maxTxSampleBps));
         if (_history.length > _maxHistory) _history.removeAt(0);
       }
 
@@ -791,9 +794,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Row(children: [
           Icon(LucideIcons.chartLine, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          // نُضيف "مجموع" في العنوان — يفصل بصرياً عن كروت "أعلى ↑ ether1"
-          // اللي فوق (تلك per-interface max، هذا total).
-          Text('المجموع الحيّ (كل ether/sfp)',
+          // الكراف يعرض trajectory أعلى interface (يتطابق مع كروت
+          // "أعلى iface ↓ / ↑" اللي فوق)
+          Text('أعلى interface (سير الترفك)',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
