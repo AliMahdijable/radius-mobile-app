@@ -7,12 +7,23 @@ import 'mikrotik_binary_api.dart';
 class MikrotikApi {
   /// جلب صورة كاملة عن حالة الراوتر عبر Binary API.
   /// **يعمل مع RouterOS 6.43+** (login sentence بسيط).
+  /// **Progressive fetch**:
+  /// - `onPartialReady` (اختياري): يُستدعى بعد Tier 1 (system + interfaces
+  ///   + health + ethernet monitor) — ~400-600ms. UI يعرض CPU/RAM/interfaces فوراً.
+  /// - القيمة النهائيّة (returned Future): بعد Tier 2 (wireless + registration
+  ///   + hostname enrichment) — ~1.5-3s حسب حجم الجدول.
+  ///
+  /// **الفائدة**: بدل انتظار كل شي ~3s ثمّ عرض دفعة واحدة، الآن:
+  ///   t=0: skeleton
+  ///   t=500ms: CPU/RAM/interfaces (partial)
+  ///   t=2s: wireless + clients (complete)
   static Future<MikrotikStats> fetchStats({
     required String ip,
     required int port,          // 8728 (api) أو 8729 (api-ssl)
     required String user,
     required String pass,
     Duration timeout = const Duration(seconds: 6),
+    void Function(MikrotikStats partial)? onPartialReady,
   }) async {
     final client = MikrotikBinaryClient(
       host: ip,
@@ -25,10 +36,11 @@ class MikrotikApi {
       await client.connect();
       await client.login();
 
-      // نجيبهم بالتسلسل — Binary API socket واحد فقط
+      // ═══════ TIER 1 (fast — عرض جزئي) ═══════
+      // system/resource + interface/print + health + ethernet/monitor
+      // هذي الأساسيّات: CPU/RAM/uptime/temp + قائمة الـinterfaces
       final resourceRows = await client.query(['/system/resource/print']);
       final interfaceRows = await client.query(['/interface/print']);
-      // Health — حرارة + فولتيّة (اختياري، بعض الأجهزة الصغيرة ما تدعمه)
       List<Map<String, String>> healthRows = const [];
       try {
         healthRows = await client.query(['/system/health/print']);
@@ -38,82 +50,7 @@ class MikrotikApi {
         pppRows = await client.query(['/ppp/active/print']);
       } catch (_) {}
 
-      // Wireless — لو الجهاز يدعم wireless package
-      List<Map<String, String>> wirelessRows = const [];
-      List<Map<String, String>> wirelessClients = const [];
-      try {
-        wirelessRows = await client.query(['/interface/wireless/print']);
-      } catch (_) {
-        // بعض الأجهزة ما تدعم wireless (مثل CCR raw routers)
-      }
-      if (wirelessRows.isNotEmpty) {
-        try {
-          wirelessClients = await client.query(['/interface/wireless/registration-table/print']);
-        } catch (_) {}
-      }
-
-      // نبني map غنيّ MAC→(hostname, IP) من 3 مصادر بأولويّة:
-      //   1. /ip/dhcp-server/lease — host-name + IP (لو الراوتر DHCP server)
-      //   2. /interface/wireless/access-list — comment (اسم مخصّص لكل client)
-      //   3. /ip/arp — IP فقط (شامل حتى لو DHCP على راوتر آخر)
-      final Map<String, ({String? hostname, String? ip})> dhcpMap = {};
-
-      // 1. DHCP leases
-      try {
-        final leases = await client.query(['/ip/dhcp-server/lease/print']);
-        for (final l in leases) {
-          final mac = (l['mac-address'] ?? '').toUpperCase();
-          if (mac.isEmpty) continue;
-          dhcpMap[mac] = (
-            hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
-            ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
-          );
-        }
-      } catch (_) {}
-
-      // 2. Wireless access-list — comments هي أسماء client محفوظة يدوياً
-      try {
-        final acl = await client.query(['/interface/wireless/access-list/print']);
-        for (final a in acl) {
-          final mac = (a['mac-address'] ?? '').toUpperCase();
-          final comment = _nonEmpty(a['comment']);
-          if (mac.isEmpty || comment == null) continue;
-          final existing = dhcpMap[mac];
-          dhcpMap[mac] = (
-            hostname: existing?.hostname ?? comment,   // comment fallback لـhostname
-            ip: existing?.ip,
-          );
-        }
-      } catch (_) {}
-
-      // 3. ARP table — للـIP لو ما لكيناه من DHCP
-      try {
-        final arp = await client.query(['/ip/arp/print']);
-        for (final a in arp) {
-          final mac = (a['mac-address'] ?? '').toUpperCase();
-          final ip = _nonEmpty(a['address']);
-          final comment = _nonEmpty(a['comment']);
-          if (mac.isEmpty) continue;
-          final existing = dhcpMap[mac];
-          if (existing == null) {
-            dhcpMap[mac] = (hostname: comment, ip: ip);
-          } else {
-            dhcpMap[mac] = (
-              hostname: existing.hostname ?? comment,
-              ip: existing.ip ?? ip,
-            );
-          }
-        }
-      } catch (_) {}
-
-      // اجلب سرعة الـport الفعليّة (1Gbps/100Mbps/10Mbps) لكل ethernet.
-      // **مهم — سبب ANR سابق**: RouterOS Binary API socket بلا tags للـreads
-      // → Future.wait على نفس الـclient يسبّب race condition (reads تتداخل،
-      // parser يقرأ garbage). لذلك نُبقي الـloop تسلسلي.
-      //
-      // **الحل الحقيقي للـANR**: RouterOS يقبل قائمة interfaces مفصولة
-      // بفواصل في نفس الأمر — request واحد بدل N. يرجع كل monitors في
-      // response واحد → نقلّل من N calls إلى 1 call = 200ms بدل 2400ms.
+      // اجلب سرعة الـport الفعليّة (Tier 1 — قبل الـpartial callback)
       final Map<String, Map<String, String>> ethMonitorByName = {};
       final etherNames = interfaceRows
           .where((r) {
@@ -188,7 +125,8 @@ class MikrotikApi {
       healthTemp ??= _asInt(resource['cpu-temperature']);
       if (healthTemp == 0) healthTemp = null;
 
-      return MikrotikStats(
+      // ═══ بناء Tier 1 partial (بدون wireless بعد) ═══
+      final tier1 = MikrotikStats(
         cpuLoad: _asInt(resource['cpu-load']),
         memUsedPercent: _calcMemUsed(resource),
         memTotalBytes: _asInt(resource['total-memory']),
@@ -207,6 +145,76 @@ class MikrotikApi {
           return MikrotikInterface.fromApiMap(row, monitor: monitor);
         }).toList(),
         pppActiveCount: pppRows.length,
+        wirelessInterfaces: const [],   // Tier 2 يملؤها
+        wirelessClients: const [],
+      );
+
+      // ⚡ يُطلق callback الآن — UI يعرض CPU/RAM/interfaces فوراً
+      if (onPartialReady != null) {
+        try { onPartialReady(tier1); } catch (_) {}
+      }
+
+      // ═══════ TIER 2 (تفاصيل — wireless + enrichment) ═══════
+      List<Map<String, String>> wirelessRows = const [];
+      List<Map<String, String>> wirelessClients = const [];
+      try {
+        wirelessRows = await client.query(['/interface/wireless/print']);
+      } catch (_) {
+        // بعض الأجهزة ما تدعم wireless (CCR raw routers)
+      }
+      if (wirelessRows.isNotEmpty) {
+        try {
+          wirelessClients = await client.query(['/interface/wireless/registration-table/print']);
+        } catch (_) {}
+      }
+
+      // hostname enrichment: DHCP lease + access-list + ARP
+      final Map<String, ({String? hostname, String? ip})> dhcpMap = {};
+      try {
+        final leases = await client.query(['/ip/dhcp-server/lease/print']);
+        for (final l in leases) {
+          final mac = (l['mac-address'] ?? '').toUpperCase();
+          if (mac.isEmpty) continue;
+          dhcpMap[mac] = (
+            hostname: _nonEmpty(l['host-name']) ?? _nonEmpty(l['comment']),
+            ip: _nonEmpty(l['active-address']) ?? _nonEmpty(l['address']),
+          );
+        }
+      } catch (_) {}
+      try {
+        final acl = await client.query(['/interface/wireless/access-list/print']);
+        for (final a in acl) {
+          final mac = (a['mac-address'] ?? '').toUpperCase();
+          final comment = _nonEmpty(a['comment']);
+          if (mac.isEmpty || comment == null) continue;
+          final existing = dhcpMap[mac];
+          dhcpMap[mac] = (
+            hostname: existing?.hostname ?? comment,
+            ip: existing?.ip,
+          );
+        }
+      } catch (_) {}
+      try {
+        final arp = await client.query(['/ip/arp/print']);
+        for (final a in arp) {
+          final mac = (a['mac-address'] ?? '').toUpperCase();
+          final ip = _nonEmpty(a['address']);
+          final comment = _nonEmpty(a['comment']);
+          if (mac.isEmpty) continue;
+          final existing = dhcpMap[mac];
+          if (existing == null) {
+            dhcpMap[mac] = (hostname: comment, ip: ip);
+          } else {
+            dhcpMap[mac] = (
+              hostname: existing.hostname ?? comment,
+              ip: existing.ip ?? ip,
+            );
+          }
+        }
+      } catch (_) {}
+
+      // ═══ Tier 2 كامل — يُرجع النسخة النهائيّة ═══
+      return tier1.copyWith(
         wirelessInterfaces: wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
         wirelessClients: wirelessClients.map((c) {
           final macUpper = (c['mac-address'] ?? '').toUpperCase();
@@ -300,6 +308,33 @@ class MikrotikStats {
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
 
   int get upInterfacesCount => interfaces.where((i) => i.running && !i.disabled).length;
+
+  /// نسخة بحقول محدَّثة — يستعملها progressive rendering.
+  /// Tier 1 يبني MikrotikStats مع system data فقط (interfaces=[]، wireless=[]).
+  /// Tier 2 يستعمل هذي عشان يضيف wireless/registration بلا إعادة بناء كل شيء.
+  MikrotikStats copyWith({
+    List<MikrotikInterface>? interfaces,
+    int? pppActiveCount,
+    List<MikrotikWireless>? wirelessInterfaces,
+    List<MikrotikWirelessClient>? wirelessClients,
+  }) => MikrotikStats(
+        cpuLoad: cpuLoad,
+        memUsedPercent: memUsedPercent,
+        memTotalBytes: memTotalBytes,
+        memFreeBytes: memFreeBytes,
+        uptime: uptime,
+        version: version,
+        boardName: boardName,
+        architectureName: architectureName,
+        cpuCount: cpuCount,
+        cpuFrequencyMhz: cpuFrequencyMhz,
+        temperature: temperature,
+        voltage: voltage,
+        interfaces: interfaces ?? this.interfaces,
+        pppActiveCount: pppActiveCount ?? this.pppActiveCount,
+        wirelessInterfaces: wirelessInterfaces ?? this.wirelessInterfaces,
+        wirelessClients: wirelessClients ?? this.wirelessClients,
+      );
   int get downInterfacesCount => interfaces.where((i) => !i.running && !i.disabled).length;
   int get memUsedBytes => memTotalBytes - memFreeBytes;
 }

@@ -102,6 +102,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         port: widget.device.apiPort ?? 8728,
         user: user,
         pass: pass,
+        // ⚡ عرض جزئي فوري — CPU/RAM/interfaces تظهر بعد ~500ms
+        // بدل انتظار كل شيء (~2-3s)
+        onPartialReady: (partial) {
+          if (!mounted) return;
+          setState(() {
+            _stats = partial;
+            _lastFetch = DateTime.now();
+            // نُبقي _loading = true لأن wireless بعده جاي
+          });
+        },
       );
       if (!mounted) return;
 
