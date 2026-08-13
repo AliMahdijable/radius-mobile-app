@@ -79,7 +79,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     if (_probing) return;
     setState(() => _probing = true);
     try {
-      final r = await NetworkDevicesApi.localIcmpPing(ip: _d.ip);
+      // TCP probe (أدقّ من ICMP على iOS)
+      final r = await NetworkDevicesApi.localIcmpPing(
+        ip: _d.ip,
+        tcpPort: _d.apiPort ?? _d.port,
+      );
       NetworkDevicesApi.saveProbeResult(
         deviceId: _d.id,
         status: r.status,

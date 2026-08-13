@@ -1,3 +1,5 @@
+import 'dart:io' show Socket;
+
 import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -82,19 +84,67 @@ class NetworkDevicesApi {
     return <String, dynamic>{};
   }
 
-  /// ICMP ping محلّي (من الموبايل على LAN) — يعمل على iOS + Android.
-  /// أدقّ من TCP لأنّه لا يعتمد على منفذ محدّد. يرسل count ping ويرجع
-  /// متوسّط الاستجابة + status.
+  /// Local probe محلّي — يستعمل TCP كأولوية (أدقّ من ICMP على iOS)
+  /// مع fallback على ICMP لو الـport مجهول.
+  ///
+  /// **iOS ICMP quirk**: dart_ping على iOS يرجع بيانات مزيّفة أحياناً
+  /// (نفس latency=156ms لكل الأجهزة، أو "online" لأجهزة offline).
+  /// السبب: iOS يمنع raw ICMP sockets بدون entitlement خاصّ، فالمكتبة
+  /// تلجأ لـfallback غير موثوق.
+  ///
+  /// **الحل**: TCP connect probe:
+  ///   - سريع (~1-100ms على LAN)
+  ///   - دقيق (successful connect = server-side pipeline يستجيب)
+  ///   - يعمل على iOS + Android بلا permissions
+  ///
+  /// نستعمل [tcpPort] لو متوفّر (Mikrotik=8728، UBNT=22، Mimosa=161).
+  /// ICMP fallback فقط لأجهزة بلا port معروف.
   static Future<({String status, int? responseMs, double? packetLoss})> localIcmpPing({
     required String ip,
     int count = 3,
     Duration timeout = const Duration(seconds: 2),
+    int? tcpPort,   // نُفضّله على ICMP
+  }) async {
+    // ── 1. TCP probe (الأولوية) ──
+    if (tcpPort != null && tcpPort > 0) {
+      return _tcpProbe(ip: ip, port: tcpPort, timeout: timeout);
+    }
+    // ── 2. ICMP fallback (لو ما فيه port) ──
+    return _icmpProbe(ip: ip, count: count, timeout: timeout);
+  }
+
+  /// TCP connect probe — أدقّ probe للأجهزة على LAN.
+  /// نجاح = الجهاز يقبل connections على هذا الـport (بمعنى: online + السيرفس شغّال).
+  /// فشل = timeout أو refused → offline.
+  static Future<({String status, int? responseMs, double? packetLoss})> _tcpProbe({
+    required String ip,
+    required int port,
+    required Duration timeout,
+  }) async {
+    final sw = Stopwatch()..start();
+    Socket? socket;
+    try {
+      socket = await Socket.connect(ip, port, timeout: timeout);
+      sw.stop();
+      socket.destroy();
+      return (status: 'online', responseMs: sw.elapsedMilliseconds, packetLoss: 0.0);
+    } catch (e) {
+      if (kDebugMode) print('⚠️ tcpProbe $ip:$port failed: $e');
+      try { socket?.destroy(); } catch (_) {}
+      return (status: 'offline', responseMs: null, packetLoss: 100.0);
+    }
+  }
+
+  /// ICMP ping — fallback لو ما نعرف الـport.
+  static Future<({String status, int? responseMs, double? packetLoss})> _icmpProbe({
+    required String ip,
+    required int count,
+    required Duration timeout,
   }) async {
     try {
       final ping = Ping(ip, count: count, timeout: timeout.inSeconds);
       final times = <int>[];
       int received = 0;
-      // dart_ping 10.x: PingEvent = sealed (PingResponse | PingError | PingSummary)
       await for (final event in ping.stream) {
         if (event is PingResponse) {
           if (event.time != null) {
@@ -112,7 +162,7 @@ class NetworkDevicesApi {
       final loss = ((count - received) / count) * 100.0;
       return (status: 'online', responseMs: avg, packetLoss: loss);
     } catch (e) {
-      if (kDebugMode) print('⚠️ localIcmpPing failed: $e');
+      if (kDebugMode) print('⚠️ icmpProbe $ip failed: $e');
       return (status: 'offline', responseMs: null, packetLoss: 100.0);
     }
   }

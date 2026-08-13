@@ -153,7 +153,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
       await Future.wait(_all.where((d) => _shouldProbeInRound(d.id)).map((d) async {
         try {
-          final r = await NetworkDevicesApi.localIcmpPing(ip: d.ip);
+          // TCP probe (أدقّ من ICMP على iOS) — نستعمل apiPort لو موجود
+          // (Mikrotik=8728، UBNT=22، Mimosa=161)، وإلا الـport الأساسي.
+          final r = await NetworkDevicesApi.localIcmpPing(
+            ip: d.ip,
+            tcpPort: d.apiPort ?? d.port,
+          );
           final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
           final newStatus = r.status;
 
