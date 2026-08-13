@@ -702,15 +702,22 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // Traffic graph — RX + TX gradient area chart
   // ══════════════════════════════════════════════════════════════
   Widget _trafficGraph() {
+    // Mirror chart pattern (مثل nload/vnstat):
+    //   RX (download) → positive Y (فوق المحور) — أخضر
+    //   TX (upload)   → negative Y (تحت المحور، مرسوم كقيمة موجبة) — أزرق
+    // يفصل الاثنين بصرياً حتى لو القيم متطابقة (typical للـPtP link متوازن).
     final rxSpots = <FlSpot>[];
     final txSpots = <FlSpot>[];
     for (int i = 0; i < _history.length; i++) {
-      rxSpots.add(FlSpot(i.toDouble(), _history[i].rxBps.toDouble()));
-      txSpots.add(FlSpot(i.toDouble(), _history[i].txBps.toDouble()));
+      final x = i.toDouble();
+      rxSpots.add(FlSpot(x, _history[i].rxBps.toDouble()));
+      // TX سالب في الرسم — نعرضه كأنّه ينزل تحت الخط الأفقي
+      txSpots.add(FlSpot(x, -_history[i].txBps.toDouble()));
     }
     final maxRx = _history.map((s) => s.rxBps).fold<int>(0, math.max);
     final maxTx = _history.map((s) => s.txBps).fold<int>(0, math.max);
-    final maxY = (math.max(maxRx, maxTx) * 1.3).clamp(1000, double.infinity);
+    final peak = math.max(maxRx, maxTx);
+    final bound = (peak * 1.2).clamp(1000, double.infinity).toDouble();
 
     final lastRx = _history.isNotEmpty ? _history.last.rxBps : 0;
     final lastTx = _history.isNotEmpty ? _history.last.txBps : 0;
@@ -745,10 +752,13 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
-                horizontalInterval: maxY / 4,
-                getDrawingHorizontalLine: (_) => FlLine(
-                  color: AppColors.border.withValues(alpha: 0.5),
-                  strokeWidth: 0.5,
+                // نُظهر أفقياً 0 (المحور) + قيم منتصف كل جانب
+                horizontalInterval: bound / 2,
+                getDrawingHorizontalLine: (v) => FlLine(
+                  color: v == 0
+                      ? AppColors.border.withValues(alpha: 0.9)   // أسمك للمحور
+                      : AppColors.border.withValues(alpha: 0.35),
+                  strokeWidth: v == 0 ? 1 : 0.5,
                 ),
               ),
               titlesData: FlTitlesData(
@@ -760,22 +770,23 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 44,
-                    interval: maxY / 3,
+                    interval: bound / 2,
                     getTitlesWidget: (value, _) => Text(
-                      _formatBpsShort(value.toInt()),
+                      // نعرض القيمة المطلقة — TX تحت لكن الرقم موجب
+                      _formatBpsShort(value.abs().toInt()),
                       style: TextStyle(fontSize: 9, color: AppColors.textLow),
                     ),
                   ),
                 ),
               ),
               borderData: FlBorderData(show: false),
-              minY: 0,
-              maxY: maxY.toDouble(),
+              minY: -bound,
+              maxY: bound,
               minX: 0,
               maxX: (_history.length - 1).toDouble(),
               lineBarsData: [
-                _lineBarData(rxSpots, rxColor),
-                _lineBarData(txSpots, txColor),
+                _lineBarData(rxSpots, rxColor, mirror: false),  // فوق
+                _lineBarData(txSpots, txColor, mirror: true),   // تحت
               ],
               lineTouchData: LineTouchData(
                 enabled: true,
@@ -784,7 +795,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                   getTooltipItems: (spots) => spots.map((s) {
                     final isRx = s.barIndex == 0;
                     return LineTooltipItem(
-                      '${isRx ? "↓" : "↑"} ${_formatBps(s.y.toInt())}',
+                      // TX سالب في الـspot، نعرض قيمته المطلقة
+                      '${isRx ? "↓" : "↑"} ${_formatBps(s.y.abs().toInt())}',
                       TextStyle(
                         color: isRx ? rxColor : txColor,
                         fontWeight: FontWeight.w700,
@@ -801,7 +813,19 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     );
   }
 
-  LineChartBarData _lineBarData(List<FlSpot> spots, Color color) {
+  /// [mirror]=true للـTX (تحت المحور) — fl_chart يستعمل aboveBarData بدل below
+  /// للـspots السالبة، والـgradient يُقلب اتجاهه (من أسفل إلى أعلى) عشان
+  /// اللون الغامق قرب الخط والفاتح قرب المحور.
+  LineChartBarData _lineBarData(List<FlSpot> spots, Color color,
+      {bool mirror = false}) {
+    final gradient = LinearGradient(
+      begin: mirror ? Alignment.bottomCenter : Alignment.topCenter,
+      end: mirror ? Alignment.topCenter : Alignment.bottomCenter,
+      colors: [
+        color.withValues(alpha: 0.35),
+        color.withValues(alpha: 0.03),
+      ],
+    );
     return LineChartBarData(
       spots: spots,
       isCurved: true,
@@ -810,17 +834,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       barWidth: 2,
       isStrokeCapRound: true,
       dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(
-        show: true,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.28),
-            color.withValues(alpha: 0.02),
-          ],
-        ),
-      ),
+      // للـTX (mirror=true): الـfill من الخط إلى المحور (فوقه) — aboveBarData
+      // للـRX (mirror=false): الـfill من الخط إلى المحور (تحته) — belowBarData
+      belowBarData: mirror
+          ? BarAreaData(show: false)
+          : BarAreaData(show: true, gradient: gradient),
+      aboveBarData: mirror
+          ? BarAreaData(show: true, gradient: gradient)
+          : BarAreaData(show: false),
     );
   }
 
