@@ -43,8 +43,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   /// history للـtraffic الإجمالي — للرسم البياني
   final List<_TrafficSample> _history = [];
-  static const int _maxHistory = 30;              // 30 × 15s ≈ 7.5 دقائق
-  static const _refreshInterval = Duration(seconds: 15);
+  static const int _maxHistory = 30;              // 30 × 8s ≈ 4 دقائق history
+  // 8s cadence (بدل 15s) — user requested أسرع تحديث. Progressive rendering
+  // يعطي partial في 500ms، لكن refresh cycle نفسه صار أسرع.
+  static const _refreshInterval = Duration(seconds: 8);
 
   @override
   void initState() {
@@ -104,12 +106,18 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         pass: pass,
         // ⚡ عرض جزئي فوري — CPU/RAM/interfaces تظهر بعد ~500ms
         // بدل انتظار كل شيء (~2-3s)
+        //
+        // ⚠️ مهم جداً: **لا** نلمس _lastFetch أو _lastBytes هنا!
+        // (bug 2026-08-13: كنّا نضبط _lastFetch في callback → rate calc
+        // للـfetch النهائي كان يستعمل elapsed = 500ms بدل 15s الحقيقيّة
+        // → 30× overestimate → ether1 يظهر 4.10Gbps بدل 130Mbps!)
+        //
+        // Rate calculation يبقى فقط في المكان الي بعد الـawait (النهائي)
+        // — يستعمل _lastFetch الصحيح من fetch السابق.
         onPartialReady: (partial) {
           if (!mounted) return;
           setState(() {
             _stats = partial;
-            _lastFetch = DateTime.now();
-            // نُبقي _loading = true لأن wireless بعده جاي
           });
         },
       );
@@ -126,10 +134,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               final dRx = iface.rxBytes! - prev.rxBytes;
               final dTx = iface.txBytes! - prev.txBytes;
               if (dRx >= 0 && dTx >= 0) {
-                _rates[iface.name] = _IfaceRate(
-                  rxBps: (dRx * 8 / elapsed).round(),
-                  txBps: (dTx * 8 / elapsed).round(),
-                );
+                final rxBps = (dRx * 8 / elapsed).round();
+                final txBps = (dTx * 8 / elapsed).round();
+                // Safety cap: أي رقم > 10Gbps = خطأ (لا يوجد راوتر Mikrotik
+                // يتجاوز 10G على واجهة واحدة). نتجاهله بدل عرض قراءة مضلّلة.
+                const maxSaneBps = 10000000000;   // 10 Gbps
+                if (rxBps <= maxSaneBps && txBps <= maxSaneBps) {
+                  _rates[iface.name] = _IfaceRate(rxBps: rxBps, txBps: txBps);
+                }
               }
             }
             if (iface.rxBytes != null && iface.txBytes != null) {
