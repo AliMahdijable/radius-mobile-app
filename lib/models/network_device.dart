@@ -1,3 +1,5 @@
+import '../core/util/format.dart';
+
 /// Network device inventory — routers/switches/APs/links/sectors.
 /// راجع project_devices_monitoring_plan في memory.
 class NetworkDevice {
@@ -89,17 +91,20 @@ class NetworkDevice {
         id: j['id'] as int,
         adminId: (j['admin_id'] ?? '').toString(),
         regionId: j['region_id'] as int?,
-        name: (j['name'] ?? '').toString(),
+        // 2026-08-18: normalize digits (١٢ → 12) في الحقول النصّيّة —
+        // Cairo font يرندر الأرقام الهنديّة بشكل يشبه lr للمستخدم.
+        // نصلح للـcosmetic فقط، الـDB يبقى كما كتب المستخدم.
+        name: normalizeDigits((j['name'] ?? '').toString()) ?? '',
         type: (j['type'] ?? 'other').toString(),
         brand: (j['brand'] ?? 'other').toString(),
-        model: j['model']?.toString(),
+        model: normalizeDigits(j['model']?.toString()),
         ip: (j['ip'] ?? '').toString(),
         port: (j['port'] is int) ? j['port'] as int : int.tryParse('${j['port']}') ?? 80,
         apiPort: j['api_port'] as int?,
         protocol: j['protocol']?.toString(),
         mac: j['mac']?.toString(),
-        location: j['location']?.toString(),
-        notes: j['notes']?.toString(),
+        location: normalizeDigits(j['location']?.toString()),
+        notes: normalizeDigits(j['notes']?.toString()),
         hasCredentials: _parseHasCreds(j['has_credentials']),
         lastProbedAt: j['last_probed_at'] != null
             ? DateTime.tryParse(j['last_probed_at'].toString())

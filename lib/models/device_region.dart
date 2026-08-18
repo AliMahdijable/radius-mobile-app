@@ -1,3 +1,5 @@
+import '../core/util/format.dart';
+
 /// منطقة أجهزة (كرخ/رصافة/شرق/غرب…) — grouping للـfilter و bulk-scan.
 /// راجع [[project_devices_monitoring_plan]] في memory.
 class DeviceRegion {
@@ -19,7 +21,8 @@ class DeviceRegion {
 
   factory DeviceRegion.fromJson(Map<String, dynamic> j) => DeviceRegion(
         id: j['id'] as int,
-        name: (j['name'] ?? '').toString(),
+        // 2026-08-18: normalize digits (١٢ → 12) — Cairo يرندرها كـlr
+        name: normalizeDigits((j['name'] ?? '').toString()) ?? '',
         color: j['color']?.toString(),
         sortOrder: (j['sort_order'] is int)
             ? j['sort_order'] as int
