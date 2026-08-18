@@ -501,10 +501,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           border: Border.all(color: signalColor.withValues(alpha: 0.25), width: 1),
         ),
         child: Row(children: [
-          // Gauge on the right (RTL friendly)
+          // Gauge on the right — RepaintBoundary لعزل الـCustomPaint (rebuild
+          // كل fetch كان يُعيد رسم الـpainter → jank بسيط لكن ملحوظ)
           SizedBox(
             width: 120, height: 90,
-            child: CustomPaint(
+            child: RepaintBoundary(child: CustomPaint(
               painter: _SignalGaugePainter(
                 percent: w.signalQualityPercent,
                 color: signalColor,
@@ -522,7 +523,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                           color: AppColors.textMid)),
                 ]),
               ),
-            ),
+            )),
           ),
           const SizedBox(width: 16),
           // Details on the left

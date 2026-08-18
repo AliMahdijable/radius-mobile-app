@@ -264,11 +264,13 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           _header(),
           if (_error != null) _errorBox(),
           if (_stats != null) ...[
-            _boardBanner(),
-            _metricsRow(),
+            // RepaintBoundary لكل section — كل قسم يُرسم مستقلاً بلا rebuild
+            // للـchart (الأثقل بصرياً) عند تحديث القيم فقط
+            RepaintBoundary(child: _boardBanner()),
+            RepaintBoundary(child: _metricsRow()),
             if (_history.length >= 2) ...[
               const SizedBox(height: 4),
-              _trafficGraph(),
+              _trafficGraph(),   // فيه RepaintBoundary داخلياً
             ],
             const SizedBox(height: Sp.md),
           ],
@@ -293,7 +295,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Text('Ethernet Interfaces (${ethers.length})',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           ]),
-          content: _interfacesContent(ethers),
+          // RepaintBoundary → عزل الـinterface list عن باقي rebuilds
+          content: RepaintBoundary(child: _interfacesContent(ethers)),
         ),
       ],
       if (s.hasWireless) ...[
@@ -321,7 +324,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Text('العملاء المتّصلون (${s.wirelessClients.length})',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           ]),
-          content: _clientsContent(s.wirelessClients),
+          content: RepaintBoundary(child: _clientsContent(s.wirelessClients)),
         ),
       ],
     ];
@@ -804,9 +807,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           _legendChip('↑', _formatBps(lastTx), txColor),
         ]),
         const SizedBox(height: 12),
+        // RepaintBoundary + duration:0 → يمنع rebuild الكامل عند كل setState
+        // الـchart كان أكبر مصدر للـjank (animation 150ms افتراضي × كل fetch)
         SizedBox(
           height: 120,
-          child: LineChart(
+          child: RepaintBoundary(child: LineChart(
+            duration: Duration.zero,       // ألغي الـanimation بين updates
             LineChartData(
               gridData: FlGridData(
                 show: true,
@@ -864,7 +870,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 ),
               ),
             ),
-          ),
+          )),
         ),
       ]),
     );
