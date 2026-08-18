@@ -62,6 +62,81 @@ class UbntApi {
         '  • بعض airFiber يستعمل SSH-user منفصل عن web-user');
   }
 
+  /// إعادة تشغيل الجهاز عبر SSH `reboot` command (مدعوم على airMax + airFiber).
+  /// نُجرّب نفس الـfallback usernames مثل fetchStats.
+  /// **مهم**: SSH session تنقطع فوراً بعد استقبال reboot — نتوقّع I/O error
+  /// طبيعي (يعني الأمر وصل).
+  static Future<void> rebootDevice({
+    required String ip,
+    int port = 22,
+    required String user,
+    required String pass,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final userList = _buildUserFallback(user);
+    UbntException? lastAuthErr;
+    for (final u in userList) {
+      try {
+        await _rebootWithUser(
+            ip: ip, port: port, user: u, pass: pass, timeout: timeout);
+        return;   // نجح
+      } on UbntException catch (e) {
+        if (e.message.contains('اسم المستخدم') || e.message.contains('SSH auth')) {
+          lastAuthErr = e;
+          continue;
+        }
+        rethrow;
+      }
+    }
+    throw lastAuthErr ?? UbntException('فشل SSH auth للـreboot');
+  }
+
+  static Future<void> _rebootWithUser({
+    required String ip,
+    required int port,
+    required String user,
+    required String pass,
+    required Duration timeout,
+  }) async {
+    SSHClient? client;
+    SSHSocket? socket;
+    try {
+      socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      client = SSHClient(
+        socket,
+        username: user,
+        onPasswordRequest: () => pass,
+        onUserInfoRequest: (req) async => req.prompts.map((_) => pass).toList(),
+      );
+      await client.authenticated.timeout(timeout);
+      // نُنفّذ الأمر — الجهاز يقطع الاتصال تقريباً فوراً بعد وصول reboot
+      try {
+        await client.run('reboot &').timeout(const Duration(seconds: 3));
+      } catch (e) {
+        // Socket closure / timeout = الجهاز بدأ يُعيد التشغيل (متوقّع)
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('closed') || msg.contains('timeout') ||
+            msg.contains('reset') || msg.contains('eof')) {
+          return;
+        }
+        // خطأ آخر — قد يكون permission denied أو command not found
+        rethrow;
+      }
+    } on SSHAuthAbortError {
+      throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
+    } on SSHAuthFailError {
+      throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
+    } on TimeoutException {
+      throw UbntException('انتهت مهلة الاتصال');
+    } catch (e) {
+      if (e is UbntException) rethrow;
+      throw UbntException('فشل reboot: $e');
+    } finally {
+      try { client?.close(); } catch (_) {}
+      try { socket?.close(); } catch (_) {}
+    }
+  }
+
   /// نُنشئ قائمة usernames مرتّبة: الحاليّ أوّلاً، ثمّ الـfallbacks.
   static List<String> _buildUserFallback(String user) {
     final base = user.trim();

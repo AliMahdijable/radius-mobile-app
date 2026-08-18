@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/mikrotik_api.dart';
+import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
+import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
@@ -36,6 +39,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   late NetworkDevice _d;
   bool _probing = false;
   bool _changed = false;
+  bool _rebooting = false;   // spinner على زرّ reboot
   double? _lastPacketLoss;
 
   /// آخر 10 قراءات ping — للـsparkline
@@ -162,6 +166,105 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         _ => AppColors.textLow,
       };
 
+  /// هل reboot متاح لهذا الجهاز؟
+  /// Mikrotik + api → نعم (Binary API 8728)
+  /// UBNT + api → نعم (SSH 22)
+  /// Mimosa → لا (SSH مقفول، SNMP SET غير موثّق)
+  /// أي جهاز بلا credentials → لا
+  bool _canReboot() {
+    if (!_d.hasCredentials) return false;
+    if (_d.protocol != 'api' && _d.protocol != 'ssh') return false;
+    return _d.brand == 'mikrotik' || _d.brand == 'ubnt';
+  }
+
+  /// dialog تأكيد + spinner + snackbar للنجاح/الفشل.
+  Future<void> _confirmAndReboot() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.power, color: const Color(0xFFEA580C), size: 32),
+        title: const Text('إعادة تشغيل الجهاز'),
+        content: Text(
+          'سيُعاد تشغيل "${_d.name}" الآن.\n'
+          'الجهاز سيكون غير متاح لمدة 1-2 دقيقة.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+            icon: const Icon(LucideIcons.power, size: 16),
+            label: const Text('إعادة تشغيل'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _rebooting = true);
+    HapticFeedback.mediumImpact();
+    try {
+      final creds = await NetworkDevicesApi.getCredentials(_d.id);
+      final user = (creds['user'] ?? '').toString();
+      final pass = (creds['pass'] ?? '').toString();
+
+      switch (_d.brand) {
+        case 'mikrotik':
+          await MikrotikApi.rebootDevice(
+            ip: _d.ip,
+            port: _d.apiPort ?? 8728,
+            user: user,
+            pass: pass,
+          );
+          break;
+        case 'ubnt':
+          await UbntApi.rebootDevice(
+            ip: _d.ip,
+            port: _d.apiPort ?? 22,
+            user: user,
+            pass: pass,
+          );
+          break;
+        default:
+          throw Exception('البراند ${_d.brand} غير مدعوم للـreboot');
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(LucideIcons.check, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text('تمّ إرسال reboot لـ${_d.name} — الجهاز يعيد التشغيل الآن')),
+        ]),
+        backgroundColor: const Color(0xFF10B981),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is MikrotikException
+          ? e.message
+          : e is UbntException
+              ? e.message
+              : e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(LucideIcons.circleAlert, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text('فشل reboot: $msg')),
+        ]),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      if (mounted) setState(() => _rebooting = false);
+    }
+  }
+
   IconData _protocolIcon(String p) => switch (p) {
         'api' => LucideIcons.globe,
         'ssh' => LucideIcons.terminal,
@@ -204,6 +307,16 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           onPressed: () => Navigator.pop(context, _changed),
         ),
         actions: [
+          // Reboot — يظهر فقط للأجهزة الي عندها credentials وبروتوكول مدعوم
+          if (_canReboot())
+            IconButton(
+              icon: _rebooting
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(LucideIcons.power, size: 18, color: const Color(0xFFEA580C)),
+              tooltip: 'إعادة تشغيل الجهاز',
+              onPressed: _rebooting ? null : _confirmAndReboot,
+            ),
           IconButton(icon: const Icon(LucideIcons.pencil, size: 18), onPressed: _edit),
           IconButton(icon: Icon(LucideIcons.trash2, size: 18, color: AppColors.error), onPressed: _delete),
         ],

@@ -296,6 +296,46 @@ class MikrotikApi {
     }
   }
 
+  /// إعادة تشغيل الراوتر عبر `/system/reboot` (Binary API).
+  /// **مهم**: الراوتر يقطع الاتصال فوراً بعد استقبال الأمر — نتوقّع socket
+  /// exception طبيعي (يعني الأمر وصل). نُطلق success في هذي الحالة.
+  static Future<void> rebootDevice({
+    required String ip,
+    required int port,
+    required String user,
+    required String pass,
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    final client = MikrotikBinaryClient(
+      host: ip,
+      port: port,
+      user: user,
+      pass: pass,
+      timeout: timeout,
+    );
+    try {
+      await client.connect();
+      await client.login();
+      try {
+        // نُرسل الأمر — RouterOS قد يقطع الاتصال قبل الرد
+        await client.query(['/system/reboot']);
+      } catch (e) {
+        // Socket closure = الراوتر بدأ يُعيد التشغيل (متوقّع)
+        final msg = e.toString();
+        if (msg.contains('closed') || msg.contains('timeout') ||
+            msg.contains('reset') || msg.contains('reboot')) {
+          return;  // ← نجاح: الأمر وصل والراوتر بدأ
+        }
+        rethrow;  // خطأ حقيقي (auth، socket refuse)
+      }
+    } catch (e) {
+      if (e is MikrotikException) rethrow;
+      throw MikrotikException(_translateSocketError(e));
+    } finally {
+      try { await client.close(); } catch (_) {}
+    }
+  }
+
   static String _translateSocketError(dynamic e) {
     final msg = e.toString();
     if (msg.contains('SocketException') && msg.contains('refused')) {

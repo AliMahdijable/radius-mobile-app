@@ -188,6 +188,23 @@ class MimosaApi {
     final v = vb.asInt;
     return v == 0 ? null : v / 10.0;
   }
+
+  /// إعادة تشغيل الجهاز — **غير مدعومة على Mimosa عن بُعد**.
+  ///
+  /// السبب: SSH مقفول في firmware، وMimosa لا توفّر OID موثّق للـreboot عبر
+  /// SNMP SET (اختبرنا 1.3.6.1.4.1.43356.2.1.1.6.0 وأخوته — لا تستجيب).
+  ///
+  /// الطريقة الوحيدة: web UI مباشرة عبر HTTPS.
+  static Future<void> rebootDevice({
+    required String host,
+    int port = 161,
+    required String community,
+  }) async {
+    throw MimosaException(
+      'Reboot لا يُدعم عن بُعد لأجهزة Mimosa. '
+      'يجب استعمال web UI: https://$host',
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
