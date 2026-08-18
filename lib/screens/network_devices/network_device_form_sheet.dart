@@ -245,9 +245,14 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                         _onBrandChanged)),
                   ]),
                   const SizedBox(height: 10),
-                  _textField(_modelCtrl, 'الموديل',
-                      hint: 'مثلاً: RB4011، PBE-5AC، A5c',
-                      icon: LucideIcons.info),
+                  // 2026-08-18: dropdown مخصّص لأجهزة UBNT — يحدّد الموديل
+                  // بشكل حاسم فيحدّد أي Live Panel نعرض (AF60 vs classic).
+                  // الأنواع الأخرى تبقى بحقل نصّي حرّ كما كانت.
+                  if (_brand == 'ubnt') _ubntModelPicker()
+                  else
+                    _textField(_modelCtrl, 'الموديل',
+                        hint: 'مثلاً: RB4011، PBE-5AC، A5c',
+                        icon: LucideIcons.info),
                   const SizedBox(height: 10),
                   _textField(_locationCtrl, 'الموقع (اختياري)',
                       hint: 'مثلاً: البرج الشمالي - قطاع 3',
@@ -537,6 +542,58 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       decoration: _inputDecoration(label),
       items: items.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
       onChanged: (v) { if (v != null) onChanged(v); },
+    );
+  }
+
+  /// UBNT model picker — يحدّد الموديل بشكل حاسم فيقرّر أي Live Panel نعرض.
+  /// - "airFiber 60 LR/XR/GP/Lite" → AirFiber60LivePanel (بانل 60 GHz)
+  /// - "AF-60-XG" → UbntLivePanel (رغم اسمه — لأنه 5 GHz backhaul!)
+  /// - "AirMax classic" أو "أخرى" → UbntLivePanel (airOS العادي)
+  ///
+  /// 2026-08-18: أُضيف لأنّ اسم الجهاز وحده (مثل "لنك 12") لا يكفي للتخمين.
+  Widget _ubntModelPicker() {
+    // خيارات موحّدة — key = القيمة الي تُحفظ في model field
+    // (كلها تحوي "AF-60" أو "airMax" الي يفهمها _isAirFiber60)
+    const presets = <MapEntry<String, String>>[
+      MapEntry('', 'لم يُحدَّد — اكتب أدناه'),
+      MapEntry('AF-60-LR', 'AirFiber 60 LR (60 GHz — Long Range)'),
+      MapEntry('AF-60-XR', 'AirFiber 60 XR (60 GHz — Extreme Range)'),
+      MapEntry('AF-60-GP', 'AirFiber 60 GP (60 GHz)'),
+      MapEntry('AF-60-Lite', 'AirFiber 60 Lite (60 GHz)'),
+      MapEntry('AF-60-XG', 'AF-60-XG (5 GHz backhaul ⚠️ ليس 60 GHz)'),
+      MapEntry('AirMax', 'AirMax classic (PBE / NanoBeam / LiteBeam ...)'),
+    ];
+    // القيمة الحاليّة — نطابقها مع presets، وإلا نعتبرها "أخرى/مخصّص"
+    final current = _modelCtrl.text.trim();
+    final matchedKey = presets.any((p) => p.key == current) ? current : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String?>(
+          value: matchedKey,
+          isExpanded: true,
+          decoration: _inputDecoration('موديل UBNT'),
+          hint: current.isEmpty
+              ? const Text('اختر الموديل')
+              : Text('مخصّص: $current', overflow: TextOverflow.ellipsis),
+          items: [
+            for (final p in presets)
+              DropdownMenuItem<String?>(
+                value: p.key.isEmpty ? null : p.key,
+                child: Text(p.value, style: const TextStyle(fontSize: 13),
+                    overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (v) => setState(() {
+            _modelCtrl.text = v ?? '';
+          }),
+        ),
+        // حقل نصّي حرّ للـmodels غير المدرجة
+        const SizedBox(height: 8),
+        _textField(_modelCtrl, 'أو اكتب الموديل يدوياً',
+            hint: 'مثلاً: PBE-5AC-500، NBE-5AC-Gen2',
+            icon: LucideIcons.info),
+      ],
     );
   }
 
