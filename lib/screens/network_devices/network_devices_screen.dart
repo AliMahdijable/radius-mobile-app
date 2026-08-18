@@ -9,6 +9,7 @@ import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
@@ -278,6 +279,16 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
   }
 
+  /// شاشة Bulk scan — يرجع bool لو أُضيف أي جهاز.
+  Future<void> _openBulkScan() async {
+    final added = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const BulkScanScreen()),
+    );
+    if (added == true && mounted) {
+      await _refresh();
+    }
+  }
+
   /// اختبار تجريبي — يطلق alert فوري (بدون انتظار probe حقيقي).
   /// يُستدعى بـlong-press على البيل. مفيد لتأكيد إن الإشعارات مسموحة والقناة تعمل.
   Future<void> _testAlert() async {
@@ -387,6 +398,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             icon: const Icon(LucideIcons.mapPin, size: 20),
             onPressed: _openRegions,
             tooltip: 'إدارة المناطق',
+          ),
+          // زر Bulk Scan — يفحص /24 subnet ويستكشف الأجهزة
+          IconButton(
+            icon: const Icon(LucideIcons.radar, size: 20),
+            onPressed: _openBulkScan,
+            tooltip: 'اكتشاف أجهزة الشبكة',
           ),
           // زر تحديث — يظهر animation دوران أثناء الـprobe
           _probing

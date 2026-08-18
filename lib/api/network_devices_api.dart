@@ -8,6 +8,24 @@ import '../models/device_region.dart';
 import '../models/network_device.dart';
 import 'api_client.dart';
 
+/// نتيجة scan واحدة — تُستهلك من bulk_scan_screen.dart.
+class ScanResult {
+  final String ip;
+  final int openPort;
+  final int responseMs;
+  final String guessBrand;
+  final String guessProtocol;
+  final int guessApiPort;
+  const ScanResult({
+    required this.ip,
+    required this.openPort,
+    required this.responseMs,
+    required this.guessBrand,
+    required this.guessProtocol,
+    required this.guessApiPort,
+  });
+}
+
 /// API client لميزة الأجهزة (Devices Monitoring) — راجع
 /// project_devices_monitoring_plan في memory. Slice 1: CRUD + probe.
 class NetworkDevicesApi {
@@ -187,6 +205,101 @@ class NetworkDevicesApi {
       if (kDebugMode) print('⚠️ saveProbeResult: ${e.message}');
       // لا نـthrow — الفحص المحلّي نجح، حفظ النتيجة ثانوي
     }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Bulk IP scan (2026-08-18)
+  // TCP-connect probing لكل الـIPs في /24 على 6 ports شائعة.
+  // نُشخّص البراند/البروتوكول من أول port يفتح.
+  // ══════════════════════════════════════════════════════════
+
+  /// Port fingerprints — أوّل port ينجح يحدّد التخمين المبدئي.
+  /// الترتيب مهمّ: نجرّب المميّز أوّلاً (8728 قبل 22).
+  static const List<int> scanPorts = [8728, 22, 443, 80, 161, 23];
+
+  /// خمّن brand + protocol + apiPort من أوّل port فُتح.
+  static ({String brand, String protocol, int apiPort}) guessDeviceFromPort(int port) {
+    return switch (port) {
+      8728 => (brand: 'mikrotik', protocol: 'api', apiPort: 8728),
+      22   => (brand: 'ubnt',     protocol: 'ssh', apiPort: 22),
+      443  => (brand: 'mimosa',   protocol: 'api', apiPort: 443),
+      161  => (brand: 'other',    protocol: 'snmp', apiPort: 161),
+      80   => (brand: 'other',    protocol: 'api', apiPort: 80),
+      23   => (brand: 'other',    protocol: 'telnet', apiPort: 23),
+      _    => (brand: 'other',    protocol: 'api', apiPort: port),
+    };
+  }
+
+  /// ماسح subnet /24 — يستهلك [base] كـ`192.168.1` ويفحص [start].. [end].
+  /// كل IP يُفحص على [ports] بالتوازي. أوّل port يُفتح → discovered.
+  /// [concurrency] عدد الـIPs المفحوصة معاً (default 30 — سريع بلا إرهاق).
+  ///
+  /// [onProgress] يُستدعى بعد كل IP بـ(done, total).
+  /// [onFound] يُستدعى فور اكتشاف جهاز — للـstreaming UI.
+  ///
+  /// يرجع القائمة الكاملة عند انتهاء الـscan.
+  static Future<List<ScanResult>> bulkScanSubnet({
+    required String base,   // "192.168.1"
+    int startOctet = 1,
+    int endOctet = 254,
+    List<int> ports = scanPorts,
+    int concurrency = 30,
+    Duration timeout = const Duration(milliseconds: 800),
+    void Function(int done, int total)? onProgress,
+    void Function(ScanResult result)? onFound,
+  }) async {
+    final base3 = base.endsWith('.') ? base.substring(0, base.length - 1) : base;
+    final ips = <String>[
+      for (var i = startOctet; i <= endOctet; i++) '$base3.$i',
+    ];
+    final total = ips.length;
+    var done = 0;
+    final results = <ScanResult>[];
+    final queue = List<String>.from(ips);
+
+    Future<void> worker() async {
+      while (queue.isNotEmpty) {
+        final ip = queue.removeAt(0);
+        for (final port in ports) {
+          try {
+            final sw = Stopwatch()..start();
+            final socket = await Socket.connect(ip, port, timeout: timeout);
+            sw.stop();
+            socket.destroy();
+            final guess = guessDeviceFromPort(port);
+            final res = ScanResult(
+              ip: ip,
+              openPort: port,
+              responseMs: sw.elapsedMilliseconds,
+              guessBrand: guess.brand,
+              guessProtocol: guess.protocol,
+              guessApiPort: guess.apiPort,
+            );
+            results.add(res);
+            onFound?.call(res);
+            break; // أوّل port فُتح → لا نكمل باقي الـports لهذا الـIP
+          } catch (_) {
+            // continue للـport التالي
+          }
+        }
+        done++;
+        onProgress?.call(done, total);
+      }
+    }
+
+    // spawn workers
+    final workers = List.generate(
+      concurrency.clamp(1, total),
+      (_) => worker(),
+    );
+    await Future.wait(workers);
+    // sort by last octet ascending
+    results.sort((a, b) {
+      final ai = int.tryParse(a.ip.split('.').last) ?? 0;
+      final bi = int.tryParse(b.ip.split('.').last) ?? 0;
+      return ai.compareTo(bi);
+    });
+    return results;
   }
 
   // ══════════════════════════════════════════════════════════
