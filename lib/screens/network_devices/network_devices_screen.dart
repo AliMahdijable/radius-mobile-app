@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/network_devices_api.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'bulk_scan_screen.dart';
@@ -393,18 +394,19 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               ]);
             },
           ),
-          // زر إدارة المناطق (Regions) — 2026-08-18
-          IconButton(
-            icon: const Icon(LucideIcons.mapPin, size: 20),
-            onPressed: _openRegions,
-            tooltip: 'إدارة المناطق',
-          ),
-          // زر Bulk Scan — يفحص /24 subnet ويستكشف الأجهزة
-          IconButton(
-            icon: const Icon(LucideIcons.radar, size: 20),
-            onPressed: _openBulkScan,
-            tooltip: 'اكتشاف أجهزة الشبكة',
-          ),
+          // Manage-tier tools — 2026-08-18: مخفيّة للـview-only.
+          if (Perms.has('devices.manage')) ...[
+            IconButton(
+              icon: const Icon(LucideIcons.mapPin, size: 20),
+              onPressed: _openRegions,
+              tooltip: 'إدارة المناطق',
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.radar, size: 20),
+              onPressed: _openBulkScan,
+              tooltip: 'اكتشاف أجهزة الشبكة',
+            ),
+          ],
           // زر تحديث — يظهر animation دوران أثناء الـprobe
           _probing
               ? Container(
@@ -419,22 +421,23 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   onPressed: _refresh,
                   tooltip: 'تحديث فوري',
                 ),
-          // زر "+" إضافة جهاز — في الـappBar (بدل FAB الي كان يختفي وراء البيل)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, right: 8),
-            child: Material(
-              color: AppColors.brand,
-              shape: const CircleBorder(),
-              child: InkWell(
-                onTap: () => _openForm(),
-                customBorder: const CircleBorder(),
-                child: const SizedBox(
-                  width: 36, height: 36,
-                  child: Icon(LucideIcons.plus, size: 18, color: Colors.white),
+          // زر "+" إضافة جهاز — manage tier فقط
+          if (Perms.has('devices.manage'))
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 8),
+              child: Material(
+                color: AppColors.brand,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: () => _openForm(),
+                  customBorder: const CircleBorder(),
+                  child: const SizedBox(
+                    width: 36, height: 36,
+                    child: Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
       body: _loading

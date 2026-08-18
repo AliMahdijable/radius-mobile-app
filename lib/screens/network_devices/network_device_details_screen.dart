@@ -11,6 +11,7 @@ import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/network_device.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
@@ -167,11 +168,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       };
 
   /// هل reboot متاح لهذا الجهاز؟
-  /// Mikrotik + api → نعم (Binary API 8728)
-  /// UBNT + api → نعم (SSH 22)
-  /// Mimosa → لا (SSH مقفول، SNMP SET غير موثّق)
-  /// أي جهاز بلا credentials → لا
+  /// - يتطلّب صلاحيّة devices.manage (2026-08-18)
+  /// - Mikrotik + api → نعم (Binary API 8728)
+  /// - UBNT + api → نعم (SSH 22)
+  /// - Mimosa → لا (SSH مقفول، SNMP SET غير موثّق)
+  /// - أي جهاز بلا credentials → لا
   bool _canReboot() {
+    if (!Perms.has('devices.manage')) return false;
     if (!_d.hasCredentials) return false;
     if (_d.protocol != 'api' && _d.protocol != 'ssh') return false;
     return _d.brand == 'mikrotik' || _d.brand == 'ubnt';
@@ -317,8 +320,10 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               tooltip: 'إعادة تشغيل الجهاز',
               onPressed: _rebooting ? null : _confirmAndReboot,
             ),
-          IconButton(icon: const Icon(LucideIcons.pencil, size: 18), onPressed: _edit),
-          IconButton(icon: Icon(LucideIcons.trash2, size: 18, color: AppColors.error), onPressed: _delete),
+          if (Perms.has('devices.manage')) ...[
+            IconButton(icon: const Icon(LucideIcons.pencil, size: 18), onPressed: _edit),
+            IconButton(icon: Icon(LucideIcons.trash2, size: 18, color: AppColors.error), onPressed: _delete),
+          ],
         ],
       ),
       body: ListView(
@@ -328,27 +333,33 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           const SizedBox(height: Sp.md),
           _statsRow(),
           // ICMP sparkline log أُزيل (2026-08-11) — لا فائدة عمليّة له
-          // Live Panels حسب البراند — تظهر مع API + credentials
-          if (_d.brand == 'mikrotik') ...[
+          // Live Panels حسب البراند — تحتاج devices.monitor (2026-08-18).
+          // الـview-only يشوف كارت hint بدل الـpanel.
+          if (Perms.has('devices.monitor')) ...[
+            if (_d.brand == 'mikrotik') ...[
+              const SizedBox(height: Sp.md),
+              if (_d.protocol == 'api' && _d.hasCredentials)
+                MikrotikLivePanel(device: _d)
+              else
+                _mikrotikHint(),
+            ] else if (_d.brand == 'ubnt') ...[
+              const SizedBox(height: Sp.md),
+              if (_d.protocol == 'api' && _d.hasCredentials)
+                _isAirFiber60(_d)
+                    ? AirFiber60LivePanel(device: _d)
+                    : UbntLivePanel(device: _d)
+              else
+                _ubntHint(),
+            ] else if (_d.brand == 'mimosa') ...[
+              const SizedBox(height: Sp.md),
+              if (_d.protocol == 'snmp' && _d.hasCredentials)
+                MimosaLivePanel(device: _d)
+              else
+                _mimosaHint(),
+            ],
+          ] else if ({'mikrotik','ubnt','mimosa'}.contains(_d.brand)) ...[
             const SizedBox(height: Sp.md),
-            if (_d.protocol == 'api' && _d.hasCredentials)
-              MikrotikLivePanel(device: _d)
-            else
-              _mikrotikHint(),
-          ] else if (_d.brand == 'ubnt') ...[
-            const SizedBox(height: Sp.md),
-            if (_d.protocol == 'api' && _d.hasCredentials)
-              _isAirFiber60(_d)
-                  ? AirFiber60LivePanel(device: _d)
-                  : UbntLivePanel(device: _d)
-            else
-              _ubntHint(),
-          ] else if (_d.brand == 'mimosa') ...[
-            const SizedBox(height: Sp.md),
-            if (_d.protocol == 'snmp' && _d.hasCredentials)
-              MimosaLivePanel(device: _d)
-            else
-              _mimosaHint(),
+            _noMonitorPermHint(),
           ],
           // معلومات الجهاز + protocol انتقلا للـhero card (2026-08-12)
           if (_d.notes != null && _d.notes!.isNotEmpty) ...[
@@ -1015,6 +1026,40 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
         IconButton(
           icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
           onPressed: _edit,
+        ),
+      ]),
+    );
+  }
+
+  /// كارت مختصر لموظّف بدون صلاحيّة devices.monitor — يوضّح إنّ Live Panel
+  /// يحتاج إذن، بدلاً من إخفاء الصف كاملاً (المستخدم قد يظنّ إنّ الميزة عاطلة).
+  Widget _noMonitorPermHint() {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.textLow.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.textLow.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(LucideIcons.lock, color: AppColors.textMid, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('المراقبة الحيّة مقفلة',
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            Text('تحتاج صلاحيّة "مراقبة Live" — راجع المدير.',
+                style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+          ]),
         ),
       ]),
     );
