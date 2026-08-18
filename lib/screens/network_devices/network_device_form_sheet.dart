@@ -564,8 +564,13 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       MapEntry('AirMax', 'AirMax classic (PBE / NanoBeam / LiteBeam ...)'),
     ];
     // القيمة الحاليّة — نطابقها مع presets، وإلا نعتبرها "أخرى/مخصّص"
+    // 2026-08-18: normalization مهم — items تستعمل null للـempty (لأن
+    // Flutter DropdownButton يرفض قيمتَين متطابقتَين). لذا نضمن أن
+    // matchedKey null للفارغ + للـcustom text (الي مو في presets).
     final current = _modelCtrl.text.trim();
-    final matchedKey = presets.any((p) => p.key == current) ? current : null;
+    final String? matchedKey = current.isEmpty
+        ? null
+        : (presets.skip(1).any((p) => p.key == current) ? current : null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
