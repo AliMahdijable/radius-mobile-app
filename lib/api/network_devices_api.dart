@@ -93,6 +93,28 @@ class NetworkDevicesApi {
     }
   }
 
+  /// POST /api/v2/admin/devices/bulk-delete — يحذف مجموعة بطلب واحد.
+  /// طلب واحد بدل N → لا rate-limit من Cloudflare. 2026-08-18.
+  /// يرجع `{deleted: int, requested: int}` — لو الاثنين مختلفان يعني
+  /// بعض الـids ليست ملك المدير أو ما موجودة (تُتجاهل بصمت في backend).
+  static Future<({int deleted, int requested})> bulkDelete(List<int> ids) async {
+    if (ids.isEmpty) return (deleted: 0, requested: 0);
+    final r = await ApiClient.dio.post<Map<String, dynamic>>(
+      '/api/v2/admin/devices/bulk-delete',
+      data: {'ids': ids},
+    );
+    if (r.data?['success'] != true) {
+      throw Exception(r.data?['message'] ?? 'فشل الحذف الجماعي');
+    }
+    final deleted = (r.data?['deleted'] is int)
+        ? r.data!['deleted'] as int
+        : int.tryParse('${r.data?['deleted']}') ?? 0;
+    final requested = (r.data?['requested'] is int)
+        ? r.data!['requested'] as int
+        : ids.length;
+    return (deleted: deleted, requested: requested);
+  }
+
   /// GET /api/v2/admin/devices/:id/credentials — يفكّ التشفير ويرجع الـcredentials
   /// (مطلوب عند فتح الـedit form لملء الحقول)
   static Future<Map<String, dynamic>> getCredentials(int id) async {

@@ -646,17 +646,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
     setState(() => _bulkDeleting = true);
     HapticFeedback.mediumImpact();
-    var deleted = 0;
-    var failed = 0;
-    // نسخة سناب-شوت — لو الـset تغيّرت أثناء الحلقة
+    // 2026-08-18: طلب واحد بدل N — كان الـloop يُطلق Cloudflare rate-limit
+    // (429) على N>~10. bulkDelete backend يستعمل WHERE IN بترانزاكشن واحد.
     final ids = _selectedIds.toList();
-    for (final id in ids) {
-      try {
-        await NetworkDevicesApi.delete(id);
-        deleted++;
-      } catch (_) {
-        failed++;
-      }
+    String snackText;
+    Color snackColor;
+    try {
+      final r = await NetworkDevicesApi.bulkDelete(ids);
+      snackText = r.deleted == r.requested
+          ? 'حُذف ${r.deleted} جهاز بنجاح'
+          : 'حُذف ${r.deleted} من ${r.requested} — الباقي غير موجود';
+      snackColor = r.deleted == r.requested
+          ? const Color(0xFF10B981)
+          : AppColors.error;
+    } catch (e) {
+      snackText = 'فشل الحذف: ${e.toString().replaceFirst('Exception: ', '')}';
+      snackColor = AppColors.error;
     }
     if (!mounted) return;
     setState(() {
@@ -665,10 +670,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       _selectedIds.clear();
     });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(failed > 0
-          ? 'حُذف $deleted جهاز — $failed فشل'
-          : 'حُذف $deleted جهاز بنجاح'),
-      backgroundColor: failed > 0 ? AppColors.error : const Color(0xFF10B981),
+      content: Text(snackText),
+      backgroundColor: snackColor,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
     ));
