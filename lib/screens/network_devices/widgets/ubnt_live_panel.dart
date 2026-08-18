@@ -136,87 +136,181 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     if (_stats == null && _error == null) {
       return _connectingBox();
     }
+    // 2026-08-18: أُعيد بناء البانل بنمط "كل قسم في كارت منفصل" مطابق
+    // لـAirFiber60LivePanel + mode-aware ordering:
+    //   - PtP link (Station mode): إشارة كبيرة + التركيز على peer واحد
+    //   - PtMP AP mode: mode chip + التركيز على قائمة العملاء
+    final s = _stats;
+    final isAp = s?.isAp ?? false;
+    final isStation = s?.isStation ?? false;
     return Column(children: [
-      // Main card: header + banner + metrics + signal (always visible)
-      Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(children: [
-          _header(),
-          if (_error != null) _errorBox(),
-          if (_stats != null) ...[
-            const Divider(height: 1),
-            _boardBanner(),
-            _systemMetrics(),
-            if (_stats!.wireless != null) ...[
-              const SizedBox(height: 4),
-              _signalHero(_stats!.wireless!),
-            ],
-            const SizedBox(height: Sp.md),
-          ],
-        ]),
-      ),
-      // Expandable sections
-      if (_stats != null) ..._buildExpandables(),
+      // Header (control bar — pause/refresh/آخر تحديث)
+      _cardWrapper(child: _header()),
+      if (_error != null) ...[
+        const SizedBox(height: Sp.md),
+        _cardWrapper(child: _errorBox()),
+      ],
+      if (s != null) ...[
+        // Board banner (airOS / airFiber badge + uptime + mode indicator)
+        const SizedBox(height: Sp.md),
+        _cardWrapper(child: _boardBanner()),
+        // Mode indicator (PtP link / PtMP access point) — 2026-08-18
+        if (isAp || isStation) ...[
+          const SizedBox(height: Sp.md),
+          _cardWrapper(child: _modeIndicator(isAp: isAp)),
+        ],
+        // System metrics (Uptime / حرارة / CPU)
+        const SizedBox(height: Sp.md),
+        _cardWrapper(child: _systemMetrics()),
+        // Signal hero — لو فيه wireless. حجم أكبر لـPtP (peer link)،
+        // أصغر لـPtMP (فيه clients متعدّدين — القسم مو الأهم)
+        if (s.wireless != null) ...[
+          const SizedBox(height: Sp.md),
+          _cardWrapper(child: _signalHero(s.wireless!)),
+        ],
+        // Expandable sections — للـPtMP نُظهر Stations أوّلاً (الأهم)
+        ..._buildExpandables(),
+      ],
     ]);
+  }
+
+  /// شارة تُظهر نمط عمل الجهاز — لينك PtP أم AP PtMP.
+  /// 2026-08-18: طلب المستخدم — يريد فرق مرئي واضح بين الاثنين.
+  Widget _modeIndicator({required bool isAp}) {
+    final color = isAp
+        ? const Color(0xFF7C3AED)   // بنفسجي — AP يخدم عملاء
+        : const Color(0xFF0891B2);  // فيروزي — لينك PtP
+    final icon = isAp ? LucideIcons.radioTower : LucideIcons.arrowLeftRight;
+    final title = isAp ? 'نقطة وصول (Access Point)' : 'لينك نقطة-إلى-نقطة (PtP)';
+    final subtitle = isAp
+        ? 'يخدم عدة عملاء — PtMP'
+        : 'اتصال مباشر مع peer واحد';
+    final count = isAp && _stats?.stations != null
+        ? '${_stats!.stations.length} عميل'
+        : null;
+    return Row(children: [
+      Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textHi)),
+            const SizedBox(height: 2),
+            Text(subtitle,
+                style: TextStyle(fontSize: 11, color: AppColors.textMid)),
+          ],
+        ),
+      ),
+      if (count != null)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(count,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+        ),
+    ]);
+  }
+
+  /// Card wrapper — نفس نمط AirFiber60LivePanel لتوحيد الشكل بين الاثنين.
+  /// 2026-08-18.
+  Widget _cardWrapper({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: child,
+    );
   }
 
   List<Widget> _buildExpandables() {
     final s = _stats!;
+    // 2026-08-18: ترتيب حسب نمط الجهاز — PtMP يُظهر Stations أوّلاً
+    // (الأهم للـWISP)، PtP يُظهر Wireless details أوّلاً.
+    final isAp = s.isAp;
+    final wirelessSection = s.wireless == null ? null : [
+      const SizedBox(height: Sp.md),
+      ExpandableSection(
+        initiallyExpanded: !isAp,  // AP: مطويّ افتراضياً (المهمّ العملاء)
+        header: Row(children: [
+          Icon(LucideIcons.wifi, size: 14, color: const Color(0xFF0559C9)),
+          const SizedBox(width: 6),
+          Text('تفاصيل Wireless',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+        ]),
+        content: _wirelessDetails(s.wireless!),
+      ),
+    ];
+    final stationsSection = s.stations.isEmpty ? null : [
+      const SizedBox(height: Sp.md),
+      ExpandableSection(
+        initiallyExpanded: isAp,  // AP: مفتوح افتراضياً
+        header: Row(children: [
+          Icon(LucideIcons.users, size: 14, color: const Color(0xFF7C3AED)),
+          const SizedBox(width: 6),
+          Text(
+            isAp
+                ? 'العملاء المتّصلون (${s.stations.length})'
+                : 'الطرف الآخر (peer)',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi),
+          ),
+        ]),
+        content: Column(children: [
+          for (final st in s.stations.take(20)) _stationRow(st),
+          if (s.stations.length > 20)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('+ ${s.stations.length - 20} عميل آخر',
+                  style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+            ),
+        ]),
+      ),
+    ];
+    final ethernetSection = s.interfaces.isEmpty ? null : [
+      const SizedBox(height: Sp.md),
+      ExpandableSection(
+        initiallyExpanded: false,  // دائماً مطويّ — معلومات ثانويّة
+        header: Row(children: [
+          Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
+          const SizedBox(width: 6),
+          Text('Ethernet (${s.interfaces.where((i) => i.ifname.startsWith("eth")).length})',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+        ]),
+        content: Column(children: [
+          for (final iface in s.interfaces.where((i) => i.ifname.startsWith('eth')))
+            _interfaceRow(iface),
+        ]),
+      ),
+    ];
+    // ترتيب mode-aware:
+    // - PtMP AP: Stations أوّلاً (العملاء = الأهم) ثمّ Wireless ثمّ Ethernet
+    // - PtP link: Wireless (peer info) أوّلاً ثمّ Stations (peer الوحيد) ثمّ Ethernet
     return [
-      if (s.wireless != null) ...[
-        const SizedBox(height: Sp.md),
-        ExpandableSection(
-          initiallyExpanded: true,
-          header: Row(children: [
-            Icon(LucideIcons.wifi, size: 14, color: const Color(0xFF0559C9)),
-            const SizedBox(width: 6),
-            Text('تفاصيل Wireless',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-          ]),
-          content: _wirelessDetails(s.wireless!),
-        ),
+      if (isAp) ...[
+        if (stationsSection != null) ...stationsSection,
+        if (wirelessSection != null) ...wirelessSection,
+      ] else ...[
+        if (wirelessSection != null) ...wirelessSection,
+        if (stationsSection != null) ...stationsSection,
       ],
-      if (s.interfaces.isNotEmpty) ...[
-        const SizedBox(height: Sp.md),
-        ExpandableSection(
-          initiallyExpanded: true,
-          header: Row(children: [
-            Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
-            const SizedBox(width: 6),
-            Text('Ethernet (${s.interfaces.where((i) => i.ifname.startsWith("eth")).length})',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-          ]),
-          content: Column(children: [
-            for (final iface in s.interfaces.where((i) => i.ifname.startsWith('eth')))
-              _interfaceRow(iface),
-          ]),
-        ),
-      ],
-      if (s.stations.isNotEmpty) ...[
-        const SizedBox(height: Sp.md),
-        ExpandableSection(
-          initiallyExpanded: true,
-          header: Row(children: [
-            Icon(LucideIcons.users, size: 14, color: const Color(0xFF0559C9)),
-            const SizedBox(width: 6),
-            Text('العملاء المتّصلون (${s.stations.length})',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-          ]),
-          content: Column(children: [
-            for (final st in s.stations.take(20)) _stationRow(st),
-            if (s.stations.length > 20)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('+ ${s.stations.length - 20} عميل آخر',
-                    style: TextStyle(fontSize: 10, color: AppColors.textLow)),
-              ),
-          ]),
-        ),
-      ],
+      if (ethernetSection != null) ...ethernetSection,
     ];
   }
 
@@ -239,9 +333,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   }
 
   Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Row(children: [
+    // 2026-08-18: أُزيل الـPadding — الآن _cardWrapper يهتمّ بالـpadding
+    return Row(children: [
         Container(
           width: 32, height: 32,
           decoration: BoxDecoration(
@@ -282,13 +375,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           onPressed: _monitoring ? _stopMonitoring : _startMonitoring,
           visualDensity: VisualDensity.compact,
         ),
-      ]),
-    );
+      ]);
   }
 
   Widget _errorBox() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: Sp.md),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.error.withValues(alpha: 0.08),
@@ -307,7 +398,6 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   Widget _boardBanner() {
     final h = _stats!.host;
     return Container(
-      margin: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 4),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF0559C9).withValues(alpha: 0.06),
@@ -346,34 +436,31 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   Widget _systemMetrics() {
     final h = _stats!.host;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 8),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: _percentCard(
-              icon: LucideIcons.cpu, label: 'CPU',
-              percent: h.cpuload.toDouble(),
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: _valueCard(
-              icon: LucideIcons.thermometer,
-              label: 'حرارة',
-              value: h.temperature > 0 ? '${h.temperature}' : '—',
-              unit: h.temperature > 0 ? '°C' : '',
-              color: _tempColor(h.temperature),
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: _valueCard(
-              icon: LucideIcons.clock,
-              label: 'Uptime',
-              value: h.uptime > 0 ? _formatUptime(h.uptime) : '—',
-              unit: '',  // نضم كل النصّ في value بحجم موحّد
-              color: const Color(0xFF0559C9),
-            )),
-          ],
-        ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _percentCard(
+            icon: LucideIcons.cpu, label: 'CPU',
+            percent: h.cpuload.toDouble(),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: _valueCard(
+            icon: LucideIcons.thermometer,
+            label: 'حرارة',
+            value: h.temperature > 0 ? '${h.temperature}' : '—',
+            unit: h.temperature > 0 ? '°C' : '',
+            color: _tempColor(h.temperature),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: _valueCard(
+            icon: LucideIcons.clock,
+            label: 'Uptime',
+            value: h.uptime > 0 ? _formatUptime(h.uptime) : '—',
+            unit: '',  // نضم كل النصّ في value بحجم موحّد
+            color: const Color(0xFF0559C9),
+          )),
+        ],
       ),
     );
   }
@@ -484,9 +571,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   Widget _signalHero(UbntWireless w) {
     final signalColor = _signalColor(w.signal);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
-      child: Container(
+    return Container(
         padding: const EdgeInsets.all(Sp.lg),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -552,8 +637,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             ]),
           ),
         ]),
-      ),
-    );
+      );
   }
 
   Widget _metric(String label, String value, String unit, {required Color color}) {
