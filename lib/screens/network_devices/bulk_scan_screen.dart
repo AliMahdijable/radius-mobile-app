@@ -75,28 +75,73 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     } catch (_) {}
   }
 
+  /// نتيجة parseRange — base + start/end octets.
+  ({String base, int start, int end})? _parseRange(String raw) {
+    var s = raw.trim().replaceAll(RegExp(r'\s+'), '');
+    if (s.isEmpty) return null;
+    // شيل /24 لو موجود
+    s = s.replaceAll(RegExp(r'/\d+$'), '');
+    // شيل نقطة تعليقة في النهاية (10.70.241.)
+    s = s.replaceAll(RegExp(r'\.$'), '');
+
+    // صيغة range: a.b.c.d-e (مثال 10.70.241.5-100)
+    final rangeMatch = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})-(\d{1,3})$').firstMatch(s);
+    if (rangeMatch != null) {
+      final o1 = int.parse(rangeMatch.group(1)!);
+      final o2 = int.parse(rangeMatch.group(2)!);
+      final o3 = int.parse(rangeMatch.group(3)!);
+      final start = int.parse(rangeMatch.group(4)!);
+      final end = int.parse(rangeMatch.group(5)!);
+      if (![o1,o2,o3].every((n) => n>=0 && n<=255)) return null;
+      if (start<1 || start>254 || end<1 || end>254 || start>end) return null;
+      return (base: '$o1.$o2.$o3', start: start, end: end);
+    }
+    // صيغة 4 octets: a.b.c.d → نتجاهل الرابع، scan كامل
+    final fourMatch = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$').firstMatch(s);
+    if (fourMatch != null) {
+      final o1 = int.parse(fourMatch.group(1)!);
+      final o2 = int.parse(fourMatch.group(2)!);
+      final o3 = int.parse(fourMatch.group(3)!);
+      if (![o1,o2,o3].every((n) => n>=0 && n<=255)) return null;
+      return (base: '$o1.$o2.$o3', start: 1, end: 254);
+    }
+    // صيغة 3 octets: a.b.c → scan كامل .1-.254
+    final threeMatch = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(s);
+    if (threeMatch != null) {
+      final o1 = int.parse(threeMatch.group(1)!);
+      final o2 = int.parse(threeMatch.group(2)!);
+      final o3 = int.parse(threeMatch.group(3)!);
+      if (![o1,o2,o3].every((n) => n>=0 && n<=255)) return null;
+      return (base: '$o1.$o2.$o3', start: 1, end: 254);
+    }
+    return null;
+  }
+
   Future<void> _startScan() async {
-    final base = _baseCtrl.text.trim().replaceAll(RegExp(r'\.$'), '');
-    // تحقّق: 3 octets فقط (a.b.c) بلا الرابع
-    if (!RegExp(r'^(\d{1,3}\.){2}\d{1,3}$').hasMatch(base)) {
+    final parsed = _parseRange(_baseCtrl.text);
+    if (parsed == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('صيغة غير صحيحة — استعمل "192.168.1"'),
+        content: Text('صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 4),
       ));
       return;
     }
+    final total = parsed.end - parsed.start + 1;
     setState(() {
       _scanning = true;
       _done = 0;
-      _total = 254;
+      _total = total;
       _found.clear();
       _selected.clear();
     });
     HapticFeedback.mediumImpact();
     try {
       final results = await NetworkDevicesApi.bulkScanSubnet(
-        base: base,
+        base: parsed.base,
+        startOctet: parsed.start,
+        endOctet: parsed.end,
         onProgress: (done, total) {
           if (mounted) setState(() { _done = done; _total = total; });
         },
@@ -234,8 +279,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               enabled: !_scanning,
               textDirection: TextDirection.ltr,
               decoration: InputDecoration(
-                labelText: 'Subnet /24',
-                hintText: '192.168.1',
+                labelText: 'الشبكة أو النطاق',
+                hintText: '10.70.241.0/24',
                 prefixIcon: Icon(LucideIcons.network, size: 18, color: AppColors.textMid),
                 filled: true,
                 fillColor: AppColors.surfaceInput,
@@ -266,6 +311,15 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
             ),
           ),
         ]),
+        // Helper text — أمثلة الصيغ المقبولة
+        Padding(
+          padding: const EdgeInsets.only(top: 4, right: 4, left: 4),
+          child: Text(
+            'الصيغ المدعومة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100',
+            style: TextStyle(color: AppColors.textLow, fontSize: 10, height: 1.4),
+            textDirection: TextDirection.rtl,
+          ),
+        ),
         const SizedBox(height: 8),
         TextField(
           controller: _prefixCtrl,
