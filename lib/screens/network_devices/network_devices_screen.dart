@@ -41,6 +41,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   String _search = '';
   final _searchCtrl = TextEditingController();
 
+  // Selection mode — long-press لتنشيطه، tap يبدّل عنصر، exit بزرّ الـclose. 2026-08-18.
+  bool _selectionMode = false;
+  final Set<int> _selectedIds = <int>{};
+  bool _bulkDeleting = false;
+
   /// آخر حالة معروفة لكل جهاز (لرصد transition). key = device.id
   final Map<int, String> _lastKnownStatus = {};
 
@@ -366,6 +371,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Selection mode → AppBar تعرض عدد المحدَّد + أزرار bulk actions
+    // بدل الـtitle العادي. زرّ الـback (Android) يخرج من selection بدل الخروج من الشاشة.
+    if (_selectionMode) {
+      return WillPopScope(
+        onWillPop: () async { _exitSelection(); return false; },
+        child: _buildSelectionScaffold(),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -494,6 +507,172 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   ),
                 ),
     );
+  }
+
+  /// Scaffold بديل يظهر في selection mode — AppBar فيها عدد المحدَّد
+  /// وأزرار bulk actions. القائمة تبقى نفسها لكن الكارتات تعرض checkbox.
+  Widget _buildSelectionScaffold() {
+    final canManage = Perms.has('devices.manage');
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.x, size: 20),
+          onPressed: _exitSelection,
+          tooltip: 'إلغاء التحديد',
+        ),
+        title: Text('${_selectedIds.length} مُحدَّد',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.checkCheck, size: 20),
+            onPressed: _selectAllFiltered,
+            tooltip: 'تحديد الكل',
+          ),
+          if (canManage)
+            _bulkDeleting
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14),
+                    child: SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(LucideIcons.trash2, size: 20),
+                    onPressed: _bulkDelete,
+                    tooltip: 'حذف المُحدَّد',
+                  ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _searchBar()),
+            SliverToBoxAdapter(child: _summaryRow()),
+            SliverToBoxAdapter(child: _typeFilterRow()),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            _filtered.isEmpty
+                ? const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _EmptyDevices(),
+                  )
+                : SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, 90),
+                    sliver: SliverList.separated(
+                      itemCount: _filtered.length,
+                      itemBuilder: (_, i) => _deviceCard(_filtered[i]),
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    ),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// دخول selection mode بأوّل جهاز محدَّد. long-press = الـpattern الأصيل
+  /// في Android للـmulti-select. iOS + Android يفهمانه بلا تعلّم.
+  void _enterSelection(NetworkDevice d) {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _selectionMode = true;
+      _selectedIds.add(d.id);
+    });
+  }
+
+  void _toggleSelected(NetworkDevice d) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_selectedIds.contains(d.id)) {
+        _selectedIds.remove(d.id);
+        // آخر واحد يُلغى تحديده → نخرج من selection mode تلقائياً
+        if (_selectedIds.isEmpty) _selectionMode = false;
+      } else {
+        _selectedIds.add(d.id);
+      }
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  /// اختيار كل الأجهزة الحاليّة (بعد الفلترة).
+  void _selectAllFiltered() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      for (final d in _filtered) {
+        _selectedIds.add(d.id);
+      }
+    });
+  }
+
+  /// حذف كل المُحدَّدة — dialog تأكيد + snackbar للنتيجة.
+  Future<void> _bulkDelete() async {
+    if (_selectedIds.isEmpty) return;
+    final count = _selectedIds.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
+        title: Text('حذف $count جهاز'),
+        content: Text(
+          'سيتم حذف $count جهاز بشكل نهائي. لا يمكن التراجع. متابعة؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: Text('حذف $count'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _bulkDeleting = true);
+    HapticFeedback.mediumImpact();
+    var deleted = 0;
+    var failed = 0;
+    // نسخة سناب-شوت — لو الـset تغيّرت أثناء الحلقة
+    final ids = _selectedIds.toList();
+    for (final id in ids) {
+      try {
+        await NetworkDevicesApi.delete(id);
+        deleted++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _bulkDeleting = false;
+      _selectionMode = false;
+      _selectedIds.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(failed > 0
+          ? 'حُذف $deleted جهاز — $failed فشل'
+          : 'حُذف $deleted جهاز بنجاح'),
+      backgroundColor: failed > 0 ? AppColors.error : const Color(0xFF10B981),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 3),
+    ));
+    await _refresh();
   }
 
   Widget _summaryRow() {
@@ -756,21 +935,39 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   Widget _deviceCard(NetworkDevice d) {
     final statusCol = _statusColor(d.lastStatus);
+    final selected = _selectionMode && _selectedIds.contains(d.id);
+    final canManage = Perms.has('devices.manage');
     return Material(
-      color: AppColors.surface,
+      color: selected ? AppColors.brand.withValues(alpha: 0.08) : AppColors.surface,
       borderRadius: BorderRadius.circular(12),
       elevation: 0,
       child: InkWell(
-        onTap: () => _openDetails(d),
+        // في selection mode: tap = toggle. عادي: tap = يفتح التفاصيل.
+        onTap: _selectionMode ? () => _toggleSelected(d) : () => _openDetails(d),
+        // long-press = يدخل selection mode ويضيف هذا الجهاز.
+        // مطلوب devices.manage — الـview-only ما يحتاج bulk delete.
+        onLongPress: canManage && !_selectionMode ? () => _enterSelection(d) : null,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border, width: 1),
+            border: Border.all(
+              color: selected ? AppColors.brand : AppColors.border,
+              width: selected ? 1.5 : 1,
+            ),
           ),
           padding: const EdgeInsets.all(Sp.md),
           child: Row(
             children: [
+              // في selection mode: checkbox قبل الأيقونة
+              if (_selectionMode) ...[
+                Icon(
+                  selected ? LucideIcons.checkSquare : LucideIcons.square,
+                  size: 20,
+                  color: selected ? AppColors.brand : AppColors.textLow,
+                ),
+                const SizedBox(width: Sp.sm),
+              ],
               Stack(children: [
                 BrandBadge(brand: d.brand, size: 44),
                 // Type icon صغير في الزاوية العلوى (لتمييز router عن switch عن link)
