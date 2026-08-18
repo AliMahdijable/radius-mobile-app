@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
+import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
 import '../../services/permissions_service.dart';
@@ -45,6 +46,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   bool _selectionMode = false;
   final Set<int> _selectedIds = <int>{};
   bool _bulkDeleting = false;
+
+  // خريطة id → منطقة لعرض اسم المنطقة على الكارت وفي التفاصيل.
+  // تُحدَّث في _initialLoad + _refresh (بعد أي تعديل مناطق).
+  Map<int, DeviceRegion> _regionsById = const {};
 
   /// آخر حالة معروفة لكل جهاز (لرصد transition). key = device.id
   final Map<int, String> _lastKnownStatus = {};
@@ -102,7 +107,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Future<void> _initialLoad() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final rows = await NetworkDevicesApi.list();
+      // نجلب devices + regions بالتوازي — واحد ما يعطّل الثاني.
+      final results = await Future.wait([
+        NetworkDevicesApi.list(),
+        NetworkDevicesApi.listRegions().catchError((_) => <DeviceRegion>[]),
+      ]);
+      final rows = results[0] as List<NetworkDevice>;
+      final regions = results[1] as List<DeviceRegion>;
       if (!mounted) return;
       // **مهم**: نعمل reset لـ _lastKnownStatus بلا القيم القديمة من backend.
       // السبب: backend يحمل last_status من ساعات مضت (cache). لو استعملناه
@@ -110,7 +121,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // التطبيق ورجع بعد وقت طويل، سيرى spam إشعارات لأشياء قديمة).
       // نمرّرها 'unknown' → checkTransition يتخطّاها → baseline نظيف.
       _lastKnownStatus.clear();
-      setState(() { _all = rows; _loading = false; });
+      setState(() {
+        _all = rows;
+        _regionsById = { for (final r in regions) r.id: r };
+        _loading = false;
+      });
       // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
       _probeAll();
     } catch (e) {
@@ -129,7 +144,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// وميض "unknown" أثناء انتظار الـprobe الجديد (~1-2s).
   Future<void> _refresh() async {
     try {
-      final fresh = await NetworkDevicesApi.list();
+      // devices + regions معاً — يضمن ظهور مناطق مُنشأة من شاشة أخرى.
+      final results = await Future.wait([
+        NetworkDevicesApi.list(),
+        NetworkDevicesApi.listRegions().catchError((_) => <DeviceRegion>[]),
+      ]);
+      final fresh = results[0] as List<NetworkDevice>;
+      final regions = results[1] as List<DeviceRegion>;
       if (!mounted) return;
       // Preserve status حسب id — الأجهزة الموجودة تحتفظ بحالتها القديمة
       // مؤقّتاً، الجديدة تدخل بـstatus من backend (unknown غالباً).
@@ -147,7 +168,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           merged.add(d);
         }
       }
-      setState(() { _all = merged; _error = null; });
+      setState(() {
+        _all = merged;
+        _regionsById = { for (final r in regions) r.id: r };
+        _error = null;
+      });
       await _probeAll();
     } catch (e) {
       // فشل الـlist fetch لا يوقف الـprobe — الأجهزة القديمة تُفحص كما هي.
@@ -1091,10 +1116,38 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         ),
                       ],
                     ]),
+                    // Region badge — يظهر إن كان الجهاز مسند لمنطقة (2026-08-18)
+                    if (d.regionId != null && _regionsById[d.regionId!] != null) ...[
+                      const SizedBox(height: 3),
+                      Builder(builder: (_) {
+                        final region = _regionsById[d.regionId!]!;
+                        final color = _parseRegionColor(region.color) ?? AppColors.brand;
+                        return Row(children: [
+                          Icon(LucideIcons.mapPin, size: 10, color: color),
+                          const SizedBox(width: 3),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: color.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              region.name,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ]);
+                      }),
+                    ],
                     if (d.location != null && d.location!.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Row(children: [
-                        Icon(LucideIcons.mapPin, size: 10, color: AppColors.textLow),
+                        Icon(LucideIcons.building2, size: 10, color: AppColors.textLow),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
@@ -1178,4 +1231,13 @@ class _EmptyDevices extends StatelessWidget {
       ),
     );
   }
+}
+
+/// يحوّل hex ("#RRGGBB" أو "RRGGBB") إلى Color، null لو غير صالح.
+Color? _parseRegionColor(String? hex) {
+  if (hex == null || hex.isEmpty) return null;
+  final s = hex.startsWith('#') ? hex.substring(1) : hex;
+  final n = int.tryParse(s, radix: 16);
+  if (n == null) return null;
+  return Color(0xFF000000 | n);
 }

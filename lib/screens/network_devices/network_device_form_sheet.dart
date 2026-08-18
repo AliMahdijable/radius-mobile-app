@@ -8,6 +8,7 @@ import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import 'regions_screen.dart';
 
 /// bottom sheet لإضافة/تعديل جهاز شبكة — مع اختيار protocol + credentials.
 class NetworkDeviceFormSheet extends StatefulWidget {
@@ -38,6 +39,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   String _snmpVersion = 'v2c';
   int? _regionId;
   List<DeviceRegion> _regions = const [];
+  bool _regionsLoaded = false;
 
   bool _obscurePassword = true;
   bool _submitting = false;
@@ -71,10 +73,19 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     try {
       final list = await NetworkDevicesApi.listRegions();
       if (!mounted) return;
-      setState(() => _regions = list);
+      setState(() { _regions = list; _regionsLoaded = true; });
     } catch (_) {
       // silent — dropdown يبقى فاضي، المستخدم يضيف يدوياً من شاشة المناطق
+      if (mounted) setState(() => _regionsLoaded = true);
     }
+  }
+
+  /// يفتح شاشة إدارة المناطق ثم يُعيد تحميل القائمة عند العودة.
+  Future<void> _openRegionsAndReload() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RegionsScreen()),
+    );
+    if (mounted) await _loadRegions();
   }
 
   Future<void> _loadCredentials(int deviceId) async {
@@ -526,9 +537,62 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   }
 
   /// dropdown المنطقة — null = بدون منطقة. القائمة تُحمَّل asynchronously من backend.
-  /// لو الـuser فتح الفورم قبل ما تصل القائمة، نعرض المنطقة الحاليّة (إن وُجدت)
-  /// كـplaceholder مؤقّت لتفادي assertion "value not in items".
+  ///
+  /// 3 حالات:
+  /// 1. قيد التحميل → dropdown مبسّط ("بدون منطقة" فقط)
+  /// 2. مُحمَّلة وفارغة → CTA card "أنشئ منطقة أوّلاً" بدل الـdropdown
+  /// 3. مُحمَّلة وفيها مناطق → dropdown كامل + item "+ إدارة المناطق" بالنهاية
   Widget _regionDropdown() {
+    // Empty state — لا مناطق موجودة
+    if (_regionsLoaded && _regions.isEmpty) {
+      return InkWell(
+        onTap: _openRegionsAndReload,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.brand.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.brand.withValues(alpha: 0.4),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.brand.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(LucideIcons.mapPinPlus,
+                  size: 18, color: AppColors.brand),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('لا توجد مناطق بعد',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textHi)),
+                  const SizedBox(height: 2),
+                  Text('اضغط لإنشاء منطقة (مثل: كرخ / رصافة / ...)',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textMid)),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronLeft,
+                size: 16, color: AppColors.brand),
+          ]),
+        ),
+      );
+    }
+
+    // Dropdown عادي
     final items = <DropdownMenuItem<int?>>[
       DropdownMenuItem<int?>(
         value: null,
@@ -562,12 +626,33 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             style: TextStyle(color: AppColors.textLow, fontSize: 13)),
       ));
     }
-    return DropdownButtonFormField<int?>(
-      value: _regionId,
-      isExpanded: true,
-      decoration: _inputDecoration('المنطقة'),
-      items: items,
-      onChanged: (v) => setState(() => _regionId = v),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<int?>(
+          value: _regionId,
+          isExpanded: true,
+          decoration: _inputDecoration('المنطقة'),
+          items: items,
+          onChanged: (v) => setState(() => _regionId = v),
+        ),
+        // زرّ صغير أسفل الـdropdown لإدارة المناطق (إضافة/تعديل/حذف)
+        if (_regionsLoaded && _regions.isNotEmpty)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: _openRegionsAndReload,
+              icon: Icon(LucideIcons.settings2, size: 14, color: AppColors.brand),
+              label: Text('إدارة المناطق',
+                  style: TextStyle(color: AppColors.brand, fontSize: 12)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

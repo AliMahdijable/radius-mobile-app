@@ -10,6 +10,7 @@ import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
@@ -42,6 +43,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   bool _changed = false;
   bool _rebooting = false;   // spinner على زرّ reboot
   double? _lastPacketLoss;
+  DeviceRegion? _region;     // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
   /// آخر 10 قراءات ping — للـsparkline
   final List<_PingSample> _history = [];
@@ -67,11 +69,26 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         online: _d.lastStatus == 'online',
       ));
     }
+    // اجلب معلومات المنطقة لو الجهاز مُسند لواحدة (يعرض الاسم في الهيرو).
+    _loadRegionInfo();
     // Auto-ping فور فتح الشاشة — يضمن أن الحالة المعروضة حقيقيّة الآن
     // (وليس آخر ping ناجح قديم لمّا كان المدير داخل الشبكة).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _probe();
     });
+  }
+
+  Future<void> _loadRegionInfo() async {
+    if (_d.regionId == null) return;
+    try {
+      final list = await NetworkDevicesApi.listRegions();
+      if (!mounted) return;
+      DeviceRegion? found;
+      for (final x in list) {
+        if (x.id == _d.regionId) { found = x; break; }
+      }
+      if (found != null) setState(() => _region = found);
+    } catch (_) {}
   }
 
   @override
@@ -475,11 +492,35 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       fontWeight: FontWeight.w600, color: AppColors.textHi,
                     )),
               ]),
+              // Region (لو مُسند لواحدة) — 2026-08-18
+              if (_region != null) ...[
+                const SizedBox(height: 4),
+                Builder(builder: (_) {
+                  final color = _parseRegionColorHex(_region!.color) ?? AppColors.brand;
+                  return Row(children: [
+                    Icon(LucideIcons.mapPin, size: 12, color: color),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: color.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(_region!.name,
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: color)),
+                    ),
+                  ]);
+                }),
+              ],
               // Location (لو موجود)
               if (_d.location != null && _d.location!.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Row(children: [
-                  Icon(LucideIcons.mapPin, size: 12, color: AppColors.textLow),
+                  Icon(LucideIcons.building2, size: 12, color: AppColors.textLow),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(_d.location!,
@@ -1168,4 +1209,13 @@ class _PingSample {
   final int? ms;
   final bool online;
   const _PingSample({required this.at, this.ms, required this.online});
+}
+
+/// نفس منطق _parseRegionColor في الشاشات الأخرى — top-level helper.
+Color? _parseRegionColorHex(String? hex) {
+  if (hex == null || hex.isEmpty) return null;
+  final s = hex.startsWith('#') ? hex.substring(1) : hex;
+  final n = int.tryParse(s, radix: 16);
+  if (n == null) return null;
+  return Color(0xFF000000 | n);
 }
