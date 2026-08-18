@@ -281,9 +281,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   /// شاشة Bulk scan — يرجع bool لو أُضيف أي جهاز.
+  /// نمرّر IPs الحاليّة عشان الـscanner يميّز المكرّرات ("مضاف مسبقاً").
   Future<void> _openBulkScan() async {
+    final existingIps = _all.map((d) => d.ip).toSet();
     final added = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const BulkScanScreen()),
+      MaterialPageRoute(
+        builder: (_) => BulkScanScreen(existingIps: existingIps),
+      ),
     );
     if (added == true && mounted) {
       await _refresh();
@@ -313,7 +317,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   List<NetworkDevice> get _filtered {
     final q = _search.trim().toLowerCase();
-    return _all.where((d) {
+    final result = _all.where((d) {
       if (_typeFilter != null && d.type != _typeFilter) return false;
       if (_statusFilter != null && d.lastStatus != _statusFilter) return false;
       if (q.isNotEmpty) {
@@ -322,6 +326,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       }
       return true;
     }).toList();
+    // 2026-08-18: ترتيب بالـIP تصاعديّاً (من الأصغر). طلب المستخدم لكل شاشات الأجهزة.
+    result.sort((a, b) => _compareIps(a.ip, b.ip));
+    return result;
+  }
+
+  /// يقارن IPv4 كأربعة أرقام (بدل lex string). "10.0.0.5" < "10.0.0.20".
+  static int _compareIps(String a, String b) {
+    final pa = a.split('.').map(int.tryParse).toList();
+    final pb = b.split('.').map(int.tryParse).toList();
+    for (var i = 0; i < 4; i++) {
+      final va = (i < pa.length ? pa[i] : null) ?? 0;
+      final vb = (i < pb.length ? pb[i] : null) ?? 0;
+      if (va != vb) return va.compareTo(vb);
+    }
+    return 0;
   }
 
   int _countByType(String type) => _all.where((d) => d.type == type).length;
@@ -452,9 +471,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       SliverToBoxAdapter(child: _searchBar()),
                       // Summary row: total + online + offline
                       SliverToBoxAdapter(child: _summaryRow()),
-                      // Filters
+                      // Type filters (chips الحالة أُزيلت — تدمج بكارتات الملخّص)
                       SliverToBoxAdapter(child: _typeFilterRow()),
-                      SliverToBoxAdapter(child: _statusFilterRow()),
                       const SliverToBoxAdapter(child: SizedBox(height: 8)),
                       // List
                       _filtered.isEmpty
@@ -482,6 +500,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final online = _countByStatus('online');
     final offline = _countByStatus('offline');
     final total = _all.length;
+    // 2026-08-18: الكارتات الآن قابلة للنقر → تعمل toggle للـstatus filter.
+    // (chips الفلترة السفليّة أُزيلت — دمج نفس الوظيفة هنا).
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.md, 12, Sp.md, 8),
       child: Row(children: [
@@ -490,6 +510,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           label: 'الإجمالي',
           value: '$total',
           color: AppColors.textHi,
+          filterStatus: null, // نقر → يعرض الكل
         ),
         const SizedBox(width: 8),
         _summaryTile(
@@ -497,6 +518,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           label: 'متّصل',
           value: '$online',
           color: const Color(0xFF10B981),
+          filterStatus: 'online',
         ),
         const SizedBox(width: 8),
         _summaryTile(
@@ -504,6 +526,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           label: 'مفصول',
           value: '$offline',
           color: AppColors.error,
+          filterStatus: 'offline',
         ),
       ]),
     );
@@ -512,41 +535,59 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Widget _summaryTile({
     required IconData icon, required String label,
     required String value, required Color color,
+    required String? filterStatus,
   }) {
+    final active = _statusFilter == filterStatus;
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(children: [
-          Container(
-            width: 30, height: 30,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              // نقر ثاني على نفس الحالة النشطة → يلغي الفلتر (يرجع للكل)
+              _statusFilter = active && filterStatus != null ? null : filterStatus;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: active ? color.withValues(alpha: 0.10) : AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: active ? color : AppColors.border,
+                width: active ? 1.5 : 1,
+              ),
             ),
-            child: Icon(icon, size: 14, color: color),
+            child: Row(children: [
+              Container(
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 14, color: color),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 10, color: AppColors.textLow,
+                          fontWeight: FontWeight.w600)),
+                  Text(value,
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w900,
+                          color: color, height: 1.1)),
+                ],
+              )),
+            ]),
           ),
-          const SizedBox(width: 8),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 10, color: AppColors.textLow,
-                      fontWeight: FontWeight.w600)),
-              Text(value,
-                  textDirection: TextDirection.ltr,
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w900,
-                      color: color, height: 1.1)),
-            ],
-          )),
-        ]),
+        ),
       ),
     );
   }

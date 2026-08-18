@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
+import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -18,7 +19,11 @@ import '../../theme/spacing.dart';
 /// 3. النتائج تظهر live مع icon البراند المُخمّن
 /// 4. يختار الي يريد + prefix اسم + region → "أضف N جهاز"
 class BulkScanScreen extends StatefulWidget {
-  const BulkScanScreen({super.key});
+  const BulkScanScreen({super.key, this.existingIps = const {}});
+
+  /// IPs موجودة مسبقاً في قائمة أجهزة المدير — تظهر بالقائمة كـ"مضاف مسبقاً"
+  /// وغير قابلة للتحديد (dedup ضد إضافة نفس الجهاز مرّتين). 2026-08-18.
+  final Set<String> existingIps;
 
   @override
   State<BulkScanScreen> createState() => _BulkScanScreenState();
@@ -36,11 +41,20 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   bool _adding = false;
   int _added = 0;
   int _mutated = 0; // كم جهاز أُضيف — للـcaller
+  List<DeviceRegion> _regions = const [];
 
   @override
   void initState() {
     super.initState();
     _detectLocalSubnet();
+    _loadRegions();
+  }
+
+  Future<void> _loadRegions() async {
+    try {
+      final r = await NetworkDevicesApi.listRegions();
+      if (mounted) setState(() => _regions = r);
+    } catch (_) {}
   }
 
   @override
@@ -149,7 +163,10 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           if (mounted) {
             setState(() {
               _found.add(r);
-              _selected.add(r.ip); // بشكل افتراضي كل مكتشف مُحدّد
+              // dedup: أجهزة مضافة مسبقاً لا تُختار افتراضياً
+              if (!widget.existingIps.contains(r.ip)) {
+                _selected.add(r.ip);
+              }
             });
             HapticFeedback.selectionClick();
           }
@@ -177,26 +194,53 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
 
   Future<void> _addSelected() async {
     if (_selected.isEmpty) return;
+    // Sheet قبل الإضافة — يجمع region + creds + prefix تُطبّق على كل المُحدَّد
+    final opts = await showModalBottomSheet<_BulkAddOptions>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _BulkAddOptionsSheet(
+        count: _selected.length,
+        regions: _regions,
+        initialPrefix: _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim(),
+      ),
+    );
+    if (opts == null || !mounted) return;
+
     setState(() { _adding = true; _added = 0; });
     HapticFeedback.mediumImpact();
-    final prefix = _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim();
     var errors = 0;
     for (final r in _found.where((r) => _selected.contains(r.ip))) {
       try {
         final lastOctet = r.ip.split('.').last;
+        final creds = <String, dynamic>{};
+        // credentials حسب البروتوكول (نفس منطق _buildCredentials في الـform)
+        if (r.guessProtocol == 'snmp') {
+          if (opts.community != null && opts.community!.isNotEmpty) {
+            creds['community'] = opts.community!;
+            creds['version'] = 'v2c';
+          }
+        } else {
+          if (opts.user != null && opts.user!.isNotEmpty) creds['user'] = opts.user!;
+          if (opts.pass != null && opts.pass!.isNotEmpty) creds['pass'] = opts.pass!;
+        }
         await NetworkDevicesApi.create({
-          'name': '$prefix $lastOctet',
+          'name': '${opts.prefix} $lastOctet',
           'type': _typeFromBrand(r.guessBrand),
           'brand': r.guessBrand,
           'ip': r.ip,
           'port': 80,
           'api_port': r.guessApiPort,
           'protocol': r.guessProtocol,
+          'region_id': opts.regionId,
           'model': null,
           'mac': null,
           'location': null,
           'notes': 'أُضيف عبر Bulk scan',
-          'credentials': null,
+          'credentials': creds.isEmpty ? null : creds,
         });
         if (mounted) setState(() { _added++; _mutated++; });
       } catch (_) {
@@ -384,16 +428,20 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   }
 
   Widget _resultTile(ScanResult r) {
+    final alreadyExists = widget.existingIps.contains(r.ip);
     final selected = _selected.contains(r.ip);
     final label = NetworkDeviceLabels.brandLabel(r.guessBrand);
+    // أجهزة مضافة مسبقاً: تظهر باهتة + badge + لا تُختار + لا onTap
     return Material(
-      color: selected
-          ? AppColors.brand.withValues(alpha: 0.06)
-          : AppColors.surface,
+      color: alreadyExists
+          ? AppColors.surfaceInput.withValues(alpha: 0.4)
+          : (selected
+              ? AppColors.brand.withValues(alpha: 0.06)
+              : AppColors.surface),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => setState(() {
+        onTap: alreadyExists ? null : () => setState(() {
           if (selected) {
             _selected.remove(r.ip);
           } else {
@@ -405,56 +453,87 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? AppColors.brand : AppColors.border,
-              width: selected ? 1.5 : 1,
+              color: alreadyExists
+                  ? AppColors.border
+                  : (selected ? AppColors.brand : AppColors.border),
+              width: (selected && !alreadyExists) ? 1.5 : 1,
             ),
           ),
-          child: Row(children: [
-            Checkbox(
-              value: selected,
-              activeColor: AppColors.brand,
-              visualDensity: VisualDensity.compact,
-              onChanged: (v) => setState(() {
-                if (v == true) { _selected.add(r.ip); } else { _selected.remove(r.ip); }
-              }),
-            ),
-            Container(
-              width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: _brandColor(r.guessBrand).withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+          child: Opacity(
+            opacity: alreadyExists ? 0.55 : 1.0,
+            child: Row(children: [
+              if (alreadyExists)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(LucideIcons.circleCheck, size: 18,
+                      color: const Color(0xFF10B981)),
+                )
+              else
+                Checkbox(
+                  value: selected,
+                  activeColor: AppColors.brand,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: (v) => setState(() {
+                    if (v == true) { _selected.add(r.ip); } else { _selected.remove(r.ip); }
+                  }),
+                ),
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: _brandColor(r.guessBrand).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(_brandIcon(r.guessBrand),
+                    size: 16, color: _brandColor(r.guessBrand)),
               ),
-              child: Icon(_brandIcon(r.guessBrand),
-                  size: 16, color: _brandColor(r.guessBrand)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Text(r.ip,
-                        style: TextStyle(
-                            color: AppColors.textHi,
-                            fontSize: 14, fontWeight: FontWeight.w700)),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceInput,
-                        borderRadius: BorderRadius.circular(4),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Text(r.ip,
+                          style: TextStyle(
+                              color: AppColors.textHi,
+                              fontSize: 14, fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceInput,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('${r.responseMs}ms',
+                            style: TextStyle(color: AppColors.textLow, fontSize: 10)),
                       ),
-                      child: Text('${r.responseMs}ms',
-                          style: TextStyle(color: AppColors.textLow, fontSize: 10)),
-                    ),
-                  ]),
-                  const SizedBox(height: 2),
-                  Text('$label · port ${r.openPort} · ${r.guessProtocol}',
-                      style: TextStyle(color: AppColors.textMid, fontSize: 11)),
-                ],
+                      if (alreadyExists) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Text('مضاف مسبقاً',
+                              style: TextStyle(
+                                color: Color(0xFF10B981),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              )),
+                        ),
+                      ],
+                    ]),
+                    const SizedBox(height: 2),
+                    Text('$label · port ${r.openPort} · ${r.guessProtocol}',
+                        style: TextStyle(color: AppColors.textMid, fontSize: 11)),
+                  ],
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         ),
       ),
     );
@@ -507,4 +586,274 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       ),
     );
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Bulk add options sheet — يظهر قبل تنفيذ الإضافة
+// كل الحقول اختياريّة. لو المستخدم ما ضاف شي → أسماء تلقائيّة من الـIP.
+// ═════════════════════════════════════════════════════════════════════
+
+/// نتيجة الـsheet — options تُطبَّق على كل الأجهزة المُحدَّدة.
+class _BulkAddOptions {
+  final String prefix;    // بادئة الاسم (default "جهاز")
+  final int? regionId;    // null = بدون منطقة
+  final String? user;     // للـapi/ssh
+  final String? pass;
+  final String? community; // للـsnmp
+  const _BulkAddOptions({
+    required this.prefix,
+    this.regionId,
+    this.user,
+    this.pass,
+    this.community,
+  });
+}
+
+class _BulkAddOptionsSheet extends StatefulWidget {
+  const _BulkAddOptionsSheet({
+    required this.count,
+    required this.regions,
+    required this.initialPrefix,
+  });
+  final int count;
+  final List<DeviceRegion> regions;
+  final String initialPrefix;
+
+  @override
+  State<_BulkAddOptionsSheet> createState() => _BulkAddOptionsSheetState();
+}
+
+class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
+  late final TextEditingController _prefixCtrl;
+  late final TextEditingController _userCtrl;
+  late final TextEditingController _passCtrl;
+  late final TextEditingController _communityCtrl;
+  int? _regionId;
+  bool _obscurePass = true;
+  bool _showAdvanced = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _prefixCtrl = TextEditingController(text: widget.initialPrefix);
+    _userCtrl = TextEditingController();
+    _passCtrl = TextEditingController();
+    _communityCtrl = TextEditingController(text: 'public');
+  }
+
+  @override
+  void dispose() {
+    _prefixCtrl.dispose();
+    _userCtrl.dispose();
+    _passCtrl.dispose();
+    _communityCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final prefix = _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim();
+    Navigator.pop(context, _BulkAddOptions(
+      prefix: prefix,
+      regionId: _regionId,
+      user: _userCtrl.text.trim().isEmpty ? null : _userCtrl.text.trim(),
+      pass: _passCtrl.text.isEmpty ? null : _passCtrl.text,
+      community: _communityCtrl.text.trim().isEmpty ? null : _communityCtrl.text.trim(),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: inset),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(children: [
+                Icon(LucideIcons.circlePlus, color: AppColors.brand, size: 22),
+                const SizedBox(width: 8),
+                Text('إضافة ${widget.count} جهاز',
+                    style: TextStyle(
+                        color: AppColors.textHi,
+                        fontSize: 17, fontWeight: FontWeight.w800)),
+              ]),
+              const SizedBox(height: 4),
+              Text('كل الحقول اختياريّة — اتركها فارغة وسيُملأ تلقائياً',
+                  style: TextStyle(color: AppColors.textMid, fontSize: 11)),
+              const SizedBox(height: 16),
+
+              // 1. بادئة الاسم
+              TextField(
+                controller: _prefixCtrl,
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.right,
+                decoration: InputDecoration(
+                  labelText: 'بادئة الاسم',
+                  hintText: 'مثال: "جهاز" → جهاز 5، جهاز 88',
+                  prefixIcon: Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
+                  filled: true,
+                  fillColor: AppColors.surfaceInput,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // 2. المنطقة (dropdown)
+              DropdownButtonFormField<int?>(
+                value: _regionId,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'المنطقة',
+                  prefixIcon: Icon(LucideIcons.mapPin, size: 16, color: AppColors.textMid),
+                  filled: true,
+                  fillColor: AppColors.surfaceInput,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+                items: [
+                  DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('بدون منطقة',
+                        style: TextStyle(color: AppColors.textMid)),
+                  ),
+                  for (final r in widget.regions)
+                    DropdownMenuItem<int?>(
+                      value: r.id,
+                      child: Row(children: [
+                        Icon(LucideIcons.mapPin, size: 12,
+                            color: _parseRegionColor(r.color) ?? AppColors.brand),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(r.name, overflow: TextOverflow.ellipsis)),
+                        if (r.deviceCount > 0)
+                          Text(' (${r.deviceCount})',
+                              style: TextStyle(color: AppColors.textLow, fontSize: 11)),
+                      ]),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _regionId = v),
+              ),
+              const SizedBox(height: 10),
+
+              // 3. Advanced — user/pass/community (طيّ افتراضي)
+              InkWell(
+                onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Icon(
+                      _showAdvanced ? LucideIcons.chevronDown : LucideIcons.chevronLeft,
+                      size: 16, color: AppColors.brand),
+                    const SizedBox(width: 4),
+                    Text('بيانات الدخول المشتركة (اختياريّة)',
+                        style: TextStyle(
+                            color: AppColors.brand, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ]),
+                ),
+              ),
+              if (_showAdvanced) ...[
+                const SizedBox(height: 6),
+                Text('تُطبَّق على كل الأجهزة — Mikrotik/UBNT (user+pass) و Mimosa (community)',
+                    style: TextStyle(color: AppColors.textLow, fontSize: 10, height: 1.4)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: TextField(
+                    controller: _userCtrl,
+                    textDirection: TextDirection.ltr,
+                    decoration: InputDecoration(
+                      labelText: 'User',
+                      hintText: 'admin / ubnt',
+                      filled: true,
+                      fillColor: AppColors.surfaceInput,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      isDense: true,
+                    ),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextField(
+                    controller: _passCtrl,
+                    obscureText: _obscurePass,
+                    textDirection: TextDirection.ltr,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      filled: true,
+                      fillColor: AppColors.surfaceInput,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePass ? LucideIcons.eye : LucideIcons.eyeOff, size: 16),
+                        onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                      ),
+                    ),
+                  )),
+                ]),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _communityCtrl,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(
+                    labelText: 'SNMP Community (لأجهزة Mimosa)',
+                    hintText: 'public',
+                    filled: true,
+                    fillColor: AppColors.surfaceInput,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    isDense: true,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: _submit,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(LucideIcons.check, size: 16),
+                label: Text('تأكيد إضافة ${widget.count} جهاز'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Color? _parseRegionColor(String? hex) {
+  if (hex == null || hex.isEmpty) return null;
+  final s = hex.startsWith('#') ? hex.substring(1) : hex;
+  final n = int.tryParse(s, radix: 16);
+  if (n == null) return null;
+  return Color(0xFF000000 | n);
 }
