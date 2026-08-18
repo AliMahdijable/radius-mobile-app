@@ -20,9 +20,110 @@ class WhatsTemplate {
   /// e.g. 'debt_reminder' / 'expiry_warning' / 'subscriber_info'.
   final String templateType;
   final bool isActive;
+
   /// Raw body with {variable} placeholders the client renders before
   /// calling sendMessage.
   final String messageContent;
+}
+
+Map<String, dynamic>? _waMap(dynamic value) {
+  if (value is! Map) return null;
+  return value.map((key, item) => MapEntry(key.toString(), item));
+}
+
+dynamic _waFirst(Map<String, dynamic>? source, List<String> keys) {
+  if (source == null) return null;
+  for (final key in keys) {
+    final value = source[key];
+    if (value != null) return value;
+  }
+  return null;
+}
+
+bool? _waBool(dynamic value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    switch (value.trim().toLowerCase()) {
+      case 'true':
+      case '1':
+      case 'yes':
+        return true;
+      case 'false':
+      case '0':
+      case 'no':
+        return false;
+    }
+  }
+  return null;
+}
+
+int? _waInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '');
+}
+
+int? _waUnixSeconds(dynamic value) {
+  final numeric = _waInt(value);
+  if (numeric != null) {
+    // WAHA returns seconds. Accept milliseconds as a defensive fallback.
+    return numeric > 10000000000 ? numeric ~/ 1000 : numeric;
+  }
+  final parsed = DateTime.tryParse(value?.toString() ?? '');
+  if (parsed == null) return null;
+  return parsed.millisecondsSinceEpoch ~/ 1000;
+}
+
+/// WhatsApp's per-cycle allowance for opening new 1:1 conversations.
+/// `CAPPED` blocks new conversations until [cycleEnd], while existing chats
+/// keep working. The session must not be logged out or re-paired for this.
+class WhatsMessageCapping {
+  const WhatsMessageCapping({
+    required this.status,
+    this.totalQuota,
+    this.usedQuota,
+    this.cycleStart,
+    this.cycleEnd,
+    this.mvStatus,
+    this.oteStatus,
+  });
+
+  final String status;
+  final int? totalQuota;
+  final int? usedQuota;
+  final int? cycleStart;
+  final int? cycleEnd;
+  final String? mvStatus;
+  final String? oteStatus;
+
+  bool get isCapped => status == 'CAPPED';
+  bool get isWarning => status.isNotEmpty && status != 'NONE' && !isCapped;
+
+  static WhatsMessageCapping? fromJson(dynamic value) {
+    final j = _waMap(value);
+    if (j == null) return null;
+    final status = (_waFirst(j, const [
+              'cappingStatus',
+              'capping_status',
+              'status',
+            ]) ??
+            '')
+        .toString()
+        .toUpperCase();
+    if (status.isEmpty && j.isEmpty) return null;
+    return WhatsMessageCapping(
+      status: status,
+      totalQuota: _waInt(_waFirst(j, const ['totalQuota', 'total_quota'])),
+      usedQuota: _waInt(_waFirst(j, const ['usedQuota', 'used_quota'])),
+      cycleStart: _waUnixSeconds(_waFirst(
+          j, const ['cycleStart', 'cycle_start', 'cycle_start_timestamp'])),
+      cycleEnd: _waUnixSeconds(
+          _waFirst(j, const ['cycleEnd', 'cycle_end', 'cycle_end_timestamp'])),
+      mvStatus: _waFirst(j, const ['mvStatus', 'mv_status'])?.toString(),
+      oteStatus: _waFirst(j, const ['oteStatus', 'ote_status'])?.toString(),
+    );
+  }
 }
 
 /// حالة اتصال واتساب الـadmin الحالية.
@@ -33,18 +134,118 @@ class WhatsConnectionStatus {
     this.phone,
     this.pushname,
     this.platform,
+    this.sessionStatus,
+    this.needsPairing = false,
+    this.metaRestricted = false,
+    this.reachoutRestricted = false,
+    this.restrictionEndsAt,
+    this.restrictionEnforcementType,
+    this.messageCapping,
   });
   const WhatsConnectionStatus.disconnected()
       : connected = false,
         stabilizing = false,
         phone = null,
         pushname = null,
-        platform = null;
+        platform = null,
+        sessionStatus = null,
+        needsPairing = false,
+        metaRestricted = false,
+        reachoutRestricted = false,
+        restrictionEndsAt = null,
+        restrictionEnforcementType = null,
+        messageCapping = null;
   final bool connected;
   final bool stabilizing;
   final String? phone;
   final String? pushname;
   final String? platform;
+  final String? sessionStatus;
+  final bool needsPairing;
+  final bool metaRestricted;
+  final bool reachoutRestricted;
+  final int? restrictionEndsAt;
+  final String? restrictionEnforcementType;
+  final WhatsMessageCapping? messageCapping;
+
+  bool get hasSendingRestriction =>
+      metaRestricted || messageCapping?.isCapped == true;
+
+  factory WhatsConnectionStatus.fromJson(Map<String, dynamic> body) {
+    final session = _waMap(body['session']);
+    final me = _waMap(body['me']) ?? _waMap(session?['me']);
+    final reachout = _waMap(body['reachoutTimelock']) ??
+        _waMap(body['reachout_timelock']) ??
+        _waMap(me?['reachoutTimelock']) ??
+        _waMap(me?['reachout_timelock']);
+    final cappingJson = body['messageCapping'] ??
+        body['message_capping'] ??
+        me?['messageCapping'] ??
+        me?['message_capping'];
+    final rawStatus = _waFirst(body, const [
+          'status',
+          'sessionStatus',
+          'session_status',
+        ]) ??
+        _waFirst(session, const ['status', 'sessionStatus', 'session_status']);
+    final sessionStatus = rawStatus?.toString().toUpperCase();
+    const pairingStatuses = {
+      'SCAN_QR_CODE',
+      'PASSKEY_REQUIRED',
+      'PASSKEY_CONFIRMATION_REQUIRED',
+    };
+
+    final messageCapping = WhatsMessageCapping.fromJson(cappingJson);
+    final metaRestricted = _waBool(_waFirst(
+          body,
+          const ['metaRestricted', 'meta_restricted'],
+        )) ??
+        false;
+    final explicitReachout = _waBool(
+      _waFirst(reachout, const ['isActive', 'is_active']),
+    );
+    final restrictionEnforcementType = (_waFirst(
+              body,
+              const [
+                'restrictionEnforcementType',
+                'restriction_enforcement_type',
+              ],
+            ) ??
+            _waFirst(
+              reachout,
+              const ['enforcementType', 'enforcement_type'],
+            ))
+        ?.toString();
+
+    return WhatsConnectionStatus(
+      connected: body['connected'] == true || body['isConnected'] == true,
+      stabilizing: body['stabilizing'] == true,
+      phone: body['phone']?.toString(),
+      pushname: body['pushname']?.toString(),
+      platform: body['platform']?.toString(),
+      sessionStatus: sessionStatus,
+      needsPairing: _waBool(_waFirst(
+            body,
+            const ['needsPairing', 'needs_pairing'],
+          )) ??
+          pairingStatuses.contains(sessionStatus),
+      metaRestricted: metaRestricted || explicitReachout == true,
+      reachoutRestricted: explicitReachout ??
+          (metaRestricted &&
+              ((restrictionEnforcementType ?? '').isNotEmpty ||
+                  messageCapping?.isCapped != true)),
+      restrictionEndsAt: _waUnixSeconds(_waFirst(
+            body,
+            const ['restrictionEndsAt', 'restriction_ends_at'],
+          ) ??
+          _waFirst(
+            reachout,
+            const ['timeEnforcementEnds', 'time_enforcement_ends'],
+          )),
+      restrictionEnforcementType: restrictionEnforcementType,
+      messageCapping: messageCapping,
+    );
+  }
 }
 
 /// 7 toggles لكل المسارات التلقائية في واتساب. مطابق صفّ
@@ -59,6 +260,7 @@ class WhatsFeatures {
     this.welcomeMessage = false,
     this.sendOnExtension = false,
   });
+
   /// Master switch — لو معطل، كل الإشعارات تتوقف بغض النظر عن بقية toggles.
   final bool notificationsEnabled;
   final bool sendOnActivation;
@@ -78,8 +280,7 @@ class WhatsFeatures {
     bool? sendOnExtension,
   }) {
     return WhatsFeatures(
-      notificationsEnabled:
-          notificationsEnabled ?? this.notificationsEnabled,
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       sendOnActivation: sendOnActivation ?? this.sendOnActivation,
       expiryReminder: expiryReminder ?? this.expiryReminder,
       debtReminder: debtReminder ?? this.debtReminder,
@@ -119,8 +320,10 @@ class WhatsFeatures {
 class WhatsSendResult {
   const WhatsSendResult({required this.ok, this.message, this.reason});
   final bool ok;
+
   /// Backend message when ok=false (e.g. 'واتساب غير متصل').
   final String? message;
+
   /// Local short reason for UI branching ('no_template' / 'no_phone' /
   /// 'inactive' / 'wa_disconnected' / 'send_failed' / 'network').
   final String? reason;
@@ -216,14 +419,10 @@ class WhatsAppApi {
         queryParameters: live ? {'live': 'true'} : null,
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return const WhatsConnectionStatus.disconnected();
-      return WhatsConnectionStatus(
-        connected: body['connected'] == true,
-        stabilizing: body['stabilizing'] == true,
-        phone: body['phone']?.toString(),
-        pushname: body['pushname']?.toString(),
-        platform: body['platform']?.toString(),
-      );
+      if (body['success'] != true) {
+        return const WhatsConnectionStatus.disconnected();
+      }
+      return WhatsConnectionStatus.fromJson(body);
     } on DioException catch (e) {
       _log('whatsapp/connection-status', e);
       return null;
@@ -608,9 +807,7 @@ class WhatsAppApi {
       final ok = body['success'] == true;
       return (
         ok: ok,
-        message: ok
-            ? null
-            : (body['message']?.toString() ?? 'تعذّر الحذف'),
+        message: ok ? null : (body['message']?.toString() ?? 'تعذّر الحذف'),
       );
     } catch (e) {
       _log('whatsapp/schedule DELETE', e);
@@ -636,9 +833,7 @@ class WhatsAppApi {
       final ok = body['success'] == true;
       return (
         ok: ok,
-        message: ok
-            ? null
-            : (body['message']?.toString() ?? 'تعذّر التشغيل'),
+        message: ok ? null : (body['message']?.toString() ?? 'تعذّر التشغيل'),
       );
     } catch (e) {
       _log('whatsapp/trigger-schedule POST', e);
@@ -722,9 +917,8 @@ class WhatsAppApi {
         message: 'تعذّر جلب قوالب الواتساب',
       );
     }
-    final matches = templates
-        .where((t) => t.templateType == templateType)
-        .toList();
+    final matches =
+        templates.where((t) => t.templateType == templateType).toList();
     if (matches.isEmpty) {
       final arabic = _arabicForTemplate(templateType);
       return WhatsSendResult(
@@ -751,15 +945,12 @@ class WhatsAppApi {
   /// keys so existing admin templates keep working unchanged.
   static String _renderTemplate(String body, Subscriber sub) {
     final arabicName = sub.fullName.trim();
-    final subscriberName =
-        sub.username.isNotEmpty ? sub.username : arabicName;
+    final subscriberName = sub.username.isNotEmpty ? sub.username : arabicName;
     final firstName = arabicName.isNotEmpty ? arabicName : sub.username;
     final price = sub.price?.toInt() ?? 0;
     final priceStr = price > 0 ? formatIQD(price) : '0';
-    final debt =
-        sub.balanceAmount < 0 ? sub.balanceAmount.abs().round() : 0;
-    final credit =
-        sub.balanceAmount > 0 ? sub.balanceAmount.round() : 0;
+    final debt = sub.balanceAmount < 0 ? sub.balanceAmount.abs().round() : 0;
+    final credit = sub.balanceAmount > 0 ? sub.balanceAmount.round() : 0;
     final remainingDays = sub.remainingDays?.toString() ?? '';
     final expiry = _formatExpiryArabic(sub.expiration);
     final vars = <String, String>{
@@ -792,13 +983,10 @@ class WhatsAppApi {
   static String _formatExpiryArabic(String? raw) {
     if (raw == null || raw.trim().isEmpty) return '';
     final s = raw.trim();
-    final t = DateTime.tryParse(s) ??
-        DateTime.tryParse(s.replaceAll(' ', 'T'));
+    final t = DateTime.tryParse(s) ?? DateTime.tryParse(s.replaceAll(' ', 'T'));
     if (t == null) return s;
     String two(int n) => n.toString().padLeft(2, '0');
-    final hour12 = t.hour == 0
-        ? 12
-        : (t.hour > 12 ? t.hour - 12 : t.hour);
+    final hour12 = t.hour == 0 ? 12 : (t.hour > 12 ? t.hour - 12 : t.hour);
     final suffix = t.hour < 12 ? 'صباحاً' : 'مساءً';
     return '${t.year}/${two(t.month)}/${two(t.day)}  '
         '${two(hour12)}:${two(t.minute)}:${two(t.second)} $suffix';

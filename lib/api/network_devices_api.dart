@@ -93,6 +93,33 @@ class NetworkDevicesApi {
     }
   }
 
+  /// POST /api/v2/admin/devices/bulk-create — يُنشئ مجموعة أجهزة بطلب واحد.
+  /// طلب واحد بدل N (يحلّ Cloudflare 429 + سرعة أعلى) + transaction atomic
+  /// (كل الأجهزة أو لا شي — لو أي واحد فشل validation → 400 قبل INSERT).
+  /// 2026-08-18.
+  ///
+  /// Body: `{devices: [{...deviceFields}, ...]}` — max 300 لكل طلب.
+  /// يُرجع `{created: List<NetworkDevice>, count: int}`.
+  static Future<List<NetworkDevice>> bulkCreate(List<Map<String, dynamic>> devices) async {
+    if (devices.isEmpty) return const [];
+    final r = await ApiClient.dio.post<Map<String, dynamic>>(
+      '/api/v2/admin/devices/bulk-create',
+      data: {'devices': devices},
+    );
+    if (r.data?['success'] != true) {
+      final msg = r.data?['message'] ?? 'فشل الإضافة الجماعيّة';
+      final errs = r.data?['errors'];
+      if (errs is List && errs.isNotEmpty) {
+        throw Exception('$msg — ${errs.length} خطأ');
+      }
+      throw Exception(msg);
+    }
+    final list = (r.data?['created'] as List?) ?? const [];
+    return list.whereType<Map>()
+        .map((m) => NetworkDevice.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
   /// POST /api/v2/admin/devices/bulk-delete — يحذف مجموعة بطلب واحد.
   /// طلب واحد بدل N → لا rate-limit من Cloudflare. 2026-08-18.
   /// يرجع `{deleted: int, requested: int}` — لو الاثنين مختلفان يعني
@@ -115,9 +142,24 @@ class NetworkDevicesApi {
     return (deleted: deleted, requested: requested);
   }
 
-  /// GET /api/v2/admin/devices/:id/credentials — يفكّ التشفير ويرجع الـcredentials
-  /// (مطلوب عند فتح الـedit form لملء الحقول)
-  static Future<Map<String, dynamic>> getCredentials(int id) async {
+  /// GET /api/v2/admin/devices/:id/credentials — يفكّ التشفير ويرجع credentials.
+  ///
+  /// 2026-08-18: **in-memory cache** (60s TTL) لتفادي مشاكل:
+  /// - Live Panels تستدعيه كل 8-15s → 60+ req/min على /credentials وحدها
+  /// - كل fetch = DB decrypt AES + TLS round-trip → استنزاف موارد + audit spam
+  /// - الـcreds لا تتغيّر إلا عند edit → cache 60s آمن جداً
+  ///
+  /// [forceRefresh] يتخطّى الـcache — يُستعمل بعد edit form save.
+  static final Map<int, ({Map<String, dynamic> creds, DateTime at})> _credsCache = {};
+  static const _credsCacheTtl = Duration(seconds: 60);
+
+  static Future<Map<String, dynamic>> getCredentials(int id, {bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached = _credsCache[id];
+      if (cached != null && DateTime.now().difference(cached.at) < _credsCacheTtl) {
+        return cached.creds;
+      }
+    }
     final r = await ApiClient.dio.get<Map<String, dynamic>>(
       '/api/v2/admin/devices/$id/credentials',
     );
@@ -125,8 +167,18 @@ class NetworkDevicesApi {
       throw Exception(r.data?['message'] ?? 'فشل جلب المعلومات');
     }
     final creds = r.data!['credentials'];
-    if (creds is Map<String, dynamic>) return creds;
-    return <String, dynamic>{};
+    final result = (creds is Map<String, dynamic>) ? creds : <String, dynamic>{};
+    _credsCache[id] = (creds: result, at: DateTime.now());
+    return result;
+  }
+
+  /// يمسح cache creds لجهاز معيّن (بعد edit save) أو الكل (بعد logout).
+  static void invalidateCredentialsCache([int? id]) {
+    if (id == null) {
+      _credsCache.clear();
+    } else {
+      _credsCache.remove(id);
+    }
   }
 
   /// Local probe محلّي — يستعمل TCP كأولوية (أدقّ من ICMP على iOS)

@@ -42,6 +42,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   String? _statusFilter;
   String _search = '';
   final _searchCtrl = TextEditingController();
+  Timer? _searchDebounce;
 
   // Selection mode — long-press لتنشيطه، tap يبدّل عنصر، exit بزرّ الـclose. 2026-08-18.
   bool _selectionMode = false;
@@ -81,6 +82,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _probeTimer?.cancel();
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -359,6 +361,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// اختبار تجريبي — يطلق alert فوري (بدون انتظار probe حقيقي).
   /// يُستدعى بـlong-press على البيل. مفيد لتأكيد إن الإشعارات مسموحة والقناة تعمل.
+  /// 2026-08-18: bypassDedup=true — الاختبارات المتكرّرة كانت تُفلتَر بصمت.
   Future<void> _testAlert() async {
     HapticFeedback.mediumImpact();
     final sample = _all.isNotEmpty ? _all.first : null;
@@ -368,6 +371,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       deviceIp: sample?.ip ?? '192.168.1.1',
       oldStatus: 'online',
       newStatus: 'offline',
+      bypassDedup: true,
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -547,9 +551,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       const SliverToBoxAdapter(child: SizedBox(height: 8)),
                       // List
                       _filtered.isEmpty
-                          ? const SliverFillRemaining(
+                          ? SliverFillRemaining(
                               hasScrollBody: false,
-                              child: _EmptyDevices(),
+                              child: _EmptyDevices(
+                                hasActiveFilter: _all.isNotEmpty &&
+                                    (_typeFilter != null ||
+                                        _statusFilter != null ||
+                                        _search.isNotEmpty),
+                                onClearFilter: () => setState(() {
+                                  _typeFilter = null;
+                                  _statusFilter = null;
+                                  _search = '';
+                                  _searchCtrl.clear();
+                                }),
+                              ),
                             )
                           : SliverPadding(
                               padding: const EdgeInsets.fromLTRB(
@@ -837,7 +852,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 0),
       child: TextField(
         controller: _searchCtrl,
-        onChanged: (v) => setState(() => _search = v),
+        // 2026-08-18: debounce 250ms — للـ500+ جهاز، كل keystroke بدون
+        // debounce = filter+sort ثقيل على main thread (jank محسوس).
+        onChanged: (v) {
+          _searchDebounce?.cancel();
+          _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+            if (mounted) setState(() => _search = v);
+          });
+        },
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
@@ -1201,7 +1223,9 @@ class _PendingTransition {
 
 /// Empty state — يظهر لو ما في أجهزة أصلاً أو ما في نتائج للفلتر.
 class _EmptyDevices extends StatelessWidget {
-  const _EmptyDevices();
+  const _EmptyDevices({this.hasActiveFilter = false, this.onClearFilter});
+  final bool hasActiveFilter;
+  final VoidCallback? onClearFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -1217,16 +1241,32 @@ class _EmptyDevices extends StatelessWidget {
                 color: AppColors.brand.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(LucideIcons.router, size: 40, color: AppColors.brand),
+              child: Icon(
+                hasActiveFilter ? LucideIcons.filterX : LucideIcons.router,
+                size: 40, color: AppColors.brand),
             ),
             const SizedBox(height: Sp.lg),
-            Text('لا توجد نتائج',
+            Text(hasActiveFilter ? 'لا نتائج بهذا الفلتر' : 'لا توجد أجهزة',
                 style: TextStyle(
                     fontSize: 16, fontWeight: FontWeight.w800,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
-            Text('جرّب تغيير الفلتر أو أضف جهاز جديد',
-                style: TextStyle(fontSize: 12, color: AppColors.textMid)),
+            Text(
+              hasActiveFilter
+                  ? 'قد تكون كل الأجهزة مخفيّة — امسح الفلتر لرؤيتها'
+                  : 'أضف أول جهاز شبكة من زرّ + أعلى الصفحة',
+              style: TextStyle(fontSize: 12, color: AppColors.textMid),
+              textAlign: TextAlign.center,
+            ),
+            if (hasActiveFilter && onClearFilter != null) ...[
+              const SizedBox(height: Sp.md),
+              TextButton.icon(
+                onPressed: onClearFilter,
+                icon: Icon(LucideIcons.x, size: 14, color: AppColors.brand),
+                label: Text('مسح الفلتر',
+                    style: TextStyle(color: AppColors.brand)),
+              ),
+            ],
           ],
         ),
       ),

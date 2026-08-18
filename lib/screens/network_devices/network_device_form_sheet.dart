@@ -157,6 +157,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       final saved = widget.existing == null
           ? await NetworkDevicesApi.create(body)
           : await NetworkDevicesApi.update(widget.existing!.id, body);
+      // 2026-08-18: invalidate credentials cache — قد يكون المستخدم غيّرها
+      if (widget.existing != null) {
+        NetworkDevicesApi.invalidateCredentialsCache(widget.existing!.id);
+      }
       if (!mounted) return;
       showSheetSnack(context, widget.existing == null ? 'تم إضافة الجهاز' : 'تم الحفظ');
       Navigator.of(context).pop(saved);
@@ -619,11 +623,26 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     ];
     // لو الجهاز الحالي عنده region_id ما موجود في القائمة (لسّه تُحمَّل، أو
     // المستخدم حذف منطقة من شاشة أخرى) → أضف item مؤقّت بنفس الـid لتفادي assertion.
+    // 2026-08-18: نميّز بين "قيد التحميل" و"محذوفة" — لو التحميل تمّ ولم نجدها
+    // فهي محذوفة فعلاً، نعرض label واضح مع لون تحذيري.
     if (_regionId != null && !_regions.any((r) => r.id == _regionId)) {
       items.add(DropdownMenuItem<int?>(
         value: _regionId,
-        child: Text('منطقة #$_regionId',
-            style: TextStyle(color: AppColors.textLow, fontSize: 13)),
+        child: Row(children: [
+          Icon(
+            _regionsLoaded ? LucideIcons.triangleAlert : LucideIcons.loader,
+            size: 14,
+            color: _regionsLoaded ? const Color(0xFFEA580C) : AppColors.textLow,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _regionsLoaded ? 'منطقة محذوفة' : 'قيد التحميل...',
+            style: TextStyle(
+              color: _regionsLoaded ? const Color(0xFFEA580C) : AppColors.textLow,
+              fontSize: 13,
+            ),
+          ),
+        ]),
       ));
     }
     return Column(

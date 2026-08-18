@@ -170,6 +170,9 @@ class DeviceAlertsService {
     required String deviceIp,
     required String oldStatus,
     required String newStatus,
+    /// 2026-08-18: bypass dedup للاختبار من UI (long-press على البيل).
+    /// المستخدم يظنّ الإشعارات مكسورة لو dedup يُسكت الاختبار الثاني.
+    bool bypassDedup = false,
   }) async {
     if (!_initialized) await init();
     // نتجنّب أول فحص (unknown → x) — spam خطير عند تركيب التطبيق
@@ -186,10 +189,12 @@ class DeviceAlertsService {
 
     // dedup: نمنع نفس (deviceId، kind) خلال 5 دقائق — يحمي من spam جهاز flapping
     final dedupKey = '$deviceId:${kind.name}';
-    final lastFired = _lastFiredAt[dedupKey];
-    if (lastFired != null && DateTime.now().difference(lastFired) < _dedupWindow) {
-      if (kDebugMode) debugPrint('🔕 dedup: ${dedupKey} فُلتِر (نفس النوع خلال 5د)');
-      return;
+    if (!bypassDedup) {
+      final lastFired = _lastFiredAt[dedupKey];
+      if (lastFired != null && DateTime.now().difference(lastFired) < _dedupWindow) {
+        if (kDebugMode) debugPrint('🔕 dedup: $dedupKey فُلتِر (نفس النوع خلال 5د)');
+        return;
+      }
     }
     _lastFiredAt[dedupKey] = DateTime.now();
 

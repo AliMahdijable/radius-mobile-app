@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 import 'subscribers_api.dart';
+import 'whatsapp_api.dart';
 
 void _logErr(String endpoint, Object err) {
   if (kReleaseMode) return;
@@ -45,9 +46,15 @@ class WhatsAppStatusResult {
   const WhatsAppStatusResult({
     required this.connected,
     required this.phone,
+    this.needsPairing = false,
+    this.sendingRestricted = false,
+    this.cappingWarning = false,
   });
   final bool connected;
   final String phone;
+  final bool needsPairing;
+  final bool sendingRestricted;
+  final bool cappingWarning;
 }
 
 class DebtorsResult {
@@ -64,8 +71,10 @@ class DebtorsResult {
   });
   final int count;
   final int total;
+
   /// Subscribers whose remaining days fall in [0, 3] — soon-to-expire.
   final int nearExpiry;
+
   /// مطلب 2026-06-11: حسابات حالة الاتصال من القائمة المحلية مثل v1
   /// لأن SAS4 widget الـactive يرجّع رقم خاطئ على بعض الحسابات
   /// (offline يحسب صفر مع وجود متصلين). نمشي بنفس predicate v1:
@@ -75,6 +84,7 @@ class DebtorsResult {
   final int active; // !isExpired && !isDisabled (or per model)
   final int expired;
   final int totalSubs;
+
   /// "بدون نت" — متصل + منتهي. المشترك يسحب data لكن اشتراكه انتهى.
   /// الإدمن يحتاج يمدّد أو يفصل. نحسبها هنا مرة واحدة لتُستهلك في
   /// dashboard KPI ولتفادي تمرير القائمة الكاملة للـstats-mapper.
@@ -118,8 +128,10 @@ class DashboardApi {
     final token = await AuthStorage.readToken();
     final adminId = await AuthStorage.readAdminId();
     if (token == null || adminId == null) {
-      _logSilent('daily-activations',
-          'missing token or adminId (token=${token != null} adminId=$adminId)', null);
+      _logSilent(
+          'daily-activations',
+          'missing token or adminId (token=${token != null} adminId=$adminId)',
+          null);
       return null;
     }
     try {
@@ -145,9 +157,8 @@ class DashboardApi {
       final counts = (body['counts'] as Map?) ?? const {};
       final list = (body['data'] as List?) ?? const [];
       return DailyActivationsResult(
-        activations: _toInt(counts['activations']) ??
-            _toInt(counts['activate']) ??
-            0,
+        activations:
+            _toInt(counts['activations']) ?? _toInt(counts['activate']) ?? 0,
         extensions:
             _toInt(counts['extensions']) ?? _toInt(counts['extend']) ?? 0,
         recent: list
@@ -249,8 +260,8 @@ class DashboardApi {
       final totals = (body['data'] as Map?)?['totals'] as Map?;
       final v = totals?['total_payments'];
       if (v == null) {
-        _logSilent('reports/finance',
-            'data.totals.total_payments missing', body);
+        _logSilent(
+            'reports/finance', 'data.totals.total_payments missing', body);
         return null;
       }
       final amount = v is num ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
@@ -270,8 +281,7 @@ class DashboardApi {
     // queries (Iraq is the only operating region; the device clocks
     // there match Asia/Baghdad).
     final now = DateTime.now();
-    String d(DateTime t) =>
-        '${t.year.toString().padLeft(4, '0')}-'
+    String d(DateTime t) => '${t.year.toString().padLeft(4, '0')}-'
         '${t.month.toString().padLeft(2, '0')}-'
         '${t.day.toString().padLeft(2, '0')}';
     final today = d(now);
@@ -310,7 +320,8 @@ class DashboardApi {
       final balance = body['balance'];
       final points = body['points'];
       return WalletResult(
-        balance: balance is num ? balance : (num.tryParse(balance.toString()) ?? 0),
+        balance:
+            balance is num ? balance : (num.tryParse(balance.toString()) ?? 0),
         points: points is num ? points : (num.tryParse(points.toString()) ?? 0),
       );
     } on DioException catch (e) {
@@ -330,7 +341,8 @@ class DashboardApi {
     final token = await AuthStorage.readToken();
     final adminId = await AuthStorage.readAdminId();
     if (token == null || adminId == null) {
-      _logSilent('whatsapp/connection-status',
+      _logSilent(
+          'whatsapp/connection-status',
           'missing token or adminId (token=${token != null} adminId=$adminId)',
           null);
       return null;
@@ -341,9 +353,13 @@ class DashboardApi {
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
+      final status = WhatsConnectionStatus.fromJson(body);
       return WhatsAppStatusResult(
-        connected: body['connected'] == true || body['isConnected'] == true,
+        connected: status.connected,
         phone: (body['phone'] ?? body['whatsappPhone'] ?? '').toString(),
+        needsPairing: status.needsPairing,
+        sendingRestricted: status.hasSendingRestriction,
+        cappingWarning: status.messageCapping?.isWarning == true,
       );
     } on DioException catch (e) {
       _logErr('whatsapp/connection-status', e);

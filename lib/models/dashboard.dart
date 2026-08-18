@@ -31,6 +31,7 @@ class SubscribersStats {
   final int offline;
   final int expired;
   final int nearExpiry;
+
   /// "بدون نت" — subscribers whose session is up but plan has expired
   /// (isOnline && isExpired). Iraqi ISP colloquial: they're consuming
   /// bandwidth without a valid subscription; admin needs to either
@@ -42,9 +43,14 @@ class WhatsAppStatus {
   const WhatsAppStatus({
     required this.connected,
     required this.phone,
+    this.needsPairing = false,
+    this.sendingRestricted = false,
+    this.cappingWarning = false,
   });
 
   final bool connected;
   final String phone;
+  final bool needsPairing;
+  final bool sendingRestricted;
+  final bool cappingWarning;
 }
-

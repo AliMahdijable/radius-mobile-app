@@ -293,26 +293,6 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         _ => LucideIcons.plug,
       };
 
-  IconData get _typeIcon => switch (_d.type) {
-        'link' => LucideIcons.satellite,
-        'switch' => LucideIcons.network,
-        'sector' => LucideIcons.radioTower,
-        'router' => LucideIcons.router,
-        'ap' => LucideIcons.wifi,
-        'camera' => LucideIcons.video,
-        _ => LucideIcons.circuitBoard,
-      };
-
-  String _timeAgo(DateTime? dt) {
-    if (dt == null) return '—';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 10) return 'الآن';
-    if (diff.inSeconds < 60) return 'منذ ${diff.inSeconds}ث';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes}د';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours}س';
-    return 'منذ ${diff.inDays}ي';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -715,233 +695,6 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // Ping mini section — sparkline + history dots فقط (بدون زر كبير).
-  // زر الفحص انتقل لـHero card (compact).
-  // ══════════════════════════════════════════════════════════════
-  Widget _pingSection() {
-    // لا نعرض شيء لو ما فيه history كافي — الـsparkline بلا نقاط غير مفيد
-    if (_history.length < 2) return const SizedBox.shrink();
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(children: [
-        Row(children: [
-          Icon(LucideIcons.activity, size: 14, color: AppColors.brand),
-          const SizedBox(width: 6),
-          Text('سجلّ ICMP', style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-          const Spacer(),
-          Text('آخر: ${_timeAgo(_d.lastProbedAt)}',
-              style: TextStyle(fontSize: 10, color: AppColors.textLow)),
-        ]),
-        const SizedBox(height: 8),
-        SizedBox(height: 40, child: _sparkline()),
-        const SizedBox(height: 6),
-        _historyDots(),
-        const SizedBox(height: 2),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(LucideIcons.info, size: 9, color: AppColors.textLow),
-          const SizedBox(width: 3),
-          Text(
-            'يجب أن يكون الموبايل على نفس شبكة الجهاز',
-            style: TextStyle(fontSize: 9, color: AppColors.textLow),
-          ),
-        ]),
-      ]),
-    );
-  }
-
-  Widget _sparkline() {
-    final spots = <FlSpot>[];
-    for (int i = 0; i < _history.length; i++) {
-      final ms = _history[i].ms?.toDouble() ?? 0;
-      spots.add(FlSpot(i.toDouble(), ms));
-    }
-    final validMs = _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
-    final maxY = validMs.isEmpty ? 100.0 : (validMs.reduce(math.max) * 1.3);
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        minY: 0,
-        maxY: maxY,
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: AppColors.brand,
-            barWidth: 2,
-            isStrokeCapRound: true,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
-                radius: 3,
-                color: _history[spot.x.toInt()].online
-                    ? const Color(0xFF10B981) : AppColors.error,
-                strokeWidth: 0,
-              ),
-            ),
-            belowBarData: BarAreaData(
-              show: true,
-              color: AppColors.brand.withValues(alpha: 0.1),
-            ),
-          ),
-        ],
-        lineTouchData: const LineTouchData(enabled: false),
-      ),
-    );
-  }
-
-  Widget _historyDots() {
-    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      for (final sample in _history)
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          width: 8, height: 8,
-          decoration: BoxDecoration(
-            color: sample.online ? const Color(0xFF10B981) : AppColors.error,
-            shape: BoxShape.circle,
-          ),
-        ),
-    ]);
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // Info grid — معلومات الجهاز بشكل grid منظّم
-  // ══════════════════════════════════════════════════════════════
-  Widget _infoGrid() {
-    final items = <_InfoItem>[
-      if (_d.model != null && _d.model!.isNotEmpty)
-        _InfoItem(LucideIcons.info, 'الموديل', _d.model!),
-      if (_d.mac != null && _d.mac!.isNotEmpty)
-        _InfoItem(LucideIcons.fingerprint, 'MAC', _d.mac!),
-      if (_d.location != null && _d.location!.isNotEmpty)
-        _InfoItem(LucideIcons.mapPin, 'الموقع', _d.location!),
-    ];
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 8),
-          child: Row(children: [
-            Icon(LucideIcons.info, size: 14, color: AppColors.brand),
-            const SizedBox(width: 6),
-            Text('معلومات الجهاز', style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi,
-            )),
-          ]),
-        ),
-        const Divider(height: 1),
-        for (int i = 0; i < items.length; i++) ...[
-          _infoRow(items[i]),
-          if (i < items.length - 1)
-            Divider(height: 1, color: AppColors.border.withValues(alpha: 0.5), indent: 40),
-        ],
-      ]),
-    );
-  }
-
-  Widget _infoRow(_InfoItem item) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 12),
-      child: Row(children: [
-        Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(
-            color: AppColors.brand.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(item.icon, size: 14, color: AppColors.brand),
-        ),
-        const SizedBox(width: 10),
-        Text(item.label, style: TextStyle(fontSize: 11, color: AppColors.textMid)),
-        const Spacer(),
-        Text(
-          item.value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textHi,
-          ),
-        ),
-      ]),
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // Protocol card
-  // ══════════════════════════════════════════════════════════════
-  Widget _protocolCard() {
-    final protoIcon = switch (_d.protocol) {
-      'api' => LucideIcons.globe,
-      'ssh' => LucideIcons.terminal,
-      'telnet' => LucideIcons.monitor,
-      'snmp' => LucideIcons.activity,
-      _ => LucideIcons.plug,
-    };
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.brand.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(protoIcon, size: 20, color: AppColors.brand),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-              NetworkDeviceLabels.protocolLabel(_d.protocol!),
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textHi),
-            ),
-            const SizedBox(height: 2),
-            Row(children: [
-              Text('port ${_d.apiPort ?? "—"}',
-                  style: TextStyle(fontSize: 11, color: AppColors.textMid)),
-              if (_d.hasCredentials) ...[
-                const SizedBox(width: 8),
-                Icon(LucideIcons.keyRound, size: 11, color: const Color(0xFF10B981)),
-                const SizedBox(width: 3),
-                Text('credentials محفوظة',
-                    style: TextStyle(fontSize: 10, color: const Color(0xFF10B981))),
-              ],
-            ]),
-          ]),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.textLow.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            'Slice 2',
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.textLow),
-          ),
-        ),
-      ]),
-    );
-  }
 
   // ══════════════════════════════════════════════════════════════
   // Notes card
@@ -968,68 +721,33 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // Coming soon (Slice 2 preview)
-  // ══════════════════════════════════════════════════════════════
-  Widget _comingSoonCard() {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [
-          AppColors.brand.withValues(alpha: 0.05),
-          AppColors.brand.withValues(alpha: 0.02),
-        ]),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.brand.withValues(alpha: 0.2), width: 1),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.sparkles, size: 14, color: AppColors.brand),
-          const SizedBox(width: 6),
-          Text('قادم قريباً', style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand,
-          )),
-        ]),
-        const SizedBox(height: 10),
-        _comingItem(LucideIcons.wifi, 'UBNT + Mimosa API — signal + throughput + stations'),
-        _comingItem(LucideIcons.chartLine, 'رسم بياني حيّ للـtraffic لكل interface (RX/TX Mbps)'),
-        _comingItem(LucideIcons.zap, 'زر Reboot عن بُعد (للـMikrotik أولاً)'),
-        _comingItem(LucideIcons.bellRing, 'تنبيهات (حرارة/CPU/فولتيّة) مع حدود مخصّصة'),
-        _comingItem(LucideIcons.mapPin, 'تنظيم بالمناطق (regions) + bulk IP scan'),
-      ]),
-    );
-  }
-
-  Widget _comingItem(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        Icon(icon, size: 12, color: AppColors.textMid),
-        const SizedBox(width: 6),
-        Expanded(child: Text(
-          text,
-          style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4),
-        )),
-      ]),
-    );
-  }
 }
 
 /// airFiber 60 يُكتشف من model أو name — المستخدم يكتب أي variation:
 /// "airFiber 60 LR" / "AF-60-LR" / "LR 60" / "60 GP" / "GP60" ...
 /// نبحث في الحقلين معاً لتغطية كل الحالات.
+///
+/// 2026-08-18: نستثني موديلات AF-60-XG (5 GHz — مو 60 GHz) — كانت
+/// `af60` تُطابقها بالخطأ. نتحقّق من variants الـ60 GHz الحقيقيّة:
+/// LR / XR / XG (raw) لا / gp.
 bool _isAirFiber60(NetworkDevice d) {
   final combined = '${d.model ?? ''} ${d.name}'.toLowerCase();
   if (combined.trim().isEmpty) return false;
-  return combined.contains('airfiber 60') ||
-      combined.contains('af-60') ||
-      combined.contains('af60') ||
-      combined.contains('lr 60') ||
-      combined.contains('60 lr') ||
-      combined.contains('gp 60') ||
-      combined.contains('60 gp') ||
-      combined.contains('60ghz') ||
-      combined.contains('60 ghz');
+  // Explicit 60 GHz mentions
+  if (combined.contains('60ghz') || combined.contains('60 ghz')) return true;
+  if (combined.contains('airfiber 60') || combined.contains('airfiber60')) return true;
+  // AF-60 variants — لكن ليس AF-60-XG (5GHz backhaul)
+  final af60Match = RegExp(r'af[\s-]?60[\s-]?(lr|xr|gp|lite)?\b').firstMatch(combined);
+  if (af60Match != null) {
+    // إذا كان جزء من "af-60-xg" → false
+    if (combined.contains('af-60-xg') || combined.contains('af60-xg') ||
+        combined.contains('af 60 xg')) return false;
+    return true;
+  }
+  // Suffix variants: "LR 60" / "60 LR" / "gp 60" / "60 gp"
+  if (RegExp(r'\b(lr|xr|gp)\s?60\b').hasMatch(combined)) return true;
+  if (RegExp(r'\b60\s?(lr|xr|gp)\b').hasMatch(combined)) return true;
+  return false;
 }
 
 extension _UbntHint on _NetworkDeviceDetailsScreenState {
@@ -1195,13 +913,6 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
       ]),
     );
   }
-}
-
-class _InfoItem {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _InfoItem(this.icon, this.label, this.value);
 }
 
 class _PingSample {

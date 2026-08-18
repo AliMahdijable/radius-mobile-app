@@ -163,10 +163,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           if (mounted) {
             setState(() {
               _found.add(r);
-              // dedup: أجهزة مضافة مسبقاً لا تُختار افتراضياً
-              if (!widget.existingIps.contains(r.ip)) {
-                _selected.add(r.ip);
-              }
+              // 2026-08-18: لا نُحدّد أي جهاز افتراضياً (كان يُحدّد الكل
+              // → subnet /24 = 200 جهاز يُضاف بضغطة واحدة بدون قصد).
+              // المستخدم يختار يدوياً أو يستعمل "تحديد الكل" من bottom bar.
             });
             HapticFeedback.selectionClick();
           }
@@ -194,6 +193,32 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
 
   Future<void> _addSelected() async {
     if (_selected.isEmpty) return;
+    final count = _selected.length;
+
+    // 2026-08-18: confirm صريح لو >20 جهاز — يحمي من ضغطة خطأ
+    if (count > 20) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(LucideIcons.triangleAlert, color: const Color(0xFFEA580C), size: 32),
+          title: Text('إضافة $count جهاز'),
+          content: Text(
+            'ستُضاف $count جهاز دفعة واحدة. هل أنت متأكّد؟',
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
+              child: Text('تابع'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+    }
+
     // Sheet قبل الإضافة — يجمع region + creds + prefix تُطبّق على كل المُحدَّد
     final opts = await showModalBottomSheet<_BulkAddOptions>(
       context: context,
@@ -203,7 +228,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _BulkAddOptionsSheet(
-        count: _selected.length,
+        count: count,
         regions: _regions,
         initialPrefix: _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim(),
       ),
@@ -212,55 +237,62 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
 
     setState(() { _adding = true; _added = 0; });
     HapticFeedback.mediumImpact();
-    var errors = 0;
+
+    // 2026-08-18: بنِ payload كامل واستدع bulk-create endpoint (طلب واحد
+    // بدل N — يتفادى rate-limit + سرعة أعلى + atomic transaction).
+    final payload = <Map<String, dynamic>>[];
     for (final r in _found.where((r) => _selected.contains(r.ip))) {
-      try {
-        final lastOctet = r.ip.split('.').last;
-        final creds = <String, dynamic>{};
-        // credentials حسب البروتوكول (نفس منطق _buildCredentials في الـform)
-        if (r.guessProtocol == 'snmp') {
-          if (opts.community != null && opts.community!.isNotEmpty) {
-            creds['community'] = opts.community!;
-            creds['version'] = 'v2c';
-          }
-        } else {
-          if (opts.user != null && opts.user!.isNotEmpty) creds['user'] = opts.user!;
-          if (opts.pass != null && opts.pass!.isNotEmpty) creds['pass'] = opts.pass!;
+      final lastOctet = r.ip.split('.').last;
+      final creds = <String, dynamic>{};
+      if (r.guessProtocol == 'snmp') {
+        if (opts.community != null && opts.community!.isNotEmpty) {
+          creds['community'] = opts.community!;
+          creds['version'] = 'v2c';
         }
-        await NetworkDevicesApi.create({
-          'name': '${opts.prefix} $lastOctet',
-          'type': _typeFromBrand(r.guessBrand),
-          'brand': r.guessBrand,
-          'ip': r.ip,
-          'port': 80,
-          'api_port': r.guessApiPort,
-          'protocol': r.guessProtocol,
-          'region_id': opts.regionId,
-          'model': null,
-          'mac': null,
-          'location': null,
-          'notes': 'أُضيف عبر Bulk scan',
-          'credentials': creds.isEmpty ? null : creds,
-        });
-        if (mounted) setState(() { _added++; _mutated++; });
-      } catch (_) {
-        errors++;
+      } else {
+        if (opts.user != null && opts.user!.isNotEmpty) creds['user'] = opts.user!;
+        if (opts.pass != null && opts.pass!.isNotEmpty) creds['pass'] = opts.pass!;
       }
+      payload.add({
+        'name': '${opts.prefix} $lastOctet',
+        'type': _typeFromBrand(r.guessBrand),
+        'brand': r.guessBrand,
+        'ip': r.ip,
+        'port': 80,
+        'api_port': r.guessApiPort,
+        'protocol': r.guessProtocol,
+        'region_id': opts.regionId,
+        'model': null,
+        'mac': null,
+        'location': null,
+        'notes': 'أُضيف عبر Bulk scan',
+        'credentials': creds.isEmpty ? null : creds,
+      });
+    }
+
+    String snackText;
+    Color snackColor;
+    try {
+      final created = await NetworkDevicesApi.bulkCreate(payload);
+      _added = created.length;
+      _mutated += created.length;
+      snackText = 'أُضيف ${created.length} جهاز بنجاح';
+      snackColor = const Color(0xFF10B981);
+    } catch (e) {
+      snackText = 'فشل: ${e.toString().replaceFirst('Exception: ', '')}';
+      snackColor = AppColors.error;
     }
     if (!mounted) return;
-    setState(() => _adding = false);
+    setState(() {
+      _adding = false;
+      if (snackColor != AppColors.error) _selected.clear();
+    });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(errors > 0
-          ? 'أُضيف $_added جهاز — $errors فشل'
-          : 'أُضيف $_added جهاز بنجاح'),
-      backgroundColor: errors > 0 ? AppColors.error : const Color(0xFF10B981),
+      content: Text(snackText),
+      backgroundColor: snackColor,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
     ));
-    if (errors == 0) {
-      // نظّف الـselected لتجنّب double-add
-      setState(() => _selected.clear());
-    }
   }
 
   String _typeFromBrand(String brand) {
@@ -305,7 +337,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   ),
           ),
         ]),
-        bottomNavigationBar: _selected.isEmpty ? null : _bottomBar(),
+        // 2026-08-18: BottomBar يظهر لو فيه نتائج (حتى لو ما مُحدَّد)
+        // — يعرض زرّ "تحديد الكل" مفيد بعد ما شلنا auto-select.
+        bottomNavigationBar: _found.isEmpty ? null : _bottomBar(),
       ),
     );
   }
@@ -554,6 +588,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       };
 
   Widget _bottomBar() {
+    // كم جهاز يمكن اختياره (ما عدا المضاف مسبقاً)
+    final selectable = _found.where((r) => !widget.existingIps.contains(r.ip)).length;
+    final allSelected = _selected.length == selectable && selectable > 0;
     return Material(
       elevation: 8,
       color: AppColors.surface,
@@ -561,25 +598,56 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(Sp.md, 10, Sp.md, 10),
           child: Row(children: [
+            // زرّ "تحديد الكل / إلغاء التحديد" — يظهر لو فيه جهاز واحد+
+            if (selectable > 0)
+              TextButton.icon(
+                onPressed: _adding ? null : () {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    if (allSelected) {
+                      _selected.clear();
+                    } else {
+                      for (final r in _found) {
+                        if (!widget.existingIps.contains(r.ip)) {
+                          _selected.add(r.ip);
+                        }
+                      }
+                    }
+                  });
+                },
+                icon: Icon(allSelected ? LucideIcons.square : LucideIcons.checkSquare,
+                    size: 16, color: AppColors.brand),
+                label: Text(allSelected ? 'إلغاء' : 'تحديد الكل',
+                    style: TextStyle(color: AppColors.brand, fontSize: 12)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'محدَّد: ${_selected.length}',
                 style: TextStyle(
-                    color: AppColors.textHi, fontWeight: FontWeight.w700),
+                    color: AppColors.textHi, fontWeight: FontWeight.w700, fontSize: 13),
               ),
             ),
             FilledButton.icon(
               onPressed: (_adding || _selected.isEmpty) ? null : _addSelected,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.brand,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
               icon: _adding
                   ? const SizedBox(
                       width: 14, height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(LucideIcons.plus, size: 16),
-              label: Text(_adding ? 'يُضيف $_added…' : 'أضف ${_selected.length} جهاز'),
+                  : const Icon(LucideIcons.plus, size: 14),
+              label: Text(_adding
+                  ? 'يُضيف $_added…'
+                  : 'أضف ${_selected.length}',
+                  style: const TextStyle(fontSize: 13)),
             ),
           ]),
         ),

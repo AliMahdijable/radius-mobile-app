@@ -41,7 +41,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   Timer? _qrPoll;
   int _qrPollElapsed = 0;
   static const int _qrPollTimeoutSec = 90;
-  static const int _pairCodeTimeoutSec = 240;   // ~4 min (WAHA gives ~3-5)
+  static const int _pairCodeTimeoutSec = 240; // ~4 min (WAHA gives ~3-5)
 
   @override
   void initState() {
@@ -281,8 +281,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('wa.disconnect_btn'.tr()),
           ),
@@ -299,7 +298,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok ? 'wa.disconnected'.tr() : (r.message ?? 'common.error'.tr())),
+        content: Text(
+            r.ok ? 'wa.disconnected'.tr() : (r.message ?? 'common.error'.tr())),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -373,8 +373,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           'settings.whatsapp'.tr(),
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
@@ -383,8 +382,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           color: accent,
           onRefresh: _bootstrap,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-                Sp.lg, Sp.md, Sp.lg, Sp.huge),
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
               if (_loading)
                 const Padding(
@@ -394,6 +392,10 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
               else ...[
                 _statusCard(accent),
                 const SizedBox(height: Sp.md),
+                if (_hasSafetyNotices) ...[
+                  _safetyNotices(),
+                  const SizedBox(height: Sp.md),
+                ],
                 if (_qrData != null) ...[
                   _qrCard(),
                   const SizedBox(height: Sp.md),
@@ -433,15 +435,182 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
     );
   }
 
+  bool get _hasSafetyNotices {
+    final s = _status;
+    if (s == null) return false;
+    return (s.needsPairing && !s.connected) ||
+        s.reachoutRestricted ||
+        s.messageCapping?.isWarning == true ||
+        s.messageCapping?.isCapped == true;
+  }
+
+  Widget _safetyNotices() {
+    final s = _status;
+    if (s == null) return const SizedBox.shrink();
+    final notices = <Widget>[];
+
+    if (s.needsPairing && !s.connected) {
+      final rawStatus = (s.sessionStatus ?? '').trim();
+      notices.add(_safetyNotice(
+        color: const Color(0xFFE08F2D),
+        icon: LucideIcons.qrCode,
+        title: 'wa.needs_pairing_title'.tr(),
+        body: rawStatus.isEmpty
+            ? 'wa.needs_pairing_body'.tr()
+            : 'wa.needs_pairing_body_status'.tr(
+                namedArgs: {'status': rawStatus},
+              ),
+      ));
+    }
+
+    if (s.reachoutRestricted) {
+      final endsAt = _formatUnixTime(s.restrictionEndsAt);
+      notices.add(_safetyNotice(
+        color: AppColors.error,
+        icon: LucideIcons.triangleAlert,
+        title: 'wa.reachout_title'.tr(),
+        body: endsAt == null
+            ? 'wa.reachout_body'.tr()
+            : 'wa.reachout_body_until'.tr(namedArgs: {'time': endsAt}),
+      ));
+    }
+
+    final capping = s.messageCapping;
+    if (capping?.isWarning == true || capping?.isCapped == true) {
+      final capped = capping!.isCapped;
+      final cycleEnd = _formatUnixTime(capping.cycleEnd);
+      final quotaKnown = capping.usedQuota != null &&
+          capping.totalQuota != null &&
+          capping.totalQuota! > 0;
+      final quotaText = quotaKnown
+          ? 'wa.capping_quota'.tr(namedArgs: {
+              'used': '${capping.usedQuota}',
+              'total': '${capping.totalQuota}',
+            })
+          : '';
+      final guidance = capped
+          ? (cycleEnd == null
+              ? 'wa.capping_body'.tr()
+              : 'wa.capping_body_until'.tr(namedArgs: {'time': cycleEnd}))
+          : 'wa.capping_warning_body'.tr();
+      final progress = quotaKnown
+          ? (capping.usedQuota! / capping.totalQuota!)
+              .clamp(0.0, 1.0)
+              .toDouble()
+          : null;
+      notices.add(_safetyNotice(
+        color: capped ? AppColors.error : const Color(0xFFE08F2D),
+        icon: LucideIcons.triangleAlert,
+        title:
+            capped ? 'wa.capping_title'.tr() : 'wa.capping_warning_title'.tr(),
+        body: [quotaText, guidance].where((part) => part.isNotEmpty).join(' '),
+        progress: progress,
+      ));
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < notices.length; i++) ...[
+          if (i > 0) const SizedBox(height: Sp.sm),
+          notices[i],
+        ],
+      ],
+    );
+  }
+
+  Widget _safetyNotice({
+    required Color color,
+    required IconData icon,
+    required String title,
+    required String body,
+    double? progress,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(R.md),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppType.title(color: color).copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  body,
+                  style: AppType.muted(color: AppColors.textMid)
+                      .copyWith(fontSize: 11, height: 1.55),
+                ),
+                if (progress != null) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(R.pill),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 5,
+                      backgroundColor: color.withValues(alpha: 0.12),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _formatUnixTime(int? seconds) {
+    if (seconds == null || seconds <= 0) return null;
+    final value = DateTime.fromMillisecondsSinceEpoch(
+      seconds * 1000,
+      isUtc: true,
+    ).toLocal();
+    String two(int part) => part.toString().padLeft(2, '0');
+    return '${value.year}/${two(value.month)}/${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+
   Widget _statusCard(Color accent) {
     final connected = _status?.connected == true;
     final stabilizing = _status?.stabilizing == true;
-    final color = connected
+    final restricted = _status?.hasSendingRestriction == true;
+    final needsPairing = _status?.needsPairing == true;
+    final color = connected && !restricted
         ? accent
-        : (stabilizing ? const Color(0xFFE08F2D) : AppColors.error);
-    final label = connected
-        ? 'subscribers.status_online'.tr()
-        : (stabilizing ? 'wa.stabilizing'.tr() : 'wa.disconnected_state'.tr());
+        : (connected || stabilizing || needsPairing
+            ? const Color(0xFFE08F2D)
+            : AppColors.error);
+    final label = needsPairing && !connected
+        ? 'wa.needs_pairing'.tr()
+        : connected
+            ? (restricted
+                ? 'wa.connected_limited'.tr()
+                : 'subscribers.status_online'.tr())
+            : (stabilizing
+                ? 'wa.stabilizing'.tr()
+                : 'wa.disconnected_state'.tr());
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
@@ -479,8 +648,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                        color: AppColors.surface, width: 2),
+                    border: Border.all(color: AppColors.surface, width: 2),
                   ),
                 ),
               ),
@@ -531,12 +699,13 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           fit: BoxFit.contain,
         );
       } catch (_) {
-        body = SelectableText(qr, style: AppType.input(color: AppColors.textHi));
+        body =
+            SelectableText(qr, style: AppType.input(color: AppColors.textHi));
       }
     } else {
       body = SelectableText(qr,
-          style: AppType.input(color: AppColors.textHi).copyWith(
-              fontFamily: 'monospace', fontSize: 9));
+          style: AppType.input(color: AppColors.textHi)
+              .copyWith(fontFamily: 'monospace', fontSize: 9));
     }
     return Container(
       padding: const EdgeInsets.all(Sp.md),
@@ -549,8 +718,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
         children: [
           Text(
             'wa.scan_qr'.tr(),
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
@@ -580,8 +749,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
         children: [
           Text(
             'wa.auth_mode_title'.tr(),
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 8),
           Row(
@@ -621,14 +790,14 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                 isDense: true,
                 hintText: '9647701234567',
                 hintStyle: AppType.muted().copyWith(fontFamily: 'monospace'),
-                prefixIcon: Icon(LucideIcons.phone,
-                    size: 16, color: AppColors.textLow),
+                prefixIcon:
+                    Icon(LucideIcons.phone, size: 16, color: AppColors.textLow),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(R.md),
                   borderSide: BorderSide(color: AppColors.border),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 10),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               ),
             ),
             const SizedBox(height: 4),
@@ -674,9 +843,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 14,
-                  color: active ? accent : AppColors.textLow),
+              Icon(icon, size: 14, color: active ? accent : AppColors.textLow),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -709,8 +876,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
         children: [
           Text(
             'wa.pair_code_title'.tr(),
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
@@ -843,16 +1010,13 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-              color: disabled
-                  ? AppColors.border
-                  : color.withValues(alpha: 0.3),
+              color: disabled ? AppColors.border : color.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 14, color: disabled ? AppColors.textLow : color),
+              Icon(icon, size: 14, color: disabled ? AppColors.textLow : color),
               const SizedBox(width: 5),
               Text(
                 label,
@@ -916,29 +1080,25 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
             label: 'wa.welcome_msg'.tr(),
             value: f.welcomeMessage,
             enabled: masterOn,
-            onChanged: (v) =>
-                _updateFeatures(f.copyWith(welcomeMessage: v)),
+            onChanged: (v) => _updateFeatures(f.copyWith(welcomeMessage: v)),
           ),
           _toggle(
             label: 'wa.activation_notif'.tr(),
             value: f.sendOnActivation,
             enabled: masterOn,
-            onChanged: (v) =>
-                _updateFeatures(f.copyWith(sendOnActivation: v)),
+            onChanged: (v) => _updateFeatures(f.copyWith(sendOnActivation: v)),
           ),
           _toggle(
             label: 'wa.extend_notif'.tr(),
             value: f.sendOnExtension,
             enabled: masterOn,
-            onChanged: (v) =>
-                _updateFeatures(f.copyWith(sendOnExtension: v)),
+            onChanged: (v) => _updateFeatures(f.copyWith(sendOnExtension: v)),
           ),
           _toggle(
             label: 'wa.near_expiry_notif'.tr(),
             value: f.expiryReminder,
             enabled: masterOn,
-            onChanged: (v) =>
-                _updateFeatures(f.copyWith(expiryReminder: v)),
+            onChanged: (v) => _updateFeatures(f.copyWith(expiryReminder: v)),
           ),
           _toggle(
             label: 'wa.expired_notif'.tr(),
@@ -970,9 +1130,9 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
       activeColor: const Color(0xFF25D366),
       title: Text(
         label,
-        style: AppType.label(
-                color: enabled ? AppColors.textHi : AppColors.textLow)
-            .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+        style:
+            AppType.label(color: enabled ? AppColors.textHi : AppColors.textLow)
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
       ),
       value: enabled ? value : false,
       onChanged: enabled ? onChanged : null,
@@ -1026,8 +1186,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16, color: AppColors.textLow),
+              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
             ],
           ),
         ),

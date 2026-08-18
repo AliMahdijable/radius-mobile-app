@@ -144,7 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _walletLoaded = true;
         }
       });
-    } catch (_) { /* silent — cache is best-effort */ }
+    } catch (_) {/* silent — cache is best-effort */}
   }
 
   Future<void> _refreshLive({bool silent = false}) async {
@@ -203,21 +203,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .then((r) {
       if (!mounted) return;
       // Sas4Stats non-nullable — نستعمل total==null كإشارة على fetch فشل.
-      final failed = r.total == null && r.active == null &&
-          r.expired == null && r.online == null && r.balance == null;
+      final failed = r.total == null &&
+          r.active == null &&
+          r.expired == null &&
+          r.online == null &&
+          r.balance == null;
       if (silent && failed && _sas4Live != null) return;
       setState(() {
         _sas4Live = r;
         _sas4Loaded = true;
       });
-      if (!failed) DashboardCache.saveSas4(r);   // persist for next cold start
+      if (!failed) DashboardCache.saveSas4(r); // persist for next cold start
     });
     // Defer debtors 800ms so the faster widgets (SAS4/wallet/finance)
     // grab bandwidth first. `subscribers/with-phones` is the heaviest
     // fetch (loads every subscriber's row + notes + package) — running
     // it in parallel with the light widgets was starving them.
     // On silent refresh we still fire immediately (no cold start).
-    Future.delayed(silent ? Duration.zero : const Duration(milliseconds: 800), () {
+    Future.delayed(silent ? Duration.zero : const Duration(milliseconds: 800),
+        () {
       if (!mounted) return;
       DashboardApi.fetchDebtors()
           .timeout(kMaxLoad, onTimeout: () => null)
@@ -244,7 +248,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _walletLive = r;
         _walletLoaded = true;
       });
-      if (r != null) DashboardCache.saveWallet(r);   // persist for next cold start
+      if (r != null)
+        DashboardCache.saveWallet(r); // persist for next cold start
     });
   }
 
@@ -282,6 +287,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return WhatsAppStatus(
       connected: _waLive!.connected,
       phone: _waLive!.phone,
+      needsPairing: _waLive!.needsPairing,
+      sendingRestricted: _waLive!.sendingRestricted,
+      cappingWarning: _waLive!.cappingWarning,
     );
   }
 
@@ -311,7 +319,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: EdgeInsets.fromLTRB(
                 Sp.lg,
                 4, // tightened from Sp.md so the subscribers card sits
-                   // right under the header without dead space.
+                // right under the header without dead space.
                 Sp.lg,
                 Sp.huge * 3 + MediaQuery.paddingOf(context).bottom,
               ),
@@ -508,8 +516,10 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => _contentHeight + topInset;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    Theme.of(context); // theme-dep (dark-mode) — delegate.build skipped by injector
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    Theme.of(
+        context); // theme-dep (dark-mode) — delegate.build skipped by injector
     return Container(
       color: AppColors.bg,
       padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, 2),
@@ -586,6 +596,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.waLoaded != waLoaded ||
       old.whatsApp?.connected != whatsApp?.connected ||
       old.whatsApp?.phone != whatsApp?.phone ||
+      old.whatsApp?.needsPairing != whatsApp?.needsPairing ||
+      old.whatsApp?.sendingRestricted != whatsApp?.sendingRestricted ||
+      old.whatsApp?.cappingWarning != whatsApp?.cappingWarning ||
       old.isDark != isDark;
 }
 
@@ -603,6 +616,15 @@ class _WAStatusChip extends StatelessWidget {
     if (!loaded) {
       c = AppColors.textMid;
       label = 'dashboard.wa_checking'.tr();
+    } else if (status?.needsPairing == true) {
+      c = const Color(0xFFE08F2D);
+      label = 'wa.needs_pairing'.tr();
+    } else if (status?.sendingRestricted == true) {
+      c = AppColors.error;
+      label = 'wa.connected_limited'.tr();
+    } else if (status?.cappingWarning == true) {
+      c = const Color(0xFFE08F2D);
+      label = 'wa.outreach_warning'.tr();
     } else if (status?.connected == true) {
       c = AppColors.brand;
       label = 'dashboard.wa_connected'.tr();
@@ -633,8 +655,7 @@ class _WAStatusChip extends StatelessWidget {
               decoration: BoxDecoration(color: c, shape: BoxShape.circle),
             ),
           const SizedBox(width: 6),
-          Text(label,
-              style: AppType.muted(color: c).copyWith(fontSize: 11)),
+          Text(label, style: AppType.muted(color: c).copyWith(fontSize: 11)),
         ],
       ),
     );
