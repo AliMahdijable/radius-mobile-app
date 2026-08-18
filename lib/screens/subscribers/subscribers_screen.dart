@@ -10,6 +10,7 @@ import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -681,14 +682,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final result = await SubscribersApi.disconnect(s.idx!);
     if (!mounted) return;
     if (result.ok) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.ok
-            ? 'subscribers.disconnect_ok'.tr()
-            : (result.message ?? 'subscribers.disconnect_failed'.tr())),
-        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    // 2026-08-18: overlay بدل ScaffoldMessenger — يظهر فوق أي modal مفتوح.
+    showSheetSnack(
+      context,
+      result.ok
+          ? 'subscribers.disconnect_ok'.tr()
+          : (result.message ?? 'subscribers.disconnect_failed'.tr()),
+      isError: !result.ok,
     );
   }
 
@@ -707,23 +707,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       );
       if (!mounted) return;
       final ok = result.ok;
-      final color = ok
-          ? const Color(0xFF25D366)
-          : (result.reason == 'no_template' ||
-                  result.reason == 'inactive' ||
-                  result.reason == 'no_phone')
-              ? const Color(0xFFE08F2D)
-              : AppColors.error;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok
-                ? 'subscribers.wa_debt_reminder_sent'.tr()
-                : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
-          ),
-          backgroundColor: color,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showSheetSnack(
+        context,
+        ok
+            ? 'subscribers.wa_debt_reminder_sent'.tr()
+            : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
+        isError: !ok,
       );
     } finally {
       if (mounted) {
@@ -776,15 +765,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (ok > 0) SubscriberEvents.notifyChange();
     await _refresh();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('subscribers.disconnected_count'.tr(namedArgs: {
-          'ok': '$ok',
-          'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
-        })),
-        backgroundColor: fail == 0 ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSheetSnack(
+      context,
+      'subscribers.disconnected_count'.tr(namedArgs: {
+        'ok': '$ok',
+        'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
+      }),
+      isError: fail != 0,
     );
   }
 
@@ -859,15 +846,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (ok > 0) SubscriberEvents.notifyChange();
     await _refresh();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('subscribers.done_count'.tr(namedArgs: {
-          'ok': '$ok',
-          'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
-        })),
-        backgroundColor: fail == 0 ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSheetSnack(
+      context,
+      'subscribers.done_count'.tr(namedArgs: {
+        'ok': '$ok',
+        'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
+      }),
+      isError: fail != 0,
     );
   }
 
@@ -1219,13 +1204,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.textHi,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    // 2026-08-18: overlay-based → يظهر فوق أي modal مفتوح
+    showSheetSnack(context, msg);
   }
 
   void _openDetail(Subscriber s) {

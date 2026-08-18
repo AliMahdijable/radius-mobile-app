@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/permissions_service.dart';
@@ -278,12 +279,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       if (success) sub = sub.copyWithOnline(online: false);
     });
     if (success) SubscriberEvents.notifyChange();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? 'subscribers.disconnect_ok_user'.tr() : 'subscribers.disconnect_failed'.tr()),
-        backgroundColor: success ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    // 2026-08-18: overlay بدل ScaffoldMessenger → يظهر فوق أي modal مفتوح.
+    showSheetSnack(
+      context,
+      success ? 'subscribers.disconnect_ok_user'.tr() : 'subscribers.disconnect_failed'.tr(),
+      isError: !success,
     );
   }
 
@@ -331,14 +331,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // round-trip is cheaper than waiting for the API to reject and
     // matches v1's flow.
     if (sub.hasDebt) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'subscribers.delete_debt_block'.tr(namedArgs: {'amt': formatIQD(sub.debtAbs.round())}),
-          ),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showSheetSnack(
+        context,
+        'subscribers.delete_debt_block'.tr(namedArgs: {'amt': formatIQD(sub.debtAbs.round())}),
+        isError: true,
       );
       return;
     }
@@ -381,23 +377,15 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     setState(() => _deleting = false);
     if (result.ok) {
       SubscriberEvents.notifyChange();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('subscribers.delete_ok'.tr()),
-          backgroundColor: AppColors.brand,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'subscribers.delete_ok'.tr());
       // Pop back to the list — the subscriber no longer exists and
       // the underlying state will refresh from dataChanged.
       Navigator.of(context).pop();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message ?? 'subscribers.delete_failed'.tr()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showSheetSnack(
+        context,
+        result.message ?? 'subscribers.delete_failed'.tr(),
+        isError: true,
       );
     }
   }
@@ -407,13 +395,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // Phone required — the user-info URL is delivered through
     // WhatsApp. Without a phone we can't deliver it anywhere.
     if (sub.displayPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('subscribers.no_phone'.tr()),
-          backgroundColor: const Color(0xFFE08F2D),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSheetSnack(context, 'subscribers.no_phone'.tr(), isError: true);
       return;
     }
     setState(() => _generatingLink = true);
@@ -421,12 +403,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (!mounted) return;
     if (!linkResult.ok || linkResult.url == null) {
       setState(() => _generatingLink = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(linkResult.message ?? 'subscribers.wa_link_gen_failed'.tr()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showSheetSnack(
+        context,
+        linkResult.message ?? 'subscribers.wa_link_gen_failed'.tr(),
+        isError: true,
       );
       return;
     }
@@ -453,17 +433,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (!mounted) return;
     setState(() => _generatingLink = false);
     final ok = sendResult.ok;
-    final color = ok ? const Color(0xFF25D366) : AppColors.error;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? 'subscribers.wa_link_sent'.tr()
-              : (sendResult.message ?? 'subscribers.wa_link_send_failed'.tr()),
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSheetSnack(
+      context,
+      ok
+          ? 'subscribers.wa_link_sent'.tr()
+          : (sendResult.message ?? 'subscribers.wa_link_send_failed'.tr()),
+      isError: !ok,
     );
   }
 
@@ -480,29 +455,18 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // to see why a send failed (missing template / inactive /
     // disconnected) so they can fix it inline.
     final ok = result.ok;
-    final color = ok
-        ? const Color(0xFF25D366)
-        : (result.reason == 'no_template' ||
-                result.reason == 'inactive' ||
-                result.reason == 'no_phone')
-            ? const Color(0xFFE08F2D) // warning, not error
-            : AppColors.error;
     final defaultOkMsg = switch (templateType) {
       'debt_reminder' => 'subscribers.wa_debt_reminder_sent'.tr(),
       'expiry_warning' => 'subscribers.wa_expiry_warning_sent'.tr(),
       'subscriber_info' => 'subscribers.wa_subscriber_info_sent'.tr(),
       _ => 'subscribers.wa_message_sent'.tr(),
     };
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? defaultOkMsg
-              : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSheetSnack(
+      context,
+      ok
+          ? defaultOkMsg
+          : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
+      isError: !ok,
     );
   }
 
@@ -524,18 +488,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     });
     if (success) SubscriberEvents.notifyChange();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? (wantEnable ? 'subscribers.enable_ok'.tr() : 'subscribers.disable_ok'.tr())
-              : (wantEnable ? 'subscribers.enable_failed'.tr() : 'subscribers.disable_failed'.tr()),
-        ),
-        backgroundColor: success
-            ? (wantEnable ? AppColors.brand : const Color(0xFFCD8B00))
-            : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSheetSnack(
+      context,
+      success
+          ? (wantEnable ? 'subscribers.enable_ok'.tr() : 'subscribers.disable_ok'.tr())
+          : (wantEnable ? 'subscribers.enable_failed'.tr() : 'subscribers.disable_failed'.tr()),
+      isError: !success,
     );
   }
 }
@@ -796,14 +754,12 @@ class _SubscriptionCard extends StatelessWidget {
           label: 'subscribers.label_expiration'.tr(),
           value: _expirationText(sub.expiration),
         ),
+        // 2026-08-18: استعمل نفس منطق الهيرو (parsedExpiration - now, inDays floor)
+        // بدل sub.remainingDays (SAS4 يقرّبه لأعلى فيعطي 31 بدل 30).
         _InfoRow(
           icon: LucideIcons.clock,
           label: 'subscribers.label_remaining_days'.tr(),
-          value: sub.remainingDays == null
-              ? '—'
-              : sub.isExpired
-                  ? 'subscribers.label_expired_short'.tr()
-                  : '${sub.remainingDays} يوم',
+          value: _remainingDaysText(sub),
           valueColor: sub.isExpired
               ? AppColors.error
               : sub.isNearExpiry
@@ -889,6 +845,31 @@ class _SubscriptionCard extends StatelessWidget {
     if (t == null) return s.split(' ').first;
     String two(int n) => n.toString().padLeft(2, '0');
     return '${t.year}/${two(t.month)}/${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+  }
+
+  /// حساب "الأيام المتبقيّة" لصف الـinfo (تحت "تاريخ الانتهاء").
+  /// 2026-08-18: نفس منطق الهيرو — يستعمل parsedExpiration - now للحصول
+  /// على floor(diff/day) بدل sub.remainingDays الذي يقرّبه SAS4 لأعلى.
+  /// يعرض "Nيوم Hس" لو أقل من يوم كامل، أو "منتهي" لو مضى الوقت.
+  static String _remainingDaysText(Subscriber sub) {
+    final exp = sub.parsedExpiration;
+    if (exp != null) {
+      final diff = exp.difference(DateTime.now());
+      if (diff.isNegative) return 'subscribers.label_expired_short'.tr();
+      final d = diff.inDays;
+      final h = diff.inHours.remainder(24);
+      if (d > 0 && h > 0) return '$d يوم و $h ساعة';
+      if (d > 0) return '$d يوم';
+      if (h > 0) return '$h ساعة';
+      final m = diff.inMinutes.remainder(60);
+      if (m > 0) return '$m دقيقة';
+      return 'أقل من دقيقة';
+    }
+    // fallback على remainingDays حين لا يوجد تاريخ نصّي
+    final r = sub.remainingDays;
+    if (r == null) return '—';
+    if (sub.isExpired) return 'subscribers.label_expired_short'.tr();
+    return '$r يوم';
   }
 }
 
@@ -1191,22 +1172,14 @@ class _OperationsCard extends StatelessWidget {
   static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
 
   static void _todo(BuildContext ctx, String msg) {
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.textHi,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSheetSnack(ctx, msg);
   }
 
   static Future<void> _launchUri(BuildContext ctx, Uri uri) async {
     final ok = await canLaunchUrl(uri);
     if (!ok) {
       if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('لا يمكن فتح الرابط')),
-      );
+      showSheetSnack(ctx, 'لا يمكن فتح الرابط', isError: true);
       return;
     }
     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -1944,13 +1917,10 @@ class _CopyChipState extends State<_CopyChip> {
     await Clipboard.setData(ClipboardData(text: widget.value));
     if (!mounted) return;
     setState(() => _copied = true);
-    ScaffoldMessenger.of(widget.context).showSnackBar(
-      SnackBar(
-        content: Text('تم نسخ ${widget.value}'),
-        backgroundColor: AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    showSheetSnack(
+      widget.context,
+      'تم نسخ ${widget.value}',
+      duration: const Duration(seconds: 2),
     );
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _copied = false);
@@ -2005,13 +1975,10 @@ class _PasswordRowState extends State<_PasswordRow> {
     await Clipboard.setData(ClipboardData(text: widget.password));
     if (!mounted) return;
     setState(() => _copied = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تمّ نسخ كلمة المرور'),
-        backgroundColor: AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
+    showSheetSnack(
+      context,
+      'تمّ نسخ كلمة المرور',
+      duration: const Duration(seconds: 2),
     );
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _copied = false);

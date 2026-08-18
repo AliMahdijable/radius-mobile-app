@@ -238,7 +238,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
           _suppressFormat = false;
           setState(() => _amount = 0);
         },
-        chips: const [5000, 10000, 15000, 25000, 35000, 50000],
+        chips: const [5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000],
         onChipTap: _addToAmount,
       ),
       const SizedBox(height: Sp.sm),
