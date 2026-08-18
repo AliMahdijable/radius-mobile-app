@@ -1558,23 +1558,42 @@ class _SubscriberHero extends StatelessWidget {
     // الألوان داكنة كافياً لتباين واضح مع النصّ الأبيض في الوضعَين
     // (الفاتح والداكن). طلب المستخدم — تمييز فوري للحالة عند فتح الكرت.
     final accent = _heroColor(sub);
-    final remaining = sub.remainingDays;
+    // 2026-08-18: احسب الأيام من parsedExpiration مباشرةً بدل الاعتماد
+    // على sub.remainingDays (SAS4 يُقرّبها لأعلى فيصير 31 يوم لباقة 30).
+    // نفس منطق v1 (subscriber_details_screen.dart:1656+): floor(diff/day).
+    final exp = sub.parsedExpiration;
     String remainingTop = '—';
     String remainingSub = 'الأيام المتبقية';
-    if (remaining != null && remaining > 0) {
-      remainingTop = '$remaining';
-      final exp = sub.parsedExpiration;
-      if (exp != null) {
-        final diff = exp.difference(DateTime.now());
+    if (exp != null) {
+      final diff = exp.difference(DateTime.now());
+      if (diff.isNegative) {
+        remainingTop = '—';
+        remainingSub = 'منتهي';
+      } else {
+        final d = diff.inDays;
         final h = diff.inHours.remainder(24);
         final m = diff.inMinutes.remainder(60);
-        if (h > 0 || m > 0) {
+        remainingTop = d > 0 ? '$d يوم' : (h > 0 ? '${h}س' : '${m}د');
+        if (d > 0 && (h > 0 || m > 0)) {
           remainingSub = '${h}س ${m}د';
+        } else if (d > 0) {
+          remainingSub = 'الأيام المتبقية';
+        } else if (h > 0) {
+          remainingSub = '${m}د';
+        } else {
+          remainingSub = 'أقل من دقيقة';
         }
       }
-    } else if (remaining != null && remaining <= 0) {
-      remainingTop = '—';
-      remainingSub = 'منتهي';
+    } else {
+      // fallback على remainingDays من SAS4 حين لا يوجد تاريخ نصّي مفصّل
+      final r = sub.remainingDays;
+      if (r != null && r > 0) {
+        remainingTop = '$r يوم';
+        remainingSub = 'الأيام المتبقية';
+      } else if (r != null && r <= 0) {
+        remainingTop = '—';
+        remainingSub = 'منتهي';
+      }
     }
     final hasDebt = sub.balanceAmount < 0;
     // مطلب 2026-06-12: شيلنا الـicon الرقمي اللي كان جوه الهيرو.
@@ -1640,6 +1659,14 @@ class _SubscriberHero extends StatelessWidget {
               ],
             ),
           ),
+          // 2026-08-18: صفّ الباسورد — copy مباشر بدون فتح شاشة التعديل.
+          // مقفّل خلف صلاحيّة subscribers.view_credentials للموظفين.
+          if ((sub.password ?? '').isNotEmpty &&
+              Perms.has('subscribers.view_credentials'))
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _PasswordRow(password: sub.password!),
+            ),
           const SizedBox(height: 14),
           // 3-stat strip (الدين / الباقة / الأيام)
           Row(
@@ -1664,6 +1691,9 @@ class _SubscriberHero extends StatelessWidget {
                 child: _heroStat(
                   big: remainingTop,
                   small: remainingSub,
+                  // 2026-08-18: bigSize=15 (بدل 18 الافتراضي) — أضفنا "يوم"
+                  // بجنب الرقم فاحتاج فسحة أفقيّة أكبر لتفادي ellipsis.
+                  bigSize: 15,
                 ),
               ),
             ],
@@ -1950,6 +1980,109 @@ class _CopyChipState extends State<_CopyChip> {
             size: 12,
             color: Colors.white,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// صفّ الباسورد في الهيرو — عين إظهار/إخفاء + زرّ copy.
+/// النسخ يعمل حتى والباس مخفي بالنجوم. أُضيف 2026-08-18 لتوفير
+/// نسخ سريع دون فتح شاشة التعديل.
+class _PasswordRow extends StatefulWidget {
+  const _PasswordRow({required this.password});
+  final String password;
+
+  @override
+  State<_PasswordRow> createState() => _PasswordRowState();
+}
+
+class _PasswordRowState extends State<_PasswordRow> {
+  bool _visible = false;
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.password));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تمّ نسخ كلمة المرور'),
+        backgroundColor: AppColors.brand,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    final display = _visible ? widget.password : '•' * widget.password.length.clamp(4, 12);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(LucideIcons.lock, size: 11,
+            color: Colors.white.withValues(alpha: 0.7)),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            display,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: _visible ? 0 : 2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 6),
+        _MiniHeroIconButton(
+          icon: _visible ? LucideIcons.eyeOff : LucideIcons.eye,
+          onTap: () => setState(() => _visible = !_visible),
+        ),
+        const SizedBox(width: 4),
+        _MiniHeroIconButton(
+          icon: _copied ? LucideIcons.check : LucideIcons.copy,
+          onTap: _copy,
+        ),
+      ],
+    );
+  }
+}
+
+/// زرّ أيقونة صغير دائري بخلفيّة أبيض شفّاف — يُستعمل في هيرو
+/// الكارت للعين والنسخ. حجم 24 (أصغر من _CopyChip=28 لأنّه بجنب
+/// حقل نص محدود).
+class _MiniHeroIconButton extends StatelessWidget {
+  const _MiniHeroIconButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 14,
+        child: Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3), width: 1),
+          ),
+          child: Icon(icon, size: 11, color: Colors.white),
         ),
       ),
     );
