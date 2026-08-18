@@ -28,6 +28,41 @@ class MimosaApi {
   /// BFIVE (B5, B5c, B11, B24 PtP) — `.enterprise.2.1`
   static const String _bfive = '$_enterprise.2.1';
 
+  /// PTMP (A5, A5c, A6, C5, C5c, C5x — Sector APs) — `.enterprise.2.2`.
+  /// جدول العملاء المتصلين بالسكتور. LibreNMS MIB reference:
+  /// https://github.com/librenms/librenms/blob/master/mibs/mimosa/MIMOSA-NETWORKS-PTMP-MIB
+  static const String _ptmp = '$_enterprise.2.2';
+
+  // — Mimosa PTMP Station Table (mimosaPtmpStaTable) —
+  //   entry index = MAC as 6 octets في الـsuffix (مثال: .0.15.140.1.2.3)
+  //   الأعمدة (columns) داخل mimosaPtmpStaEntry:
+  //     1  = mimosaPtmpStaMAC        (index-اختياري لأنّه في الـsuffix أصلاً)
+  //     2  = mimosaPtmpStaIPAddress  (string)
+  //     3  = mimosaPtmpStaName       (string — hostname/alias)
+  //     4  = mimosaPtmpStaHwModel    (string)
+  //     5  = mimosaPtmpStaFwVersion  (string)
+  //     6  = mimosaPtmpStaRSSI       (int, dBm — قد يكون سالب صريح)
+  //     7  = mimosaPtmpStaSNR        (int, dB)
+  //     8  = mimosaPtmpStaTxRate     (int, Mbps)
+  //     9  = mimosaPtmpStaRxRate     (int, Mbps)
+  //     10 = mimosaPtmpStaTxPower    (int, dBm)
+  //     11 = mimosaPtmpStaDistance   (int, meters)
+  //     12 = mimosaPtmpStaUptime     (int, seconds)
+  //     13 = mimosaPtmpStaOnline     (int, 1=online 0=offline)
+  static const String _oidPtmpStaTable   = '$_ptmp.2';
+  static const String _oidPtmpStaIP      = '$_ptmp.2.1.2';
+  static const String _oidPtmpStaName    = '$_ptmp.2.1.3';
+  static const String _oidPtmpStaHw      = '$_ptmp.2.1.4';
+  static const String _oidPtmpStaFw      = '$_ptmp.2.1.5';
+  static const String _oidPtmpStaRssi    = '$_ptmp.2.1.6';
+  static const String _oidPtmpStaSnr     = '$_ptmp.2.1.7';
+  static const String _oidPtmpStaTxRate  = '$_ptmp.2.1.8';
+  static const String _oidPtmpStaRxRate  = '$_ptmp.2.1.9';
+  static const String _oidPtmpStaTxPower = '$_ptmp.2.1.10';
+  static const String _oidPtmpStaDist    = '$_ptmp.2.1.11';
+  static const String _oidPtmpStaUptime  = '$_ptmp.2.1.12';
+  static const String _oidPtmpStaOnline  = '$_ptmp.2.1.13';
+
   // — Standard MIB-II (works for any SNMP device) —
   static const String _oidSysDescr   = '1.3.6.1.2.1.1.1.0';
   static const String _oidSysUpTime  = '1.3.6.1.2.1.1.3.0';
@@ -187,6 +222,121 @@ class MimosaApi {
     if (vb == null) return null;
     final v = vb.asInt;
     return v == 0 ? null : v / 10.0;
+  }
+
+  /// جلب قائمة العملاء (Stations) المتصلة بسكتور PtMP.
+  ///
+  /// يُستعمل لأجهزة Mimosa A5/A6/C5 (السكتورات). أجهزة PtP (B5) ترجع قائمة
+  /// فارغة (لا يوجد "clients" في PtP — فقط peer واحد).
+  ///
+  /// المنطق:
+  /// 1. Walk على 6 أعمدة رئيسيّة (IP, name, RSSI, SNR, tx, rx) بالتوازي
+  /// 2. الـsuffix بعد كل عمود = MAC كسلسلة أرقام (6 octets)
+  /// 3. نجمع الأسطر حسب الـMAC ونبني قائمة MimosaClient
+  ///
+  /// لو الجهاز لا يدعم PtMP MIB (مثل B5 PtP) → walk يرجع فارغاً → قائمة فارغة.
+  /// لا نرمي exception — نعطي [] ونترك الـUI يعرض "لا يوجد عملاء".
+  static Future<List<MimosaClient>> fetchClients({
+    required String host,
+    int port = 161,
+    required String community,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final snmp = SnmpV2c(
+      host: host,
+      port: port,
+      community: community,
+      timeout: timeout,
+    );
+
+    try {
+      // 6 أعمدة بالتوازي — كلها walks على نفس الجدول
+      final futures = await Future.wait([
+        snmp.walk(_oidPtmpStaIP, chunkSize: 20),
+        snmp.walk(_oidPtmpStaName, chunkSize: 20),
+        snmp.walk(_oidPtmpStaRssi, chunkSize: 20),
+        snmp.walk(_oidPtmpStaSnr, chunkSize: 20),
+        snmp.walk(_oidPtmpStaTxRate, chunkSize: 20),
+        snmp.walk(_oidPtmpStaRxRate, chunkSize: 20),
+        snmp.walk(_oidPtmpStaTxPower, chunkSize: 20),
+        snmp.walk(_oidPtmpStaDist, chunkSize: 20),
+        snmp.walk(_oidPtmpStaUptime, chunkSize: 20),
+        snmp.walk(_oidPtmpStaOnline, chunkSize: 20),
+      ]);
+
+      final ipsBySuffix       = _byMacSuffix(futures[0], _oidPtmpStaIP);
+      final namesBySuffix     = _byMacSuffix(futures[1], _oidPtmpStaName);
+      final rssiBySuffix      = _byMacSuffix(futures[2], _oidPtmpStaRssi);
+      final snrBySuffix       = _byMacSuffix(futures[3], _oidPtmpStaSnr);
+      final txRateBySuffix    = _byMacSuffix(futures[4], _oidPtmpStaTxRate);
+      final rxRateBySuffix    = _byMacSuffix(futures[5], _oidPtmpStaRxRate);
+      final txPowerBySuffix   = _byMacSuffix(futures[6], _oidPtmpStaTxPower);
+      final distBySuffix      = _byMacSuffix(futures[7], _oidPtmpStaDist);
+      final uptimeBySuffix    = _byMacSuffix(futures[8], _oidPtmpStaUptime);
+      final onlineBySuffix    = _byMacSuffix(futures[9], _oidPtmpStaOnline);
+
+      // كل الـMAC suffixes الي شفناها (union)
+      final allSuffixes = <String>{
+        ...ipsBySuffix.keys,
+        ...namesBySuffix.keys,
+        ...rssiBySuffix.keys,
+        ...snrBySuffix.keys,
+        ...onlineBySuffix.keys,
+      };
+
+      final clients = <MimosaClient>[];
+      for (final suffix in allSuffixes) {
+        clients.add(MimosaClient(
+          mac: _suffixToMac(suffix),
+          ip: ipsBySuffix[suffix]?.asString,
+          name: namesBySuffix[suffix]?.asString,
+          rssiDbm: rssiBySuffix[suffix]?.asInt,
+          snrDb: snrBySuffix[suffix]?.asInt,
+          txRateMbps: txRateBySuffix[suffix]?.asInt,
+          rxRateMbps: rxRateBySuffix[suffix]?.asInt,
+          txPowerDbm: txPowerBySuffix[suffix]?.asInt,
+          distanceMeters: distBySuffix[suffix]?.asInt,
+          uptimeSec: uptimeBySuffix[suffix]?.asInt,
+          online: (onlineBySuffix[suffix]?.asInt ?? 0) == 1,
+        ));
+      }
+      // ترتيب: online أوّلاً، ثم بأقوى signal (rssi أقرب للصفر أفضل)
+      clients.sort((a, b) {
+        if (a.online != b.online) return a.online ? -1 : 1;
+        final ra = a.rssiDbm ?? -999;
+        final rb = b.rssiDbm ?? -999;
+        return rb.compareTo(ra);
+      });
+      return clients;
+    } on SnmpException catch (_) {
+      // الجهاز لا يدعم PtMP MIB — قائمة فارغة بدلاً من exception
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// يُحوّل suffix رقمي (بعد OID root) لـMAC نصّي "AA:BB:CC:DD:EE:FF".
+  /// المثال: "0.15.140.1.2.3" → "00:0F:8C:01:02:03"
+  static String _suffixToMac(String suffix) {
+    final parts = suffix.split('.').where((p) => p.isNotEmpty).toList();
+    if (parts.length < 6) return suffix;
+    final macBytes = parts.take(6).map((s) {
+      final n = int.tryParse(s) ?? 0;
+      return n.toRadixString(16).padLeft(2, '0').toUpperCase();
+    }).join(':');
+    return macBytes;
+  }
+
+  /// يبني map: suffix (بعد الـbase) → Varbind. الـsuffix هو الـMAC كأرقام.
+  static Map<String, Varbind> _byMacSuffix(List<Varbind> vbs, String base) {
+    final map = <String, Varbind>{};
+    for (final vb in vbs) {
+      if (vb.oid.length > base.length + 1) {
+        map[vb.oid.substring(base.length + 1)] = vb;
+      }
+    }
+    return map;
   }
 
   /// إعادة تشغيل الجهاز — **غير مدعومة على Mimosa عن بُعد**.
@@ -371,4 +521,49 @@ class MimosaException implements Exception {
   MimosaException(this.message);
   @override
   String toString() => message;
+}
+
+/// عميل PtMP مُتصل بسكتور Mimosa (A5/A6/C5).
+/// كل الحقول nullable لأنّ MIB implementation يختلف بين firmware versions —
+/// الـUI يعرض ما هو متوفّر فقط.
+class MimosaClient {
+  final String mac;
+  final String? ip;
+  final String? name;
+  final int? rssiDbm;         // dBm — أقرب للصفر أفضل (-40 ممتاز، -80 ضعيف)
+  final int? snrDb;           // dB — أعلى أفضل (35+ ممتاز، 15- سيئ)
+  final int? txRateMbps;      // معدّل الإرسال من الجهاز للعميل
+  final int? rxRateMbps;      // معدّل الاستقبال من العميل
+  final int? txPowerDbm;
+  final int? distanceMeters;
+  final int? uptimeSec;
+  final bool online;
+
+  const MimosaClient({
+    required this.mac,
+    this.ip,
+    this.name,
+    this.rssiDbm,
+    this.snrDb,
+    this.txRateMbps,
+    this.rxRateMbps,
+    this.txPowerDbm,
+    this.distanceMeters,
+    this.uptimeSec,
+    required this.online,
+  });
+
+  /// تصنيف جودة الـsignal حسب RSSI:
+  /// - ممتاز: >= -50
+  /// - جيّد: -50 .. -65
+  /// - متوسط: -65 .. -75
+  /// - ضعيف: < -75
+  String get signalQuality {
+    final r = rssiDbm;
+    if (r == null) return 'unknown';
+    if (r >= -50) return 'excellent';
+    if (r >= -65) return 'good';
+    if (r >= -75) return 'fair';
+    return 'poor';
+  }
 }

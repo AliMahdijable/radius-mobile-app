@@ -26,6 +26,7 @@ class MimosaLivePanel extends StatefulWidget {
 
 class _MimosaLivePanelState extends State<MimosaLivePanel> {
   MimosaStats? _stats;
+  List<MimosaClient> _clients = const [];
   bool _loading = false;
   String? _error;
   Timer? _timer;
@@ -98,12 +99,29 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         _lastFetch = DateTime.now();
         _loading = false;
       });
+      // العملاء PtMP (اختياري — للسكتورات فقط A5/A6/C5). لا يوقف الـpanel لو
+      // فشل — الأجهزة PtP (B5) ترجع قائمة فارغة تلقائياً.
+      _fetchClients(community, port);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e is MimosaException ? e.message : e.toString();
         _loading = false;
       });
+    }
+  }
+
+  /// جلب قائمة العملاء PtMP بشكل غير متزامن — لا يوقف الـUI لو تأخّر أو فشل.
+  Future<void> _fetchClients(String community, int port) async {
+    try {
+      final list = await MimosaApi.fetchClients(
+        host: widget.device.ip,
+        port: port,
+        community: community,
+      );
+      if (mounted) setState(() => _clients = list);
+    } catch (_) {
+      // silent — البانل يبقى يعمل بدون قسم العملاء
     }
   }
 
@@ -132,6 +150,11 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       ],
       if (s.chains.isNotEmpty) ...[
         _chainsSection(s),
+        const SizedBox(height: Sp.md),
+      ],
+      // 2026-08-18: العملاء PtMP — يظهر فقط لو الجهاز سكتور (A5/A6/C5).
+      if (_clients.isNotEmpty) ...[
+        _clientsSection(),
         const SizedBox(height: Sp.md),
       ],
       _ratesCard(s),
@@ -425,6 +448,163 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             c.snrDb != null ? _snrColor(c.snrDb!) : AppColors.textLow)),
       ]),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PtMP Clients section — 2026-08-18
+  // العملاء المتصلون بالسكتور. لكل واحد: name/IP/RSSI/SNR/rates/uptime.
+  // ═══════════════════════════════════════════════════════
+
+  Widget _clientsSection() {
+    final online = _clients.where((c) => c.online).length;
+    return ExpandableSection(
+      initiallyExpanded: true,
+      header: Row(children: [
+        Icon(LucideIcons.users, size: 14, color: const Color(0xFF7C3AED)),
+        const SizedBox(width: 6),
+        Text('العملاء المتصلون (${_clients.length})',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                color: AppColors.textHi)),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: const Color(0xFF10B981).withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text('$online online',
+              style: const TextStyle(
+                fontSize: 9, fontWeight: FontWeight.w700,
+                color: Color(0xFF10B981),
+              )),
+        ),
+      ]),
+      content: Column(children: [
+        for (final c in _clients) _clientTile(c),
+      ]),
+    );
+  }
+
+  Widget _clientTile(MimosaClient c) {
+    final rssiColor = _rssiColor(c.rssiDbm);
+    final label = (c.name?.trim().isNotEmpty == true)
+        ? c.name!.trim()
+        : (c.ip ?? c.mac);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: c.online
+              ? AppColors.surface
+              : AppColors.surfaceInput.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // العنوان: الاسم/IP + status dot + RSSI badge
+            Row(children: [
+              Container(
+                width: 6, height: 6,
+                decoration: BoxDecoration(
+                  color: c.online ? const Color(0xFF10B981) : AppColors.error,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: c.online ? AppColors.textHi : AppColors.textMid,
+                    ),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (c.rssiDbm != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: rssiColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: rssiColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text('${c.rssiDbm} dBm',
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w800,
+                        color: rssiColor,
+                      )),
+                ),
+            ]),
+            const SizedBox(height: 4),
+            // MAC + IP row (لو الاسم غير الـIP)
+            if (c.name?.trim().isNotEmpty == true && c.ip != null) ...[
+              Row(children: [
+                Icon(LucideIcons.globe, size: 10, color: AppColors.textLow),
+                const SizedBox(width: 3),
+                Text(c.ip!,
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 10, color: AppColors.textMid)),
+                const SizedBox(width: 8),
+                Icon(LucideIcons.wifi, size: 10, color: AppColors.textLow),
+                const SizedBox(width: 3),
+                Expanded(child: Text(c.mac,
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 9, color: AppColors.textLow),
+                    overflow: TextOverflow.ellipsis)),
+              ]),
+              const SizedBox(height: 4),
+            ],
+            // Metrics: SNR / TX rate / RX rate / distance / uptime
+            Wrap(spacing: 8, runSpacing: 4, children: [
+              if (c.snrDb != null)
+                _clientMetric(LucideIcons.activity, '${c.snrDb} dB',
+                    _snrColor(c.snrDb!.toDouble())),
+              if (c.txRateMbps != null)
+                _clientMetric(LucideIcons.arrowUp, '${c.txRateMbps} Mbps',
+                    const Color(0xFF2563EB)),
+              if (c.rxRateMbps != null)
+                _clientMetric(LucideIcons.arrowDown, '${c.rxRateMbps} Mbps',
+                    const Color(0xFF10B981)),
+              if (c.distanceMeters != null)
+                _clientMetric(LucideIcons.ruler,
+                    c.distanceMeters! >= 1000
+                        ? '${(c.distanceMeters! / 1000).toStringAsFixed(1)} km'
+                        : '${c.distanceMeters} m',
+                    AppColors.textMid),
+              if (c.uptimeSec != null && c.uptimeSec! > 0)
+                _clientMetric(LucideIcons.clock,
+                    _formatUptime(c.uptimeSec!),
+                    AppColors.textMid),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _clientMetric(IconData icon, String value, Color color) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 10, color: color),
+      const SizedBox(width: 3),
+      Text(value,
+          textDirection: TextDirection.ltr,
+          style: TextStyle(
+            fontSize: 10, fontWeight: FontWeight.w700, color: color,
+          )),
+    ]);
+  }
+
+  /// لون حسب قوّة الـRSSI (dBm — أقرب للصفر أفضل)
+  Color _rssiColor(int? dbm) {
+    if (dbm == null) return AppColors.textLow;
+    if (dbm >= -50) return const Color(0xFF10B981); // ممتاز
+    if (dbm >= -65) return const Color(0xFF84CC16); // جيّد
+    if (dbm >= -75) return const Color(0xFFEA580C); // متوسط
+    return AppColors.error;                          // ضعيف
   }
 
   Widget _chainMetric(String label, String value, Color color) {
