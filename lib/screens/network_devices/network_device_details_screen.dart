@@ -45,6 +45,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   double? _lastPacketLoss;
   DeviceRegion? _region;     // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
+  /// runtime override — لو UbntLivePanel اكتشف الجهاز فعلاً airFiber 60
+  /// (رغم أن model حقلها ما فيه AF-60)، نبدّل تلقائياً للـAirFiber60LivePanel.
+  /// 2026-08-18.
+  bool _af60RuntimeDetected = false;
+
   /// آخر 10 قراءات ping — للـsparkline
   final List<_PingSample> _history = [];
 
@@ -342,9 +347,19 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             ] else if (_d.brand == 'ubnt') ...[
               const SizedBox(height: Sp.md),
               if (_d.protocol == 'api' && _d.hasCredentials)
-                _isAirFiber60(_d)
+                // 2026-08-18: نستعمل static detection من model + runtime
+                // detection من stats — الاثنين معاً يضمنان route صحيح
+                // للأجهزة الي model حقلها ما مضبوطة كـAF-60.
+                (_isAirFiber60(_d) || _af60RuntimeDetected)
                     ? AirFiber60LivePanel(device: _d)
-                    : UbntLivePanel(device: _d)
+                    : UbntLivePanel(
+                        device: _d,
+                        onAirFiber60Detected: () {
+                          if (mounted && !_af60RuntimeDetected) {
+                            setState(() => _af60RuntimeDetected = true);
+                          }
+                        },
+                      )
               else
                 _ubntHint(),
             ] else if (_d.brand == 'mimosa') ...[

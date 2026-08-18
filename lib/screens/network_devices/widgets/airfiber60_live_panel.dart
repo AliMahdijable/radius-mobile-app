@@ -82,6 +82,11 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       }
       final port = widget.device.apiPort ?? 22;
 
+      // 2026-08-18: نُطبّق partial فقط للتحميل الأوّل — refresh لا يستفيد
+      // منه لأنّه يفرغ الـstations مؤقّتاً → hero card يختفي → المستخدم
+      // يشوف الجهاز "فُصل ورجع". فيه بديل: نحتفظ بالـstations القديمة
+      // ونستبدل باقي الحقول من partial.
+      final isFirstLoad = _stats == null;
       final s = await UbntApi.fetchStats(
         ip: widget.device.ip,
         port: port,
@@ -89,12 +94,12 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         pass: pass,
         // ⚡ Tier 1 partial بعد mca-status/af-status (~500ms-1s):
         // device name/CPU/RAM/signal فوراً بدل انتظار wstalist (~1-2s كامل).
-        onPartialReady: (partial) {
+        onPartialReady: isFirstLoad ? (partial) {
           if (!mounted) return;
           setState(() {
             _stats = partial;
           });
-        },
+        } : null,   // ← refresh: تجاهل partial، انتظر البيانات الكاملة
       );
 
       _updateInterfaceRates(s);

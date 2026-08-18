@@ -15,7 +15,12 @@ import 'expandable_section.dart';
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
 class UbntLivePanel extends StatefulWidget {
   final NetworkDevice device;
-  const UbntLivePanel({super.key, required this.device});
+  /// callback يُطلق مرّة واحدة حين نكتشف من الـstats أن الجهاز فعلاً
+  /// airFiber 60 (رغم أن الـdevice.model ما مذكور فيه). الـcaller
+  /// (details screen) يستخدمها ليبدّل للـAirFiber60LivePanel.
+  /// 2026-08-18.
+  final VoidCallback? onAirFiber60Detected;
+  const UbntLivePanel({super.key, required this.device, this.onAirFiber60Detected});
 
   @override
   State<UbntLivePanel> createState() => _UbntLivePanelState();
@@ -122,6 +127,14 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         _error = null;
         _lastFetch = now;
       });
+      // 2026-08-18: كشف AF60 من الـstats — لو الجهاز فعلاً airFiber 60
+      // (mca-status يقول devmodel='airFiber 60' أو client متّصل airFiber 60)
+      // → أعلم الـparent ليبدّل للـAirFiber60LivePanel المتخصّص.
+      if (stats.isAirFiber60 && widget.onAirFiber60Detected != null) {
+        // نطلقها مرّة واحدة فقط (الـcallback نفسها ستوقف الاستدعاءات
+        // اللاحقة عبر ubuild remount)
+        widget.onAirFiber60Detected!();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
