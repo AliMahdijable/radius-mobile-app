@@ -11,6 +11,7 @@ import '../../services/device_alerts_service.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../widgets/skeleton.dart';
 import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
 import 'network_device_details_screen.dart';
@@ -530,7 +531,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonDeviceList()
           : _error != null
               ? Center(child: Text(_error!, style: TextStyle(color: AppColors.textMid)))
               : RefreshIndicator(

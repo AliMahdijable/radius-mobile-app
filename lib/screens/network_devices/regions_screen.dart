@@ -6,6 +6,7 @@ import '../../api/network_devices_api.dart';
 import '../../models/device_region.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../widgets/skeleton.dart';
 
 /// شاشة إدارة مناطق الأجهزة — قائمة + إضافة + تعديل + حذف.
 /// راجع [[project_devices_monitoring_plan]].
@@ -153,7 +154,12 @@ class _RegionsScreenState extends State<RegionsScreen> {
           ],
         ),
         body: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? ListView.separated(
+                padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 90),
+                itemCount: 5,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, __) => const SkeletonRegionCard(),
+              )
             : _error != null
                 ? Center(child: Text(_error!, style: TextStyle(color: AppColors.textMid)))
                 : _regions.isEmpty
