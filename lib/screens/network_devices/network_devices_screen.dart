@@ -119,15 +119,44 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
   }
 
-  /// Refresh يدوي (زر أو pull-to-refresh): مباشرة probe بلا list fetch.
-  /// السبب: backend عنده الحالة القديمة، الـprobe الجديد هو مصدر الحقيقة.
+  /// Refresh يدوي (زر أو pull-to-refresh) + بعد add/delete/region-change.
+  ///
+  /// 2026-08-18: كان يعمل probe فقط بلا list fetch → أجهزة محذوفة تبقى
+  /// ظاهرة، ومُضافة ما تظهر إلا بعد كيل التطبيق. الآن يجلب list جديدة
+  /// من backend أوّلاً ثم يعمل probe.
+  ///
+  /// نحافظ على `lastStatus/lastResponseMs` من الـstate القديم لتفادي
+  /// وميض "unknown" أثناء انتظار الـprobe الجديد (~1-2s).
   Future<void> _refresh() async {
-    if (_all.isEmpty) {
-      // لسّه ما فيه أجهزة — اجلب القائمة أوّلاً
-      await _initialLoad();
-      return;
+    try {
+      final fresh = await NetworkDevicesApi.list();
+      if (!mounted) return;
+      // Preserve status حسب id — الأجهزة الموجودة تحتفظ بحالتها القديمة
+      // مؤقّتاً، الجديدة تدخل بـstatus من backend (unknown غالباً).
+      final oldById = { for (final d in _all) d.id: d };
+      final merged = <NetworkDevice>[];
+      for (final d in fresh) {
+        final old = oldById[d.id];
+        if (old != null) {
+          merged.add(d.copyWith(
+            lastStatus: old.lastStatus,
+            lastResponseMs: old.lastResponseMs,
+            lastProbedAt: old.lastProbedAt,
+          ));
+        } else {
+          merged.add(d);
+        }
+      }
+      setState(() { _all = merged; _error = null; });
+      await _probeAll();
+    } catch (e) {
+      // فشل الـlist fetch لا يوقف الـprobe — الأجهزة القديمة تُفحص كما هي.
+      if (_all.isNotEmpty) {
+        await _probeAll();
+      } else if (mounted) {
+        setState(() => _error = 'فشل التحميل: $e');
+      }
     }
-    await _probeAll();
   }
 
   /// probe كل الأجهزة بالتوازي (batch) + قارن مع الحالة السابقة + أنشئ alerts.
@@ -250,17 +279,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => NetworkDeviceFormSheet(existing: existing),
     );
-    if (result != null) _initialLoad();
+    // 2026-08-18: نستعمل _refresh (يجلب list + يحافظ على status) بدل
+    // _initialLoad الذي يعرض spinner كامل ويمسح القائمة مؤقّتاً — تجربة
+    // مزعجة بعد إضافة/تعديل جهاز واحد.
+    if (result != null) _refresh();
   }
 
   Future<void> _openDetails(NetworkDevice d) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)),
     );
-    // إذا المستخدم عدّل الجهاز → إعادة تحميل كاملة (list + probe)
+    // إذا المستخدم عدّل/حذف الجهاز → إعادة تحميل list + probe
     // وإلا → probe فوري (details شافت حالة جديدة، القائمة لازم تتزامن)
     if (changed == true) {
-      _initialLoad();
+      _refresh();
     } else {
       // Reset backoff لكل الأجهزة عند الرجوع — يضمن probe فوري بلا تخطّي
       _consecutiveFailures.clear();
