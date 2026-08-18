@@ -67,6 +67,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// True while the DELETE round-trip is in flight.
   bool _deleting = false;
 
+  /// Password المشترك — يُحمَّل asynchronously من backend عند فتح الشاشة
+  /// (SAS4 يحجبه في list endpoint، يرجعه فقط في /user/overview/{idx}).
+  /// null = قيد التحميل أو فشل. non-null = جاهز للعرض في _PasswordRow.
+  String? _subscriberPassword;
+
   /// Any operation (toggle / disconnect / template send / link gen)
   /// currently awaiting a server response. Drives the operations
   /// card's progress bar + chip-disable overlay so the admin can't
@@ -96,6 +101,23 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // لأن الشاشة تبقى مركّبة في stack الـnavigation حتى بعد resume
     // فما تنطلق initState ثانية.
     AppResumedSignal.tick.addListener(_onDataChanged);
+    // 2026-08-18: جلب password (non-blocking) — لعرضه في هيرو الكارت مع
+    // زرّ copy. مقفّل بـsubscribers.view_credentials أو subscribers.edit.
+    _loadPassword();
+  }
+
+  Future<void> _loadPassword() async {
+    if (!Perms.hasAny(const [
+      'subscribers.view_credentials',
+      'subscribers.edit',
+    ])) {
+      return;
+    }
+    final idx = sub.idx;
+    if (idx == null) return;
+    final pass = await SubscribersApi.fetchPassword(idx.toString());
+    if (!mounted || pass == null || pass.isEmpty) return;
+    setState(() => _subscriberPassword = pass);
   }
 
   @override
@@ -171,7 +193,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 ),
                 children: [
                   // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
-                  _SubscriberHero(sub: sub),
+                  _SubscriberHero(sub: sub, password: _subscriberPassword),
                   const SizedBox(height: Sp.md),
                   // معلومات الجلسة الحية (IP + مدّة + DL/UL) فقط عند الاتصال
                   // النشط الفعلي — أي RADIUS session قائم. مشترك online في
@@ -1521,8 +1543,11 @@ class _SimpleAppBar extends StatelessWidget {
 /// + الاسم الكامل + username + 3 إحصاءات بالأسفل (الدين / الباقة
 /// / الأيام المتبقية).
 class _SubscriberHero extends StatelessWidget {
-  const _SubscriberHero({required this.sub});
+  const _SubscriberHero({required this.sub, this.password});
   final Subscriber sub;
+  /// كلمة مرور المشترك — تُمرَّر من الـState لعرضها في صفّ Password.
+  /// null = لسّه ما وصلت من backend (أو ما عنده الصلاحيّة).
+  final String? password;
 
   @override
   Widget build(BuildContext context) {
@@ -1633,12 +1658,13 @@ class _SubscriberHero extends StatelessWidget {
             ),
           ),
           // 2026-08-18: صفّ الباسورد — copy مباشر بدون فتح شاشة التعديل.
-          // مقفّل خلف صلاحيّة subscribers.view_credentials للموظفين.
-          if ((sub.password ?? '').isNotEmpty &&
-              Perms.has('subscribers.view_credentials'))
+          // password يُحمَّل asynchronously من /api/v2/subscribers/:idx/password
+          // (SAS4 يحجبه في list endpoint). null = لسّه قيد التحميل أو
+          // موظّف بدون الصلاحيّة → الصفّ مخفي.
+          if ((password ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: _PasswordRow(password: sub.password!),
+              child: _PasswordRow(password: password!),
             ),
           const SizedBox(height: 14),
           // 3-stat strip (الدين / الباقة / الأيام)
