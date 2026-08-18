@@ -380,8 +380,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 const SizedBox(width: 4),
               ],
               Text(
-                _loading ? 'جاري التحديث…' :
-                (_monitoring ? 'يُحدَّث كل ${_refreshInterval.inSeconds}s' : 'متوقّف'),
+                // 2026-08-18: النصّ ثابت — التغيّر السابق كان يُوحي "فُصل ورجع".
+                // الـ_pulseDot يعطي المؤشّر البصري كافياً.
+                _monitoring
+                    ? 'مباشر · كل ${_refreshInterval.inSeconds}s'
+                    : 'متوقّف',
                 style: TextStyle(fontSize: 10, color: AppColors.textMid),
               ),
               if (_lastFetch != null) ...[

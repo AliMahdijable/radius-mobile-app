@@ -192,22 +192,25 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (_loading)
-            const SizedBox(
-                width: 10, height: 10,
-                child: CircularProgressIndicator(strokeWidth: 1.5))
-          else
-            Container(
+          // 2026-08-18: النقطة الخضراء تبقى دائماً — التبديل السابق
+          // بـCircularProgressIndicator كان يبدو كأنّ الجهاز فُصل ورجع.
+          // الآن: opacity pulse خفيف فقط عند _loading (يوحي التحديث
+          // بدون كسر استمرارية "الحيّة").
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 400),
+            opacity: _loading ? 0.35 : 1.0,
+            child: Container(
               width: 8, height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: _monitoring ? const Color(0xFF10B981) : AppColors.textLow,
               ),
             ),
+          ),
           const SizedBox(width: 6),
           Text(
               _monitoring
-                  ? (freshMs != null ? 'مباشر · قبل ${freshMs}ث' : 'جاري...')
+                  ? (freshMs != null ? 'مباشر · قبل ${freshMs}ث' : 'مباشر')
                   : 'موقوف',
               style: TextStyle(
                 fontSize: 10, fontWeight: FontWeight.w700,

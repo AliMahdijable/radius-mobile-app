@@ -351,13 +351,23 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             const SizedBox(height: 2),
             Row(children: [
               if (_monitoring) ...[
-                Container(width: 6, height: 6,
-                  decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+                // 2026-08-18: opacity pulse بدل استبدال النصّ بـ"جاري التحديث…"
+                // — لتفادي ظهور الجهاز كأنّه فُصل ورجع عند كل fetch
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 400),
+                  opacity: _loading ? 0.35 : 1.0,
+                  child: Container(
+                    width: 6, height: 6,
+                    decoration: const BoxDecoration(
+                        color: Color(0xFF10B981), shape: BoxShape.circle),
+                  ),
+                ),
                 const SizedBox(width: 4),
               ],
               Text(
-                _loading ? 'جاري التحديث…' :
-                (_monitoring ? 'يُحدَّث كل ${_refreshInterval.inSeconds}s' : 'متوقّف'),
+                _monitoring
+                    ? 'مباشر · كل ${_refreshInterval.inSeconds}s'
+                    : 'متوقّف',
                 style: TextStyle(fontSize: 10, color: AppColors.textMid),
               ),
             ]),

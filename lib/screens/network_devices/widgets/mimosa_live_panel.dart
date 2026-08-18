@@ -186,21 +186,23 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (_loading)
-            const SizedBox(width: 10, height: 10,
-                child: CircularProgressIndicator(strokeWidth: 1.5))
-          else
-            Container(
+          // 2026-08-18: opacity pulse بدل spinner swap — يمنع مظهر
+          // "فُصل ورجع" على كل fetch cycle.
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 400),
+            opacity: _loading ? 0.35 : 1.0,
+            child: Container(
               width: 8, height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: _monitoring ? const Color(0xFF10B981) : AppColors.textLow,
               ),
             ),
+          ),
           const SizedBox(width: 6),
           Text(
             _monitoring
-                ? (freshS != null ? 'مباشر · قبل ${freshS}ث' : 'جاري...')
+                ? (freshS != null ? 'مباشر · قبل ${freshS}ث' : 'مباشر')
                 : 'موقوف',
             style: TextStyle(
               fontSize: 10, fontWeight: FontWeight.w700,
