@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -35,6 +36,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   late String _brand;
   String? _protocol;
   String _snmpVersion = 'v2c';
+  int? _regionId;
+  List<DeviceRegion> _regions = const [];
 
   bool _obscurePassword = true;
   bool _submitting = false;
@@ -58,8 +61,20 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     _type = e?.type ?? 'router';
     _brand = e?.brand ?? 'mikrotik';
     _protocol = e?.protocol;
+    _regionId = e?.regionId;
 
     if (e != null && e.hasCredentials) _loadCredentials(e.id);
+    _loadRegions();
+  }
+
+  Future<void> _loadRegions() async {
+    try {
+      final list = await NetworkDevicesApi.listRegions();
+      if (!mounted) return;
+      setState(() => _regions = list);
+    } catch (_) {
+      // silent — dropdown يبقى فاضي، المستخدم يضيف يدوياً من شاشة المناطق
+    }
   }
 
   Future<void> _loadCredentials(int deviceId) async {
@@ -121,6 +136,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         'port': int.tryParse(_portCtrl.text.trim()) ?? 80,
         'api_port': int.tryParse(_apiPortCtrl.text.trim()),
         'protocol': _protocol,
+        'region_id': _regionId,
         'model': _modelCtrl.text.trim().isEmpty ? null : _modelCtrl.text.trim(),
         'mac': _macCtrl.text.trim().isEmpty ? null : _macCtrl.text.trim(),
         'location': _locationCtrl.text.trim().isEmpty ? null : _locationCtrl.text.trim(),
@@ -221,6 +237,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   _textField(_locationCtrl, 'الموقع (اختياري)',
                       hint: 'مثلاً: البرج الشمالي - قطاع 3',
                       icon: LucideIcons.mapPin),
+                  const SizedBox(height: 10),
+                  _regionDropdown(),
 
                   const SizedBox(height: Sp.xl),
                   _sectionTitle('الشبكة'),
@@ -506,4 +524,58 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       onChanged: (v) { if (v != null) onChanged(v); },
     );
   }
+
+  /// dropdown المنطقة — null = بدون منطقة. القائمة تُحمَّل asynchronously من backend.
+  /// لو الـuser فتح الفورم قبل ما تصل القائمة، نعرض المنطقة الحاليّة (إن وُجدت)
+  /// كـplaceholder مؤقّت لتفادي assertion "value not in items".
+  Widget _regionDropdown() {
+    final items = <DropdownMenuItem<int?>>[
+      DropdownMenuItem<int?>(
+        value: null,
+        child: Row(children: [
+          Icon(LucideIcons.slash, size: 14, color: AppColors.textLow),
+          const SizedBox(width: 6),
+          Text('بدون منطقة',
+              style: TextStyle(color: AppColors.textMid, fontSize: 13)),
+        ]),
+      ),
+      for (final r in _regions)
+        DropdownMenuItem<int?>(
+          value: r.id,
+          child: Row(children: [
+            Icon(LucideIcons.mapPin,
+                size: 14, color: _parseRegionColor(r.color) ?? AppColors.brand),
+            const SizedBox(width: 6),
+            Expanded(child: Text(r.name, overflow: TextOverflow.ellipsis)),
+            if (r.deviceCount > 0)
+              Text(' (${r.deviceCount})',
+                  style: TextStyle(color: AppColors.textLow, fontSize: 11)),
+          ]),
+        ),
+    ];
+    // لو الجهاز الحالي عنده region_id ما موجود في القائمة (لسّه تُحمَّل، أو
+    // المستخدم حذف منطقة من شاشة أخرى) → أضف item مؤقّت بنفس الـid لتفادي assertion.
+    if (_regionId != null && !_regions.any((r) => r.id == _regionId)) {
+      items.add(DropdownMenuItem<int?>(
+        value: _regionId,
+        child: Text('منطقة #$_regionId',
+            style: TextStyle(color: AppColors.textLow, fontSize: 13)),
+      ));
+    }
+    return DropdownButtonFormField<int?>(
+      value: _regionId,
+      isExpanded: true,
+      decoration: _inputDecoration('المنطقة'),
+      items: items,
+      onChanged: (v) => setState(() => _regionId = v),
+    );
+  }
+}
+
+Color? _parseRegionColor(String? hex) {
+  if (hex == null || hex.isEmpty) return null;
+  final s = hex.startsWith('#') ? hex.substring(1) : hex;
+  final n = int.tryParse(s, radix: 16);
+  if (n == null) return null;
+  return Color(0xFF000000 | n);
 }

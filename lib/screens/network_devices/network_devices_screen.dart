@@ -12,6 +12,7 @@ import '../../theme/spacing.dart';
 import 'device_alerts_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
+import 'regions_screen.dart';
 import 'widgets/brand_badge.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
@@ -266,6 +267,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
+  /// شاشة المناطق — تُرجع bool يشير إن حصلت تعديلات. لو نعم نُعيد
+  /// تحميل قائمة الأجهزة (region_id قد تغيّرت على بعضها بسبب delete=null).
+  Future<void> _openRegions() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const RegionsScreen()),
+    );
+    if (changed == true && mounted) {
+      await _refresh();
+    }
+  }
+
   /// اختبار تجريبي — يطلق alert فوري (بدون انتظار probe حقيقي).
   /// يُستدعى بـlong-press على البيل. مفيد لتأكيد إن الإشعارات مسموحة والقناة تعمل.
   Future<void> _testAlert() async {
@@ -369,6 +381,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   ),
               ]);
             },
+          ),
+          // زر إدارة المناطق (Regions) — 2026-08-18
+          IconButton(
+            icon: const Icon(LucideIcons.mapPin, size: 20),
+            onPressed: _openRegions,
+            tooltip: 'إدارة المناطق',
           ),
           // زر تحديث — يظهر animation دوران أثناء الـprobe
           _probing

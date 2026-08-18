@@ -4,17 +4,20 @@ import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/device_region.dart';
 import '../models/network_device.dart';
 import 'api_client.dart';
 
 /// API client لميزة الأجهزة (Devices Monitoring) — راجع
 /// project_devices_monitoring_plan في memory. Slice 1: CRUD + probe.
 class NetworkDevicesApi {
-  /// GET /api/v2/admin/devices?brand=X&type=Y&status=Z
+  /// GET /api/v2/admin/devices?brand=X&type=Y&status=Z&region_id=N
+  /// [regionId]: null = بلا فلتر، 0 = "بدون منطقة" (unassigned)، N>0 = تلك المنطقة.
   static Future<List<NetworkDevice>> list({
     String? brand,
     String? type,
     String? status,
+    int? regionId,
   }) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -23,6 +26,8 @@ class NetworkDevicesApi {
           if (brand != null && brand.isNotEmpty) 'brand': brand,
           if (type != null && type.isNotEmpty) 'type': type,
           if (status != null && status.isNotEmpty) 'status': status,
+          if (regionId == 0) 'region_id': 'none'
+          else if (regionId != null && regionId > 0) 'region_id': regionId,
         },
       );
       final data = (r.data?['data'] as List?) ?? const [];
@@ -182,5 +187,80 @@ class NetworkDevicesApi {
       if (kDebugMode) print('⚠️ saveProbeResult: ${e.message}');
       // لا نـthrow — الفحص المحلّي نجح، حفظ النتيجة ثانوي
     }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Regions CRUD (2026-08-18)
+  // المدير يقسّم أجهزته لمناطق (كرخ/رصافة/شرق…) لسرعة الفلترة.
+  // Delete = يُصفّر region_id على الأجهزة (لا يحذفها).
+  // ══════════════════════════════════════════════════════════
+
+  /// GET /api/v2/admin/devices/regions
+  static Future<List<DeviceRegion>> listRegions() async {
+    final r = await ApiClient.dio.get<Map<String, dynamic>>(
+      '/api/v2/admin/devices/regions',
+    );
+    if (r.data?['success'] != true) {
+      throw Exception(r.data?['message'] ?? 'فشل جلب المناطق');
+    }
+    final data = (r.data?['data'] as List?) ?? const [];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(DeviceRegion.fromJson)
+        .toList();
+  }
+
+  /// POST /api/v2/admin/devices/regions
+  static Future<DeviceRegion> createRegion({
+    required String name,
+    String? color,
+    int sortOrder = 0,
+  }) async {
+    final r = await ApiClient.dio.post<Map<String, dynamic>>(
+      '/api/v2/admin/devices/regions',
+      data: {
+        'name': name,
+        if (color != null) 'color': color,
+        'sort_order': sortOrder,
+      },
+    );
+    if (r.data?['success'] != true) {
+      throw Exception(r.data?['message'] ?? 'فشل الإضافة');
+    }
+    return DeviceRegion.fromJson(r.data!['data'] as Map<String, dynamic>);
+  }
+
+  /// PUT /api/v2/admin/devices/regions/:id
+  static Future<DeviceRegion> updateRegion(
+    int id, {
+    required String name,
+    String? color,
+    int sortOrder = 0,
+  }) async {
+    final r = await ApiClient.dio.put<Map<String, dynamic>>(
+      '/api/v2/admin/devices/regions/$id',
+      data: {
+        'name': name,
+        if (color != null) 'color': color,
+        'sort_order': sortOrder,
+      },
+    );
+    if (r.data?['success'] != true) {
+      throw Exception(r.data?['message'] ?? 'فشل التعديل');
+    }
+    return DeviceRegion.fromJson(r.data!['data'] as Map<String, dynamic>);
+  }
+
+  /// DELETE /api/v2/admin/devices/regions/:id
+  /// يرجع عدد الأجهزة التي أُلغيَ ربطها بالمنطقة (region_id=NULL).
+  static Future<int> deleteRegion(int id) async {
+    final r = await ApiClient.dio.delete<Map<String, dynamic>>(
+      '/api/v2/admin/devices/regions/$id',
+    );
+    if (r.data?['success'] != true) {
+      throw Exception(r.data?['message'] ?? 'فشل الحذف');
+    }
+    final n = r.data?['devices_unassigned'];
+    return (n is int) ? n : int.tryParse('$n') ?? 0;
   }
 }
