@@ -207,7 +207,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   Future<void> _probeAll() async {
     if (_probing || _all.isEmpty) return;
-    _probing = true;
+    // 2026-08-18: setState — الـAppBar refresh icon يعتمد على _probing
+    // لتبديل CPI ↔ زرّ. تغيير الـflag بلا setState → الأيقونة تعلق.
+    setState(() => _probing = true);
     _probeRoundCount++;
     try {
       // اجمع الـtransitions المُحتملة + التحديثات (بلا setState لكل جهاز).
@@ -296,7 +298,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         );
       }
     } finally {
-      _probing = false;
+      if (mounted) setState(() => _probing = false);
     }
   }
 

@@ -855,10 +855,19 @@ class UbntStats {
     this.lanSpeed,
   });
 
-  bool get isAp => wireless?.mode.toLowerCase().contains('ap') ?? false ||
-      wireless?.mode.toLowerCase().contains('master') == true;
-  bool get isStation => wireless?.mode.toLowerCase().contains('sta') ?? false ||
-      wireless?.mode.toLowerCase().contains('managed') == true;
+  // 2026-08-18: أقواس صريحة — `??` أدنى precedence من `||` فالكود الأصلي
+  // كان يقرأ: `contains('ap') ?? (false || contains('master'))` → الـfallback
+  // ما يعمل إلا لو wireless == null (مستحيل — الـgetters عبر ?.).
+  bool get isAp {
+    final m = wireless?.mode.toLowerCase();
+    if (m == null) return false;
+    return m.contains('ap') || m.contains('master');
+  }
+  bool get isStation {
+    final m = wireless?.mode.toLowerCase();
+    if (m == null) return false;
+    return m.contains('sta') || m.contains('managed');
+  }
 
   /// airFiber 60 (GP/LR) — يظهر عبر platform أو linked_60 من أي station.
   bool get isAirFiber60 {

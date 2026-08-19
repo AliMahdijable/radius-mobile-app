@@ -157,6 +157,27 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       // Header controls
       _controlBar(),
       const SizedBox(height: Sp.md),
+      // 2026-08-18: عرض banner خطأ فوق البيانات القديمة إن كان الفشل الأخير
+      // ما زال قائماً — سابقاً كان صامتاً تماماً (المستخدم يظنّ الجهاز يعمل).
+      if (_error != null) ...[
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.error.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+          ),
+          child: Row(children: [
+            Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.error),
+            const SizedBox(width: 8),
+            Expanded(child: Text(
+              'آخر تحديث فشل — البيانات معروضة من آخر جولة ناجحة',
+              style: TextStyle(fontSize: 11, color: AppColors.error, height: 1.4),
+            )),
+          ]),
+        ),
+        const SizedBox(height: Sp.md),
+      ],
       // 🎯 Hero: peer + signal + SNR + MCS
       if (peer != null) _heroCard(peer),
       if (peer != null) const SizedBox(height: Sp.md),

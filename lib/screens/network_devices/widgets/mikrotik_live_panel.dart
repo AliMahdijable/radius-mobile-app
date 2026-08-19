@@ -99,6 +99,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (user.isEmpty || pass.isEmpty) {
         throw MikrotikException('لم يتم إعداد credentials للجهاز');
       }
+      // 2026-08-18: partial فقط لأوّل تحميل — refresh لا يستفيد منه
+      // (partial بلا interfaces/wireless مؤقّتاً → ExpandableSections تختفي
+      // → تفقد state (expanded/collapsed)). نفس bug UBNT + AF60 المُصلَح.
+      final isFirstLoad = _stats == null;
       final stats = await MikrotikApi.fetchStats(
         ip: widget.device.ip,
         port: widget.device.apiPort ?? 8728,
@@ -114,12 +118,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         //
         // Rate calculation يبقى فقط في المكان الي بعد الـawait (النهائي)
         // — يستعمل _lastFetch الصحيح من fetch السابق.
-        onPartialReady: (partial) {
+        onPartialReady: isFirstLoad ? (partial) {
           if (!mounted) return;
           setState(() {
             _stats = partial;
           });
-        },
+        } : null,
       );
       if (!mounted) return;
 

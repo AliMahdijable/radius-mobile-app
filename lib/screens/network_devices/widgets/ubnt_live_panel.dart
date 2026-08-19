@@ -44,6 +44,10 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   final List<_TrafficSample> _history = [];
   static const int _maxHistory = 30;
 
+  /// 2026-08-18: local guard — الـcallback onAirFiber60Detected تُطلق
+  /// مرّة واحدة فقط عبر lifecycle الـpanel (بدل كل fetch بعد الاكتشاف).
+  bool _af60Notified = false;
+
   static const _refreshInterval = Duration(seconds: 15);
 
   @override
@@ -152,12 +156,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         _error = null;
         _lastFetch = now;
       });
-      // 2026-08-18: كشف AF60 من الـstats — لو الجهاز فعلاً airFiber 60
-      // (mca-status يقول devmodel='airFiber 60' أو client متّصل airFiber 60)
-      // → أعلم الـparent ليبدّل للـAirFiber60LivePanel المتخصّص.
-      if (stats.isAirFiber60 && widget.onAirFiber60Detected != null) {
-        // نطلقها مرّة واحدة فقط (الـcallback نفسها ستوقف الاستدعاءات
-        // اللاحقة عبر ubuild remount)
+      // 2026-08-18: كشف AF60 من الـstats — مرّة واحدة فقط عبر lifecycle.
+      // كنا نطلق الـcallback كل fetch (بين إطلاقها وrebuild+dispose، أي
+      // fetch جارٍ سيُطلقها ثانية). local flag يمنع الإطلاق المتكرّر.
+      if (!_af60Notified &&
+          stats.isAirFiber60 &&
+          widget.onAirFiber60Detected != null) {
+        _af60Notified = true;
         widget.onAirFiber60Detected!();
       }
     } catch (e) {
