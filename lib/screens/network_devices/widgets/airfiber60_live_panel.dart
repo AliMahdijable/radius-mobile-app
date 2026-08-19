@@ -901,6 +901,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     final fwShort = _extractVersion(fw);
 
     return ExpandableSection(
+      key: PageStorageKey('af60-${widget.device.id}-info'),
       initiallyExpanded: true,
       header: Row(children: [
         Icon(LucideIcons.info, size: 16, color: AppColors.brand),

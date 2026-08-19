@@ -285,9 +285,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     final s = _stats!;
     final ethers = s.interfaces.where(_isEther).toList();
     return [
+      // 2026-08-18: PageStorageKey يحفظ expanded عبر rebuilds
       if (ethers.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
+          key: PageStorageKey('mikrotik-${widget.device.id}-eth'),
           initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.network, size: 14, color: AppColors.brand),
@@ -302,6 +304,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (s.hasWireless) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
+          key: PageStorageKey('mikrotik-${widget.device.id}-wifi'),
           initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
@@ -317,6 +320,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (s.wirelessClients.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
+          key: PageStorageKey('mikrotik-${widget.device.id}-clients'),
           initiallyExpanded: true,
           header: Row(children: [
             Icon(LucideIcons.users, size: 14, color: AppColors.brand),

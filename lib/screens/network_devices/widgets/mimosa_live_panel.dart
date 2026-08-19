@@ -408,6 +408,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   // ═══════════════════════════════════════════════════════
   Widget _chainsSection(MimosaStats s) {
     return ExpandableSection(
+      key: PageStorageKey('mimosa-${widget.device.id}-chains'),
       initiallyExpanded: true,
       header: Row(children: [
         Icon(LucideIcons.signal, size: 14, color: const Color(0xFFEA580C)),
@@ -460,6 +461,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   Widget _clientsSection() {
     final online = _clients.where((c) => c.online).length;
     return ExpandableSection(
+      key: PageStorageKey('mimosa-${widget.device.id}-clients'),
       initiallyExpanded: true,
       header: Row(children: [
         Icon(LucideIcons.users, size: 14, color: const Color(0xFF7C3AED)),
@@ -754,6 +756,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   // ═══════════════════════════════════════════════════════
   Widget _infoCard(MimosaStats s) {
     return ExpandableSection(
+      key: PageStorageKey('mimosa-${widget.device.id}-info'),
       initiallyExpanded: false,
       header: Row(children: [
         Icon(LucideIcons.info, size: 14, color: AppColors.textMid),

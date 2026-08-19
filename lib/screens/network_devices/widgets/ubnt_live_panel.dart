@@ -74,6 +74,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (user.isEmpty || pass.isEmpty) {
         throw UbntException('لم يتم إعداد credentials للجهاز');
       }
+      // 2026-08-18: partial فقط لأوّل تحميل — refresh لا يستفيد منه لأنّ
+      // partial يفرغ stations/interfaces مؤقّتاً → ExpandableSections تختفي
+      // → تفقد حالتها (expanded/collapsed) → تُرندَر بالوضع الافتراضي.
+      // نفس bug AF60 الي أصلحته سابقاً.
+      final isFirstLoad = _stats == null;
       final stats = await UbntApi.fetchStats(
         ip: widget.device.ip,
         port: widget.device.apiPort ?? 22,  // SSH default
@@ -83,12 +88,12 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         // بدل انتظار wstalist + ifconfig + link speeds (~2-3s كامل)
         // ⚠️ **لا** نلمس _lastFetch/_lastBytes هنا (نفس bug Mikrotik السابق —
         // rate calc يستعمل elapsed مغلوط).
-        onPartialReady: (partial) {
+        onPartialReady: isFirstLoad ? (partial) {
           if (!mounted) return;
           setState(() {
             _stats = partial;
           });
-        },
+        } : null,  // ← refresh: تجاهل partial، انتظر البيانات الكاملة
       );
       if (!mounted) return;
 
@@ -258,9 +263,14 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     // 2026-08-18: ترتيب حسب نمط الجهاز — PtMP يُظهر Stations أوّلاً
     // (الأهم للـWISP)، PtP يُظهر Wireless details أوّلاً.
     final isAp = s.isAp;
+    // 2026-08-18: PageStorageKey — يحفظ حالة expanded عبر rebuilds
+    // (وحتى لو موقع القسم في الـColumn تغيّر). أساسي لأنّ refresh قد
+    // يُغيّر ترتيب/وجود الأقسام (لكن الحالة تبقى محفوظة).
+    final deviceId = widget.device.id;
     final wirelessSection = s.wireless == null ? null : [
       const SizedBox(height: Sp.md),
       ExpandableSection(
+        key: PageStorageKey('ubnt-$deviceId-wireless'),
         initiallyExpanded: !isAp,  // AP: مطويّ افتراضياً (المهمّ العملاء)
         header: Row(children: [
           Icon(LucideIcons.wifi, size: 14, color: const Color(0xFF0559C9)),
@@ -274,6 +284,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     final stationsSection = s.stations.isEmpty ? null : [
       const SizedBox(height: Sp.md),
       ExpandableSection(
+        key: PageStorageKey('ubnt-$deviceId-stations'),
         initiallyExpanded: isAp,  // AP: مفتوح افتراضياً
         header: Row(children: [
           Icon(LucideIcons.users, size: 14, color: const Color(0xFF7C3AED)),
@@ -299,6 +310,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     final ethernetSection = s.interfaces.isEmpty ? null : [
       const SizedBox(height: Sp.md),
       ExpandableSection(
+        key: PageStorageKey('ubnt-$deviceId-interfaces'),
         initiallyExpanded: false,  // دائماً مطويّ — معلومات ثانويّة
         header: Row(children: [
           Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),

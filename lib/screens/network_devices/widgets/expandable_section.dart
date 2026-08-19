@@ -37,6 +37,9 @@ class _ExpandableSectionState extends State<ExpandableSection>
   @override
   void initState() {
     super.initState();
+    // 2026-08-18: لو الـwidget عنده PageStorageKey → استعِد expanded من
+    // PageStorage (يحفظ الحالة عبر rebuilds حتى لو الـwidget موقعه تغيّر).
+    // بدون هذا: refresh يعيد الأقسام إلى initiallyExpanded الافتراضيّة.
     _expanded = widget.initiallyExpanded;
     _ctrl = AnimationController(
       duration: const Duration(milliseconds: 200),
@@ -46,6 +49,20 @@ class _ExpandableSectionState extends State<ExpandableSection>
     _iconTurns = Tween<double>(begin: 0, end: 0.5).animate(
       CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // نقرأ PageStorage هنا (وليس في initState) لأن context لا يزال ما
+    // ينفع في initState. mounted بعد أول build.
+    if (widget.key is PageStorageKey) {
+      final stored = PageStorage.of(context).readState(context) as bool?;
+      if (stored != null && stored != _expanded) {
+        _expanded = stored;
+        _ctrl.value = stored ? 1.0 : 0.0;
+      }
+    }
   }
 
   @override
@@ -60,6 +77,10 @@ class _ExpandableSectionState extends State<ExpandableSection>
       _ctrl.forward();
     } else {
       _ctrl.reverse();
+    }
+    // احفظ الحالة في PageStorage لو الـwidget عنده PageStorageKey.
+    if (widget.key is PageStorageKey) {
+      PageStorage.of(context).writeState(context, _expanded);
     }
   }
 
