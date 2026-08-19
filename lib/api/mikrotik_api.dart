@@ -215,16 +215,64 @@ class MikrotikApi {
       }
 
       // ═══════ TIER 2 (تفاصيل — wireless + enrichment) ═══════
-      List<Map<String, String>> wirelessRows = const [];
-      List<Map<String, String>> wirelessClients = const [];
+      // 2026-08-18: أجهزة Mikrotik تستعمل حزم wireless مختلفة حسب النوع:
+      //   - `/interface/wireless/print` — airMax/802.11 القديم (RouterOS 6)
+      //   - `/interface/w60g/print` — 60 GHz (LHG 60G, wAP 60G, cAP 60G)
+      //   - `/interface/wifi/print` — RouterOS 7 wifi (WiFi 6 / AX)
+      //   - `/interface/wifiwave2/print` — legacy wifiwave2 (7.1-7.6)
+      // نجرّب الأربعة، ونجمع النتائج (LHG 60G مثلاً لا يستجيب للأوّل بل للثاني).
+      List<Map<String, String>> wirelessRows = [];
+      List<Map<String, String>> wirelessClients = [];
       try {
-        wirelessRows = await client.query(['/interface/wireless/print']);
-      } catch (_) {
-        // بعض الأجهزة ما تدعم wireless (CCR raw routers)
-      }
+        final rows = await client.query(['/interface/wireless/print']);
+        wirelessRows.addAll(rows);
+      } catch (_) { /* عادي على CCR + LHG 60G */ }
+      try {
+        final rows = await client.query(['/interface/w60g/print']);
+        // sanitize: نطابق بنية wireless (ssid/mode/frequency)
+        for (final w in rows) {
+          wirelessRows.add({
+            'name': w['name'] ?? '',
+            'ssid': w['ssid'] ?? '',
+            'mode': (w['mode'] ?? 'bridge').toString(),
+            'band': '60ghz',
+            'frequency': w['frequency'] ?? '',
+            'channel-width': w['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '2160',
+            'tx-power': w['tx-power'] ?? '',
+            'disabled': w['disabled'] ?? 'false',
+            'running': w['running'] ?? 'false',
+          });
+        }
+      } catch (_) { /* عادي على الأجهزة الي لا تدعم 60GHz */ }
+      try {
+        final rows = await client.query(['/interface/wifi/print']);
+        for (final w in rows) {
+          wirelessRows.add({
+            'name': w['name'] ?? '',
+            'ssid': (w['configuration'] ?? w['ssid'] ?? '').toString(),
+            'mode': (w['mode'] ?? 'ap').toString(),
+            'band': (w['band'] ?? '').toString(),
+            'frequency': w['frequency'] ?? '',
+            'channel-width': w['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '',
+            'tx-power': w['tx-power'] ?? '',
+            'disabled': w['disabled'] ?? 'false',
+            'running': w['running'] ?? 'false',
+          });
+        }
+      } catch (_) { /* عادي على RouterOS 6 */ }
+      // Clients — نجرّب من كل الحزم المتاحة
       if (wirelessRows.isNotEmpty) {
         try {
-          wirelessClients = await client.query(['/interface/wireless/registration-table/print']);
+          final regs = await client.query(['/interface/wireless/registration-table/print']);
+          wirelessClients.addAll(regs);
+        } catch (_) {}
+        try {
+          final regs = await client.query(['/interface/w60g/station/print']);
+          wirelessClients.addAll(regs);
+        } catch (_) {}
+        try {
+          final regs = await client.query(['/interface/wifi/registration-table/print']);
+          wirelessClients.addAll(regs);
         } catch (_) {}
       }
 
