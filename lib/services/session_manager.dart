@@ -8,6 +8,7 @@ import '../api/subscribers_api.dart';
 import 'alerts_service.dart';
 import 'auth_storage.dart';
 import 'badge_service.dart';
+import 'device_alerts_service.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
 import 'permissions_service.dart';
@@ -60,6 +61,10 @@ class SessionManager {
       _guardAsync('BadgeService.clear', BadgeService.clear()),
       _guardAsync('InboxService.clear', InboxService.clear()),
       _guardAsync('PermissionsService.clear', PermissionsService.clear()),
+      // 2026-08-18: device alerts + dedup map + OS notifications — كانت
+      // تبقى للمدير التالي فتظهر تنبيهات أجهزة السابق.
+      _guardAsync('DeviceAlertsService.reset',
+          DeviceAlertsService.instance.reset()),
     ]);
 
     // 3) FCM unregister (network — only on real logout).

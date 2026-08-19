@@ -213,7 +213,12 @@ class DeviceAlertsService {
     }
     _updateUnreadCount();
     await _persist();
-    await _showOsNotification(alert);
+    // 2026-08-18: أُلغي OS notification صراحةً — طلب المستخدم:
+    // "تنبيهات الأجهزة **داخل التطبيق فقط**" (bell badge + list في
+    // shell التطبيق). لا نريد push من نوع FCM/local-OS لهذه الفئة.
+    // النقل: _showOsNotification موجود لكن غير مستدعى — احتياط لو غيّرنا
+    // الرأي لاحقاً.
+    // await _showOsNotification(alert);
   }
 
   Future<void> markAllRead() async {
@@ -240,6 +245,19 @@ class DeviceAlertsService {
     _alerts.clear();
     _updateUnreadCount();
     await _persist();
+  }
+
+  /// Reset كامل — للاستدعاء عند logout. يُفرغ الـalerts + dedup map
+  /// + يمسح OS notifications + يعيد unreadCount إلى 0.
+  /// المدير التالي ما يرث أي تنبيهات من السابق. 2026-08-18.
+  Future<void> reset() async {
+    _alerts.clear();
+    _lastFiredAt.clear();
+    unreadCount.value = 0;
+    try {
+      await _notifications.cancelAll();  // يمسح إشعارات OS المعلّقة
+    } catch (_) { /* best-effort */ }
+    await _persist();  // يحفظ الـempty list ليُبقي storage نظيف
   }
 
   void _updateUnreadCount() {

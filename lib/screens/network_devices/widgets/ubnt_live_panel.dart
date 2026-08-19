@@ -303,11 +303,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         header: Row(children: [
           Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
           const SizedBox(width: 6),
-          Text('Ethernet (${s.interfaces.where((i) => i.ifname.startsWith("eth")).length})',
+          Text('Interfaces (${s.interfaces.where(_isDataIface).length})',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
         ]),
         content: Column(children: [
-          for (final iface in s.interfaces.where((i) => i.ifname.startsWith('eth')))
+          for (final iface in s.interfaces.where(_isDataIface))
             _interfaceRow(iface),
         ]),
       ),
@@ -737,7 +737,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // Interfaces section
   // ══════════════════════════════════════════════════════════════
   Widget _interfacesSection() {
-    final ethers = _stats!.interfaces.where((i) => i.ifname.startsWith('eth')).toList();
+    final ethers = _stats!.interfaces.where(_isDataIface).toList();
     if (ethers.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.all(Sp.md),
@@ -957,6 +957,18 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(1)}K';
     if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
     return '${(bps / 1000000000).toStringAsFixed(2)}G';
+  }
+
+  /// 2026-08-18: أي واجهة تحمل بيانات فعليّة (تظهر بالـUI + traffic
+  /// يُحسَب لها). كان الفلتر السابق `startsWith('eth')` يستثني br0/wlan0
+  /// الي أحياناً تكون الواجهة الوحيدة على airFiber 60 GP → traffic ما يظهر.
+  static bool _isDataIface(UbntInterface i) {
+    final n = i.ifname;
+    if (n.startsWith('eth')) return true;
+    if (n.startsWith('br')) return true;   // bridge (airFiber 60)
+    if (n.startsWith('wlan') || n.startsWith('ath')) return true;  // wireless
+    if (n == 'ppp0' || n == 'wan') return true;
+    return false;
   }
 }
 
