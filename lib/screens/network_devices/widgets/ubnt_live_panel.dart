@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -37,6 +38,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // rate tracking للـinterfaces
   final Map<String, _BytesPoint> _lastBytes = {};
   final Map<String, _IfaceRate> _rates = {};
+
+  /// history للـtraffic (أعلى interface بكل جولة) — للـgraph
+  /// 30 samples × 15s ≈ 7 دقائق تاريخ. مماثل لـMikrotik.
+  final List<_TrafficSample> _history = [];
+  static const int _maxHistory = 30;
 
   static const _refreshInterval = Duration(seconds: 15);
 
@@ -125,6 +131,20 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           );
         }
       }
+      // 2026-08-18: أضف sample لـtraffic graph — أعلى interface هذه الجولة
+      // (نفس نمط Mikrotik). لا نُضيف قبل _lastFetch لأنّ الـrates لسّه 0.
+      if (_lastFetch != null) {
+        int maxRx = 0, maxTx = 0;
+        for (final iface in stats.interfaces.where(_isDataIface)) {
+          final r = _rates[iface.ifname];
+          if (r != null) {
+            if (r.rxBps > maxRx) maxRx = r.rxBps;
+            if (r.txBps > maxTx) maxTx = r.txBps;
+          }
+        }
+        _history.add(_TrafficSample(at: now, rxBps: maxRx, txBps: maxTx));
+        if (_history.length > _maxHistory) _history.removeAt(0);
+      }
 
       setState(() {
         _stats = stats;
@@ -185,6 +205,12 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         if (s.wireless != null) ...[
           const SizedBox(height: Sp.md),
           _cardWrapper(child: _signalHero(s.wireless!)),
+        ],
+        // Traffic graph — نفس نمط Mikrotik. يظهر بعد 2+ عيّنات (rate calc
+        // يحتاج fetches متتاليّة). 2026-08-18: طلب المستخدم.
+        if (_history.length >= 2) ...[
+          const SizedBox(height: Sp.md),
+          _trafficGraph(),
         ],
         // Expandable sections — للـPtMP نُظهر Stations أوّلاً (الأهم)
         ..._buildExpandables(),
@@ -971,6 +997,149 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     return '${(bps / 1000000000).toStringAsFixed(2)}G';
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // Traffic graph — RX/TX area chart (نفس نمط Mikrotik) — 2026-08-18
+  // ══════════════════════════════════════════════════════════════
+  Widget _trafficGraph() {
+    final rxSpots = <FlSpot>[];
+    final txSpots = <FlSpot>[];
+    for (int i = 0; i < _history.length; i++) {
+      final x = i.toDouble();
+      rxSpots.add(FlSpot(x, _history[i].rxBps.toDouble()));
+      txSpots.add(FlSpot(x, _history[i].txBps.toDouble()));
+    }
+    final maxRx = _history.map((s) => s.rxBps).fold<int>(0, math.max);
+    final maxTx = _history.map((s) => s.txBps).fold<int>(0, math.max);
+    final peak = math.max(maxRx, maxTx);
+    final maxY = (peak * 1.25).clamp(1000, double.infinity).toDouble();
+
+    final lastRx = _history.isNotEmpty ? _history.last.rxBps : 0;
+    final lastTx = _history.isNotEmpty ? _history.last.txBps : 0;
+
+    const rxColor = Color(0xFF10B981);
+    const txColor = Color(0xFF3B82F6);
+
+    return _cardWrapper(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.chartLine, size: 14, color: const Color(0xFF0559C9)),
+          const SizedBox(width: 6),
+          Text('أعلى interface (سير الترفك)',
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+          const Spacer(),
+          _legendChip('↓', _formatBps(lastRx), rxColor),
+          const SizedBox(width: 6),
+          _legendChip('↑', _formatBps(lastTx), txColor),
+        ]),
+        const SizedBox(height: 12),
+        // RepaintBoundary + duration:0 → يمنع rebuild الكامل عند كل setState
+        SizedBox(
+          height: 120,
+          child: RepaintBoundary(child: LineChart(
+            duration: Duration.zero,
+            LineChartData(
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: maxY / 4,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: AppColors.border.withValues(alpha: 0.35),
+                  strokeWidth: 0.5,
+                ),
+              ),
+              titlesData: FlTitlesData(
+                show: true,
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 44,
+                    interval: maxY / 3,
+                    getTitlesWidget: (value, _) => Text(
+                      _formatBpsShort(value.toInt()),
+                      style: TextStyle(fontSize: 9, color: AppColors.textLow),
+                    ),
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              minY: 0,
+              maxY: maxY,
+              minX: 0,
+              maxX: (_history.length - 1).toDouble(),
+              lineBarsData: [
+                _lineBarData(txSpots, txColor),   // أزرق تحت
+                _lineBarData(rxSpots, rxColor),   // أخضر فوق
+              ],
+              lineTouchData: LineTouchData(
+                enabled: true,
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => AppColors.textHi.withValues(alpha: 0.9),
+                  getTooltipItems: (spots) => spots.map((s) {
+                    final isTx = s.barIndex == 0;
+                    return LineTooltipItem(
+                      '${isTx ? "↑" : "↓"} ${_formatBps(s.y.toInt())}',
+                      TextStyle(
+                        color: isTx ? txColor : rxColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          )),
+        ),
+      ]),
+    );
+  }
+
+  LineChartBarData _lineBarData(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      curveSmoothness: 0.28,
+      color: color,
+      barWidth: 2.5,
+      isStrokeCapRound: true,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(
+        show: true,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.25),
+            color.withValues(alpha: 0.02),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _legendChip(String arrow, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text('$arrow $value',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+
+  String _formatBpsShort(int bps) {
+    if (bps < 1000) return '0';
+    if (bps < 1000000) return '${(bps / 1000).round()}K';
+    if (bps < 1000000000) return '${(bps / 1000000).round()}M';
+    return '${(bps / 1000000000).toStringAsFixed(1)}G';
+  }
+
   /// 2026-08-18: أي واجهة تحمل بيانات فعليّة (تظهر بالـUI + traffic
   /// يُحسَب لها). كان الفلتر السابق `startsWith('eth')` يستثني br0/wlan0
   /// الي أحياناً تكون الواجهة الوحيدة على airFiber 60 GP → traffic ما يظهر.
@@ -1060,4 +1229,12 @@ class _IfaceRate {
   final int rxBps;
   final int txBps;
   const _IfaceRate({required this.rxBps, required this.txBps});
+}
+
+/// عيّنة traffic لحظة واحدة — أعلى interface بها. 2026-08-18.
+class _TrafficSample {
+  final DateTime at;
+  final int rxBps;
+  final int txBps;
+  const _TrafficSample({required this.at, required this.rxBps, required this.txBps});
 }
