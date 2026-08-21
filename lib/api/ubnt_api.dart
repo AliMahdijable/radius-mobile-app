@@ -282,7 +282,25 @@ class UbntApi {
         loadOut = parts.length > 2 ? parts[2].trim() : '';
         iwOut = parts.length > 3 ? parts[3] : '';
         ifOut = parts.length > 4 ? parts[4] : '';
-      } else {
+      }
+      // 2026-08-20: wstalist recovery — إذا الأمر المُجمَّع نجح لكن wstaOut
+      // فارغ أو مقطوع (بعض airOS firmware تدمج stdout للأوامر المتسلسلة
+      // بشكل يخرّب parsing)، أعد جلب wstalist منفصلاً. بدون هذا: AP
+      // بعملاء متصلين يعرض "لا يوجد عملاء" بلا سبب حقيقي.
+      if (batchedOut.isNotEmpty && !wstaOut.startsWith('[')) {
+        try {
+          final r = utf8.decode(
+            await client.run('wstalist 2>/dev/null')
+                .timeout(const Duration(seconds: 5)),
+            allowMalformed: true,
+          ).trim();
+          if (r.startsWith('[')) {
+            wstaOut = r;
+            if (kDebugMode) debugPrint('🟢 [ubnt] wstalist recovered via fallback fetch');
+          }
+        } catch (_) {}
+      }
+      if (batchedOut.isEmpty) {
         // fallback: أوامر منفصلة (سلوك قديم)
         try {
           wstaOut = utf8.decode(await client.run('wstalist 2>/dev/null')
