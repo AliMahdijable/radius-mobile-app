@@ -515,9 +515,9 @@ class MikrotikApi {
   /// حتى لو الجهاز فيه عملاء. SSH يستعمل نفس الـshell الي يستعمله Winbox
   /// terminal — يعطي مخرجات كاملة بلا API quirks.
   ///
-  /// نُنفّذ:
-  ///   /interface wireless registration-table print terse
-  /// `terse` = one line per record, مفيد للـparse (key=value pairs).
+  /// نستعمل MikroTik script يطبع كل الحقول المطلوبة بصيغة ثابتة معروفة
+  /// (بدل الاعتماد على `terse` الذي على 6.49.x لا يُخرج signal/rate/ccq
+  /// تلقائياً — فقط mac-address و interface).
   static Future<List<Map<String, String>>> _fetchClientsViaSsh(
     String ip, String user, String pass,
   ) async {
@@ -532,38 +532,74 @@ class MikrotikApi {
         onUserInfoRequest: (req) async => req.prompts.map((_) => pass).toList(),
       );
       await client.authenticated.timeout(const Duration(seconds: 6));
-      // 2026-08-20: `terse` output on RouterOS:
-      //   " 0 interface=wlan1 radio-name=\"foo\" mac-address=04:18:D6:...
-      //     ap=no signal-strength=-65@6Mbps tx-rate=144Mbps rx-rate=... uptime=..."
+      // 2026-08-20: MikroTik script يجمع كل الحقول من registration-table.
+      // كل client يُطبع بسطر واحد بصيغة "key=value|key=value|..." — الـpipe
+      // يفصل الحقول والـSTART يفصل السجلّات. تجنّبنا newline بين حقول (لأنّه
+      // SSH terminal يضيف \r\n قد يخرّب parse). الحقول مضمونة exist عبر :toarray.
+      const script = ':local out ""; '
+        ':foreach id in=[/interface wireless registration-table find] do={ '
+          ':local r [/interface wireless registration-table get \$id]; '
+          ':set out (\$out . "START|mac=" . (\$r->"mac-address") . '
+            '"|iface=" . (\$r->"interface") . '
+            '"|name=" . (\$r->"radio-name") . '
+            '"|sig=" . (\$r->"signal-strength") . '
+            '"|txsig=" . (\$r->"tx-signal-strength") . '
+            '"|snr=" . (\$r->"signal-to-noise") . '
+            '"|txccq=" . (\$r->"tx-ccq") . '
+            '"|rxccq=" . (\$r->"rx-ccq") . '
+            '"|txr=" . (\$r->"tx-rate") . '
+            '"|rxr=" . (\$r->"rx-rate") . '
+            '"|up=" . (\$r->"uptime") . '
+            '"|comment=" . (\$r->"comment") . "\\r\\n") '
+        '}; :put \$out';
       final out = utf8.decode(
-        await client.run('/interface wireless registration-table print terse')
-            .timeout(const Duration(seconds: 8)),
+        await client.run(script).timeout(const Duration(seconds: 10)),
         allowMalformed: true,
       );
-      return _parseTerseOutput(out);
+      if (kDebugMode) {
+        final preview = out.length > 400 ? out.substring(0, 400) : out;
+        debugPrint('📥 [mikrotik SSH] raw:\n$preview');
+      }
+      return _parseSshScript(out);
     } finally {
       client?.close();
       try { socket?.close(); } catch (_) {}
     }
   }
 
-  /// Parse RouterOS `terse` output — كل سطر = record واحد.
-  /// النموذج: ` 0 K name="foo" mac-address=AA:BB:.. signal-strength=-65@6Mbps ...`
-  /// نستخرج key=value pairs، مع دعم القيم بين "..." (تحوي spaces).
-  static List<Map<String, String>> _parseTerseOutput(String text) {
+  /// Parse SSH script output — كل record يبدأ بـSTART| وينتهي بـ\r\n.
+  /// نُحوّل المفاتيح المختصرة (mac, iface, sig...) لأسماء API القياسيّة
+  /// (mac-address, interface, signal-strength...) لتوافق مع fromApiMap.
+  static List<Map<String, String>> _parseSshScript(String text) {
     final results = <Map<String, String>>[];
-    for (final rawLine in text.split('\n')) {
-      final line = rawLine.trim();
+    // كل record: "START|mac=xx|iface=xx|..."
+    final records = text.split('START|').where((s) => s.trim().isNotEmpty);
+    for (final rec in records) {
+      // نقطع عند أوّل \r أو \n لأن record واحد سطر واحد
+      final line = rec.split(RegExp(r'[\r\n]')).first;
       if (line.isEmpty) continue;
-      // تخطّى prompt أو أسطر noise. الـrecord يبدأ بـindex رقمي.
-      if (!RegExp(r'^\d+\s').hasMatch(line)) continue;
       final map = <String, String>{};
-      // regex يستوعب: key="quoted value with spaces" | key=simple-value
-      final rx = RegExp(r'([\w.-]+)=(?:"([^"]*)"|(\S+))');
-      for (final m in rx.allMatches(line)) {
-        final key = m.group(1)!;
-        final value = m.group(2) ?? m.group(3) ?? '';
-        map[key] = value;
+      for (final pair in line.split('|')) {
+        final eq = pair.indexOf('=');
+        if (eq < 1) continue;
+        final key = pair.substring(0, eq).trim();
+        final val = pair.substring(eq + 1).trim();
+        if (val.isEmpty) continue;
+        // Map قصر → API standard
+        switch (key) {
+          case 'mac': map['mac-address'] = val; break;
+          case 'iface': map['interface'] = val; break;
+          case 'name': map['radio-name'] = val; break;
+          case 'sig': map['signal-strength'] = val; break;
+          case 'txsig': map['tx-signal-strength'] = val; break;
+          case 'snr': map['signal-to-noise'] = val; break;
+          case 'txccq': map['tx-ccq'] = val; break;
+          case 'rxccq': map['rx-ccq'] = val; break;
+          case 'txr': map['tx-rate'] = val; break;
+          case 'rxr': map['rx-rate'] = val; break;
+          case 'up': map['uptime'] = val; break;
+          case 'comment': map['comment'] = val; break;
+        }
       }
       if (map.containsKey('mac-address')) {
         results.add(map);
