@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
 import 'mikrotik_binary_api.dart';
@@ -311,26 +313,26 @@ class MikrotikApi {
           failureMsg = msg.length > 80 ? msg.substring(0, 80) : msg;
         }
       }
-      // 2026-08-20: إذا reg-table رجع 0 rows بدون خطأ على جهاز يبدو AP،
-      // جرّب صيغة multi-word (RouterOS 6.4x قد ترفض النقاط المتعدّدة).
+      // 2026-08-20: RouterOS 6.49.x + Binary API bug — reg-table يرجع !done
+      // بـ 0 rows حتى لو Winbox يعرض عملاء. مؤكّد على BaseBox 5 / 6.49.13
+      // (user admin/full، الأمر ينجح بلا !trap لكن سطر واحد !done فقط).
+      // الحلّ الوحيد المضمون: SSH fallback — نفس interface الي يستعمله Winbox
+      // terminal، بلا الـAPI quirks.
       if (wirelessClients.isEmpty && failureMsg == null && wirelessRows.isNotEmpty) {
-        if (kDebugMode) debugPrint('🔁 [mikrotik] reg-table رجع 0 — جرّب صيغة بديلة');
-        // صيغ بديلة معروفة على RouterOS 6.4x:
-        //   1. مع =.proplist صريح — بعض firmware تحتاجه
-        //   2. مع =detail — يُرجع كل الحقول (equivalent لـWinbox display)
-        final alternatives = [
-          [pickedPath, '=detail='],
-          [pickedPath, '=.proplist=mac-address,interface,signal-strength,tx-signal-strength,signal-to-noise,tx-ccq,rx-ccq,tx-rate,rx-rate,uptime,comment'],
-        ];
-        for (final alt in alternatives) {
-          try {
-            final regs = await client.query(alt, debugLog: true).timeout(const Duration(seconds: 10));
-            if (regs.isNotEmpty) {
-              wirelessClients.addAll(regs);
-              if (kDebugMode) debugPrint('🟢 [mikrotik] alternative worked: ${alt.join(" ")} → ${regs.length} clients');
-              break;
-            }
-          } catch (_) {}
+        if (kDebugMode) debugPrint('🔁 [mikrotik] Binary API رجع 0 — جرّب SSH fallback');
+        try {
+          final sshClients = await _fetchClientsViaSsh(ip, user, pass);
+          if (sshClients.isNotEmpty) {
+            wirelessClients.addAll(sshClients);
+            if (kDebugMode) debugPrint('🟢 [mikrotik] SSH fallback → ${sshClients.length} clients');
+          } else {
+            if (kDebugMode) debugPrint('ℹ️ [mikrotik] SSH fallback رجع 0 كذلك — الـAP فعلاً بلا عملاء');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            final es = e.toString();
+            debugPrint('⚠️ [mikrotik] SSH fallback فشل: ${es.length > 80 ? es.substring(0, 80) : es}');
+          }
         }
       }
       // CAPsMAN: نضيفه فقط لو الجهاز يبدو manager (اسم "capsman" في
@@ -490,6 +492,68 @@ class MikrotikApi {
     final free = _asInt(resource['free-memory']);
     if (total == 0) return 0;
     return (((total - free) / total) * 100).round();
+  }
+
+  /// 2026-08-20: SSH fallback لـregistration-table.
+  /// RouterOS 6.49.x + Binary API لديه bug: reg-table يرجع !done مع 0 rows
+  /// حتى لو الجهاز فيه عملاء. SSH يستعمل نفس الـshell الي يستعمله Winbox
+  /// terminal — يعطي مخرجات كاملة بلا API quirks.
+  ///
+  /// نُنفّذ:
+  ///   /interface wireless registration-table print terse
+  /// `terse` = one line per record, مفيد للـparse (key=value pairs).
+  static Future<List<Map<String, String>>> _fetchClientsViaSsh(
+    String ip, String user, String pass,
+  ) async {
+    SSHClient? client;
+    SSHSocket? socket;
+    try {
+      socket = await SSHSocket.connect(ip, 22, timeout: const Duration(seconds: 6));
+      client = SSHClient(
+        socket,
+        username: user,
+        onPasswordRequest: () => pass,
+        onUserInfoRequest: (req) async => req.prompts.map((_) => pass).toList(),
+      );
+      await client.authenticated.timeout(const Duration(seconds: 6));
+      // 2026-08-20: `terse` output on RouterOS:
+      //   " 0 interface=wlan1 radio-name=\"foo\" mac-address=04:18:D6:...
+      //     ap=no signal-strength=-65@6Mbps tx-rate=144Mbps rx-rate=... uptime=..."
+      final out = utf8.decode(
+        await client.run('/interface wireless registration-table print terse')
+            .timeout(const Duration(seconds: 8)),
+        allowMalformed: true,
+      );
+      return _parseTerseOutput(out);
+    } finally {
+      client?.close();
+      try { socket?.close(); } catch (_) {}
+    }
+  }
+
+  /// Parse RouterOS `terse` output — كل سطر = record واحد.
+  /// النموذج: ` 0 K name="foo" mac-address=AA:BB:.. signal-strength=-65@6Mbps ...`
+  /// نستخرج key=value pairs، مع دعم القيم بين "..." (تحوي spaces).
+  static List<Map<String, String>> _parseTerseOutput(String text) {
+    final results = <Map<String, String>>[];
+    for (final rawLine in text.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      // تخطّى prompt أو أسطر noise. الـrecord يبدأ بـindex رقمي.
+      if (!RegExp(r'^\d+\s').hasMatch(line)) continue;
+      final map = <String, String>{};
+      // regex يستوعب: key="quoted value with spaces" | key=simple-value
+      final rx = RegExp(r'([\w.-]+)=(?:"([^"]*)"|(\S+))');
+      for (final m in rx.allMatches(line)) {
+        final key = m.group(1)!;
+        final value = m.group(2) ?? m.group(3) ?? '';
+        map[key] = value;
+      }
+      if (map.containsKey('mac-address')) {
+        results.add(map);
+      }
+    }
+    return results;
   }
 }
 
