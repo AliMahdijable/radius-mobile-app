@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'mikrotik_binary_api.dart';
@@ -260,40 +262,74 @@ class MikrotikApi {
           });
         }
       } catch (_) { /* عادي على RouterOS 6 */ }
-      // Clients — نجرّب من كل الحزم المتاحة. 2026-08-20: أزلنا gate
-      // `wirelessRows.isNotEmpty` — بعض الأجهزة (خاصّة RouterOS 7 wifi و
-      // CAPsMAN centralized) قد ترجع reg-table حتى لو /interface/wireless
-      // /print فشل أو غير مسموح. الفحوصات المستقلّة تحمي من overhead.
-      final regTablePaths = [
-        '/interface/wireless/registration-table/print',   // RouterOS 6 + 7 legacy wireless
-        '/interface/w60g/station/print',                  // 60GHz (LHG 60G, wAP 60G)
-        '/interface/wifi/registration-table/print',       // RouterOS 7 wifi (WiFi 6/AX)
-        '/interface/wifiwave2/registration-table/print',  // RouterOS 7.1-7.6 legacy
-        '/caps-man/registration-table/print',             // CAPsMAN v1/v2
-        '/interface/wifi/capsman/registration-table/print', // wifi CAPsMAN
-      ];
-      for (final path in regTablePaths) {
-        try {
-          final regs = await client.query([path]);
-          if (regs.isNotEmpty && kDebugMode) {
-            debugPrint('🟢 [mikrotik] $path → ${regs.length} clients');
-          }
-          wirelessClients.addAll(regs);
-        } catch (e) {
-          // 2026-08-20: preserve error info in debug — permission trap
-          // ("no such command") vs network vs other. بدون هذا: نضيع
-          // السبب الحقيقي لعدم ظهور العملاء.
-          if (kDebugMode) {
-            final msg = e.toString();
-            // نتجاهل no-such-command silently (متوقّع للحزم غير المثبّتة)
-            if (!msg.contains('no such command') && !msg.contains('no such item')) {
-              debugPrint('⚠️ [mikrotik] $path failed: $msg');
+      // Clients — نختار المسار الصحيح بناءً على نوع الـwireless interfaces
+      // المكتشفة أعلاه، بدل تجربة الـ6 مسارات متسلسلة (كانت تسبّب global
+      // timeout: 6s × 5 مسارات فاشلة = 30s → الـfetch الخارجي يفشل → لا
+      // عملاء إطلاقاً حتى للأجهزة السليمة).
+      //
+      // الاستنتاج من `wirelessRows` (band field):
+      //   band='60ghz' → w60g/station
+      //   band=''      + جاء من /interface/wireless/print → wireless legacy
+      //   band=<other> + جاء من /interface/wifi/print → wifi (RouterOS 7)
+      // إن لم نستطع الاستنتاج، نجرّب `/interface/wireless/registration-table
+      // /print` (الأشيع لـRouterOS 6) ثمّ نتوقّف إن رجع empty.
+      String pickedPath;
+      if (wirelessRows.any((w) => (w['band'] ?? '') == '60ghz')) {
+        pickedPath = '/interface/w60g/station/print';
+      } else {
+        // legacy wireless first (RouterOS 6 + 7-with-wireless-package).
+        // wifi7 يستعمل نفس ROS-7 mikrotik: reg-table تحته
+        // `/interface/wifi/registration-table/print`.
+        pickedPath = '/interface/wireless/registration-table/print';
+      }
+      String? failureMsg;
+      try {
+        final regs = await client.query([pickedPath])
+            .timeout(const Duration(seconds: 12));
+        wirelessClients.addAll(regs);
+        if (kDebugMode) debugPrint('🟢 [mikrotik] $pickedPath → ${regs.length} clients');
+      } on TimeoutException {
+        failureMsg = 'timeout';
+      } catch (e) {
+        final msg = e.toString();
+        if (msg.contains('no such command') || msg.contains('no such item')) {
+          // Package غير مثبّت → جرّب wifi (RouterOS 7)
+          try {
+            final regs = await client.query(['/interface/wifi/registration-table/print'])
+                .timeout(const Duration(seconds: 8));
+            wirelessClients.addAll(regs);
+            if (kDebugMode) debugPrint('🟢 [mikrotik] wifi reg-table → ${regs.length} clients');
+          } catch (e2) {
+            final m2 = e2.toString();
+            if (!m2.contains('no such command') && !m2.contains('no such item')) {
+              failureMsg = m2.length > 80 ? m2.substring(0, 80) : m2;
             }
           }
+        } else {
+          failureMsg = msg.length > 80 ? msg.substring(0, 80) : msg;
         }
       }
+      // CAPsMAN: نضيفه فقط لو الجهاز يبدو manager (اسم "capsman" في
+      // interfaces، أو مسار /caps-man موجود مع wireless section null).
+      // بدون هذا: كل جهاز عادي يهدر 6s على /caps-man غير الموجود.
+      final looksLikeCapsMan = interfaceRows.any((i) =>
+        (i['name'] ?? '').toLowerCase().contains('capsman'));
+      if (looksLikeCapsMan) {
+        try {
+          final regs = await client.query(['/caps-man/registration-table/print'])
+              .timeout(const Duration(seconds: 8));
+          wirelessClients.addAll(regs);
+          if (kDebugMode) debugPrint('🟢 [mikrotik] caps-man reg-table → ${regs.length} clients');
+        } catch (_) {}
+      }
       if (wirelessClients.isEmpty && wirelessRows.isNotEmpty && kDebugMode) {
-        debugPrint('⚠️ [mikrotik] wireless interfaces موجودة لكن reg-table فارغ عبر كل الحزم — تحقّق من صلاحيّات API user (group يحتاج api+read)');
+        if (failureMsg == 'timeout') {
+          debugPrint('⚠️ [mikrotik] reg-table timeout — الجهاز بطيء أو overload. زد timeout عبر MikrotikApi.fetchStats(timeout: ...).');
+        } else if (failureMsg != null) {
+          debugPrint('⚠️ [mikrotik] reg-table فشل: $failureMsg');
+        } else {
+          debugPrint('ℹ️ [mikrotik] reg-table رجع فارغ عبر $pickedPath — الـAP بلا عملاء متصلين حالياً.');
+        }
       }
 
       // hostname enrichment: DHCP lease + access-list + ARP
