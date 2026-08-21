@@ -264,32 +264,37 @@ class MikrotikApi {
       // `wirelessRows.isNotEmpty` — بعض الأجهزة (خاصّة RouterOS 7 wifi و
       // CAPsMAN centralized) قد ترجع reg-table حتى لو /interface/wireless
       // /print فشل أو غير مسموح. الفحوصات المستقلّة تحمي من overhead.
-      try {
-        final regs = await client.query(['/interface/wireless/registration-table/print']);
-        wirelessClients.addAll(regs);
-      } catch (_) {}
-      try {
-        final regs = await client.query(['/interface/w60g/station/print']);
-        wirelessClients.addAll(regs);
-      } catch (_) {}
-      try {
-        final regs = await client.query(['/interface/wifi/registration-table/print']);
-        wirelessClients.addAll(regs);
-      } catch (_) {}
-      // RouterOS 7 wifiwave2 (7.1-7.6 legacy)
-      try {
-        final regs = await client.query(['/interface/wifiwave2/registration-table/print']);
-        wirelessClients.addAll(regs);
-      } catch (_) {}
-      // CAPsMAN centralized management (v1 + v2)
-      try {
-        final regs = await client.query(['/caps-man/registration-table/print']);
-        wirelessClients.addAll(regs);
-      } catch (_) {}
-      try {
-        final regs = await client.query(['/interface/wifi/capsman/registration-table/print']);
-        wirelessClients.addAll(regs);
-      } catch (_) {}
+      final regTablePaths = [
+        '/interface/wireless/registration-table/print',   // RouterOS 6 + 7 legacy wireless
+        '/interface/w60g/station/print',                  // 60GHz (LHG 60G, wAP 60G)
+        '/interface/wifi/registration-table/print',       // RouterOS 7 wifi (WiFi 6/AX)
+        '/interface/wifiwave2/registration-table/print',  // RouterOS 7.1-7.6 legacy
+        '/caps-man/registration-table/print',             // CAPsMAN v1/v2
+        '/interface/wifi/capsman/registration-table/print', // wifi CAPsMAN
+      ];
+      for (final path in regTablePaths) {
+        try {
+          final regs = await client.query([path]);
+          if (regs.isNotEmpty && kDebugMode) {
+            debugPrint('🟢 [mikrotik] $path → ${regs.length} clients');
+          }
+          wirelessClients.addAll(regs);
+        } catch (e) {
+          // 2026-08-20: preserve error info in debug — permission trap
+          // ("no such command") vs network vs other. بدون هذا: نضيع
+          // السبب الحقيقي لعدم ظهور العملاء.
+          if (kDebugMode) {
+            final msg = e.toString();
+            // نتجاهل no-such-command silently (متوقّع للحزم غير المثبّتة)
+            if (!msg.contains('no such command') && !msg.contains('no such item')) {
+              debugPrint('⚠️ [mikrotik] $path failed: $msg');
+            }
+          }
+        }
+      }
+      if (wirelessClients.isEmpty && wirelessRows.isNotEmpty && kDebugMode) {
+        debugPrint('⚠️ [mikrotik] wireless interfaces موجودة لكن reg-table فارغ عبر كل الحزم — تحقّق من صلاحيّات API user (group يحتاج api+read)');
+      }
 
       // hostname enrichment: DHCP lease + access-list + ARP
       final Map<String, ({String? hostname, String? ip})> dhcpMap = {};
