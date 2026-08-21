@@ -338,9 +338,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           ]),
         ),
       ],
-      // 2026-08-20: نستعمل _stickyClients (آخر لقطة معروفة) بدل s.wirelessClients
-      // كي القسم لا يختفي عند refresh عابر فارغ.
-      if (_stickyClients.isNotEmpty) ...[
+      // 2026-08-20: القسم يظهر دائماً لأي جهاز AP (حتى لو صفر عملاء).
+      // كان يختفي كلياً عند empty → المستخدم يظنّ "الاستعلام مكسور" —
+      // بينما الحقيقة قد تكون AP بدون عملاء أو الاستعلام رجع فارغ.
+      // نُميّز بينهما بنص واضح داخل القسم.
+      if (s.isAccessPoint) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
           key: PageStorageKey('mikrotik-${widget.device.id}-clients'),
@@ -351,7 +353,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Text('العملاء المتّصلون (${_stickyClients.length})',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           ]),
-          content: RepaintBoundary(child: _clientsContent(_stickyClients)),
+          content: RepaintBoundary(
+            child: _stickyClients.isEmpty
+                ? _emptyClientsHint()
+                : _clientsContent(_stickyClients),
+          ),
         ),
       ],
     ];
@@ -366,6 +372,30 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     return Column(children: [
       for (final iface in ethers) _interfaceRow(iface, maxRate),
     ]);
+  }
+
+  /// 2026-08-20: state فارغ للـclients section — يميّز بين "AP بلا عملاء"
+  /// و"استعلام فشل". الأخير سيظهر أيضاً في banner الأحمر بأعلى الصفحة.
+  Widget _emptyClientsHint() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      child: Column(
+        children: [
+          Icon(LucideIcons.userX, size: 22, color: AppColors.textLow.withValues(alpha: 0.6)),
+          const SizedBox(height: 6),
+          Text('لا يوجد عملاء متصلون حالياً',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textMid,
+              )),
+          const SizedBox(height: 2),
+          Text('registration-table فارغ — قد يكون الـSSID بلا عملاء الآن',
+              style: TextStyle(fontSize: 10, color: AppColors.textLow),
+              textAlign: TextAlign.center),
+        ],
+      ),
+    );
   }
 
   Widget _clientsContent(List<MikrotikWirelessClient> cs) {

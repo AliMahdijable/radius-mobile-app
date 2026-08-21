@@ -531,6 +531,10 @@ class MikrotikStats {
 
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
 
+  /// 2026-08-20: هل هذا الجهاز AP (بمعنى يخدم عملاء)؟
+  /// نستعمل هذا لعرض قسم "العملاء" حتى لو الحالة صفر (بدل ما نخفيه كلياً).
+  bool get isAccessPoint => wirelessInterfaces.any((w) => w.isAp);
+
   int get upInterfacesCount => interfaces.where((i) => i.running && !i.disabled).length;
 
   /// نسخة بحقول محدَّثة — يستعملها progressive rendering.
