@@ -313,6 +313,22 @@ class MikrotikApi {
           failureMsg = msg.length > 80 ? msg.substring(0, 80) : msg;
         }
       }
+      // 2026-08-20: صيغة multi-word — بعض RouterOS 6.4x تعامل الأمر كسلسلة
+      // كلمات (`/interface`, `wireless`, `registration-table`, `print`) بدل
+      // path واحد بـslashes. غير معياريّ لكن يعمل على بعض firmware.
+      if (wirelessClients.isEmpty && failureMsg == null && wirelessRows.isNotEmpty) {
+        try {
+          if (kDebugMode) debugPrint('🔁 [mikrotik] جرّب multi-word format');
+          final regs = await client.query(
+            ['/interface', 'wireless', 'registration-table', 'print'],
+            debugLog: true,
+          ).timeout(const Duration(seconds: 8));
+          if (regs.isNotEmpty) {
+            wirelessClients.addAll(regs);
+            if (kDebugMode) debugPrint('🟢 [mikrotik] multi-word worked → ${regs.length} clients');
+          }
+        } catch (_) {}
+      }
       // 2026-08-20: RouterOS 6.49.x + Binary API bug — reg-table يرجع !done
       // بـ 0 rows حتى لو Winbox يعرض عملاء. مؤكّد على BaseBox 5 / 6.49.13
       // (user admin/full، الأمر ينجح بلا !trap لكن سطر واحد !done فقط).
