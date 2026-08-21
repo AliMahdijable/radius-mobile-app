@@ -83,13 +83,29 @@ class MikrotikBinaryClient {
   }
 
   /// إرسال command واستقبال كل الـreplies حتى !done أو !trap
-  Future<List<Map<String, String>>> query(List<String> command) async {
+  ///
+  /// [debugLog]: إذا true (kDebugMode + للـqueries المشتبه بها)، يطبع
+  /// كل sentence مستلمة — للتشخيص عندما query يرجع empty بلا سبب واضح.
+  Future<List<Map<String, String>>> query(List<String> command, {bool debugLog = false}) async {
+    if (kDebugMode && debugLog) {
+      debugPrint('▶️ [mtk-api] send: ${command.join(" ")}');
+    }
     await _writeSentence(command);
     final results = <Map<String, String>>[];
+    int sentenceCount = 0;
     while (true) {
       final sentence = await _readSentence();
+      sentenceCount++;
       if (sentence.isEmpty) continue;
       final tag = sentence.first;
+      if (kDebugMode && debugLog) {
+        debugPrint('◀️ [mtk-api] sentence #$sentenceCount tag=$tag words=${sentence.length}');
+        if (tag == '!re' && sentence.length > 1) {
+          // اطبع أول 3 keys لنتأكّد من شكل الحقول
+          final keys = sentence.skip(1).take(3).join(', ');
+          debugPrint('   preview: $keys');
+        }
+      }
       if (tag == '!re') {
         results.add(_sentenceToMap(sentence));
       } else if (tag == '!done') {
@@ -98,7 +114,15 @@ class MikrotikBinaryClient {
         final err = sentence.firstWhere((w) => w.startsWith('=message='),
             orElse: () => '=message=unknown error');
         throw MikrotikBinaryException(err.substring('=message='.length));
+      } else if (tag == '!fatal') {
+        // 2026-08-20: RouterOS 6.4x قد ترسل !fatal عند خطأ ماحد يعالجه — ما
+        // كنّا نُلاحظه فيقطع الـconnection ويرجع 0 results بصمت.
+        final msg = sentence.length > 1 ? sentence.skip(1).join(' ') : 'fatal error';
+        throw MikrotikBinaryException('fatal: $msg');
       }
+    }
+    if (kDebugMode && debugLog) {
+      debugPrint('✅ [mtk-api] query done — ${results.length} rows');
     }
     return results;
   }

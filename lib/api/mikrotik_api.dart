@@ -283,8 +283,10 @@ class MikrotikApi {
         pickedPath = '/interface/wireless/registration-table/print';
       }
       String? failureMsg;
+      // Debug logging مفعّل دائماً لـreg-table لأن هذي الاستعلامات
+      // تفشل بصمت أحياناً على RouterOS 6.4x. Log يُطبع فقط في debug build.
       try {
-        final regs = await client.query([pickedPath])
+        final regs = await client.query([pickedPath], debugLog: true)
             .timeout(const Duration(seconds: 12));
         wirelessClients.addAll(regs);
         if (kDebugMode) debugPrint('🟢 [mikrotik] $pickedPath → ${regs.length} clients');
@@ -295,7 +297,7 @@ class MikrotikApi {
         if (msg.contains('no such command') || msg.contains('no such item')) {
           // Package غير مثبّت → جرّب wifi (RouterOS 7)
           try {
-            final regs = await client.query(['/interface/wifi/registration-table/print'])
+            final regs = await client.query(['/interface/wifi/registration-table/print'], debugLog: true)
                 .timeout(const Duration(seconds: 8));
             wirelessClients.addAll(regs);
             if (kDebugMode) debugPrint('🟢 [mikrotik] wifi reg-table → ${regs.length} clients');
@@ -307,6 +309,28 @@ class MikrotikApi {
           }
         } else {
           failureMsg = msg.length > 80 ? msg.substring(0, 80) : msg;
+        }
+      }
+      // 2026-08-20: إذا reg-table رجع 0 rows بدون خطأ على جهاز يبدو AP،
+      // جرّب صيغة multi-word (RouterOS 6.4x قد ترفض النقاط المتعدّدة).
+      if (wirelessClients.isEmpty && failureMsg == null && wirelessRows.isNotEmpty) {
+        if (kDebugMode) debugPrint('🔁 [mikrotik] reg-table رجع 0 — جرّب صيغة بديلة');
+        // صيغ بديلة معروفة على RouterOS 6.4x:
+        //   1. مع =.proplist صريح — بعض firmware تحتاجه
+        //   2. مع =detail — يُرجع كل الحقول (equivalent لـWinbox display)
+        final alternatives = [
+          [pickedPath, '=detail='],
+          [pickedPath, '=.proplist=mac-address,interface,signal-strength,tx-signal-strength,signal-to-noise,tx-ccq,rx-ccq,tx-rate,rx-rate,uptime,comment'],
+        ];
+        for (final alt in alternatives) {
+          try {
+            final regs = await client.query(alt, debugLog: true).timeout(const Duration(seconds: 10));
+            if (regs.isNotEmpty) {
+              wirelessClients.addAll(regs);
+              if (kDebugMode) debugPrint('🟢 [mikrotik] alternative worked: ${alt.join(" ")} → ${regs.length} clients');
+              break;
+            }
+          } catch (_) {}
         }
       }
       // CAPsMAN: نضيفه فقط لو الجهاز يبدو manager (اسم "capsman" في
