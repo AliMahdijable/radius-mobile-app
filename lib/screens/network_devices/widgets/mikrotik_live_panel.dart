@@ -44,6 +44,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   /// history للـtraffic الإجمالي — للرسم البياني
   final List<_TrafficSample> _history = [];
   static const int _maxHistory = 30;              // 30 × 8s ≈ 4 دقائق history
+
+  /// 2026-08-20: sticky snapshot لآخر مجموعة عملاء غير فارغة. عند refresh
+  /// إذا reg-table returned empty (glitch، permission، timeout عابر)،
+  /// نعرض آخر لقطة معروفة بدل ما نُخفي القسم كلياً — يمنع "الوميض" الذي
+  /// كان يجعل المستخدم يشوف الأجهزة تختفي وترجع كل refresh cycle.
+  List<MikrotikWirelessClient> _stickyClients = const [];
   // 8s cadence (بدل 15s) — user requested أسرع تحديث. Progressive rendering
   // يعطي partial في 500ms، لكن refresh cycle نفسه صار أسرع.
   static const _refreshInterval = Duration(seconds: 8);
@@ -188,8 +194,19 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         if (_history.length > _maxHistory) _history.removeAt(0);
       }
 
+      // 2026-08-20: حدّث sticky snapshot فقط لو رجعت clients فعلاً. لو
+      // reg-table فارغ (glitch عابر)، الـUI يبقى يعرض آخر لقطة معروفة
+      // بدل ما القسم يختفي. الحالة الوحيدة الي نصفّر فيها: interfaces
+      // نفسها اختفت (الجهاز ما عاد AP).
+      final freshClients = stats.wirelessClients;
+      final noWirelessIfaces = stats.wirelessInterfaces.isEmpty;
+      final nextSticky = noWirelessIfaces
+          ? const <MikrotikWirelessClient>[]
+          : (freshClients.isNotEmpty ? freshClients : _stickyClients);
+
       setState(() {
         _stats = stats;
+        _stickyClients = nextSticky;
         _loading = false;
         _error = null;
         _lastFetch = now;
@@ -321,7 +338,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           ]),
         ),
       ],
-      if (s.wirelessClients.isNotEmpty) ...[
+      // 2026-08-20: نستعمل _stickyClients (آخر لقطة معروفة) بدل s.wirelessClients
+      // كي القسم لا يختفي عند refresh عابر فارغ.
+      if (_stickyClients.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         ExpandableSection(
           key: PageStorageKey('mikrotik-${widget.device.id}-clients'),
@@ -329,10 +348,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           header: Row(children: [
             Icon(LucideIcons.users, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
-            Text('العملاء المتّصلون (${s.wirelessClients.length})',
+            Text('العملاء المتّصلون (${_stickyClients.length})',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
           ]),
-          content: RepaintBoundary(child: _clientsContent(s.wirelessClients)),
+          content: RepaintBoundary(child: _clientsContent(_stickyClients)),
         ),
       ],
     ];

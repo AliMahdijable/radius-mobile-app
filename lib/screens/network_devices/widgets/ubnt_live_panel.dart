@@ -48,6 +48,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   /// مرّة واحدة فقط عبر lifecycle الـpanel (بدل كل fetch بعد الاكتشاف).
   bool _af60Notified = false;
 
+  /// 2026-08-20: sticky snapshot لآخر stations معروفة (مثل Mikrotik).
+  /// يمنع اختفاء "قسم العملاء" عند refresh عابر يرجع wstalist فارغ
+  /// (permission glitch، SSH timeout، firmware ذُبذبة).
+  List<UbntStation> _stickyStations = const [];
+
   static const _refreshInterval = Duration(seconds: 15);
 
   @override
@@ -150,6 +155,16 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         if (_history.length > _maxHistory) _history.removeAt(0);
       }
 
+      // 2026-08-20: sticky stations — keep last known non-empty snapshot
+      // إذا wstalist رجع فارغاً عابراً (permission، SSH glitch)، UI يبقى
+      // يعرض آخر عملاء بدل ما القسم يختفي. صفّرها فقط لو wireless غاب
+      // كلياً (الجهاز ما عاد AP).
+      final freshStations = stats.stations;
+      final noWireless = stats.wireless == null;
+      _stickyStations = noWireless
+          ? const <UbntStation>[]
+          : (freshStations.isNotEmpty ? freshStations : _stickyStations);
+
       setState(() {
         _stats = stats;
         _loading = false;
@@ -239,8 +254,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     final subtitle = isAp
         ? 'يخدم عدة عملاء — PtMP'
         : 'اتصال مباشر مع peer واحد';
-    final count = isAp && _stats?.stations != null
-        ? '${_stats!.stations.length} عميل'
+    // 2026-08-20: نستعمل _stickyStations لعرض العدد كي ما يتذبذب عند refresh عابر
+    final count = isAp && _stickyStations.isNotEmpty
+        ? '${_stickyStations.length} عميل'
         : null;
     return Row(children: [
       Container(
@@ -317,7 +333,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         content: _wirelessDetails(s.wireless!),
       ),
     ];
-    final stationsSection = s.stations.isEmpty ? null : [
+    // 2026-08-20: نستعمل _stickyStations بدل s.stations كي القسم لا يختفي
+    // عند refresh عابر يرجع wstalist فارغاً.
+    final stationsSection = _stickyStations.isEmpty ? null : [
       const SizedBox(height: Sp.md),
       ExpandableSection(
         key: PageStorageKey('ubnt-$deviceId-stations'),
@@ -327,17 +345,17 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 6),
           Text(
             isAp
-                ? 'العملاء المتّصلون (${s.stations.length})'
+                ? 'العملاء المتّصلون (${_stickyStations.length})'
                 : 'الطرف الآخر (peer)',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi),
           ),
         ]),
         content: Column(children: [
-          for (final st in s.stations.take(20)) _stationRow(st),
-          if (s.stations.length > 20)
+          for (final st in _stickyStations.take(20)) _stationRow(st),
+          if (_stickyStations.length > 20)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('+ ${s.stations.length - 20} عميل آخر',
+              child: Text('+ ${_stickyStations.length - 20} عميل آخر',
                   style: TextStyle(fontSize: 10, color: AppColors.textLow)),
             ),
         ]),
