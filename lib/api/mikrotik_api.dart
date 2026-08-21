@@ -260,21 +260,36 @@ class MikrotikApi {
           });
         }
       } catch (_) { /* عادي على RouterOS 6 */ }
-      // Clients — نجرّب من كل الحزم المتاحة
-      if (wirelessRows.isNotEmpty) {
-        try {
-          final regs = await client.query(['/interface/wireless/registration-table/print']);
-          wirelessClients.addAll(regs);
-        } catch (_) {}
-        try {
-          final regs = await client.query(['/interface/w60g/station/print']);
-          wirelessClients.addAll(regs);
-        } catch (_) {}
-        try {
-          final regs = await client.query(['/interface/wifi/registration-table/print']);
-          wirelessClients.addAll(regs);
-        } catch (_) {}
-      }
+      // Clients — نجرّب من كل الحزم المتاحة. 2026-08-20: أزلنا gate
+      // `wirelessRows.isNotEmpty` — بعض الأجهزة (خاصّة RouterOS 7 wifi و
+      // CAPsMAN centralized) قد ترجع reg-table حتى لو /interface/wireless
+      // /print فشل أو غير مسموح. الفحوصات المستقلّة تحمي من overhead.
+      try {
+        final regs = await client.query(['/interface/wireless/registration-table/print']);
+        wirelessClients.addAll(regs);
+      } catch (_) {}
+      try {
+        final regs = await client.query(['/interface/w60g/station/print']);
+        wirelessClients.addAll(regs);
+      } catch (_) {}
+      try {
+        final regs = await client.query(['/interface/wifi/registration-table/print']);
+        wirelessClients.addAll(regs);
+      } catch (_) {}
+      // RouterOS 7 wifiwave2 (7.1-7.6 legacy)
+      try {
+        final regs = await client.query(['/interface/wifiwave2/registration-table/print']);
+        wirelessClients.addAll(regs);
+      } catch (_) {}
+      // CAPsMAN centralized management (v1 + v2)
+      try {
+        final regs = await client.query(['/caps-man/registration-table/print']);
+        wirelessClients.addAll(regs);
+      } catch (_) {}
+      try {
+        final regs = await client.query(['/interface/wifi/capsman/registration-table/print']);
+        wirelessClients.addAll(regs);
+      } catch (_) {}
 
       // hostname enrichment: DHCP lease + access-list + ARP
       final Map<String, ({String? hostname, String? ip})> dhcpMap = {};
@@ -604,14 +619,15 @@ class MikrotikWirelessClient {
     // كـidentity للـsector/client. أولويّة عالية للعرض.
     final radioName = _nonEmpty(j['radio-name']);
     return MikrotikWirelessClient(
-      mac: j['mac-address'] ?? '',
+      // RouterOS 7 wifi package أحياناً يستعمل `mac` بدل `mac-address`.
+      mac: j['mac-address'] ?? j['mac'] ?? '',
       iface: j['interface'] ?? '',
-      // RX = signal-strength (نستقبل من العميل)
+      // RX signal — wireless: `signal-strength`، wifi7+: `signal`.
       signalStrength: _parseSignal(j['signal-strength'] ?? j['signal']),
-      // TX = tx-signal-strength (العميل يستقبل منّا) — يظهر في WinBox
-      // كنصف "Tx/Rx Signal Strength" الأيسر
-      txSignalStrength: _parseSignal(j['tx-signal-strength']),
-      signalToNoise: _iOrZero(j['signal-to-noise']),
+      // TX signal — wireless: `tx-signal-strength`، wifi7+: `tx-signal`.
+      txSignalStrength: _parseSignal(j['tx-signal-strength'] ?? j['tx-signal']),
+      // SNR — wireless: `signal-to-noise`، wifi7+: `snr` أحياناً.
+      signalToNoise: _iOrZero(j['signal-to-noise'] ?? j['snr']),
       txCcq: _iOrZero(j['tx-ccq']),
       rxCcq: _iOrZero(j['rx-ccq']),
       txRate: _parseRate(j['tx-rate']),
