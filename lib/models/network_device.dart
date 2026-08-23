@@ -142,6 +142,7 @@ class NetworkDeviceLabels {
     'ubnt': 'Ubiquiti',
     'mimosa': 'Mimosa',
     'cisco': 'Cisco',
+    'ruijie': 'Ruijie / Reyee',
     'roji': 'Roji',
     'other': 'آخر',
   };

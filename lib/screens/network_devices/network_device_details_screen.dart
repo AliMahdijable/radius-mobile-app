@@ -20,6 +20,7 @@ import 'widgets/brand_badge.dart';
 import 'widgets/airfiber60_live_panel.dart';
 import 'widgets/mikrotik_live_panel.dart';
 import 'widgets/mimosa_live_panel.dart';
+import 'widgets/ruijie_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
@@ -368,8 +369,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 MimosaLivePanel(device: _d)
               else
                 _mimosaHint(),
+            ] else if (_d.brand == 'ruijie') ...[
+              const SizedBox(height: Sp.md),
+              if (_d.protocol == 'snmp' && _d.hasCredentials)
+                RuijieLivePanel(device: _d)
+              else
+                _ruijieHint(),
             ],
-          ] else if ({'mikrotik','ubnt','mimosa'}.contains(_d.brand)) ...[
+          ] else if ({'mikrotik','ubnt','mimosa','ruijie'}.contains(_d.brand)) ...[
             const SizedBox(height: Sp.md),
             _noMonitorPermHint(),
           ],
@@ -917,6 +924,53 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
             Text('مراقبة Mimosa عبر SNMP',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+          ]),
+        ),
+        IconButton(
+          icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
+          onPressed: _edit,
+        ),
+      ]),
+    );
+  }
+}
+
+extension _RuijieHint on _NetworkDeviceDetailsScreenState {
+  Widget _ruijieHint() {
+    final needsSnmp = _d.protocol != 'snmp';
+    final needsCreds = _d.protocol == 'snmp' && !_d.hasCredentials;
+    final msg = needsSnmp
+        ? 'اختر بروتوكول SNMP + أدخل الـcommunity string (في حقل كلمة المرور).\n'
+          'Ruijie/Reyee: فعّل SNMP من web UI (Advanced → Basics → SNMP) وأنشئ Read Community.'
+        : (needsCreds ? 'أدخل SNMP community string. '
+          'أنشئه من Reyee web UI: Advanced → Basics → SNMP → أضف Community مع صلاحية Read.' : '');
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFF5B4CDB).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF5B4CDB).withValues(alpha: 0.25)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF5B4CDB).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Center(
+            child: Text('R',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
+                    color: Color(0xFF5B4CDB))),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('مراقبة Ruijie / Reyee عبر SNMP',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
             const SizedBox(height: 4),
             Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
           ]),

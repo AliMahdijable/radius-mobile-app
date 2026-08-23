@@ -300,6 +300,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       'mikrotik' => 'router',
       'ubnt'     => 'link',
       'mimosa'   => 'link',
+      'ruijie'   => 'ap',
       _          => 'other',
     };
   }
@@ -577,6 +578,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         'mikrotik' => const Color(0xFF2563EB),
         'ubnt'     => const Color(0xFF0891B2),
         'mimosa'   => const Color(0xFF7C3AED),
+        'ruijie'   => const Color(0xFF5B4CDB),
         _          => AppColors.textMid,
       };
 
@@ -584,6 +586,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         'mikrotik' => LucideIcons.router,
         'ubnt'     => LucideIcons.satellite,
         'mimosa'   => LucideIcons.radioTower,
+        'ruijie'   => LucideIcons.wifi,
         _          => LucideIcons.circuitBoard,
       };
 
