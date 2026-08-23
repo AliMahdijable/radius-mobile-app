@@ -34,7 +34,6 @@ class BrandBadge extends StatelessWidget {
     'mimosa':   (color: Color(0xFFEA580C), accent: Color(0xFFF97316)),
     'cisco':    (color: Color(0xFF049FD9), accent: Color(0xFF00BCEB)),
     'ruijie':   (color: Color(0xFF5B4CDB), accent: Color(0xFF7B6EE8)),
-    'roji':     (color: Color(0xFF1F7A3D), accent: Color(0xFF34C759)),
     'other':    (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
   };
 
@@ -94,9 +93,6 @@ class _BrandGlyphPainter extends CustomPainter {
         _paintCisco(canvas, size);
         break;
       case 'ruijie':
-        _paintLetter(canvas, size, 'R');
-        break;
-      case 'roji':
         _paintLetter(canvas, size, 'R');
         break;
       default:

@@ -143,7 +143,6 @@ class NetworkDeviceLabels {
     'mimosa': 'Mimosa',
     'cisco': 'Cisco',
     'ruijie': 'Ruijie / Reyee',
-    'roji': 'Roji',
     'other': 'آخر',
   };
 
