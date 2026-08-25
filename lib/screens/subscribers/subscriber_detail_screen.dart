@@ -102,17 +102,15 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // فما تنطلق initState ثانية.
     AppResumedSignal.tick.addListener(_onDataChanged);
     // 2026-08-18: جلب password (non-blocking) — لعرضه في هيرو الكارت مع
-    // زرّ copy. مقفّل بـsubscribers.view_credentials أو subscribers.edit.
+    // زرّ copy.
+    // 2026-08-25: أُزيلت صلاحيّة الحجب — الباسورد يظهر لكل موظّف مصادَق
+    // (بلا اشتراط subscribers.view_credentials أو subscribers.edit).
+    // السبب: قفل التعديل كان يشلّ إمكان مساعدة المشترك في تسجيل الدخول،
+    // وهذه خدمة أساسيّة يحتاجها كل موظّف داعم.
     _loadPassword();
   }
 
   Future<void> _loadPassword() async {
-    if (!Perms.hasAny(const [
-      'subscribers.view_credentials',
-      'subscribers.edit',
-    ])) {
-      return;
-    }
     final idx = sub.idx;
     if (idx == null) return;
     final pass = await SubscribersApi.fetchPassword(idx.toString());
@@ -1659,8 +1657,8 @@ class _SubscriberHero extends StatelessWidget {
           ),
           // 2026-08-18: صفّ الباسورد — copy مباشر بدون فتح شاشة التعديل.
           // password يُحمَّل asynchronously من /api/v2/subscribers/:idx/password
-          // (SAS4 يحجبه في list endpoint). null = لسّه قيد التحميل أو
-          // موظّف بدون الصلاحيّة → الصفّ مخفي.
+          // (SAS4 يحجبه في list endpoint). null = لسّه قيد التحميل →
+          // الصفّ مخفي مؤقّتاً ثم يظهر عند وصول الاستجابة.
           if ((password ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
