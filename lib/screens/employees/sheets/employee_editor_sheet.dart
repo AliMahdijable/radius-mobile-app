@@ -163,7 +163,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   }
 
   void _snack(String msg, {bool warn = false}) {
-    showSheetSnack(context, msg, isError: true);
+    // 2026-08-25 (bug fix): كان isError مُثبَّت true دائماً حتى للنجاح
+    // ("تم حفظ التعديلات" كان يظهر بأحمر). الآن يحترم warn.
+    showSheetSnack(context, msg, isError: warn);
   }
 
   @override

@@ -266,7 +266,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   _textField(_ipCtrl, 'عنوان IP *',
                       hint: '192.168.1.1',
                       icon: LucideIcons.globe,
-                      keyboardType: TextInputType.number,
+                      // 2026-08-25: numberWithOptions(decimal:true) يُظهر نقطة
+                      // على iOS numeric keypad — TextInputType.number لا يُظهرها
+                      // (يظهر فقط 0-9 كأنّه رقم تلفون).
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: false),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) return 'مطلوب';
                         if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(v.trim())) {
