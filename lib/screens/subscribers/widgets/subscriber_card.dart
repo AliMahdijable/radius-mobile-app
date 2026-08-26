@@ -213,12 +213,14 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 1),
+              // 2026-08-26: dropped vertical bar separator + tightened
+              // gaps. status dot 6dp → 5dp، middot `·` بدل الـborder-bar
+              // الرمادي كفاصل بين "متصل" و username. أنظف بصرياً.
               Row(
                 children: [
-                  // Status dot
                   Container(
-                    width: 6,
-                    height: 6,
+                    width: 5,
+                    height: 5,
                     decoration: BoxDecoration(
                       color: statusColor,
                       shape: BoxShape.circle,
@@ -228,18 +230,19 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                   Text(
                     statusLabel,
                     style: AppType.muted(color: statusColor).copyWith(
-                      fontSize: 11, // Caption tier (was 10)
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   if (sub.fullName != sub.username) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      width: 2,
-                      height: 10,
-                      color: AppColors.border,
+                    Text(
+                      '  ·  ',
+                      style: TextStyle(
+                        color: AppColors.textLow,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         sub.username,
@@ -341,6 +344,13 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 2026-08-26: الدين/الرصيد يظهر أولاً في قسم المالية — أولويّة
+        // بصريّة عالية. كان تحت الأزرار فيضيع الأدمن لا يشوفه في مسح
+        // سريع للقائمة. الآن أول شي يشوف بعد divider.
+        if (sub.balanceAmount != 0) ...[
+          _BalanceChip(sub: sub),
+          const SizedBox(height: 5),
+        ],
         // Live session row — IP + duration + DL/UL + device vendor.
         // يظهر فقط للمشتركين المتصلين حقيقياً (بيانات الجلسة اللحظية
         // مو متوفّرة لغيرهم).
@@ -406,13 +416,12 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
             ],
           ),
         ],
-        if (_hasDeviceInfo &&
-            (sub.balanceAmount != 0 || lastPayment != null))
+        // BalanceChip انتقل لأعلى القسم (2026-08-26). يبقى last-payment
+        // في الأسفل فقط.
+        if (lastPayment != null) ...[
           const SizedBox(height: 4),
-        if (sub.balanceAmount != 0) _BalanceChip(sub: sub),
-        if (sub.balanceAmount != 0 && lastPayment != null)
-          const SizedBox(height: 4),
-        if (lastPayment != null) _LastPaymentLine(payment: lastPayment!),
+          _LastPaymentLine(payment: lastPayment!),
+        ],
       ],
     );
   }
@@ -645,10 +654,11 @@ class _ExpiryBadge extends StatelessWidget {
   }
 }
 
-/// Package name with an inline price chip on the trailing side
-/// (only rendered when the catalogue gave us a price > 0). Mirrors
-/// v1 subscriber_card.dart's two-chip pattern — package chip in brand
-/// teal, price chip in warning amber — just in v2's tighter inline form.
+/// Package name + inline price + optional discount.
+///
+/// 2026-08-26 redesign: dropped the amber/teal bordered chips. سطر واحد
+/// بسيط: `📦 Package · IQD price · -Xk`. الأدمن يقرأ السطر مرة واحدة
+/// بلا 3 حواف ملوّنة تتنافس مع الأيقونات المجاورة.
 class _PackageWithPrice extends StatelessWidget {
   const _PackageWithPrice({
     required this.name,
@@ -658,75 +668,47 @@ class _PackageWithPrice extends StatelessWidget {
 
   final String name;
   final num? price;
-  /// Active discount on the subscriber's package (set via the quick
-  /// discount sheet). When >0 we render a small teal '-Xk' chip next
-  /// to the amber price chip so the admin sees at-a-glance that the
-  /// row has a discount applied without opening the detail screen.
   final double? discount;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final hasDiscount = (discount ?? 0) > 0;
+    final hasPrice = price != null && price! > 0;
+    final buf = StringBuffer(name);
+    if (hasPrice) {
+      buf.write(' · IQD ${formatIQD(price!.round())}');
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Icon(LucideIcons.package, color: AppColors.textMid, size: 11),
+        const SizedBox(width: 4),
         Flexible(
-          child: _MetaRow(
-            icon: LucideIcons.package,
-            text: name,
-            color: AppColors.textMid,
+          child: Text(
+            buf.toString(),
+            style: AppType.muted(color: AppColors.textMid).copyWith(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (price != null) ...[
-          const SizedBox(width: 5),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE08F2D).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(R.sm),
-              border: Border.all(
-                color: const Color(0xFFE08F2D).withValues(alpha: 0.25),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.tag,
-                    size: 9, color: Color(0xFFE08F2D)),
-                const SizedBox(width: 2),
-                Text(
-                  formatIQD(price!.round()),
-                  style: AppType.muted(color: const Color(0xFFE08F2D))
-                      .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-        ],
         if (hasDiscount) ...[
-          const SizedBox(width: 4),
+          const SizedBox(width: 5),
+          // شارة الخصم فقط — النقطة الوحيدة الي تستحق تمييز بصري
+          // (نادراً تحصل، ومهمّة لمّا تحصل).
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
-              color: const Color(0xFF14B8A6).withValues(alpha: 0.1),
+              color: const Color(0xFF14B8A6).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(R.sm),
-              border: Border.all(
-                color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
-              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.percent,
-                    size: 9, color: Color(0xFF14B8A6)),
-                const SizedBox(width: 2),
-                Text(
-                  '-${formatIQD(discount!.round())}',
-                  style: AppType.muted(color: const Color(0xFF14B8A6))
-                      .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-                ),
-              ],
+            child: Text(
+              '−${formatIQD(discount!.round())}',
+              style: AppType.muted(color: const Color(0xFF0F766E))
+                  .copyWith(fontSize: 10, fontWeight: FontWeight.w800),
             ),
           ),
         ],
