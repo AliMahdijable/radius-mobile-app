@@ -897,7 +897,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                   color: Color(0xFF25D366),
                   fontSize: 10.5,
                   fontWeight: FontWeight.w800,
-                  fontFamily: 'monospace',
+                  fontFamily: 'Cairo',
                 ),
               ),
             ],

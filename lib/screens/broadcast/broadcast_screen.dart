@@ -57,6 +57,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   String? _imageName;
   final ImagePicker _picker = ImagePicker();
 
+  /// 2026-08-26 (tg parity): قناة الإرسال المفروضة على البث الجماعي.
+  /// 'auto' = يحترم binding المشترك، 'whatsapp' = يجبر واتساب،
+  /// 'telegram' = يفلتر المربوطين بتلغرام فقط (الباقي يُتخطى).
+  String _forceChannel = 'auto';
+
   @override
   void initState() {
     super.initState();
@@ -259,6 +264,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       imageBytes: _imageBytes,
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
+      forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
     );
     if (!mounted) return;
     setState(() => _sending = false);
@@ -437,6 +443,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                           _buildSelectionCard(),
                         ],
                         const SizedBox(height: Sp.md),
+                        _buildChannelCard(),
+                        const SizedBox(height: Sp.md),
                         _buildMessageCard(),
                       ],
                     ),
@@ -445,6 +453,110 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 _buildActionBar(),
               ],
             ),
+    );
+  }
+
+  Widget _buildChannelCard() {
+    final options = [
+      (
+        value: 'auto',
+        label: 'تلقائي',
+        icon: LucideIcons.split,
+        color: AppColors.brand,
+        hint: 'يحترم ربط المشترك (تلغرام لو مربوط، وإلا واتساب)',
+      ),
+      (
+        value: 'whatsapp',
+        label: 'واتساب فقط',
+        icon: LucideIcons.messageCircle,
+        color: const Color(0xFF25D366),
+        hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
+      ),
+      (
+        value: 'telegram',
+        label: 'تلغرام فقط',
+        icon: LucideIcons.send,
+        color: const Color(0xFF229ED9),
+        hint: 'يجبر تلغرام — يتخطّى غير المربوطين',
+      ),
+    ];
+    return _sectionCard(
+      icon: LucideIcons.split,
+      title: 'قناة الإرسال',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              for (int i = 0; i < options.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: _channelChoice(
+                    label: options[i].label,
+                    icon: options[i].icon,
+                    color: options[i].color,
+                    selected: _forceChannel == options[i].value,
+                    onTap: () =>
+                        setState(() => _forceChannel = options[i].value),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            options.firstWhere((o) => o.value == _forceChannel).hint,
+            style: AppType.muted().copyWith(fontSize: 10.5, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _channelChoice({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(R.sm),
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.14)
+              : AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(
+            color: selected ? color : AppColors.border,
+            width: selected ? 1 : 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: selected ? color : AppColors.textMid),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? color : AppColors.textMid,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1006,8 +1118,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               Text(
                 '${_msg.text.length} / 2000',
                 style: AppType.muted().copyWith(
-                    fontSize: 10,
-                    fontFamily: 'monospace'),
+                  fontSize: 10,
+                  fontFamily: 'Cairo',
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),

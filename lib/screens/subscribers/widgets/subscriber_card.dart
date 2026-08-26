@@ -28,6 +28,7 @@ class SubscriberCardV2 extends StatefulWidget {
     this.onDisconnect,
     this.onSendDebtReminder,
     this.collapsedAll = false,
+    this.hasTelegram = false,
   });
 
   final Subscriber sub;
@@ -53,6 +54,11 @@ class SubscriberCardV2 extends StatefulWidget {
   /// _expanded عند تغيّر القيمة فالكل ينطبق فوراً. الـchevron الفردي
   /// يبقى يعمل كـoverride بعد ذلك.
   final bool collapsedAll;
+
+  /// 2026-08-26 (tg parity): true = المشترك مربوط ببوت تلغرام الأدمن،
+  /// نعرض شارة صغيرة زرقاء بجنب اسمه — تنبيه بصري أن رسائله ستذهب عبر
+  /// تلغرام (auto routing في backend).
+  final bool hasTelegram;
 
   @override
   State<SubscriberCardV2> createState() => _SubscriberCardV2State();
@@ -234,6 +240,36 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (widget.hasTelegram) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF229ED9).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFF229ED9).withValues(alpha: 0.4),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(LucideIcons.send,
+                              size: 9, color: Color(0xFF229ED9)),
+                          SizedBox(width: 2),
+                          Text('TG',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF229ED9),
+                              )),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (sub.fullName != sub.username) ...[
                     Text(
                       '  ·  ',

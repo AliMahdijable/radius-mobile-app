@@ -165,6 +165,9 @@ class BroadcastApi {
     Uint8List? imageBytes,
     String? imageMime,
     String? imageFilename,
+    // 2026-08-26 (tg parity): 'auto' | 'whatsapp' | 'telegram'.
+    // 'auto' = يحترم ربط المشترك، 'telegram' = يفلتر المربوطين فقط، 'whatsapp' = يجبر واتساب.
+    String? forceChannel,
   }) async {
     try {
       final body = <String, dynamic>{
@@ -173,6 +176,9 @@ class BroadcastApi {
       };
       if (targetUsernames != null && targetUsernames.isNotEmpty) {
         body['targetUsernames'] = targetUsernames;
+      }
+      if (forceChannel == 'whatsapp' || forceChannel == 'telegram') {
+        body['forceChannel'] = forceChannel;
       }
       if (imageBytes != null && imageBytes.isNotEmpty) {
         if (imageBytes.length > maxImageBytes) {

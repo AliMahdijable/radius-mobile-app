@@ -508,7 +508,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   _generatedLink!,
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
-                    fontFamily: 'monospace',
+                    fontFamily: 'Cairo',
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textHi,

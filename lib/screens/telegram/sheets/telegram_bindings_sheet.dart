@@ -197,13 +197,17 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                                 color: AppColors.textHi,
                               )),
                           const SizedBox(height: 2),
-                          Text('${_all.length} مشترك مربوط ببوت تلغرام',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textMid,
-                              )),
+                          Text(
+                            _searchCtrl.text.trim().isEmpty
+                                ? '${_all.length} مشترك مربوط ببوت تلغرام'
+                                : '${_filtered.length} من ${_all.length} مشترك مربوط ببوت تلغرام',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMid,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -275,13 +279,28 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                     ? const Center(child: CircularProgressIndicator())
                     : _all.isEmpty
                         ? _emptyState()
-                        : ListView.builder(
-                            controller: scrollCtrl,
-                            padding: const EdgeInsets.only(bottom: 24),
-                            itemCount: _filtered.length,
-                            itemBuilder: (_, i) =>
-                                _bindingTile(_filtered[i]),
-                          ),
+                        : _filtered.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Text(
+                                    'لا نتائج مطابقة للبحث',
+                                    style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 13,
+                                      color: AppColors.textMid,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: scrollCtrl,
+                                padding:
+                                    const EdgeInsets.only(bottom: 24),
+                                itemCount: _filtered.length,
+                                itemBuilder: (_, i) =>
+                                    _bindingTile(_filtered[i]),
+                              ),
               ),
             ],
           ),

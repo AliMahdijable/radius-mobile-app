@@ -52,6 +52,9 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
       _checking = false;
       _preview = p;
     });
+    if (p == null) {
+      _snack('تعذّر جلب المعاينة — تحقّق من الاتصال', error: true);
+    }
   }
 
   Future<void> _send() async {
@@ -216,7 +219,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (_preview != null)
+              if (_preview != null) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -248,6 +251,19 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     ],
                   ),
                 ),
+                if (_preview!.eligible == 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'لا يوجد مشتركون مربوطون — استعمل «ربط مشترك» أوّلاً',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11.5,
+                      color: AppColors.textMid,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -284,7 +300,9 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     child: SizedBox(
                       height: 46,
                       child: FilledButton.icon(
-                        onPressed: (_sending || _preview == null)
+                        onPressed: (_sending ||
+                                _preview == null ||
+                                _preview!.eligible == 0)
                             ? null
                             : _send,
                         icon: _sending

@@ -8,11 +8,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
+import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
+import '../../services/auth_storage.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
@@ -72,6 +74,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   List<Subscriber> _all = [];
   Map<String, Map<String, dynamic>> _lastPayments = {};
+
+  /// 2026-08-26 (tg parity): sas4Idx للمشتركين المربوطين ببوت تلغرام.
+  /// نُحمّلها مرّة مع _load ونحدّثها بصمت مع polling الـ5 ثواني. الكارت
+  /// يستقبلها كـbool `hasTelegram` لعرض شارة صغيرة بجنب اسم المشترك.
+  Set<String> _telegramBoundIdx = const {};
   bool _loading = true;
   bool _refreshing = false;
   /// مطلب المستخدم 2026-07-12: تحديث صامت كل 5 ثواني حتى الحالة
@@ -318,16 +325,23 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// loadSubscribers → loadOnlineUsers → loadLastPayments sequence but
   /// runs them concurrently to cut wall time.
   Future<void> _fetchAndMerge() async {
+    final adminId = await AuthStorage.readAdminId();
     final results = await Future.wait([
       SubscribersApi.loadAll(),
       SubscribersApi.loadOnline(),
       SubscribersApi.loadLastPayments(),
       SubscribersApi.loadPackages(),
+      if (adminId != null)
+        TelegramApi.listBindings(adminId)
+      else
+        Future.value(const <TelegramBinding>[]),
     ]);
     final list = results[0] as List<Subscriber>?;
     final online = results[1] as Map<String, OnlineSessionInfo>?;
     final payments = results[2] as Map<String, Map<String, dynamic>>?;
     final packages = results[3] as Map<String, PackageInfo>?;
+    final bindings = results[4] as List<TelegramBinding>? ?? const [];
+    _telegramBoundIdx = bindings.map((b) => b.sas4Idx).toSet();
 
     if (list == null) return;
     final onlineMap = online ?? const <String, OnlineSessionInfo>{};
@@ -1142,6 +1156,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 sub: s,
                                 selected: isSelected,
                                 lastPayment: _lastPayments[s.username],
+                                hasTelegram: s.idx != null &&
+                                    _telegramBoundIdx
+                                        .contains(s.idx.toString()),
                                 // مطلب 2026-07-12: showLiveSession
                                 // مفتوح لكل التابات — الكرت داخلياً
                                 // يقرّر: يعرض LiveSessionRow لو

@@ -615,7 +615,7 @@ class _StepsCard extends StatelessWidget {
                     ),
                     child: Text(code,
                         style: TextStyle(
-                          fontFamily: 'monospace',
+                          fontFamily: 'Cairo',
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textHi,
@@ -757,16 +757,17 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                     controller: _ctrl,
                     obscureText: false,
                     style: const TextStyle(
-                      fontFamily: 'monospace',
+                      fontFamily: 'Cairo',
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
+                      fontFeatures: [FontFeature.tabularFigures()],
                     ),
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       isCollapsed: true,
                       hintText: '123456789:AAE...',
                       hintStyle: TextStyle(
-                        fontFamily: 'monospace',
+                        fontFamily: 'Cairo',
                         fontSize: 12,
                         color: AppColors.textLow,
                       ),
