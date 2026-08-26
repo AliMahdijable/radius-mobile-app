@@ -572,6 +572,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                     ),
                   ],
                   const Spacer(),
+                  _channelBadge(m),
+                  const SizedBox(width: 4),
                   Icon(LucideIcons.chevronLeft,
                       size: 14, color: AppColors.textLow),
                 ],
@@ -656,6 +658,29 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
     if (diff.inDays < 7) return 'قبل ${diff.inDays}ي';
     String two(int n) => n.toString().padLeft(2, '0');
     return '${dt.year}/${two(dt.month)}/${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+  }
+
+  // 2026-08-26: شارة القناة (TG/WA) بجنب كل سجل — backend يعطي channel
+  // من whatsapp_send_logs.channel (فعليّ) أو whatsapp_message_queue.channel
+  // (قد يكون auto لسّه ما اتّحدد).
+  Widget _channelBadge(MessageLog m) {
+    final ch = (m.channel ?? '').toLowerCase();
+    if (ch != 'telegram' && ch != 'whatsapp') {
+      return const SizedBox.shrink();
+    }
+    final isTg = ch == 'telegram';
+    final color =
+        isTg ? const Color(0xFF229ED9) : const Color(0xFF25D366);
+    final icon = isTg ? LucideIcons.send : LucideIcons.messageCircle;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.5),
+      ),
+      child: Icon(icon, size: 10, color: color),
+    );
   }
 }
 

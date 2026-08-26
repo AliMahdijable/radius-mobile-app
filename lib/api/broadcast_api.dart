@@ -47,6 +47,7 @@ class MessageLog {
     this.messageType,
     this.messagePreview,
     this.source,
+    this.channel,
   });
 
   final int id;
@@ -63,6 +64,10 @@ class MessageLog {
 
   /// queue | send_logs
   final String? source;
+
+  /// القناة الفعليّة/المطلوبة: auto | whatsapp | telegram.
+  /// send_logs يعطي القناة اللي مرّت فعلاً، queue قد يكون 'auto' لسّه ما تحدّدت.
+  final String? channel;
 
   bool get isSent => status == 'sent';
   bool get isPending => status == 'pending' || status == 'processing';
@@ -94,6 +99,7 @@ class MessageLog {
       messageType: j['message_type']?.toString(),
       messagePreview: j['message_preview']?.toString(),
       source: j['source']?.toString(),
+      channel: j['channel']?.toString(),
     );
   }
 }
