@@ -341,6 +341,32 @@ class EmployeesApi {
     }
   }
 
+  /// GET /api/v2/employees/:id/password — كلمة سرّ الموظّف الحاليّة.
+  /// Backend يفكّ التشفير AES من `employees.password_encrypted`.
+  /// الحقل يُملأ عند create/update. موظّف قديم (قبل feature) → 404
+  /// مع نصيحة "عدّل كلمة سرّه مرّة".
+  static Future<({String? password, String? message})>
+      fetchPassword(int id) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/employees/$id/password',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (password: null, message: body['message']?.toString());
+      }
+      final data = body['data'] as Map?;
+      return (password: data?['password']?.toString(), message: null);
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response?.data as Map)['message']?.toString()
+          : null;
+      return (password: null, message: msg ?? 'تعذّر جلب كلمة السر');
+    } catch (_) {
+      return (password: null, message: 'تعذّر جلب كلمة السر');
+    }
+  }
+
   static Future<({bool ok, String? message})> delete(int id) async {
     try {
       final r = await ApiClient.dio

@@ -571,6 +571,7 @@
     "action_other_debts": "ديون أخرى",
     "action_movements": "حركات",
     "action_send_info": "إرسال معلومات",
+    "action_show_password": "كلمة السرّ",
     "action_delete": "حذف",
     "chip_balance": "رصيد {amount}",
     "chip_debt": "دين {amount}",

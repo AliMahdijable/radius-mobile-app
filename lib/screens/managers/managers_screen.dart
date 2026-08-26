@@ -1,5 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'dart:ui' show FontFeature;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/manager_debts_api.dart';
@@ -189,9 +191,114 @@ class _ManagersScreenState extends State<ManagersScreen> {
         );
       case ManagerAction.sendInfo:
         await showSendInfoSheet(context, m);
+      case ManagerAction.showPassword:
+        await _showManagerPassword(m);
       case ManagerAction.delete:
         await _confirmDelete(m);
     }
+  }
+
+  /// 2026-08-26: عرض كلمة سرّ المدير الفرعي.
+  /// backend يحضرها من whatsapp_sessions.admin_password_encrypted.
+  Future<void> _showManagerPassword(Manager m) async {
+    final tid = _snack('جارٍ الجلب...', persistent: true);
+    final res = await ManagersApi.fetchPassword(m.id);
+    tid?.close();
+    if (!mounted) return;
+    if (res.password == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res.message ?? 'تعذّر جلب كلمة السر'),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    await _showPasswordDialog(
+      title: m.username,
+      subtitle: 'كلمة سرّ المدير الفرعي',
+      password: res.password!,
+    );
+  }
+
+  ScaffoldFeatureController? _snack(String msg, {bool persistent = false}) {
+    if (!mounted) return null;
+    return ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      duration: persistent
+          ? const Duration(seconds: 10)
+          : const Duration(seconds: 3),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  Future<void> _showPasswordDialog({
+    required String title,
+    required String subtitle,
+    required String password,
+  }) async {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text(subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textMid,
+                )),
+          ],
+        ),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border, width: 0.5),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  password,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: password));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('تمّ النسخ'),
+                    backgroundColor: AppColors.brand,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                  ));
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmDelete(Manager m) async {

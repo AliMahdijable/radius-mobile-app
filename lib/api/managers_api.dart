@@ -254,6 +254,35 @@ class ManagersApi {
   // READ
   // ===========================================================
 
+  /// GET /api/v2/managers/:id/password — كلمة سرّ المدير الفرعي.
+  /// مصدرها whatsapp_sessions.admin_password_encrypted (تُخزَّن حين
+  /// المدير يسجّل دخول في النظام). Backend يفكّ التشفير AES.
+  ///
+  /// - null: تعذّر (لم يسجّل دخول / خطأ صلاحيّة / شبكة). الـUI يعرض
+  ///   رسالة السيرفر لو موجودة.
+  static Future<({String? password, String? message})>
+      fetchPassword(int id) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/managers/$id/password',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (password: null, message: body['message']?.toString());
+      }
+      final data = body['data'] as Map?;
+      final p = data?['password']?.toString();
+      return (password: p, message: null);
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response?.data as Map)['message']?.toString()
+          : null;
+      return (password: null, message: msg ?? 'تعذّر جلب كلمة السر');
+    } catch (_) {
+      return (password: null, message: 'تعذّر جلب كلمة السر');
+    }
+  }
+
   /// GET /api/v2/managers/full — list with stats. The backend wraps
   /// SAS4's /index/manager and enriches each row with balance/debt/
   /// reward_points columns. The columns list is set on the server

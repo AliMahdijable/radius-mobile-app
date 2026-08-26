@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'dart:ui' show FontFeature;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/employees_api.dart';
@@ -106,6 +108,89 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     if (r.ok) _load();
   }
 
+  /// 2026-08-26: عرض كلمة سرّ الموظّف من `employees.password_encrypted`.
+  Future<void> _showEmployeePassword(Employee emp) async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('جارٍ الجلب...'),
+      duration: const Duration(seconds: 1),
+      behavior: SnackBarBehavior.floating,
+    ));
+    final res = await EmployeesApi.fetchPassword(emp.id);
+    if (!mounted) return;
+    if (res.password == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res.message ?? 'تعذّر جلب كلمة السر'),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emp.fullName?.isNotEmpty == true ? emp.fullName! : emp.username,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text('كلمة سرّ الموظّف',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textMid,
+                )),
+          ],
+        ),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border, width: 0.5),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  res.password!,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: res.password!));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('تمّ النسخ'),
+                    backgroundColor: AppColors.brand,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                  ));
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -155,6 +240,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                     : null,
                                 onDelete: Perms.has('employees.manage')
                                     ? () => _confirmDelete(e)
+                                    : null,
+                                onShowPassword: Perms.has('employees.manage')
+                                    ? () => _showEmployeePassword(e)
                                     : null,
                               ),
                               const SizedBox(height: 8),
@@ -274,6 +362,7 @@ class _EmployeeTile extends StatelessWidget {
     required this.emp,
     required this.onTap,
     this.onDelete,
+    this.onShowPassword,
   });
   final Employee emp;
   /// null لو الـactor ما عنده صلاحية التعديل — InkWell يصير inert
@@ -282,6 +371,8 @@ class _EmployeeTile extends StatelessWidget {
   /// null لو الـactor ما عنده صلاحية الحذف — يخفي زر الحذف بدل
   /// تعطيله.
   final VoidCallback? onDelete;
+  /// 2026-08-26: إظهار كلمة سرّ الموظّف الحاليّة (طلب المستخدم).
+  final VoidCallback? onShowPassword;
 
   @override
   Widget build(BuildContext context) {
@@ -361,6 +452,17 @@ class _EmployeeTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onShowPassword != null)
+                IconButton(
+                  icon: Icon(LucideIcons.keyRound,
+                      color: const Color(0xFF7C3AED), size: 16),
+                  onPressed: onShowPassword,
+                  tooltip: 'إظهار كلمة السر',
+                  splashRadius: 18,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
               if (onDelete != null)
                 IconButton(
                   icon: Icon(LucideIcons.trash2,

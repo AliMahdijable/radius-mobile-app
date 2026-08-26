@@ -571,6 +571,7 @@
     "action_other_debts": "Other debts",
     "action_movements": "History",
     "action_send_info": "Send info",
+    "action_show_password": "Password",
     "action_delete": "Delete",
     "chip_balance": "Balance {amount}",
     "chip_debt": "Debt {amount}",

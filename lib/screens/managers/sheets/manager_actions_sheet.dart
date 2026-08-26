@@ -25,6 +25,10 @@ enum ManagerAction {
   otherDebts('managers.action_other_debts', LucideIcons.receipt, Color(0xFF0EA5E9)),
   movements('managers.action_movements', LucideIcons.activity, Color(0xFF14B8A6)),
   sendInfo('managers.action_send_info', LucideIcons.smartphone, Color(0xFF25D366)),
+  // 2026-08-26: إظهار كلمة السرّ الحاليّة (طلب المستخدم).
+  // مصدرها whatsapp_sessions.admin_password_encrypted — الأدمن الفرعي
+  // يجب يسجّل دخول مرّة أولاً حتى تُخزَّن.
+  showPassword('managers.action_show_password', LucideIcons.keyRound, Color(0xFF7C3AED)),
   delete('managers.action_delete', LucideIcons.trash2, Color(0xFFDC2626));
 
   const ManagerAction(this.labelKey, this.icon, this.color);
@@ -81,6 +85,9 @@ class _ActionsSheet extends StatelessWidget {
       ManagerAction.movements,
       if (hasDebt && hasPhone && Perms.has('subscribers.send_whatsapp'))
         ManagerAction.sendInfo,
+      // كلمة السرّ متاحة لكل من عنده managers.edit — نفس صلاحيّة
+      // التعديل. الـbackend يفحصها كذلك.
+      if (Perms.has('managers.edit')) ManagerAction.showPassword,
       if (Perms.has('managers.delete')) ManagerAction.delete,
     ];
     return SafeArea(
