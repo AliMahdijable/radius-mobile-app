@@ -74,7 +74,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (!ok) {
-      showSheetSnack(context, 'تعذّر الحفظ', isError: false);
+      showSheetSnack(context, 'تعذّر الحفظ', isError: true);
       return;
     }
     // Invalidate any cached probe under the old IP AND the new IP so the
@@ -94,7 +94,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (!ok) {
-      showSheetSnack(context, 'تعذّر الحذف', isError: false);
+      showSheetSnack(context, 'تعذّر الحذف', isError: true);
       return;
     }
     if (_originalIp != null && _originalIp!.isNotEmpty) {

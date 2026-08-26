@@ -201,7 +201,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
 
   void _snack(String msg, {required bool isError}) {
     if (!mounted) return;
-    showSheetSnack(context, msg, isError: true);
+    showSheetSnack(context, msg, isError: isError);
   }
 
   @override
