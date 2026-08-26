@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../api/telegram_api.dart';
@@ -43,6 +44,9 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
   bool _generating = false;
   bool _sending = false;
   String? _err;
+  /// 2026-08-26: عرض QR — للمشتركين اللي بلا واتساب، الأدمن يعرض
+  /// الـQR على شاشته، المشترك يمسحه بجواله.
+  bool _showQr = false;
 
   @override
   void initState() {
@@ -132,6 +136,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       _generatedLink = null;
       _searchCtrl.clear();
       _err = null;
+      _showQr = false;
     });
   }
 
@@ -390,7 +395,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
         ),
       );
     }
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,14 +448,61 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('رابط الربط',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textLow,
-                      letterSpacing: 0.5,
-                    )),
+                Row(
+                  children: [
+                    Text('رابط الربط',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textLow,
+                          letterSpacing: 0.5,
+                        )),
+                    const Spacer(),
+                    // 2026-08-26: toggle QR — للمشتركين اللي بلا واتساب.
+                    InkWell(
+                      onTap: () => setState(() => _showQr = !_showQr),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _showQr
+                              ? const Color(0xFF229ED9)
+                                  .withValues(alpha: 0.14)
+                              : AppColors.surface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: _showQr
+                                ? const Color(0xFF229ED9)
+                                : AppColors.border,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.qrCode,
+                                size: 12,
+                                color: _showQr
+                                    ? const Color(0xFF229ED9)
+                                    : AppColors.textMid),
+                            const SizedBox(width: 4),
+                            Text(_showQr ? 'إخفاء QR' : 'عرض QR',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: _showQr
+                                      ? const Color(0xFF229ED9)
+                                      : AppColors.textMid,
+                                )),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 6),
                 SelectableText(
                   _generatedLink!,
@@ -465,6 +517,57 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
               ],
             ),
           ),
+          if (_showQr) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border, width: 0.5),
+              ),
+              child: Column(
+                children: [
+                  Center(
+                    child: QrImageView(
+                      data: _generatedLink!,
+                      version: QrVersions.auto,
+                      size: 220,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: Color(0xFF0F1419),
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: Color(0xFF0F1419),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.info,
+                          size: 12, color: AppColors.textMid),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          'اعرض الشاشة على المشترك — يفتحه بكاميرا هاتفه',
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textMid,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
