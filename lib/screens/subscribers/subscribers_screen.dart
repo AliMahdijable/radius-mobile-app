@@ -464,14 +464,27 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       });
       return;
     }
+    // 2026-08-26: ترتيب أبجدي حقيقي — case-insensitive + trim + normalize
+    // بديل قوي لـString.compareTo. للعربي: Unicode order = أبجدي طبيعي
+    // (ألف→ياء). للاتيني: نتجاهل حالة الأحرف (Ali و ali نفس الشيء).
+    // whitespace متعدّد يُقلَّص لحرف واحد قبل المقارنة.
+    int alphaCmp(String? a, String? b) {
+      final na = (a ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      final nb = (b ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      // فارغ يسقط لأسفل بغض النظر عن الاتجاه.
+      if (na.isEmpty && nb.isEmpty) return 0;
+      if (na.isEmpty) return 1;
+      if (nb.isEmpty) return -1;
+      return na.compareTo(nb);
+    }
     int cmp(Subscriber a, Subscriber b) {
       switch (_sortField) {
         case SortField.username:
-          return a.username.compareTo(b.username);
+          return alphaCmp(a.username, b.username);
         case SortField.firstname:
-          return a.fullName.compareTo(b.fullName);
+          return alphaCmp(a.fullName, b.fullName);
         case SortField.profileName:
-          return (a.profileName ?? '').compareTo(b.profileName ?? '');
+          return alphaCmp(a.profileName, b.profileName);
         case SortField.phone:
           return a.displayPhone.compareTo(b.displayPhone);
         case SortField.expiration:
@@ -493,7 +506,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         case SortField.notes:
           return a.balanceAmount.compareTo(b.balanceAmount);
         case SortField.parentUsername:
-          return (a.parentUsername ?? '').compareTo(b.parentUsername ?? '');
+          return alphaCmp(a.parentUsername, b.parentUsername);
         case SortField.sessionTime:
           // Null sessionTime sinks to the bottom regardless of asc/desc
           // so offline rows don't clutter the head of the online list.
