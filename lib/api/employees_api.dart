@@ -12,6 +12,8 @@ class Employee {
     this.phone,
     required this.isActive,
     required this.permissions,
+    this.scopeAdminId,
+    this.scopeAdminUsername,
   });
   final int id;
   final String username;
@@ -20,6 +22,12 @@ class Employee {
   final bool isActive;
   /// Permission key → enabled bool. Default false when absent.
   final Map<String, bool> permissions;
+  /// 2026-08-26: لو ≠ null، الموظّف مقيَّد بمدير فرعي محدَّد. يرى
+  /// بيانات هذا المدير فقط (subscribers/managers/expenses/...).
+  final String? scopeAdminId;
+  final String? scopeAdminUsername;
+
+  bool get isScoped => scopeAdminId != null && scopeAdminId!.isNotEmpty;
 
   /// Convenience for the list tile — drop unused / always-false.
   int get activePermsCount => permissions.values.where((v) => v).length;
@@ -40,6 +48,8 @@ class Employee {
       phone: j['phone']?.toString(),
       isActive: j['is_active'] == true || j['is_active'] == 1,
       permissions: m,
+      scopeAdminId: j['scope_admin_id']?.toString(),
+      scopeAdminUsername: j['scope_admin_username']?.toString(),
     );
   }
 }
@@ -270,6 +280,9 @@ class EmployeesApi {
     String? phone,
     bool isActive = true,
     required Map<String, bool> permissions,
+    /// 2026-08-26: يقيّد الموظّف بمدير فرعي (يشوف بياناته فقط).
+    /// null = يشاهد بيانات الأب كاملة.
+    String? scopeAdminId,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -281,6 +294,8 @@ class EmployeesApi {
           if (phone != null) 'phone': phone,
           'is_active': isActive,
           'permissions': permissions,
+          if (scopeAdminId != null && scopeAdminId.isNotEmpty)
+            'scope_admin_id': scopeAdminId,
         },
       );
       final body = r.data ?? const {};
@@ -316,6 +331,11 @@ class EmployeesApi {
     String? password,
     bool? isActive,
     Map<String, bool>? permissions,
+    /// 2026-08-26: scope الحقل الثلاثيّ:
+    ///   - null (parameter): لا تغيير (default)
+    ///   - '' (empty string): مسح القيد → يشاهد كل شجرة الأب
+    ///   - non-empty: يقيّد بمدير فرعي محدَّد
+    String? scopeAdminId,
   }) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
@@ -326,6 +346,9 @@ class EmployeesApi {
           if (password != null && password.isNotEmpty) 'password': password,
           if (isActive != null) 'is_active': isActive,
           if (permissions != null) 'permissions': permissions,
+          // فرّق بين "لا تغيير" (null) و "مسح" (empty string).
+          if (scopeAdminId != null)
+            'scope_admin_id': scopeAdminId.isEmpty ? null : scopeAdminId,
         },
       );
       final body = r.data ?? const {};

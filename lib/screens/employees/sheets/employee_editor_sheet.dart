@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/employees_api.dart';
+import '../../../api/subscribers_api.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -45,6 +46,12 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   late bool _isActive;
   late Map<String, bool> _perms;
   bool _saving = false;
+  /// 2026-08-26: scope — يقيّد الموظّف بمدير فرعي محدَّد.
+  /// null = يشاهد بيانات الأب كاملة (الافتراضي).
+  String? _scopeAdminId;
+  /// قائمة المدراء الفرعيّين للـdropdown — تُحمَّل في initState.
+  List<({int id, String username, String firstname, String lastname})>?
+      _managers;
 
   /// رسالة الخطأ المعروضة بأعلى الـsheet. تنمسح عند بدء الكتابة في
   /// أي حقل عشان المستخدم ما يشوف خطأ قديم بعد ما يصحّح. لو null لا
@@ -63,10 +70,20 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     _phoneCtrl = TextEditingController(text: e?.phone ?? '');
     _passCtrl = TextEditingController();
     _isActive = e?.isActive ?? true;
+    _scopeAdminId = e?.scopeAdminId; // null = بدون قيد
     _perms = {
       ...widget.catalog.defaults,
       if (e != null) ...e.permissions,
     };
+    // حمّل قائمة المدراء الفرعيّين للـdropdown (best-effort).
+    () async {
+      try {
+        final list = await SubscribersApi.loadManagers();
+        if (mounted && list != null) {
+          setState(() => _managers = list);
+        }
+      } catch (_) { /* fallback: hide dropdown */ }
+    }();
     // مسح الـerror banner تلقائياً لما المستخدم يبدأ يصحّح أي حقل.
     void clearOnEdit() {
       if (_error != null) setState(() => _error = null);
@@ -126,6 +143,10 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     bool ok;
     String? message;
     if (_isEdit) {
+      // scopeAdminId ثلاثيّ: null (لا تغيير)، '' (مسح)، id (تحديد).
+      // نستفسر: هل الـscope تغيّر عن الأصلي؟
+      final currentEditScope = widget.employee!.scopeAdminId;
+      final scopeChanged = _scopeAdminId != currentEditScope;
       final r = await EmployeesApi.update(
         id: widget.employee!.id,
         fullName: _fullNameCtrl.text.trim(),
@@ -133,6 +154,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         password: _passCtrl.text.isEmpty ? null : _passCtrl.text,
         isActive: _isActive,
         permissions: _perms,
+        scopeAdminId: scopeChanged
+            ? (_scopeAdminId ?? '') // '' = clear
+            : null, // null = no change
       );
       ok = r.ok;
       message = r.message;
@@ -148,6 +172,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             : _phoneCtrl.text.trim(),
         isActive: _isActive,
         permissions: _perms,
+        scopeAdminId: _scopeAdminId,
       );
       ok = r.ok;
       message = r.message;
@@ -375,6 +400,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           formatters: [FilteringTextInputFormatter.digitsOnly],
         ),
         const SizedBox(height: Sp.md),
+        // 2026-08-26: قيد الـscope — الموظّف مقيَّد بمدير فرعي؟
+        _scopePicker(),
+        const SizedBox(height: Sp.md),
         SwitchListTile(
           value: _isActive,
           onChanged: (v) => setState(() => _isActive = v),
@@ -525,6 +553,117 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         ],
       ),
     );
+  }
+
+  /// 2026-08-26: قيد الـscope — dropdown مدير فرعي. لو null الموظّف
+  /// يشاهد كامل شجرة الأب. لو محدَّد، يُقيَّد بمشتركي/بيانات ذلك المدير.
+  /// STOP RULE: عند تفعيل قيد، employees.manage/view تُحذف تلقائياً في
+  /// الـbackend — لا يشوف الموظّف الآخرين.
+  Widget _scopePicker() {
+    final list = _managers;
+    if (list == null) {
+      return Container(
+        height: 46,
+        alignment: AlignmentDirectional.centerStart,
+        padding: const EdgeInsetsDirectional.only(start: 8),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 14, height: 14,
+              child: CircularProgressIndicator(strokeWidth: 1.5),
+            ),
+            const SizedBox(width: 10),
+            Text('جارٍ تحميل المدراء الفرعيّين...',
+                style: AppType.muted().copyWith(fontSize: 11)),
+          ],
+        ),
+      );
+    }
+    if (list.isEmpty) return const SizedBox.shrink();
+    // نبني menu items: null = بدون قيد، ثم كل المدراء.
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInput,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.userCheck,
+              size: 16, color: AppColors.textMid),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('مقيَّد بمدير فرعي',
+                    style: AppType.label(color: AppColors.textHi)
+                        .copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
+                Text(
+                  _scopeAdminId == null
+                      ? 'بلا قيد — يشاهد كل بياناتك'
+                      : 'يرى فقط بيانات المدير الفرعي المختار',
+                  style: AppType.muted().copyWith(fontSize: 10.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _scopeAdminId,
+              hint: Text('بلا قيد',
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: AppColors.textMid,
+                    fontWeight: FontWeight.w600,
+                  )),
+              icon: Icon(LucideIcons.chevronDown,
+                  size: 14, color: AppColors.textMid),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('بلا قيد',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textHi,
+                      )),
+                ),
+                for (final m in list)
+                  DropdownMenuItem<String?>(
+                    value: m.id.toString(),
+                    child: Text(
+                      _managerLabel(m),
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textHi,
+                      ),
+                    ),
+                  ),
+              ],
+              onChanged: (v) {
+                setState(() => _scopeAdminId = v);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _managerLabel(({int id, String username, String firstname, String lastname}) m) {
+    final full = [m.firstname, m.lastname]
+        .where((s) => s.isNotEmpty)
+        .join(' ')
+        .trim();
+    if (full.isNotEmpty && full != m.username) return '$full · ${m.username}';
+    return m.username;
   }
 
   Widget _field({

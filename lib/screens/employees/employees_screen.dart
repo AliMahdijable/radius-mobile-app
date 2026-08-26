@@ -491,6 +491,30 @@ class _EmployeeTile extends StatelessWidget {
                         ),
                       ],
                     ),
+                    // 2026-08-26: شارة قيد الـscope — الموظّف مقيَّد بمدير فرعي.
+                    if (emp.isScoped) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(LucideIcons.userCheck,
+                              size: 10, color: const Color(0xFF7C3AED)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'مقيَّد بـ@${emp.scopeAdminUsername ?? emp.scopeAdminId}',
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF7C3AED),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
