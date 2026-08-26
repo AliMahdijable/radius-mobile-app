@@ -19,6 +19,7 @@ import 'sheets/edit_manager_sheet.dart';
 import 'sheets/manager_actions_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/send_info_sheet.dart';
+import '../../core/util/clipboard_helper.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 
@@ -194,6 +195,9 @@ class _ManagersScreenState extends State<ManagersScreen> {
         await showSendInfoSheet(context, m);
       case ManagerAction.showPassword:
         await _showManagerPassword(m);
+      case ManagerAction.copyUsername:
+        await copyToClipboard(context, m.username,
+            label: 'اسم المدير');
       case ManagerAction.delete:
         await _confirmDelete(m);
     }

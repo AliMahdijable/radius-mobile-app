@@ -29,6 +29,9 @@ enum ManagerAction {
   // مصدرها whatsapp_sessions.admin_password_encrypted — الأدمن الفرعي
   // يجب يسجّل دخول مرّة أولاً حتى تُخزَّن.
   showPassword('managers.action_show_password', LucideIcons.keyRound, Color(0xFF7C3AED)),
+  // 2026-08-26: نسخ اسم المستخدم — مفيد للـcross-reference بين النظام
+  // والأنظمة الأخرى (تذاكر دعم، سجلّات، إلخ).
+  copyUsername('managers.action_copy_username', LucideIcons.copy, Color(0xFF3B82F6)),
   delete('managers.action_delete', LucideIcons.trash2, Color(0xFFDC2626));
 
   const ManagerAction(this.labelKey, this.icon, this.color);
@@ -88,6 +91,8 @@ class _ActionsSheet extends StatelessWidget {
       // كلمة السرّ متاحة لكل من عنده managers.edit — نفس صلاحيّة
       // التعديل. الـbackend يفحصها كذلك.
       if (Perms.has('managers.edit')) ManagerAction.showPassword,
+      // نسخ اليوزر متاح لكل من يشاهد المدير أصلاً (بلا perm خاص).
+      ManagerAction.copyUsername,
       if (Perms.has('managers.delete')) ManagerAction.delete,
     ];
     return SafeArea(

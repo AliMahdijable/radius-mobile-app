@@ -572,6 +572,7 @@
     "action_movements": "حركات",
     "action_send_info": "إرسال معلومات",
     "action_show_password": "كلمة السرّ",
+    "action_copy_username": "نسخ اليوزر",
     "action_delete": "حذف",
     "chip_balance": "رصيد {amount}",
     "chip_debt": "دين {amount}",

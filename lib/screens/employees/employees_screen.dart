@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../widgets/reveal_password_sheet.dart';
 
 import '../../api/employees_api.dart';
+import '../../core/util/clipboard_helper.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -519,6 +520,19 @@ class _EmployeeTile extends StatelessWidget {
                 ),
               ),
               // Actions — flat icon buttons، بلا حواف.
+              // 2026-08-26: زر نسخ اليوزر — يتوفّر لأي حساب مصادَق (بلا
+              // perm gating لأن الـusername ليس بيانات حسّاسة).
+              IconButton(
+                icon: Icon(LucideIcons.copy,
+                    color: AppColors.textMid, size: 15),
+                onPressed: () => copyToClipboard(context, emp.username,
+                    label: 'اسم المستخدم'),
+                tooltip: 'نسخ اسم المستخدم',
+                splashRadius: 18,
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
               if (onShowPassword != null)
                 IconButton(
                   icon: Icon(LucideIcons.keyRound,
