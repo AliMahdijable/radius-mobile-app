@@ -99,7 +99,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(R.lg),
+        borderRadius: BorderRadius.circular(R.md),
         child: Opacity(
           opacity: disabled ? 0.62 : 1,
           child: Container(
@@ -107,20 +107,26 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
               color: selected
                   ? AppColors.brand.withValues(alpha: 0.05)
                   : AppColors.surface,
-              borderRadius: BorderRadius.circular(R.lg),
+              // 2026-08-26 tightening: R.md (12dp) بدل R.lg (16) —
+              // radius أخف يعطي إحساس احترافي أدقّ للـcards المكدّسة.
+              borderRadius: BorderRadius.circular(R.md),
+              // border 0.5dp بدل 1dp — hairline يوفّر ~2dp بصرياً + يقلّل
+              // العبء البصري لمّا في 6+ كارت على الشاشة.
               border: Border.all(
                 color: selected
                     ? AppColors.brand
                     : AppColors.border,
-                width: selected ? 2 : 1,
+                width: selected ? 1.5 : 0.5,
               ),
+              // shadow أخف — كان blur 8 offset 2؛ الآن blur 3 offset 1
+              // يعطي separation كافي بلا صخب.
               boxShadow: selected
                   ? null
                   : [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                        color: Colors.black.withValues(alpha: 0.025),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
                       ),
                     ],
             ),
@@ -133,36 +139,40 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
             // animation فالـIntrinsicHeight يقرأ snapshot ثابت، الخارجي
             // ينعّم التبديل بين snapshot موسّع و snapshot مكوّل.
             child: AnimatedSize(
-              duration: const Duration(milliseconds: 220),
+              // 220 → 180ms — snap أدقّ.
+              duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               alignment: Alignment.topCenter,
               child: IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Status accent rail (right edge in RTL = leading)
+                    // Status accent rail — 4dp → 3dp، أخف بصرياً.
                     Container(
-                      width: 4,
+                      width: 3,
                       color: statusColor,
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          Sp.md, Sp.md, Sp.md, Sp.md,
-                        ),
+                        // padding 12→10 كل الجهات = 8dp أفقياً + 8dp عمودياً
+                        // save بكل كارت. total = 6+ كارت × 8 = 48dp إضافيّة
+                        // مرئيّة على الشاشة.
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildHeader(statusColor, statusLabel, disabled),
-                            const SizedBox(height: 10),
+                            // section gap 10→7 — أخف بصرياً.
+                            const SizedBox(height: 7),
                             _buildMetadata(),
                             if (_expanded && _hasFinance) ...[
-                              const SizedBox(height: 10),
+                              // divider surround: 10+8=18 → 7+6=13.
+                              const SizedBox(height: 7),
                               Divider(
                                 height: 1,
                                 color: AppColors.border,
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               _buildFinance(),
                             ],
                           ],
@@ -185,7 +195,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _StatusIconBadge(icon: _statusIcon(), color: statusColor),
-        const SizedBox(width: 10),
+        const SizedBox(width: 9),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,7 +204,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
               Text(
                 sub.fullName,
                 style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 14, // Section title tier
+                  fontSize: 14.5,
                   fontWeight: FontWeight.w800,
                   decoration:
                       disabled ? TextDecoration.lineThrough : null,
@@ -202,7 +212,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Row(
                 children: [
                   // Status dot
@@ -302,7 +312,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
             ],
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         _MetaRow(
           icon: LucideIcons.calendar,
           text: 'subscribers.expires_at'.tr(namedArgs: {'date': _formatExpiration(sub.expiration)}),
@@ -364,7 +374,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
         // مدين). طلب 2026-07-13: زر تذكير الدين يظهر جنب زرَّي المتصل،
         // وإذا المشترك offline+مدين يظهر بمفرده. كل زر مستقل بالـcallback.
         if (onShowConsumption != null || onDisconnect != null || onSendDebtReminder != null) ...[
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Row(
             children: [
               if (onShowConsumption != null) ...[
@@ -469,16 +479,18 @@ class _StatusIconBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // 2026-08-26 tightening: 42→36، icon 20→17. proportional reduce
+    // ~14% مع الحفاظ على قابليّة القراءة. الحدود 0.5dp بدل 1dp.
     return Container(
-      width: 42,
-      height: 42,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
         shape: BoxShape.circle,
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.5),
       ),
       alignment: Alignment.center,
-      child: Icon(icon, color: color, size: 20),
+      child: Icon(icon, color: color, size: 17),
     );
   }
 }

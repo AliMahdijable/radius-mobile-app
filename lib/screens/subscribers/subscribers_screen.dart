@@ -1129,8 +1129,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   MediaQuery.paddingOf(context).bottom,
                             ),
                             itemCount: page.length,
+                            // 2026-08-26: 8dp → 6dp بين الكارت والكارت.
+                            // مع padding داخلي مخفَّض + borders أخف = تركيز
+                            // بصري أعلى، صفوف أكثر مرئيّة.
                             separatorBuilder: (_, __) =>
-                                const SizedBox(height: Sp.sm),
+                                const SizedBox(height: 6),
                             itemBuilder: (_, i) {
                               final s = page[i];
                               final isSelected = s.idx != null &&
