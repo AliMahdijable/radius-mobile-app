@@ -1,0 +1,541 @@
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../../api/subscribers_api.dart';
+import '../../../api/telegram_api.dart';
+import '../../../core/util/clipboard_helper.dart';
+import '../../../models/subscriber.dart';
+import '../../../theme/colors.dart';
+
+/// telegramLinkGeneratorSheet — يبحث المدير عن مشترك بالاسم، يولّد
+/// deep link، وينسخه/يرسله عبر واتساب. يستدعي:
+///   - GET /api/telegram/deep-link/:adminId/:idx
+///   - POST /api/telegram/send-link-via-wa/:adminId/:idx
+Future<void> showTelegramLinkGeneratorSheet(
+  BuildContext context, {
+  required String adminId,
+  required VoidCallback onDone,
+}) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    builder: (_) => _GeneratorSheet(adminId: adminId, onDone: onDone),
+  );
+}
+
+class _GeneratorSheet extends StatefulWidget {
+  const _GeneratorSheet({required this.adminId, required this.onDone});
+  final String adminId;
+  final VoidCallback onDone;
+
+  @override
+  State<_GeneratorSheet> createState() => _GeneratorSheetState();
+}
+
+class _GeneratorSheetState extends State<_GeneratorSheet> {
+  final _searchCtrl = TextEditingController();
+  List<Subscriber> _allSubs = const [];
+  Subscriber? _selected;
+  String? _generatedLink;
+  bool _loading = true;
+  bool _generating = false;
+  bool _sending = false;
+  String? _err;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSubs();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSubs() async {
+    setState(() => _loading = true);
+    final subs = await SubscribersApi.loadAll();
+    if (!mounted) return;
+    setState(() {
+      _allSubs = subs ?? const [];
+      _loading = false;
+    });
+  }
+
+  List<Subscriber> get _matches {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final out = <Subscriber>[];
+    for (final s in _allSubs) {
+      if (s.idx == null) continue;
+      final hay = [s.username, s.firstname, s.lastname, s.phone]
+          .where((x) => x != null && x.isNotEmpty)
+          .join(' ')
+          .toLowerCase();
+      if (hay.contains(q)) {
+        out.add(s);
+        if (out.length >= 12) break;
+      }
+    }
+    return out;
+  }
+
+  Future<void> _pick(Subscriber s) async {
+    setState(() {
+      _selected = s;
+      _searchCtrl.text = s.fullName;
+      _generating = true;
+      _err = null;
+    });
+    final res = await TelegramApi.generateDeepLink(widget.adminId, s.idx!);
+    if (!mounted) return;
+    setState(() {
+      _generating = false;
+      _generatedLink = res.link;
+      _err = res.link == null ? (res.message ?? 'فشل التوليد') : null;
+    });
+  }
+
+  Future<void> _sendViaWa() async {
+    if (_selected == null) return;
+    setState(() => _sending = true);
+    final res = await TelegramApi.sendLinkViaWa(
+        widget.adminId, _selected!.idx!);
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (res.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('أُرسل الرابط لـ${_selected!.fullName} عبر واتساب ✅',
+            style: const TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: AppColors.brand,
+        behavior: SnackBarBehavior.floating,
+      ));
+      widget.onDone();
+      Navigator.of(context).pop();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res.message ?? 'فشل الإرسال',
+            style: const TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  void _reset() {
+    setState(() {
+      _selected = null;
+      _generatedLink = null;
+      _searchCtrl.clear();
+      _err = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.6,
+        expand: false,
+        builder: (_, scrollCtrl) => Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF229ED9).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(LucideIcons.link,
+                          color: Color(0xFF229ED9), size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ربط مشترك',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textHi,
+                              )),
+                          const SizedBox(height: 2),
+                          Text('ابحث عن المشترك ثم أرسل الرابط عبر واتساب',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMid,
+                              )),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(LucideIcons.x,
+                          size: 20, color: AppColors.textMid),
+                      onPressed: () => Navigator.of(context).pop(),
+                      splashRadius: 20,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Search input
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceInput,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.search,
+                          size: 16, color: AppColors.textMid),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          onChanged: (_) {
+                            if (_selected != null) {
+                              _reset();
+                            } else {
+                              setState(() {});
+                            }
+                          },
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            color: AppColors.textHi,
+                          ),
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            isCollapsed: true,
+                            hintText: 'ابحث بالاسم / اليوزر / الرقم...',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12.5,
+                              color: AppColors.textLow,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_selected != null || _searchCtrl.text.isNotEmpty)
+                        IconButton(
+                          icon: Icon(LucideIcons.x,
+                              size: 14, color: AppColors.textMid),
+                          onPressed: _reset,
+                          splashRadius: 14,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _selected == null
+                        ? _searchResults(scrollCtrl)
+                        : _generatedView(),
+              ),
+              if (_selected != null && _generatedLink != null)
+                _actionBar(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _searchResults(ScrollController scrollCtrl) {
+    final matches = _matches;
+    if (_searchCtrl.text.trim().isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('ابدأ الكتابة للبحث بين ${_allSubs.length} مشترك',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                color: AppColors.textLow,
+              ),
+              textAlign: TextAlign.center),
+        ),
+      );
+    }
+    if (matches.isEmpty) {
+      return Center(
+        child: Text('لا نتائج',
+            style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                color: AppColors.textLow)),
+      );
+    }
+    return ListView.builder(
+      controller: scrollCtrl,
+      itemCount: matches.length,
+      itemBuilder: (_, i) {
+        final s = matches[i];
+        return Material(
+          color: AppColors.surface,
+          child: InkWell(
+            onTap: () => _pick(s),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom:
+                      BorderSide(color: AppColors.border, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(s.fullName,
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textHi,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 2),
+                        Text(
+                          [
+                            '@${s.username}',
+                            if (s.displayPhone.isNotEmpty) s.displayPhone,
+                          ].join(' · '),
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textMid,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(LucideIcons.chevronLeft,
+                      size: 18, color: AppColors.textLow),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _generatedView() {
+    if (_generating) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_err != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.circleAlert,
+                size: 40, color: AppColors.error),
+            const SizedBox(height: 10),
+            Text(_err!,
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: AppColors.textMid),
+                textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceInput,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('المشترك',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textLow,
+                      letterSpacing: 0.5,
+                    )),
+                const SizedBox(height: 4),
+                Text(_selected!.fullName,
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textHi,
+                    )),
+                const SizedBox(height: 2),
+                Text('@${_selected!.username}',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMid,
+                    )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceInput,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('رابط الربط',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textLow,
+                      letterSpacing: 0.5,
+                    )),
+                const SizedBox(height: 6),
+                SelectableText(
+                  _generatedLink!,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textHi,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionBar() {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 46,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await copyToClipboard(
+                        context, _generatedLink!,
+                        label: 'رابط الربط');
+                  },
+                  icon: const Icon(LucideIcons.copy, size: 16),
+                  label: const Text('نسخ',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      )),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF229ED9),
+                    side: BorderSide(
+                        color: const Color(0xFF229ED9)
+                            .withValues(alpha: 0.5),
+                        width: 1),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: 46,
+                child: FilledButton.icon(
+                  onPressed: _sending ? null : _sendViaWa,
+                  icon: _sending
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 1.5, color: Colors.white))
+                      : const Icon(LucideIcons.messageCircle, size: 16),
+                  label: const Text('أرسل عبر واتساب',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      )),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

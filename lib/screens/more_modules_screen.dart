@@ -8,6 +8,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
+import 'telegram/telegram_screen.dart';
 import 'discounts/discounts_screen.dart';
 import 'message_logs/message_logs_screen.dart';
 import 'employees/employees_screen.dart';
@@ -65,6 +66,20 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const ExpensesScreen(),
+                ),
+              ),
+            ),
+          // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. منقول
+          // كامل من client-v2. محكوم بنفس صلاحيّة إعدادات الواتساب.
+          if (Perms.hasAny(['whatsapp.broadcast', 'whatsapp.send', 'settings.edit']))
+            _ModuleCard(
+              icon: LucideIcons.send,
+              color: const Color(0xFF229ED9),
+              title: 'تلغرام',
+              subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const TelegramScreen(),
                 ),
               ),
             ),
