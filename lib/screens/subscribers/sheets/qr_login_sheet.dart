@@ -171,7 +171,11 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
           '${_linkUrl!}\n\n'
           'الرمز صالح لمدة 30 يوم. لو انتهى، اطلب واحد جديد من الأدمن.\n\n'
           'شكراً 🙏';
-      final result = await WhatsAppApi.sendMessage(to: phone, message: message);
+      final result = await WhatsAppApi.sendMessage(
+        to: phone,
+        message: message,
+        sas4Idx: widget.sub.idx,
+      );
       if (!mounted) return;
       if (result.ok) {
         _snack('qr_login.wa_sent'.tr(), isError: false);

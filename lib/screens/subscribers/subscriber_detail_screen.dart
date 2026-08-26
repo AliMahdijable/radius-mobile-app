@@ -449,6 +449,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       to: sub.displayPhone,
       message: body,
       intent: 'subscriber_info',
+      sas4Idx: sub.idx,
     );
     if (!mounted) return;
     setState(() => _generatingLink = false);

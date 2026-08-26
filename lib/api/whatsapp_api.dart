@@ -857,10 +857,18 @@ class WhatsAppApi {
 
   /// POST /api/whatsapp/send-message — generic send entry. `intent`
   /// drives the backend's dedup window + log tagging.
+  ///
+  /// 2026-08-26 (tg parity): `sas4Idx` اختياريّ — لو موجود، backend
+  /// channelRouter يفحص لو المشترك مربوط ببوت تلغرام الأدمن ويوجّه له
+  /// عبر TG تلقائياً (بلا هذا الـidx، channelRouter يعود لواتساب فقط
+  /// ويفشل بـconnectionError لو WA غير متصل). `forceChannel` يجبر
+  /// قناة معيّنة ('auto' | 'whatsapp' | 'telegram').
   static Future<WhatsSendResult> sendMessage({
     required String to,
     required String message,
     String intent = 'manual',
+    String? sas4Idx,
+    String? forceChannel,
   }) async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) {
@@ -878,6 +886,9 @@ class WhatsAppApi {
           'to': to,
           'message': message,
           'intent': intent,
+          if (sas4Idx != null) 'sas4Idx': sas4Idx,
+          if (forceChannel == 'whatsapp' || forceChannel == 'telegram')
+            'forceChannel': forceChannel,
         },
       );
       final body = r.data ?? const {};
@@ -951,7 +962,12 @@ class WhatsAppApi {
       );
     }
     final rendered = _renderTemplate(active.first.messageContent, sub);
-    return sendMessage(to: phone, message: rendered, intent: templateType);
+    return sendMessage(
+      to: phone,
+      message: rendered,
+      intent: templateType,
+      sas4Idx: sub.idx,
+    );
   }
 
   /// Replaces every {placeholder} in the template body. Mirrors v1's
