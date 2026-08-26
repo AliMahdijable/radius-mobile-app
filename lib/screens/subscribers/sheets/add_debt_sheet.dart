@@ -162,9 +162,11 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    showSheetSnack(context, result.ok
-              ? 'تم إضافة الدين بنجاح'
-              : (result.message ?? 'فشل إضافة الدين'), isError: (result.ok) ? true : true);
+    showSheetSnack(
+      context,
+      result.ok ? 'تم إضافة الدين بنجاح' : (result.message ?? 'فشل إضافة الدين'),
+      isError: !result.ok,
+    );
     if (result.ok) Navigator.of(context).pop(true);
   }
 

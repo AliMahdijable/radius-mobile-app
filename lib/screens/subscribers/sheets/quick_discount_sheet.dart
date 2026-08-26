@@ -174,13 +174,17 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    showSheetSnack(context, result.ok
-              ? (_isRemoval
-                  ? 'تم حذف الخصم'
-                  : (_amount > 0
-                      ? 'تم حفظ خصم ${formatIQD(_amount)} د.ع'
-                      : 'تم الحفظ'))
-              : (result.message ?? 'فشل حفظ الخصم'), isError: (result.ok) ? true : true);
+    showSheetSnack(
+      context,
+      result.ok
+          ? (_isRemoval
+              ? 'تم حذف الخصم'
+              : (_amount > 0
+                  ? 'تم حفظ خصم ${formatIQD(_amount)} د.ع'
+                  : 'تم الحفظ'))
+          : (result.message ?? 'فشل حفظ الخصم'),
+      isError: !result.ok,
+    );
     if (result.ok) Navigator.of(context).pop(true);
   }
 
