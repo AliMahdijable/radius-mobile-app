@@ -7,6 +7,7 @@ import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'accounts/accounts_screen.dart';
 import 'broadcast/broadcast_screen.dart';
 import 'discounts/discounts_screen.dart';
 import 'message_logs/message_logs_screen.dart';
@@ -155,6 +156,20 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const PortalSettingsScreen(),
+                ),
+              ),
+            ),
+          // 2026-08-26: التبديل السريع بين حسابات المدراء الفرعيّين.
+          // نفس صلاحيّة عرض المدراء — يستخدم الباسورد المخزَّن.
+          if (Perms.has('managers.view'))
+            _ModuleCard(
+              icon: LucideIcons.repeat2,
+              color: const Color(0xFF7C3AED),
+              title: 'الصفحات',
+              subtitle: 'تبديل سريع بين حسابات المدراء بلا كتابة كلمة السر',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AccountsScreen(),
                 ),
               ),
             ),
