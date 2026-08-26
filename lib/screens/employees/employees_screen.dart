@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'dart:ui' show FontFeature;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../widgets/reveal_password_sheet.dart';
 
 import '../../api/employees_api.dart';
 import '../../services/permissions_service.dart';
@@ -125,69 +126,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       ));
       return;
     }
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emp.fullName?.isNotEmpty == true ? emp.fullName! : emp.username,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 2),
-            Text('كلمة سرّ الموظّف',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textMid,
-                )),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceInput,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border, width: 0.5),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: SelectableText(
-                  res.password!,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: res.password!));
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('تمّ النسخ'),
-                    backgroundColor: AppColors.brand,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 2),
-                  ));
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
+    await showRevealPasswordSheet(
+      context,
+      title: emp.fullName?.isNotEmpty == true ? emp.fullName! : emp.username,
+      subtitle: 'كلمة سرّ الموظّف',
+      password: res.password!,
+      accentColor: const Color(0xFF7C3AED),
     );
   }
 
@@ -227,12 +171,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   : _rows.isEmpty
                       ? _emptyState()
                       : ListView(
-                          padding: const EdgeInsets.fromLTRB(
-                              Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
+                          padding: EdgeInsets.only(
+                              bottom:
+                                  MediaQuery.paddingOf(context).bottom + 96),
                           children: [
-                            _hero(accent),
-                            const SizedBox(height: Sp.md),
-                            for (final e in _rows) ...[
+                            _compactHero(accent),
+                            for (final e in _rows)
                               _EmployeeTile(
                                 emp: e,
                                 onTap: Perms.has('employees.manage')
@@ -245,8 +189,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                     ? () => _showEmployeePassword(e)
                                     : null,
                               ),
-                              const SizedBox(height: 8),
-                            ],
                           ],
                         ),
         ),
@@ -254,47 +196,94 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
   }
 
-  Widget _hero(Color accent) {
+  /// 2026-08-26 redesign: header compact بلا gradient بلا حواف ثقيلة.
+  /// سطر واحد ينظم العدد الكلّي + الحالة (مفعّل/معطّل) على اليمين.
+  Widget _compactHero(Color accent) {
     final activeCount = _rows.where((e) => e.isActive).length;
+    final disabledCount = _rows.length - activeCount;
     return Container(
-      padding: const EdgeInsets.all(Sp.md),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            accent.withValues(alpha: 0.18),
-            accent.withValues(alpha: 0.05),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.border, width: 0.5),
         ),
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(R.md),
-            ),
-            child: Icon(LucideIcons.users, color: accent, size: 18),
-          ),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_rows.length} موظف',
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 17, letterSpacing: -0.3),
+                  'عدد الموظفين',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMid,
+                    height: 1.1,
+                  ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  '$activeCount مفعّل · ${_rows.length - activeCount} معطّل',
-                  style: AppType.muted().copyWith(fontSize: 11),
+                  '${_rows.length}',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textHi,
+                    letterSpacing: -0.4,
+                    height: 1.1,
+                  ),
                 ),
               ],
+            ),
+          ),
+          _statBadge(
+              label: 'مفعّل',
+              count: activeCount,
+              color: const Color(0xFF14B8A6)),
+          if (disabledCount > 0) ...[
+            const SizedBox(width: 6),
+            _statBadge(
+                label: 'معطّل',
+                count: disabledCount,
+                color: AppColors.textLow),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statBadge({
+    required String label,
+    required int count,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
             ),
           ),
         ],
@@ -380,78 +369,132 @@ class _EmployeeTile extends StatelessWidget {
     final display = (emp.fullName?.isNotEmpty == true)
         ? emp.fullName!
         : emp.username;
-    final color = emp.isActive
+    final accentColor = emp.isActive
         ? const Color(0xFF14B8A6)
         : AppColors.textLow;
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: Sp.md),
+          padding: const EdgeInsetsDirectional.only(
+              start: 12, end: 4, top: 10, bottom: 10),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(R.md),
+            border: Border(
+              bottom: BorderSide(color: AppColors.border, width: 0.5),
+            ),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // 3dp rail — نفس النمط بكارت المشتركين. مفعّل = teal، معطّل = رمادي.
               Container(
-                width: 40,
-                height: 40,
+                width: 3,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.md),
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Small avatar 36dp (بدل 40 السابق)
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(18),
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  display.characters.isEmpty ? '?' : display.characters.first,
-                  style: AppType.title(color: color).copyWith(fontSize: 18),
+                  display.characters.isEmpty
+                      ? '?'
+                      : display.characters.first,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: accentColor,
+                  ),
                 ),
               ),
-              const SizedBox(width: Sp.md),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      display,
-                      style: AppType.label(color: AppColors.textHi)
-                          .copyWith(fontWeight: FontWeight.w800),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      emp.username,
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        _badge(
-                          icon: emp.isActive
-                              ? LucideIcons.circleCheck
-                              : LucideIcons.circleX,
-                          label: emp.isActive ? 'مفعّل' : 'معطّل',
-                          color: color,
+                        Flexible(
+                          child: Text(
+                            display,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textHi,
+                              height: 1.15,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        const SizedBox(width: 6),
-                        _badge(
-                          icon: LucideIcons.shield,
-                          label: '${emp.activePermsCount} صلاحية',
-                          color: AppColors.brand,
+                        if (!emp.isActive) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppColors.textLow
+                                  .withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'معطّل',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textLow,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Text(
+                          emp.username,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textMid,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text('  ·  ',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textLow,
+                            )),
+                        Icon(LucideIcons.shield,
+                            size: 10, color: AppColors.brand),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${emp.activePermsCount} صلاحية',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brand,
+                          ),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
+              // Actions — flat icon buttons، بلا حواف.
               if (onShowPassword != null)
                 IconButton(
                   icon: Icon(LucideIcons.keyRound,
@@ -466,7 +509,7 @@ class _EmployeeTile extends StatelessWidget {
               if (onDelete != null)
                 IconButton(
                   icon: Icon(LucideIcons.trash2,
-                      color: AppColors.error, size: 16),
+                      color: AppColors.error, size: 15),
                   onPressed: onDelete,
                   tooltip: 'حذف',
                   splashRadius: 18,
@@ -481,33 +524,13 @@ class _EmployeeTile extends StatelessWidget {
     );
   }
 
+  @Deprecated('unused — old badge helper')
+  // ignore: unused_element
   Widget _badge({
     required IconData icon,
     required String label,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: color),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:ui' show FontFeature;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -156,131 +158,39 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           onRefresh: _load,
           color: accent,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-                Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.paddingOf(context).bottom + 96),
             children: [
-              _headerCard(accent),
-              const SizedBox(height: Sp.md),
+              // 2026-08-26 redesign: header صف واحد كثيف — إجمالي + نطاق
+              // + عدد. بلا gradient بلا حواف ثقيلة.
+              _CompactHeader(
+                total: _total,
+                count: _rows.length,
+                from: _from,
+                to: _to,
+                accent: accent,
+                onPickRange: _pickRange,
+              ),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (_rows.isEmpty)
-                _emptyState()
+                Padding(
+                  padding: const EdgeInsets.all(Sp.lg),
+                  child: _emptyState(),
+                )
               else
-                Column(
-                  children: [
-                    for (final row in _rows) ...[
-                      _ExpenseTile(
-                        row: row,
-                        onEdit: () => _openEdit(row),
-                        onDelete: () => _confirmDelete(row),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _headerCard(Color accent) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    final rangeLabel =
-        '${_from.year}/${two(_from.month)}/${two(_from.day)} → '
-        '${_to.year}/${two(_to.month)}/${two(_to.day)}';
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            accent.withValues(alpha: 0.18),
-            accent.withValues(alpha: 0.05),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(R.md),
-                ),
-                child:
-                    Icon(LucideIcons.receipt, color: accent, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'exp.total_expenses'.tr(),
-                      style: AppType.muted().copyWith(fontSize: 11),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${formatIQD(_total)} د.ع',
-                      style: AppType.title(color: AppColors.textHi)
-                          .copyWith(
-                              fontSize: 22, letterSpacing: -0.5),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '${_rows.length} عملية',
-                style: AppType.label(color: accent)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.md),
-          InkWell(
-            onTap: _pickRange,
-            borderRadius: BorderRadius.circular(R.md),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(R.md),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.calendar,
-                      size: 14, color: AppColors.textMid),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      rangeLabel,
-                      style:
-                          AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                for (final row in _rows)
+                  _ExpenseTile(
+                    row: row,
+                    onEdit: () => _openEdit(row),
+                    onDelete: () => _confirmDelete(row),
                   ),
-                  Icon(LucideIcons.chevronDown,
-                      size: 14, color: AppColors.textMid),
-                ],
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -314,6 +224,132 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 }
 
+/// 2026-08-26 redesign: header مضغوط بلا gradient بلا حواف ثقيلة.
+/// سطر واحد: إجمالي كبير + عدّاد. سطر ثاني: chip نطاق التاريخ.
+class _CompactHeader extends StatelessWidget {
+  const _CompactHeader({
+    required this.total,
+    required this.count,
+    required this.from,
+    required this.to,
+    required this.accent,
+    required this.onPickRange,
+  });
+  final num total;
+  final int count;
+  final DateTime from;
+  final DateTime to;
+  final Color accent;
+  final VoidCallback onPickRange;
+
+  String _fmt(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}/${two(d.month)}/${two(d.day)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.border, width: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'exp.total_expenses'.tr(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMid,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${formatIQD(total)} د.ع',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textHi,
+                        letterSpacing: -0.4,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$count عملية',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: onPickRange,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceInput,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.calendar,
+                      size: 13, color: AppColors.textMid),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${_fmt(from)}  →  ${_fmt(to)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textHi,
+                      ),
+                    ),
+                  ),
+                  Icon(LucideIcons.chevronDown,
+                      size: 13, color: AppColors.textLow),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 2026-08-26 redesign: tile مسطّح مع hairline divider. لا حواف كامل
+/// لكل صف. المبلغ RTL end (يسار)، الوصف/التاريخ middle، حذف على أطراف.
+/// المصمم متطابق مع صفّ المشترك الجديد (rail 3dp + fixed metric column).
 class _ExpenseTile extends StatelessWidget {
   const _ExpenseTile({
     required this.row,
@@ -326,75 +362,67 @@ class _ExpenseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
+    Theme.of(context);
     return Material(
-      color: Colors.transparent,
+      color: AppColors.surface,
       child: InkWell(
         onTap: onEdit,
-        borderRadius: BorderRadius.circular(R.lg),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: const EdgeInsetsDirectional.only(
+              start: 12, end: 4, top: 10, bottom: 10),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(color: AppColors.border),
+            border: Border(
+              bottom: BorderSide(color: AppColors.border, width: 0.5),
+            ),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Rail — أحمر رفيع (صرفية = خرج مال)
               Container(
-                width: 38,
-                height: 38,
+                width: 3,
+                height: 32,
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(R.md),
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  LucideIcons.arrowDownToLine,
-                  size: 16,
-                  color: AppColors.error,
+                  color: AppColors.error.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      '${formatIQD(row.amount)} د.ع',
-                      style: AppType.title(color: AppColors.error)
-                          .copyWith(fontSize: 16),
-                    ),
-                    const SizedBox(height: 2),
                     Row(
                       children: [
                         Icon(LucideIcons.calendar,
                             size: 11, color: AppColors.textLow),
-                        const SizedBox(width: 3),
+                        const SizedBox(width: 4),
                         Text(
                           row.expenseDate,
-                          style: AppType.muted().copyWith(fontSize: 11),
-                        ),
-                        if ((row.actingEmployeeUsername ?? '')
-                            .isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            width: 2,
-                            height: 10,
-                            color: AppColors.border,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textHi,
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.badge,
-                              size: 11, color: Color(0xFF7C3AED)),
+                        ),
+                        if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
+                          Text('  ·  ',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textLow,
+                              )),
+                          Icon(Icons.badge,
+                              size: 11, color: const Color(0xFF7C3AED)),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
                               row.actingEmployeeUsername!,
-                              style: AppType.muted(
-                                      color: const Color(0xFF7C3AED))
-                                  .copyWith(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF7C3AED),
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -403,11 +431,15 @@ class _ExpenseTile extends StatelessWidget {
                       ],
                     ),
                     if ((row.note ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
                         row.note!.trim(),
-                        style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11, height: 1.4),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textMid,
+                          height: 1.35,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -415,26 +447,26 @@ class _ExpenseTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 4),
-              InkResponse(
-                onTap: onDelete,
-                radius: 22,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: AppColors.error.withValues(alpha: 0.3)),
-                  ),
-                  child: const Icon(
-                    LucideIcons.trash2,
-                    size: 14,
-                    color: AppColors.error,
-                  ),
+              const SizedBox(width: 8),
+              // Amount — big + red (متطابق مع currency style بالكارت)
+              Text(
+                '${formatIQD(row.amount)} د.ع',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.error,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
+              ),
+              IconButton(
+                icon: Icon(LucideIcons.trash2,
+                    size: 15, color: AppColors.error),
+                onPressed: onDelete,
+                tooltip: 'common.delete'.tr(),
+                splashRadius: 18,
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
             ],
           ),

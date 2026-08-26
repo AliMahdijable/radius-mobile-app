@@ -1,8 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'dart:ui' show FontFeature;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../widgets/reveal_password_sheet.dart';
 
 import '../../api/manager_debts_api.dart';
 import '../../api/managers_api.dart';
@@ -213,10 +214,12 @@ class _ManagersScreenState extends State<ManagersScreen> {
       ));
       return;
     }
-    await _showPasswordDialog(
+    await showRevealPasswordSheet(
+      context,
       title: m.username,
       subtitle: 'كلمة سرّ المدير الفرعي',
       password: res.password!,
+      accentColor: const Color(0xFF7C3AED),
     );
   }
 
@@ -229,76 +232,6 @@ class _ManagersScreenState extends State<ManagersScreen> {
           : const Duration(seconds: 3),
       behavior: SnackBarBehavior.floating,
     ));
-  }
-
-  Future<void> _showPasswordDialog({
-    required String title,
-    required String subtitle,
-    required String password,
-  }) async {
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 2),
-            Text(subtitle,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textMid,
-                )),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceInput,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border, width: 0.5),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: SelectableText(
-                  password,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: password));
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('تمّ النسخ'),
-                    backgroundColor: AppColors.brand,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 2),
-                  ));
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _confirmDelete(Manager m) async {
@@ -374,15 +307,19 @@ class _ManagersScreenState extends State<ManagersScreen> {
           onRefresh: _load,
           color: accent,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-                Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.paddingOf(context).bottom + 96),
             children: [
-              _hero(accent),
-              const SizedBox(height: Sp.md),
-              _searchField(),
-              const SizedBox(height: Sp.sm),
-              _sortBar(accent),
-              const SizedBox(height: Sp.md),
+              _compactHero(accent),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                child: _searchField(),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: _sortBar(accent),
+              ),
+              const SizedBox(height: 4),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
@@ -391,18 +328,12 @@ class _ManagersScreenState extends State<ManagersScreen> {
               else if (filtered.isEmpty)
                 _empty()
               else
-                Column(
-                  children: [
-                    for (final m in filtered) ...[
-                      _ManagerTile(
-                        manager: m,
-                        extraDebt: _customDebtByManager[m.id] ?? 0,
-                        onTap: () => _openActions(m),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                ),
+                for (final m in filtered)
+                  _ManagerTile(
+                    manager: m,
+                    extraDebt: _customDebtByManager[m.id] ?? 0,
+                    onTap: () => _openActions(m),
+                  ),
             ],
           ),
         ),
@@ -410,46 +341,59 @@ class _ManagersScreenState extends State<ManagersScreen> {
     );
   }
 
-  Widget _hero(Color accent) {
+  /// 2026-08-26 redesign: hero compact بلا gradient. عدد المدراء يسار،
+  /// إجمالي الرصيد يمين. صفّ واحد.
+  Widget _compactHero(Color accent) {
     return Container(
-      padding: const EdgeInsets.all(Sp.md),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            accent.withValues(alpha: 0.18),
-            accent.withValues(alpha: 0.05),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.border, width: 0.5),
         ),
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(R.md),
-            ),
-            child: Icon(LucideIcons.userCog, color: accent, size: 18),
-          ),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$_total مدير',
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 20, letterSpacing: -0.4),
+                  'إجمالي الأرصدة',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMid,
+                    height: 1.1,
+                  ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  'mgr.total_balance'.tr(namedArgs: {'amt': '${formatIQD(_totalBalance)} ${'common.currency'.tr()}'}),
-                  style: AppType.muted().copyWith(fontSize: 11),
+                  '${formatIQD(_totalBalance)} د.ع',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textHi,
+                    letterSpacing: -0.4,
+                    height: 1.1,
+                  ),
                 ),
               ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '$_total مدير',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: accent,
+              ),
             ),
           ),
         ],
@@ -627,79 +571,100 @@ class _ManagerTile extends StatelessWidget {
     final otherDebt = extraDebt;
     final points = manager.rewardPoints ?? 0;
     return Material(
-      color: Colors.transparent,
+      color: AppColors.surface,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(R.lg),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsetsDirectional.only(
+              start: 12, end: 12, top: 10, bottom: 10),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(
-              color: manager.isActive
-                  ? AppColors.border
-                  : AppColors.error.withValues(alpha: 0.3),
+            border: Border(
+              bottom: BorderSide(color: AppColors.border, width: 0.5),
             ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header — avatar + name + username + enabled dot
+              // Header — rail + avatar + name/full + status
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3B82F6)
-                              .withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(LucideIcons.shield,
-                            size: 18, color: Color(0xFF3B82F6)),
-                      ),
-                      Positioned(
-                        right: -1,
-                        bottom: -1,
-                        child: Container(
-                          width: 11,
-                          height: 11,
-                          decoration: BoxDecoration(
-                            color: manager.isActive
-                                ? AppColors.brand
-                                : AppColors.error,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                                color: AppColors.surface, width: 2),
-                          ),
-                        ),
-                      ),
-                    ],
+                  // 3dp status rail — أخضر مفعّل / أحمر معطّل
+                  Container(
+                    width: 3,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: manager.isActive
+                          ? AppColors.brand
+                          : AppColors.error,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Avatar 36dp (كان 40 + status dot زخرفي)
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(LucideIcons.shield,
+                        size: 16, color: Color(0xFF3B82F6)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          manager.username,
-                          style: AppType.title(color: AppColors.textHi)
-                              .copyWith(fontSize: 14),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                manager.username,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textHi,
+                                  height: 1.15,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (!manager.isActive) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'معطّل',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         if (manager.fullName != manager.username) ...[
-                          const SizedBox(height: 1),
+                          const SizedBox(height: 2),
                           Text(
                             manager.fullName,
-                            style: AppType.muted().copyWith(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMid,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -707,8 +672,6 @@ class _ManagerTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(LucideIcons.chevronLeft,
-                      size: 16, color: AppColors.textLow),
                 ],
               ),
               // Info badges (ACL / phone / company / enabled status)
@@ -803,6 +766,7 @@ class _ManagerTile extends StatelessWidget {
       (manager.mobile ?? '').isNotEmpty ||
       (manager.company ?? '').isNotEmpty;
 
+  /// 2026-08-26: badge flat (بلا حدود) — لون خلفيّة خفيف + نصّ ملوّن.
   Widget _badge({
     required IconData icon,
     required String label,
@@ -811,9 +775,8 @@ class _ManagerTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -825,7 +788,7 @@ class _ManagerTile extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: 10.5,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -833,6 +796,7 @@ class _ManagerTile extends StatelessWidget {
     );
   }
 
+  /// 2026-08-26: chip إحصاء flat. عرض الأرقام tabular للـalignment.
   Widget _statChip({
     required IconData icon,
     required String label,
@@ -842,23 +806,31 @@ class _ManagerTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 11, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: color.withValues(alpha: 0.85),
+            ),
+          ),
           const SizedBox(width: 4),
           Text(
-            '$label ',
-            style: AppType.muted().copyWith(fontSize: 10.5),
-          ),
-          Text(
             value,
-            style: AppType.label(color: color)
-                .copyWith(fontSize: 11.5, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
