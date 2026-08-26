@@ -241,7 +241,14 @@ class _RevealSheetState extends State<_RevealSheet>
                       child: OutlinedButton.icon(
                         onPressed: _copy,
                         icon: const Icon(LucideIcons.copy, size: 16),
-                        label: const Text('نسخ'),
+                        label: const Text(
+                          'نسخ',
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: widget.accent,
                           side: BorderSide(
@@ -251,10 +258,6 @@ class _RevealSheetState extends State<_RevealSheet>
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
@@ -267,15 +270,18 @@ class _RevealSheetState extends State<_RevealSheet>
                       child: FilledButton.icon(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(LucideIcons.check, size: 16),
-                        label: const Text('تم'),
+                        label: const Text(
+                          'تم',
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: widget.accent,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
