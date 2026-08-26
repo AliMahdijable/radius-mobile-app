@@ -178,7 +178,12 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       );
       if (!mounted) return;
       if (result.ok) {
-        _snack('qr_login.wa_sent'.tr(), isError: false);
+        final okMsg = 'qr_login.wa_sent'.tr();
+        final chArabic = result.channelArabic;
+        _snack(
+          chArabic != null ? '$okMsg · عبر $chArabic' : okMsg,
+          isError: false,
+        );
       } else {
         _snack(result.message ?? 'qr_login.wa_send_failed'.tr(), isError: true);
       }

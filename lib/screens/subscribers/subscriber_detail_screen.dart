@@ -454,10 +454,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (!mounted) return;
     setState(() => _generatingLink = false);
     final ok = sendResult.ok;
+    final okMsg = 'subscribers.wa_link_sent'.tr();
+    final chArabic = sendResult.channelArabic;
     showSheetSnack(
       context,
       ok
-          ? 'subscribers.wa_link_sent'.tr()
+          ? (chArabic != null ? '$okMsg · عبر $chArabic' : okMsg)
           : (sendResult.message ?? 'subscribers.wa_link_send_failed'.tr()),
       isError: !ok,
     );
@@ -482,10 +484,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       'subscriber_info' => 'subscribers.wa_subscriber_info_sent'.tr(),
       _ => 'subscribers.wa_message_sent'.tr(),
     };
+    final chArabic = result.channelArabic;
     showSheetSnack(
       context,
       ok
-          ? defaultOkMsg
+          ? (chArabic != null ? '$defaultOkMsg · عبر $chArabic' : defaultOkMsg)
           : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
       isError: !ok,
     );

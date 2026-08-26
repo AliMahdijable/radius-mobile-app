@@ -324,7 +324,12 @@ class WhatsFeatures {
 
 /// Result of a template-send round-trip — feeds the snackbar.
 class WhatsSendResult {
-  const WhatsSendResult({required this.ok, this.message, this.reason});
+  const WhatsSendResult({
+    required this.ok,
+    this.message,
+    this.reason,
+    this.channel,
+  });
   final bool ok;
 
   /// Backend message when ok=false (e.g. 'واتساب غير متصل').
@@ -333,6 +338,22 @@ class WhatsSendResult {
   /// Local short reason for UI branching ('no_template' / 'no_phone' /
   /// 'inactive' / 'wa_disconnected' / 'send_failed' / 'network').
   final String? reason;
+
+  /// 2026-08-26: القناة الفعليّة التي مرّت بها الرسالة عند النجاح —
+  /// 'whatsapp' أو 'telegram'. backend يعيدها في data.channel.
+  /// null على الفشل أو ردود قديمة. الـUI يستعملها لعرض "عبر تلغرام/واتساب".
+  final String? channel;
+
+  String? get channelArabic {
+    switch (channel) {
+      case 'telegram':
+        return 'تلغرام';
+      case 'whatsapp':
+        return 'واتساب';
+      default:
+        return null;
+    }
+  }
 }
 
 /// Mirrors v1's _sendWhatsAppFromTemplate flow in
@@ -893,10 +914,20 @@ class WhatsAppApi {
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;
+      // 2026-08-26: backend يعيد channel في جذر الردّ (whatsapp/telegram)
+      // للرد المؤكّد، وأحياناً داخل data.channel. نقبل الاثنين.
+      final rawChannel = body['channel']?.toString() ??
+          (body['data'] is Map
+              ? (body['data'] as Map)['channel']?.toString()
+              : null);
+      final channel = (rawChannel == 'whatsapp' || rawChannel == 'telegram')
+          ? rawChannel
+          : null;
       return WhatsSendResult(
         ok: ok,
         message: body['message']?.toString(),
         reason: ok ? null : 'send_failed',
+        channel: channel,
       );
     } on DioException catch (e) {
       _log('send-message', e);

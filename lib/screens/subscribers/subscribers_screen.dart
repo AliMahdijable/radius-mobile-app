@@ -734,10 +734,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       );
       if (!mounted) return;
       final ok = result.ok;
+      final okMsg = 'subscribers.wa_debt_reminder_sent'.tr();
+      final chArabic = result.channelArabic;
       showSheetSnack(
         context,
         ok
-            ? 'subscribers.wa_debt_reminder_sent'.tr()
+            ? (chArabic != null ? '$okMsg · عبر $chArabic' : okMsg)
             : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
         isError: !ok,
       );
