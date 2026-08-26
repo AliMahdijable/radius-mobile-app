@@ -120,15 +120,15 @@ class _LoginScreenState extends State<LoginScreen> {
           sas4Token: sas4Token,
         );
         // 2026-08-26: احفظ الحساب في profiles.* حتى يبقى بعد Logout —
-        // شاشة الدخول تعرضه كـchip. نستعمل الـusername الحقيقي اللي كتبه
-        // المستخدم (قد يكون تغيّر case) وnick باسم العرض. best-effort.
-        if (_remember) {
-          unawaited(SavedProfilesStore.upsert(
-            username: user,
-            plainPassword: pass,
-            displayName: displayName,
-          ).catchError((_) {}));
-        }
+        // شاشة الدخول تعرضه كـchip + قسم "الصفحات" يستعمله لـ"العودة
+        // للحساب الأصلي" بعد التبديل لمدير فرعي. نحفظ دائماً بغضّ النظر
+        // عن _remember لأنّ لا معنى للـswitcher بلا كلمات سرّ محفوظة.
+        // الـtoggle _remember يبقى يتحكّم فقط بـautoLogin على الـSplash.
+        unawaited(SavedProfilesStore.upsert(
+          username: user,
+          plainPassword: pass,
+          displayName: displayName,
+        ).catchError((_) {}));
         if (!mounted) return;
         HapticFeedback.mediumImpact();
         if (requires2fa) {

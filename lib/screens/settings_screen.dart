@@ -78,6 +78,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // كل مسار للخروج (logout يدوي، 401 kick، login جديد) يستعمل نفس
     // الروتين ولا ينسى caches جديدة تُضاف لاحقاً.
     await SessionManager.clearAllSessionData();
+    // 2026-08-26: امسح مرجع الأصلي — Logout يدوي = "أنا أعرف شنو أعمل"،
+    // فلا مبرّر يبقى مرجع للـswitcher الأصلي مخزَّن (سيرتبك أول تبديل
+    // بعد login جديد). الحسابات المحفوظة العامّة تبقى كما هي.
+    await SavedProfilesStore.clearOriginal();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),

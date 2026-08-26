@@ -13,7 +13,9 @@ import '../../services/app_resumed_signal.dart';
 import '../../services/auth_storage.dart';
 import '../../services/dashboard_cache.dart';
 import '../../services/inbox_service.dart';
+import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
+import '../accounts/accounts_screen.dart';
 import '../notifications/inbox_screen.dart';
 import '../reports/activity_log_report_screen.dart';
 import '../../theme/colors.dart';
@@ -551,6 +553,20 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
               ],
             ),
           ),
+          // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
+          // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
+          // للوصول السريع. محكومة بـmanagers.view.
+          if (Perms.has('managers.view')) ...[
+            _IconChip(
+              icon: Icons.swap_horiz_rounded,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AccountsScreen(),
+                ),
+              ),
+            ),
+            const SizedBox(width: Sp.sm),
+          ],
           // Bell badge: FCM unread + مشتركين في خطر (near-expiry+expired-today).
           // نُدمج المصدرين حتى المستخدم يشوف رقم واحد يعبّر عن "شي يحتاج
           // انتباه". AlertsService.count يتحدّث تلقائياً من InboxScreen

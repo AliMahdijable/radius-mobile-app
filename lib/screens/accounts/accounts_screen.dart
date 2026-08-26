@@ -42,7 +42,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
   String? _error;
   List<_AccountRow> _rows = const [];
   String? _currentUsername;
+  /// حساب "الأصلي" — يظهر لو الأدمن الرئيسي انتقل لحساب فرعي.
+  /// null لو ما فيه انتقال جارٍ (الأدمن دخل مباشرة).
+  ({String username, String password, String displayName})? _original;
   final Set<int> _switching = {};
+  bool _returningToOriginal = false;
 
   @override
   void initState() {
@@ -57,7 +61,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
     });
     // الاسم الحاليّ حتى نميّزه في القائمة.
     _currentUsername = await AuthStorage.readAdminUsername();
+    // الحساب الأصلي (لو الأدمن انتقل من super-admin لفرعي، نخزّن هوّيته
+    // للعودة السريعة). null لو ما فيه انتقال جارٍ. أيضاً null لو الحاليّ
+    // نفسه هو الأصلي (رجعنا بالفعل).
+    final orig = await SavedProfilesStore.readOriginal();
+    if (orig != null && orig.username != _currentUsername) {
+      _original = orig;
+    } else {
+      _original = null;
+      // نظّف إن كنّا رجعنا للأصلي طبيعياً
+      if (orig != null) await SavedProfilesStore.clearOriginal();
+    }
     // جلب كل المدراء (نجرّب page=1 count=200 حتى نغطّي الحسابات).
+    // قد يفشل للفرعي (ما عنده مدراء تحته) — نعرض قائمة فاضية + return only.
     try {
       final res = await ManagersApi.listFull(
         page: 1,
@@ -81,7 +97,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _rows = const [];
+        _error = _original == null ? e.toString() : null;
         _loading = false;
       });
     }
@@ -126,14 +143,34 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
     setState(() => _switching.add(row.id));
     try {
-      // 1) اجلب كلمة السر
+      // 1) اجلب كلمة السر للفرعي
       final pw = await ManagersApi.fetchPassword(row.id);
       if (!mounted) return;
       if (pw.password == null) {
         _snack(pw.message ?? 'تعذّر جلب كلمة السر', error: true);
         return;
       }
-      // 2) اسجّل دخول بالحساب الجديد
+      // 2) قبل ما نبدّل — احفظ الحساب الحاليّ كـ"الأصلي" حتى نقدر نرجع.
+      //    نأخذ كلمة سرّه من SavedProfilesStore (كل login يخزّنه هناك).
+      //    لو غير موجود لسبب ما، نتخطّى — الأدمن ما راح يشوف زر رجوع
+      //    لكن العمل يكمل عادي.
+      if (_currentUsername != null && _original == null) {
+        final saved = await SavedProfilesStore.list();
+        final me = saved.where((p) => p.username == _currentUsername).firstOrNull;
+        if (me != null) {
+          try {
+            final plain = await SavedProfilesStore.decrypt(me.encryptedPassword);
+            final displayName =
+                await AuthStorage.readDisplayName() ?? _currentUsername!;
+            await SavedProfilesStore.setOriginal(
+              username: _currentUsername!,
+              plainPassword: plain,
+              displayName: displayName,
+            );
+          } catch (_) { /* best-effort */ }
+        }
+      }
+      // 3) اسجّل دخول بالحساب الجديد
       final res = await AuthApi.login(
         username: row.username,
         password: pw.password!,
@@ -202,6 +239,72 @@ class _AccountsScreenState extends State<AccountsScreen> {
     }
   }
 
+  /// 2026-08-26: العودة للحساب الأصلي. يستدعي login بالمرجع المحفوظ في
+  /// SavedProfilesStore.readOriginal() ثم يمسحه. الأدمن يرجع بضغطة واحدة.
+  Future<void> _returnToOriginal() async {
+    final orig = _original;
+    if (orig == null) return;
+    setState(() => _returningToOriginal = true);
+    try {
+      final res = await AuthApi.login(
+        username: orig.username,
+        password: orig.password,
+      );
+      if (!mounted) return;
+      switch (res) {
+        case LoginSuccess(
+            :final token,
+            :final adminId,
+            :final adminUsername,
+            :final displayName,
+            :final expiresAt,
+            :final isSuperAdmin,
+            :final canAccessManagers,
+            :final canAccessPackages,
+            :final isEmployee,
+            :final sas4Token,
+          ):
+          await SessionManager.clearAllSessionData(
+            unregisterFcm: false,
+            clearAuth: false,
+          );
+          await AuthStorage.saveSession(
+            token: token,
+            adminId: adminId,
+            adminUsername: adminUsername,
+            displayName: displayName,
+            autoLogin: true,
+            tokenExpiry: expiresAt,
+            isSuperAdmin: isSuperAdmin,
+            canAccessManagers: canAccessManagers,
+            canAccessPackages: canAccessPackages,
+            isEmployee: isEmployee,
+            sas4Token: sas4Token,
+          );
+          // نظّف مرجع الأصلي — رجعنا فعلاً.
+          await SavedProfilesStore.clearOriginal();
+          if (isEmployee) {
+            final okPerms = await PermissionsService.refreshFromBackend();
+            if (!mounted) return;
+            if (!okPerms) await PermissionsService.clear();
+          }
+          // ignore: unawaited_futures
+          FcmService.initAfterLogin();
+          if (!mounted) return;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainShell()),
+            (route) => false,
+          );
+        case LoginFailure(:final message):
+          _snack(message, error: true);
+      }
+    } catch (e) {
+      if (mounted) _snack('فشلت العودة: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _returningToOriginal = false);
+    }
+  }
+
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -235,23 +338,45 @@ class _AccountsScreenState extends State<AccountsScreen> {
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _error != null
+            : (_error != null && _original == null)
                 ? _errorState()
-                : _rows.isEmpty
-                    ? _emptyState()
-                    : RefreshIndicator(
-                        onRefresh: _load,
-                        color: AppColors.brand,
-                        child: ListView(
-                          padding: EdgeInsets.only(
-                              bottom:
-                                  MediaQuery.paddingOf(context).bottom + 32),
-                          children: [
-                            _compactHeader(),
-                            for (final r in _rows) _accountTile(r),
-                          ],
-                        ),
-                      ),
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    color: AppColors.brand,
+                    child: ListView(
+                      padding: EdgeInsets.only(
+                          bottom:
+                              MediaQuery.paddingOf(context).bottom + 32),
+                      children: [
+                        _compactHeader(),
+                        // 2026-08-26: بطاقة "العودة للحساب الأصلي" —
+                        // تظهر أول شي لمّا يكون فيه انتقال جارٍ.
+                        if (_original != null) _originalTile(_original!),
+                        if (_rows.isEmpty && _original == null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 48),
+                            child: _emptyState(),
+                          )
+                        else if (_rows.isEmpty && _original != null)
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Text(
+                              'لا يوجد مدراء تحت هذا الحساب — استعمل زر "العودة" أعلاه للرجوع للحساب الأصلي.',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textMid,
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        else
+                          for (final r in _rows) _accountTile(r),
+                      ],
+                    ),
+                  ),
       ),
     );
   }
@@ -309,6 +434,117 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 2026-08-26: bar بارز للعودة للحساب الأصلي. لون brand بارز حتى
+  /// المدير يشوفه فوراً — دخل بلا قصد لحساب فرعي والحل بضغطة واحدة.
+  Widget _originalTile(({String username, String password, String displayName}) orig) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.brand,
+            AppColors.brand.withValues(alpha: 0.8),
+          ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brand.withValues(alpha: 0.28),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _returningToOriginal ? null : _returnToOriginal,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    LucideIcons.arrowLeftToLine,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'العودة للحساب الأصلي',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        orig.displayName.isNotEmpty
+                            ? '${orig.displayName}  ·  @${orig.username}'
+                            : '@${orig.username}',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_returningToOriginal)
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                else
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      LucideIcons.arrowRight,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

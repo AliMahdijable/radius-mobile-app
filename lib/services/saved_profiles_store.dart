@@ -56,6 +56,10 @@ class SavedProfilesStore {
 
   static const _kList = 'profiles.list';
   static const _kEncKey = 'profiles.enc_key';
+  // 2026-08-26: الحساب "الأصلي" — لمّا يبدّل الأدمن الرئيسي لحساب مدير
+  // فرعي، نحفظ هوّيته هنا. الفرعي غالباً ما عنده مدراء تحته، فتفقد
+  // العودة السريعة إلا لو حفظنا مرجع خاص. يُمسح عند العودة أو الـLogout.
+  static const _kOriginal = 'switcher.original';
   static const int _maxProfiles = 8;
 
   static String? _cachedKey;
@@ -164,7 +168,57 @@ class SavedProfilesStore {
   }
 
   /// امسح كل الحسابات المحفوظة (من إعدادات — "مسح الحسابات المحفوظة").
+  /// يمسح أيضاً مرجع الحساب الأصلي.
   static Future<void> clearAll() async {
     await _storage.delete(key: _kList);
+    await _storage.delete(key: _kOriginal);
+  }
+
+  // ─── Original admin (return-to-main after account switch) ──────
+
+  /// خزّن هوّية الحساب الأصلي — يُستدعى قبل التبديل لحساب مدير فرعي.
+  /// [origin] يوضّح من أي شاشة (accounts | manual) — للـtelemetry فقط.
+  static Future<void> setOriginal({
+    required String username,
+    required String plainPassword,
+    String displayName = '',
+    String origin = 'accounts',
+  }) async {
+    final encrypted = await encrypt(plainPassword);
+    final payload = {
+      'u': username,
+      'p': encrypted,
+      'n': displayName.isEmpty ? username : displayName,
+      'o': origin,
+      't': DateTime.now().toIso8601String(),
+    };
+    await _storage.write(key: _kOriginal, value: json.encode(payload));
+  }
+
+  /// اقرأ الحساب الأصلي — null إن ما فيه. الـpassword decrypted جاهز.
+  static Future<({String username, String password, String displayName})?>
+      readOriginal() async {
+    try {
+      final raw = await _storage.read(key: _kOriginal);
+      if (raw == null || raw.isEmpty) return null;
+      final m = json.decode(raw);
+      if (m is! Map) return null;
+      final u = m['u']?.toString();
+      final p = m['p']?.toString();
+      if (u == null || u.isEmpty || p == null) return null;
+      final plain = await decrypt(p);
+      return (
+        username: u,
+        password: plain,
+        displayName: (m['n'] ?? u).toString(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// امسح مرجع الحساب الأصلي — يُستدعى بعد العودة أو عند Logout يدوي.
+  static Future<void> clearOriginal() async {
+    await _storage.delete(key: _kOriginal);
   }
 }
