@@ -555,105 +555,133 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     );
   }
 
-  /// 2026-08-26: قيد الـscope — dropdown مدير فرعي. لو null الموظّف
-  /// يشاهد كامل شجرة الأب. لو محدَّد، يُقيَّد بمشتركي/بيانات ذلك المدير.
-  /// STOP RULE: عند تفعيل قيد، employees.manage/view تُحذف تلقائياً في
-  /// الـbackend — لا يشوف الموظّف الآخرين.
+  /// 2026-08-26: قيد الـscope — يظهر بشكل حقل form مطابق للـfields
+  /// الأخرى (اسم/باسورد/هاتف). أيقونة يمين + Dropdown ملء العرض + شرح
+  /// hint صغير تحت. تصميم نظيف بلا Row مزدوج.
   Widget _scopePicker() {
     final list = _managers;
     if (list == null) {
-      return Container(
-        height: 46,
-        alignment: AlignmentDirectional.centerStart,
-        padding: const EdgeInsetsDirectional.only(start: 8),
+      // Loading skeleton بنفس ارتفاع الحقول الأخرى
+      return _fieldContainer(
         child: Row(
           children: [
+            Icon(LucideIcons.userCheck,
+                size: 16, color: AppColors.textMid),
+            const SizedBox(width: 10),
             const SizedBox(
-              width: 14, height: 14,
+              width: 12, height: 12,
               child: CircularProgressIndicator(strokeWidth: 1.5),
             ),
-            const SizedBox(width: 10),
-            Text('جارٍ تحميل المدراء الفرعيّين...',
-                style: AppType.muted().copyWith(fontSize: 11)),
+            const SizedBox(width: 8),
+            Text('جارٍ تحميل المدراء...',
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: AppColors.textLow,
+                )),
           ],
         ),
       );
     }
     if (list.isEmpty) return const SizedBox.shrink();
-    // نبني menu items: null = بدون قيد، ثم كل المدراء.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInput,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.userCheck,
-              size: 16, color: AppColors.textMid),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('مقيَّد بمدير فرعي',
-                    style: AppType.label(color: AppColors.textHi)
-                        .copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
-                Text(
-                  _scopeAdminId == null
-                      ? 'بلا قيد — يشاهد كل بياناتك'
-                      : 'يرى فقط بيانات المدير الفرعي المختار',
-                  style: AppType.muted().copyWith(fontSize: 10.5),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: _scopeAdminId,
-              hint: Text('بلا قيد',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    color: AppColors.textMid,
-                    fontWeight: FontWeight.w600,
-                  )),
-              icon: Icon(LucideIcons.chevronDown,
-                  size: 14, color: AppColors.textMid),
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('بلا قيد',
+    final selected = _scopeAdminId;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldContainer(
+          child: Row(
+            children: [
+              Icon(LucideIcons.userCheck,
+                  size: 16, color: AppColors.textMid),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: selected,
+                    isExpanded: true,
+                    icon: Icon(LucideIcons.chevronDown,
+                        size: 16, color: AppColors.textMid),
+                    hint: Text(
+                      'مقيَّد بمدير فرعي (بلا قيد)',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                      )),
-                ),
-                for (final m in list)
-                  DropdownMenuItem<String?>(
-                    value: m.id.toString(),
-                    child: Text(
-                      _managerLabel(m),
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
+                        fontSize: 13,
+                        color: AppColors.textLow,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(
+                          'بلا قيد — يشاهد كل بياناتك',
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textHi,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      for (final m in list)
+                        DropdownMenuItem<String?>(
+                          value: m.id.toString(),
+                          child: Text(
+                            _managerLabel(m),
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textHi,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _scopeAdminId = v);
+                    },
                   ),
-              ],
-              onChanged: (v) {
-                setState(() => _scopeAdminId = v);
-              },
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Hint خفيف تحت الحقل — يوضّح الأثر بدون ازدحام
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 4, top: 5),
+          child: Text(
+            selected == null
+                ? 'الموظّف يشاهد كل مشتركين ومدراء حسابك.'
+                : 'الموظّف مقيَّد — يرى بيانات المدير الفرعي المختار فقط.',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: selected == null
+                  ? AppColors.textLow
+                  : const Color(0xFF7C3AED),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  /// Container مطابق لتصميم الـTextField في _field() — نفس المقاسات
+  /// والحدود، يعطي الـdropdown مظهر form-field متسق.
+  Widget _fieldContainer({required Widget child}) {
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
+      alignment: AlignmentDirectional.centerStart,
+      child: child,
     );
   }
 
