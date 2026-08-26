@@ -5,6 +5,7 @@ import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/locale_service.dart';
 import '../services/permissions_service.dart';
+import '../services/saved_profiles_store.dart';
 import '../services/session_manager.dart';
 import '../services/print_prefs.dart';
 import '../services/theme_service.dart';
@@ -273,7 +274,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // بلا buildNumber (نُخفيه — طلب المستخدم). الـshortVersion = 'v2.0.1'
               trailing: AppVersion.shortVersion,
             ),
-            const SizedBox(height: Sp.huge),
+            const SizedBox(height: Sp.md),
+            // 2026-08-26: مسح الحسابات المحفوظة على شاشة الدخول (chips).
+            // منفصل عن Logout — Logout ينظّف الجلسة ويُبقي الحسابات المحفوظة.
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: Material(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(R.md),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppColors.surface,
+                        title: const Text('مسح الحسابات المحفوظة'),
+                        content: const Text(
+                            'سيتمّ حذف كل الحسابات (يوزر+باسورد) المحفوظة على شاشة الدخول. متأكّد؟'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('إلغاء'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            style: TextButton.styleFrom(
+                                foregroundColor: AppColors.error),
+                            child: const Text('حذف'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      await SavedProfilesStore.clearAll();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('تمّ مسح الحسابات المحفوظة'),
+                          backgroundColor: AppColors.brand,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  child: Center(
+                    child: Text(
+                      'مسح الحسابات المحفوظة',
+                      style: AppType.button(color: AppColors.textMid),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: Sp.lg),
             SizedBox(
               width: double.infinity,
               height: 54,

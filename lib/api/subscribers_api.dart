@@ -708,7 +708,14 @@ class SubscribersApi {
   /// logged-in admin. Used by the super-admin "تابع إلى" picker on
   /// the add + edit subscriber sheets. Returns null on auth /
   /// permission failure so the caller can hide the picker.
-  static Future<List<({int id, String username, String displayName})>?>
+  ///
+  /// 2026-08-26: نحمل firstname/lastname خام بدل displayName مسبَق-التسلسل.
+  /// السبب: SAS4 كثيراً يخزّن firstname=lastname=username (نموذج الإنشاء
+  /// يعبّئها بنفس الـusername)، فـ"admin@ota6 admin@ota6 (admin@ota6)"
+  /// كان يظهر ٣ مرات. الآن الـUI يقرّر التنسيق (اسم رئيسي + username
+  /// ثانوي بلون مختلف عند اختلافهما).
+  static Future<
+      List<({int id, String username, String firstname, String lastname})>?>
       loadManagers() async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -717,7 +724,8 @@ class SubscribersApi {
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
       final list = (body['data'] as List?) ?? const [];
-      final out = <({int id, String username, String displayName})>[];
+      final out =
+          <({int id, String username, String firstname, String lastname})>[];
       for (final row in list) {
         if (row is! Map) continue;
         final rawId = row['id'];
@@ -726,16 +734,12 @@ class SubscribersApi {
             : int.tryParse(rawId?.toString() ?? '');
         if (id == null) continue;
         final username = (row['username'] ?? '').toString();
-        final fname = (row['firstname'] ?? '').toString().trim();
-        final lname = (row['lastname'] ?? '').toString().trim();
-        final arabic = [fname, lname]
-            .where((s) => s.isNotEmpty)
-            .join(' ')
-            .trim();
-        final display = arabic.isNotEmpty
-            ? '$arabic ($username)'
-            : username;
-        out.add((id: id, username: username, displayName: display));
+        out.add((
+          id: id,
+          username: username,
+          firstname: (row['firstname'] ?? '').toString().trim(),
+          lastname: (row['lastname'] ?? '').toString().trim(),
+        ));
       }
       out.sort((a, b) => a.username.compareTo(b.username));
       return out;

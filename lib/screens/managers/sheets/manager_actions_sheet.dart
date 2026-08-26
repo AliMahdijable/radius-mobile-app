@@ -40,24 +40,29 @@ enum ManagerAction {
 /// والـcaller يفتح الـsheet المناسب.
 Future<ManagerAction?> showManagerActionsSheet(
   BuildContext context,
-  Manager manager,
-) {
+  Manager manager, {
+  double customDebt = 0,
+}) {
   return showModalBottomSheet<ManagerAction>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => _ActionsSheet(manager: manager),
+    builder: (_) => _ActionsSheet(manager: manager, customDebt: customDebt),
   );
 }
 
 class _ActionsSheet extends StatelessWidget {
-  const _ActionsSheet({required this.manager});
+  const _ActionsSheet({required this.manager, this.customDebt = 0});
   final Manager manager;
+  /// دين تطبيقي (manager_debts) — يُدمج مع دين SAS4 لقرار "تسديد دين".
+  /// 2026-08-26: bug-fix — مدير عليه دين تطبيقي فقط كان يفقد الزر.
+  final double customDebt;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final hasDebt = (manager.debt ?? 0) > 0;
+    final totalDebt = (manager.debt ?? 0) + customDebt;
+    final hasDebt = totalDebt > 0;
     final hasBalance = (manager.balance ?? 0) > 0;
     final hasPhone = (manager.mobile ?? '').isNotEmpty;
     // 9 actions — ترتيب مطابق v1.
@@ -151,7 +156,7 @@ class _ActionsSheet extends StatelessWidget {
                     _summaryChip(
                       LucideIcons.alertTriangle,
                       'managers.chip_debt'.tr(
-                          namedArgs: {'amount': formatIQD(manager.debt!)}),
+                          namedArgs: {'amount': formatIQD(totalDebt)}),
                       const Color(0xFFE08F2D),
                     ),
                   _summaryChip(

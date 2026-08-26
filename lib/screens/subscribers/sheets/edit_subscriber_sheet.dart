@@ -94,7 +94,8 @@ class _EditSheetState extends State<_EditSheet> {
   DateTime? _expiration;
   /// Edited parent (تابع إلى) — null means 'keep original'.
   int? _parentId;
-  List<({int id, String username, String displayName})>? _managers;
+  List<({int id, String username, String firstname, String lastname})>?
+      _managers;
   bool _loadingManagers = false;
 
   @override
@@ -738,7 +739,7 @@ class _ManagerPicker extends StatelessWidget {
     required this.enabled,
     required this.onSelect,
   });
-  final List<({int id, String username, String displayName})>?
+  final List<({int id, String username, String firstname, String lastname})>?
       managers;
   final bool loading;
   final int? selectedId;
@@ -805,16 +806,63 @@ class _ManagerPicker extends StatelessWidget {
             for (final m in list)
               DropdownMenuItem<int>(
                 value: m.id,
-                child: Text(
-                  m.displayName,
-                  style: AppType.input(color: AppColors.textHi),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: _ManagerItemLabel(
+                  firstname: m.firstname,
+                  lastname: m.lastname,
+                  username: m.username,
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 2026-08-26: بديل لعرض displayName المسبَق-التسلسل الذي كان يظهر
+/// "admin@ota6 admin@ota6 (admin@ota6)". الآن: اسم رئيسي بارز
+/// (Arabic firstname+lastname أو username كـfallback) + @username
+/// ثانوي بلون مميّز، ويُخفى الثانوي إذا الاسم == username لتفادي التكرار.
+class _ManagerItemLabel extends StatelessWidget {
+  const _ManagerItemLabel({
+    required this.firstname,
+    required this.lastname,
+    required this.username,
+  });
+  final String firstname;
+  final String lastname;
+  final String username;
+
+  @override
+  Widget build(BuildContext context) {
+    final full = [firstname, lastname]
+        .where((s) => s.isNotEmpty)
+        .join(' ')
+        .trim();
+    final primary = full.isNotEmpty ? full : username;
+    final showSecondary = full.isNotEmpty && full != username;
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            primary,
+            style: AppType.input(color: AppColors.textHi),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (showSecondary) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '@$username',
+              style: AppType.subtitle(color: AppColors.textLow),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

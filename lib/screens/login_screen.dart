@@ -11,6 +11,7 @@ import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/fcm_service.dart';
 import '../services/permissions_service.dart';
+import '../services/saved_profiles_store.dart';
 import '../services/session_manager.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -118,6 +119,16 @@ class _LoginScreenState extends State<LoginScreen> {
           isEmployee: isEmployee,
           sas4Token: sas4Token,
         );
+        // 2026-08-26: احفظ الحساب في profiles.* حتى يبقى بعد Logout —
+        // شاشة الدخول تعرضه كـchip. نستعمل الـusername الحقيقي اللي كتبه
+        // المستخدم (قد يكون تغيّر case) وnick باسم العرض. best-effort.
+        if (_remember) {
+          unawaited(SavedProfilesStore.upsert(
+            username: user,
+            plainPassword: pass,
+            displayName: displayName,
+          ).catchError((_) {}));
+        }
         if (!mounted) return;
         HapticFeedback.mediumImpact();
         if (requires2fa) {
@@ -220,7 +231,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     duration: const Duration(milliseconds: 350),
                   )
                   .slideY(begin: 0.1, end: 0),
-              const SizedBox(height: Sp.huge),
+              const SizedBox(height: Sp.lg),
+              // 2026-08-26: chips للحسابات المحفوظة — تُملأ الفورم بضغطة،
+              // long-press لحذف حساب. تُخفى لو لا يوجد محفوظات.
+              _ProfileChips(
+                onPick: (p) async {
+                  try {
+                    final plain =
+                        await SavedProfilesStore.decrypt(p.encryptedPassword);
+                    if (!mounted) return;
+                    setState(() {
+                      _userCtrl.text = p.username;
+                      _passCtrl.text = plain;
+                    });
+                    _passFocus.requestFocus();
+                  } catch (_) {
+                    _showSnack('تعذّر قراءة الحساب المحفوظ', error: true);
+                  }
+                },
+                onRemoved: () {
+                  if (mounted) setState(() {});
+                },
+              ),
+              const SizedBox(height: Sp.md),
               _FormCard(
                 userCtrl: _userCtrl,
                 passCtrl: _passCtrl,
@@ -251,6 +284,139 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 2026-08-26: صفّ chips للحسابات المحفوظة على شاشة الدخول.
+/// - يُخفى تلقائياً لو لا محفوظات (SizedBox.shrink).
+/// - Tap: يعبّئ الفورم بيوزر+باسورد الحساب.
+/// - Long-press: يحذف الحساب من الذاكرة الدائمة.
+class _ProfileChips extends StatefulWidget {
+  const _ProfileChips({required this.onPick, required this.onRemoved});
+  final void Function(SavedProfile p) onPick;
+  final VoidCallback onRemoved;
+
+  @override
+  State<_ProfileChips> createState() => _ProfileChipsState();
+}
+
+class _ProfileChipsState extends State<_ProfileChips> {
+  late Future<List<SavedProfile>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = SavedProfilesStore.list();
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _future = SavedProfilesStore.list();
+    });
+  }
+
+  Future<void> _confirmRemove(SavedProfile p) async {
+    HapticFeedback.mediumImpact();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف الحساب المحفوظ'),
+        content: Text('حذف "${p.displayName.isEmpty ? p.username : p.displayName}" من قائمة الحسابات المحفوظة؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await SavedProfilesStore.remove(p.username);
+      if (!mounted) return;
+      await _refresh();
+      widget.onRemoved();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return FutureBuilder<List<SavedProfile>>(
+      future: _future,
+      builder: (_, snap) {
+        final items = snap.data ?? const <SavedProfile>[];
+        if (items.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: Sp.xs),
+              child: Text(
+                'الحسابات المحفوظة',
+                style: AppType.muted().copyWith(fontSize: 11),
+              ),
+            ),
+            SizedBox(
+              height: 44,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(width: Sp.sm),
+                itemBuilder: (_, i) {
+                  final p = items[i];
+                  final label = p.displayName.isEmpty ? p.username : p.displayName;
+                  return GestureDetector(
+                    onLongPress: () => _confirmRemove(p),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(22),
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        widget.onPick(p);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.brand.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: AppColors.brand.withValues(alpha: 0.35),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person_outline,
+                                size: 15, color: AppColors.brand),
+                            const SizedBox(width: 6),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 140),
+                              child: Text(
+                                label,
+                                style: AppType.button(color: AppColors.brand)
+                                    .copyWith(fontSize: 12.5),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

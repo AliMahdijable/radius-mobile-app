@@ -148,7 +148,13 @@ class _ManagersScreenState extends State<ManagersScreen> {
   /// مطلب 2026-06-12: نقر الـtile يفتح actions sheet مطابق v1.
   /// 9 عمليات يتعامل معها بحسب القيمة المرجعة.
   Future<void> _openActions(Manager m) async {
-    final action = await showManagerActionsSheet(context, m);
+    // 2026-08-26: نمرّر الدين التطبيقي (manager_debts) حتى الـsheet يعرض
+    // زر "تسديد دين" حتى للمدراء بلا دين SAS. bug-fix: كان يختفي.
+    final action = await showManagerActionsSheet(
+      context,
+      m,
+      customDebt: _customDebtByManager[m.id] ?? 0,
+    );
     if (action == null || !mounted) return;
     switch (action) {
       case ManagerAction.edit:
