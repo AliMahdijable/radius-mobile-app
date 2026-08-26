@@ -389,6 +389,8 @@ class _EditTemplateSheet extends StatefulWidget {
 class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   late final TextEditingController _bodyCtrl;
   late bool _isActive;
+  /// 2026-08-26: قناة افتراضيّة للقالب — auto/whatsapp/telegram.
+  late String _defaultChannel;
   bool _saving = false;
 
   @override
@@ -397,12 +399,138 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     _bodyCtrl = TextEditingController(
         text: widget.existing?.messageContent ?? '');
     _isActive = widget.existing?.isActive ?? true;
+    _defaultChannel = widget.existing?.defaultChannel ?? 'auto';
   }
 
   @override
   void dispose() {
     _bodyCtrl.dispose();
     super.dispose();
+  }
+
+  /// 2026-08-26: مبدّل القناة الافتراضيّة للقالب — 3 chips.
+  /// auto = يحترم binding المشترك (الافتراضي).
+  /// whatsapp = يجبر WA حتى لو المشترك مربوط بـTG.
+  /// telegram = يجبر TG (يفشل الإرسال لو المشترك مو مربوط).
+  Widget _defaultChannelPicker() {
+    final options = [
+      (
+        value: 'auto',
+        label: 'تلقائي',
+        icon: LucideIcons.split,
+        color: AppColors.brand,
+        hint: 'يحترم ربط المشترك (تلغرام لو مربوط، وإلا واتساب)',
+      ),
+      (
+        value: 'whatsapp',
+        label: 'واتساب فقط',
+        icon: LucideIcons.messageCircle,
+        color: const Color(0xFF25D366),
+        hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
+      ),
+      (
+        value: 'telegram',
+        label: 'تلغرام فقط',
+        icon: LucideIcons.send,
+        color: const Color(0xFF229ED9),
+        hint: 'يجبر تلغرام — يفشل للمشترك غير المربوط',
+      ),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('قناة الإرسال',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textHi,
+              )),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (int i = 0; i < options.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: _channelChip(
+                    label: options[i].label,
+                    icon: options[i].icon,
+                    color: options[i].color,
+                    selected: _defaultChannel == options[i].value,
+                    onTap: () => setState(
+                        () => _defaultChannel = options[i].value),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            options.firstWhere((o) => o.value == _defaultChannel).hint,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMid,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _channelChip({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.14)
+              : AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? color : AppColors.border,
+            width: selected ? 1 : 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 13, color: selected ? color : AppColors.textMid),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(label,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? color : AppColors.textMid,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _insertPlaceholder(String ph) {
@@ -426,6 +554,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
       templateName: widget.def.label,
       messageContent: _bodyCtrl.text,
       isActive: _isActive,
+      defaultChannel: _defaultChannel,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -573,6 +702,9 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                       value: _isActive,
                       onChanged: (v) => setState(() => _isActive = v),
                     ),
+                    const SizedBox(height: Sp.sm),
+                    // 2026-08-26: قناة افتراضيّة للقالب — auto / whatsapp / telegram.
+                    _defaultChannelPicker(),
                     const SizedBox(height: Sp.md),
                     if (widget.def.placeholders.isNotEmpty) ...[
                       Padding(

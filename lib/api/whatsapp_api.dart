@@ -15,6 +15,7 @@ class WhatsTemplate {
     required this.templateType,
     required this.isActive,
     required this.messageContent,
+    this.defaultChannel = 'auto',
   });
 
   /// e.g. 'debt_reminder' / 'expiry_warning' / 'subscriber_info'.
@@ -24,6 +25,11 @@ class WhatsTemplate {
   /// Raw body with {variable} placeholders the client renders before
   /// calling sendMessage.
   final String messageContent;
+
+  /// 2026-08-26: قناة افتراضيّة لهذا القالب — 'auto' (بحسب binding
+  /// المشترك) / 'whatsapp' (يجبر WA) / 'telegram' (يجبر TG). backend
+  /// يقرأها في _v2NotifySubscriberWA ويمرّر forceChannel.
+  final String defaultChannel;
 }
 
 Map<String, dynamic>? _waMap(dynamic value) {
@@ -388,10 +394,15 @@ class WhatsAppApi {
             ? active
             : (active is num ? active != 0 : active?.toString() == '1');
         final content = (row['message_content'] ?? '').toString();
+        final chRaw = row['default_channel']?.toString() ?? 'auto';
+        final ch = ['auto', 'whatsapp', 'telegram'].contains(chRaw)
+            ? chRaw
+            : 'auto';
         out.add(WhatsTemplate(
           templateType: type,
           isActive: isActive,
           messageContent: content,
+          defaultChannel: ch,
         ));
       }
       _templates = out;
@@ -649,6 +660,8 @@ class WhatsAppApi {
     required String templateName,
     required String messageContent,
     required bool isActive,
+    /// 2026-08-26: قناة افتراضيّة للقالب — 'auto' / 'whatsapp' / 'telegram'.
+    String defaultChannel = 'auto',
   }) async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return (ok: false, message: 'لا توجد جلسة دخول');
@@ -661,6 +674,7 @@ class WhatsAppApi {
           'templateName': templateName,
           'messageContent': messageContent,
           'isActive': isActive,
+          'defaultChannel': defaultChannel,
         },
       );
       final body = r.data ?? const {};

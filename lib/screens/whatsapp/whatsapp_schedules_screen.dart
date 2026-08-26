@@ -33,6 +33,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   String _expiryTime = '10:00:00';
   List<int> _expiryDays = const [0, 1, 2, 3, 4, 5, 6];
   int _daysBefore = 3;
+  String _expiryChannel = 'auto';
   final _daysBeforeCtrl = TextEditingController(text: '3');
   bool _savingExpiry = false;
   // Server-side row existence — نحتاجه للـtoggle. لو null → لسّة ما
@@ -46,6 +47,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   List<int> _debtDays = const [0, 1, 2, 3, 4, 5, 6];
   String _debtMode = 'weekly';
   List<int> _debtMonthDays = const [1];
+  String _debtChannel = 'auto';
   bool _savingDebt = false;
   int? _debtScheduleId;
 
@@ -92,6 +94,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         _expiryDays = List<int>.from(s.activeDays);
         _daysBefore = s.daysBefore ?? 3;
         _daysBeforeCtrl.text = _daysBefore.toString();
+        _expiryChannel = s.channelPreference;
       } else if (s.scheduleType == 'debt_reminder') {
         _debtScheduleId = s.id;
         _debtEnabled = s.isEnabled;
@@ -100,6 +103,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         _debtMode = s.scheduleMode == 'monthly' ? 'monthly' : 'weekly';
         _debtMonthDays =
             s.monthDays.isNotEmpty ? List<int>.from(s.monthDays) : const [1];
+        _debtChannel = s.channelPreference;
       }
     }
   }
@@ -139,6 +143,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       scheduledTime: _expiryTime,
       activeDays: List<int>.from(_expiryDays)..sort(),
       daysBefore: _daysBefore,
+      channelPreference: _expiryChannel,
     );
     final r = await WhatsAppApi.saveSchedule(schedule);
     if (!mounted) return;
@@ -168,6 +173,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       monthDays: _debtMode == 'monthly'
           ? (List<int>.from(_debtMonthDays)..sort())
           : const [],
+      channelPreference: _debtChannel,
     );
     final r = await WhatsAppApi.saveSchedule(schedule);
     if (!mounted) return;
@@ -206,6 +212,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         scheduledTime: _expiryTime,
         activeDays: List<int>.from(_expiryDays)..sort(),
         daysBefore: _daysBefore,
+        channelPreference: _expiryChannel,
       );
       final r = await WhatsAppApi.saveSchedule(schedule);
       if (!mounted) return;
@@ -248,6 +255,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         monthDays: _debtMode == 'monthly'
             ? (List<int>.from(_debtMonthDays)..sort())
             : const [],
+        channelPreference: _debtChannel,
       );
       final r = await WhatsAppApi.saveSchedule(schedule);
       if (!mounted) return;
@@ -574,6 +582,11 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             color: color,
           ),
           const SizedBox(height: Sp.md),
+          _channelPicker(
+            current: _expiryChannel,
+            onChanged: (v) => setState(() => _expiryChannel = v),
+          ),
+          const SizedBox(height: Sp.md),
           _saveButton(
             saving: _savingExpiry,
             onPressed: _saveExpiry,
@@ -656,6 +669,11 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             const SizedBox(height: 8),
             _monthDayChips(color: color),
           ],
+          const SizedBox(height: Sp.md),
+          _channelPicker(
+            current: _debtChannel,
+            onChanged: (v) => setState(() => _debtChannel = v),
+          ),
           const SizedBox(height: Sp.md),
           _saveButton(
             saving: _savingDebt,
@@ -743,6 +761,132 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  // ─── Channel Preference Picker ─────────────────────────
+  // 2026-08-26: قناة الإرسال المفضّلة (auto/whatsapp/telegram).
+  // مطابق _defaultChannelPicker في whatsapp_templates_screen.
+  Widget _channelPicker({
+    required String current,
+    required ValueChanged<String> onChanged,
+  }) {
+    final options = [
+      (
+        value: 'auto',
+        label: 'تلقائي',
+        icon: LucideIcons.split,
+        color: AppColors.brand,
+        hint: 'يحترم ربط المشترك (تلغرام لو مربوط، وإلا واتساب)',
+      ),
+      (
+        value: 'whatsapp',
+        label: 'واتساب فقط',
+        icon: LucideIcons.messageCircle,
+        color: const Color(0xFF25D366),
+        hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
+      ),
+      (
+        value: 'telegram',
+        label: 'تلغرام فقط',
+        icon: LucideIcons.send,
+        color: const Color(0xFF229ED9),
+        hint: 'يجبر تلغرام — يفشل للمشترك غير المربوط',
+      ),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('قناة الإرسال',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textHi,
+              )),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (int i = 0; i < options.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: _channelChip(
+                    label: options[i].label,
+                    icon: options[i].icon,
+                    color: options[i].color,
+                    selected: current == options[i].value,
+                    onTap: () => onChanged(options[i].value),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            options.firstWhere((o) => o.value == current).hint,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMid,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _channelChip({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.14)
+              : AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? color : AppColors.border,
+            width: selected ? 1 : 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 13, color: selected ? color : AppColors.textMid),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(label,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? color : AppColors.textMid,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -28,6 +28,12 @@ class WhatsAppSchedule {
   /// 1..31. القيمة 31 sentinel = "آخر يوم في الشهر".
   final List<int> monthDays;
 
+  /// 2026-08-26: قناة الإرسال المفضّلة لهذه الجدولة.
+  /// 'auto' = يحترم binding المشترك (default).
+  /// 'whatsapp' = يجبر واتساب.
+  /// 'telegram' = يجبر تلغرام (المشترك يجب يكون مربوطاً).
+  final String channelPreference;
+
   const WhatsAppSchedule({
     this.id,
     required this.adminId,
@@ -40,6 +46,7 @@ class WhatsAppSchedule {
     this.executionCount = 0,
     this.scheduleMode = 'weekly',
     this.monthDays = const [],
+    this.channelPreference = 'auto',
   });
 
   factory WhatsAppSchedule.fromJson(Map<String, dynamic> json) {
@@ -65,6 +72,10 @@ class WhatsAppSchedule {
               defaultVal: const [])
           .where((n) => n >= 1 && n <= 31)
           .toList(),
+      channelPreference: () {
+        final raw = (json['channel_preference'] ?? 'auto').toString();
+        return ['auto', 'whatsapp', 'telegram'].contains(raw) ? raw : 'auto';
+      }(),
     );
   }
 
@@ -83,6 +94,7 @@ class WhatsAppSchedule {
         if (daysBefore != null) 'daysBefore': daysBefore,
         'scheduleMode': scheduleMode,
         'monthDays': monthDays,
+        'channelPreference': channelPreference,
       },
     };
   }
@@ -99,6 +111,7 @@ class WhatsAppSchedule {
     int? executionCount,
     String? scheduleMode,
     List<int>? monthDays,
+    String? channelPreference,
   }) {
     return WhatsAppSchedule(
       id: id ?? this.id,
@@ -112,6 +125,7 @@ class WhatsAppSchedule {
       executionCount: executionCount ?? this.executionCount,
       scheduleMode: scheduleMode ?? this.scheduleMode,
       monthDays: monthDays ?? this.monthDays,
+      channelPreference: channelPreference ?? this.channelPreference,
     );
   }
 
