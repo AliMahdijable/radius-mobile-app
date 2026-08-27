@@ -121,15 +121,23 @@ class BroadcastPreview {
   final int totalBound;
   final int eligible;
   final int blocked;
+
+  /// 2026-08-26 (TG scope): مربوطون خارج نطاق الإرسال الحالي (send-scope
+  /// المدير). لو المدير نطاقه sendToAll=false ومحدَّد مدراء فرعيّون معيّنون،
+  /// المشتركون التابعون لغيرهم يُستَثنَون تلقائياً. الـUI يعرض هذا العدد
+  /// حتى الأدمن يفهم ليش eligible أقلّ من totalBound.
+  final int outOfScope;
   const BroadcastPreview({
     required this.totalBound,
     required this.eligible,
     required this.blocked,
+    this.outOfScope = 0,
   });
   static BroadcastPreview fromJson(Map<String, dynamic> j) => BroadcastPreview(
         totalBound: (j['totalBound'] as num?)?.toInt() ?? 0,
         eligible: (j['eligible'] as num?)?.toInt() ?? 0,
         blocked: (j['blocked'] as num?)?.toInt() ?? 0,
+        outOfScope: (j['outOfScope'] as num?)?.toInt() ?? 0,
       );
 }
 

@@ -94,12 +94,24 @@ class _SendScopePanelState extends State<SendScopePanel> {
             children: [
               Icon(LucideIcons.users, size: 14, color: AppColors.brand),
               const SizedBox(width: 6),
-              Text(
-                'نطاق الإرسال',
-                style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'نطاق الإرسال',
+                      style: AppType.title(color: AppColors.textHi)
+                          .copyWith(fontSize: 13),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      'يشمل واتساب + تلغرام (نفس النطاق للقناتين)',
+                      style: AppType.muted().copyWith(fontSize: 9.5),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
               if (_saving)
                 const SizedBox(
                   width: 14,

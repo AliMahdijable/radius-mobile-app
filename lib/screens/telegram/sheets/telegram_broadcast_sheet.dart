@@ -238,7 +238,9 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '🎯 سيصل: ${_preview!.eligible} مشترك · مرتبطون: ${_preview!.totalBound} · محظورون: ${_preview!.blocked}',
+                          _preview!.outOfScope > 0
+                              ? '🎯 سيصل: ${_preview!.eligible} · مرتبطون: ${_preview!.totalBound} · محظورون: ${_preview!.blocked} · خارج النطاق: ${_preview!.outOfScope}'
+                              : '🎯 سيصل: ${_preview!.eligible} مشترك · مرتبطون: ${_preview!.totalBound} · محظورون: ${_preview!.blocked}',
                           style: TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 12,
