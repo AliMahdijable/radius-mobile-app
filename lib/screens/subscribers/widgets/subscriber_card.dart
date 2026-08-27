@@ -8,6 +8,7 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../sheets/location_sheets.dart';
 import 'device_chip_micro.dart';
 
 /// Subscriber card v2 — banking-app style with a colored leading rail
@@ -267,6 +268,32 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                                 color: Color(0xFF229ED9),
                               )),
                         ],
+                      ),
+                    ),
+                  ],
+                  // 2026-08-26: أيقونة الموقع — قابلة للنقر لفتح chooser
+                  // (Google Maps / Waze / نسخ). تظهر فقط لو الموقع مُعيَّن.
+                  if (sub.hasLocation) ...[
+                    const SizedBox(width: 6),
+                    InkResponse(
+                      onTap: () =>
+                          showLocationChooserSheet(context, sub: sub),
+                      radius: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF14B8A6)
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF14B8A6)
+                                .withValues(alpha: 0.4),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: const Icon(LucideIcons.mapPin,
+                            size: 11, color: Color(0xFF14B8A6)),
                       ),
                     ),
                   ],

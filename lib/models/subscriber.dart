@@ -50,6 +50,16 @@ class Subscriber {
   final int? dailyUpload;
   final int? dailyDownload;
 
+  /// 2026-08-26: موقع GPS للمشترك — يُخزَّن في SAS4 field `address`
+  /// بصيغة "gps:LAT,LNG". backend parses ويعيدها هنا. null = لم يُعيَّن.
+  final double? latitude;
+  final double? longitude;
+
+  /// النصّ الخام لحقل `address` من SAS4 (لأغراض التصادم — نمنع الكتابة
+  /// فوق نصّ يدوي كتبه المدير قبل تفعيل الميزة). إذا يبدأ بـ"gps:" فهو
+  /// موقع نظيف؛ خلاف ذلك = نصّ قديم يجب تنظيفه من SAS4 أوّلاً.
+  final String? addressRaw;
+
   const Subscriber({
     this.idx,
     required this.username,
@@ -79,7 +89,21 @@ class Subscriber {
     this.dailyTrafficTotal,
     this.dailyUpload,
     this.dailyDownload,
+    this.latitude,
+    this.longitude,
+    this.addressRaw,
   });
+
+  /// true فقط لو الـbackend أرجع إحداثيّات صالحة (parse من prefix gps:).
+  bool get hasLocation => latitude != null && longitude != null;
+
+  /// true = حقل address في SAS4 محتلّ بنصّ يدوي (بلا gps:) — يمنع
+  /// تعيين موقع GPS جديد صامتاً. الـUI يعرض تحذيراً + رابط "احذف من SAS4".
+  bool get hasManualAddressText {
+    final raw = addressRaw?.trim() ?? '';
+    if (raw.isEmpty) return false;
+    return !raw.toLowerCase().startsWith('gps:');
+  }
 
   String get fullName {
     final n = '$firstname $lastname'.trim();
@@ -243,6 +267,9 @@ class Subscriber {
           toInt((j['daily_traffic'] is Map ? j['daily_traffic']['upload'] : null)),
       dailyDownload:
           toInt((j['daily_traffic'] is Map ? j['daily_traffic']['download'] : null)),
+      latitude: toDouble(j['latitude']),
+      longitude: toDouble(j['longitude']),
+      addressRaw: j['address_raw']?.toString(),
     );
   }
 
@@ -285,6 +312,12 @@ class Subscriber {
       uploadBytes: uploadBytes,
       discount: discount,
       price: newPrice,
+      dailyTrafficTotal: dailyTrafficTotal,
+      dailyUpload: dailyUpload,
+      dailyDownload: dailyDownload,
+      latitude: latitude,
+      longitude: longitude,
+      addressRaw: addressRaw,
     );
   }
 
@@ -325,6 +358,47 @@ class Subscriber {
       dailyTrafficTotal: dailyTrafficTotal,
       dailyUpload: dailyUpload,
       dailyDownload: dailyDownload,
+      latitude: latitude,
+      longitude: longitude,
+      addressRaw: addressRaw,
+    );
+  }
+
+  /// 2026-08-26: نُسخة مع موقع GPS مُحدَّث — بعد PATCH ناجح، نُطبّقها
+  /// محلياً حتى الكارت + شاشة التفاصيل تتحدّث بدون انتظار refetch.
+  Subscriber copyWithLocation({double? latitude, double? longitude, String? addressRaw}) {
+    return Subscriber(
+      idx: idx,
+      username: username,
+      firstname: firstname,
+      lastname: lastname,
+      phone: phone,
+      mobile: mobile,
+      expiration: expiration,
+      lastOnline: lastOnline,
+      remainingDays: remainingDays,
+      notes: notes,
+      hasDebtFlag: hasDebtFlag,
+      debt: debt,
+      profileName: profileName,
+      profileId: profileId,
+      parentUsername: parentUsername,
+      password: password,
+      isEnabled: isEnabled,
+      isOnlineFlag: isOnlineFlag,
+      ipAddress: ipAddress,
+      sessionTime: sessionTime,
+      downloadBytes: downloadBytes,
+      uploadBytes: uploadBytes,
+      deviceVendor: deviceVendor,
+      discount: discount,
+      price: price,
+      dailyTrafficTotal: dailyTrafficTotal,
+      dailyUpload: dailyUpload,
+      dailyDownload: dailyDownload,
+      latitude: latitude,
+      longitude: longitude,
+      addressRaw: addressRaw ?? this.addressRaw,
     );
   }
 }

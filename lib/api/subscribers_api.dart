@@ -977,6 +977,55 @@ class SubscribersApi {
     }
   }
 
+  /// 2026-08-26: تعديل موقع GPS للمشترك.
+  /// - `lat/lng` = تعيين موقع.
+  /// - `clear=true` = حذف الموقع.
+  ///
+  /// backend يرفض بـ409 لو حقل address في SAS4 يحمل نصّاً يدوياً بلا
+  /// prefix `gps:` (حماية من الكتابة فوقه صامتاً). `existingText`
+  /// يعرض للمدير النصّ الذي يجب حذفه من SAS4 يدوياً أوّلاً.
+  static Future<({bool ok, String? message, String? code, String? existingText})>
+      setLocation(String idx, {double? lat, double? lng, bool clear = false}) async {
+    try {
+      final r = await ApiClient.dio.patch<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/location',
+        data: clear
+            ? {'clear': true}
+            : {'lat': lat, 'lng': lng},
+      );
+      final data = r.data ?? const {};
+      if (data['success'] == true) {
+        return (ok: true, message: null, code: null, existingText: null);
+      }
+      return (
+        ok: false,
+        message: data['message']?.toString() ?? 'فشل تحديث الموقع',
+        code: data['code']?.toString(),
+        existingText: data['existing']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('v2/subscribers/$idx/location', e);
+      final body = e.response?.data;
+      if (body is Map) {
+        return (
+          ok: false,
+          message: body['message']?.toString() ?? 'فشل تحديث الموقع',
+          code: body['code']?.toString(),
+          existingText: body['existing']?.toString(),
+        );
+      }
+      return (
+        ok: false,
+        message: 'خطأ في الشبكة',
+        code: null,
+        existingText: null,
+      );
+    } catch (e) {
+      _log('v2/subscribers/$idx/location', e);
+      return (ok: false, message: e.toString(), code: null, existingText: null);
+    }
+  }
+
   /// DELETE /api/v2/subscribers/:idx — removes the subscriber from
   /// SAS4. Backend rejects with 400 when the subscriber still has
   /// debt (notes < 0) so we surface that message directly. Returns

@@ -18,6 +18,7 @@ import '../../theme/typography.dart';
 import '../reports/account_statement_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
+import 'sheets/location_sheets.dart';
 import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
 import 'sheets/movements_sheet.dart';
@@ -1043,6 +1044,23 @@ class _OperationsCard extends StatelessWidget {
       if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
         _Op(LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(), const Color(0xFF14B8A6),
             () => showPayDebtSheet(context, sub)),
+      // 2026-08-26: الموقع — يظهر إذا:
+      //  - الموقع مُعيَّن (يقدر أيّ موظّف يفتحه بالخرائط)، أو
+      //  - الموظّف/المدير يقدر يعدّله (subscribers.edit_location).
+      if (sub.hasLocation || Perms.has('subscribers.edit_location'))
+        _Op(
+          LucideIcons.mapPin,
+          sub.hasLocation ? 'الموقع' : 'إضافة موقع',
+          const Color(0xFF14B8A6),
+          () async {
+            if (!sub.hasLocation) {
+              await showLocationEditSheet(context, sub: sub);
+              return;
+            }
+            // الموقع مُعيَّن → chooser (يعرض خيار "تعديل" لو الصلاحية).
+            await showLocationSheet(context, sub: sub);
+          },
+        ),
       if (Perms.has('discounts.manage'))
         _Op(LucideIcons.tag, 'subscribers.op_quick_discount'.tr(), const Color(0xFF14B8A6),
             () => showQuickDiscountSheet(context, sub)),
