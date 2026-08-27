@@ -391,6 +391,11 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else ...[
+                // 2026-08-26: كارت الوضع اليدوي في أعلى الشاشة — قبل كل شيء
+                // آخر. الفكرة الأساسيّة: يشتغل حتى لو WA السيرفر مقطوع، فمو
+                // منطقي نخبيه خلف status. يجب أن يكون أوّل شيء يشوفه المدير.
+                _manualModeCard(accent),
+                const SizedBox(height: Sp.md),
                 _statusCard(accent),
                 const SizedBox(height: Sp.md),
                 if (_hasSafetyNotices) ...[
@@ -415,12 +420,6 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   const SizedBox(height: Sp.sm),
                 ],
                 _actionsBar(accent),
-                // 2026-08-26: كارت الوضع اليدوي يظهر دائماً — حتى قبل ربط WA.
-                // ⚠️ حرج: الفكرة الأساسيّة أنّ الوضع اليدوي يشتغل حتى لو WA
-                // السيرفر مقطوع/محظور — فتخبئته خلف `connected==true` كان
-                // يمنع المدير من تفعيلها في الحالة اللي يحتاجها فيها أشدّ.
-                const SizedBox(height: Sp.lg),
-                _manualModeCard(accent),
                 // Features + Templates تظهر فقط عند الاتصال — طلب المستخدم
                 // 2026-07-12: لا معنى لعرض toggles إشعارات وقوالب واتساب
                 // إذا الجلسة أصلاً غير مربوطة.
