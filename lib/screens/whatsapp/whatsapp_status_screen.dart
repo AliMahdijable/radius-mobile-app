@@ -420,16 +420,19 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   const SizedBox(height: Sp.sm),
                 ],
                 _actionsBar(accent),
+                // 2026-08-26: نطاق الإرسال يظهر دائماً (حتى قبل ربط WA).
+                // ⚠️ حرج: المدير يحتاج يقرّر نطاقه بمعزل عن حالة الجلسة —
+                // خصوصاً لو WA مقطوع والوضع اليدوي مفعّل (يريد يعرف لأي
+                // مدراء يفتح واتساب لهم). SendScopePanel داخلياً يُخفي نفسه
+                // لو ما فيه sub-managers، فلا يزعج المدراء الفرديين.
+                const SizedBox(height: Sp.md),
+                const SendScopePanel(),
                 // Features + Templates تظهر فقط عند الاتصال — طلب المستخدم
                 // 2026-07-12: لا معنى لعرض toggles إشعارات وقوالب واتساب
                 // إذا الجلسة أصلاً غير مربوطة.
                 if (_status?.connected == true) ...[
                   const SizedBox(height: Sp.md),
                   _featuresCard(accent),
-                  const SizedBox(height: Sp.md),
-                  // نطاق الإرسال — يظهر فقط لمن عنده مدراء فرعيون
-                  // (SendScopePanel داخلياً يُخفي نفسه لو subManagers فارغة).
-                  const SendScopePanel(),
                   const SizedBox(height: Sp.md),
                   _templatesLink(accent),
                 ],
