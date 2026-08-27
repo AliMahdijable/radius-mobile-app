@@ -189,6 +189,13 @@ class _Row extends StatelessWidget {
     if (lower.contains('subscriber_add') || lower.contains('add_subscriber')) {
       return (label: 'إضافة مشترك', detail: null);
     }
+    // 2026-08-26: موقع GPS — SUBSCRIBER_EDIT + description يحوي "موقع GPS".
+    // نُميّزها قبل قاعدة "تعديل مشترك" العامّة حتى تظهر بلابل واضح للأدمن.
+    if ((lower.contains('subscriber_edit') || lower.contains('edit_subscriber')) &&
+        description.contains('موقع GPS')) {
+      final isClear = description.contains('حذف موقع');
+      return (label: 'تعديل', detail: isClear ? 'حذف موقع' : 'إضافة موقع');
+    }
     if (lower.contains('subscriber_edit') ||
         lower.contains('edit_subscriber')) {
       return (label: 'تعديل مشترك', detail: null);

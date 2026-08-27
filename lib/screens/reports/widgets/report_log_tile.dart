@@ -273,6 +273,16 @@ _ActionMeta _actionMeta(String at, String desc) {
       return const _ActionMeta(
           'إضافة مشترك', LucideIcons.userPlus, _kPositive);
     case 'SUBSCRIBER_EDIT':
+      // 2026-08-26: تعديل موقع GPS يستعمل نفس النوع لكن الأيقونة
+      // والتسمية تعكس العملية الفعليّة من الوصف.
+      if (desc.contains('موقع GPS')) {
+        final isClear = desc.contains('حذف موقع');
+        return _ActionMeta(
+          isClear ? 'حذف موقع' : 'إضافة موقع',
+          LucideIcons.mapPin,
+          const Color(0xFF14B8A6),
+        );
+      }
       return const _ActionMeta(
           'تعديل مشترك', LucideIcons.pencil, Color(0xFF3B82F6));
     case 'SUBSCRIBER_DELETE':
