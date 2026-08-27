@@ -1193,14 +1193,15 @@ class _OperationsCard extends StatelessWidget {
             child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              // 2026-07-13 (تكرار ٣): مسافات near-zero + أزرار أكبر قليلاً.
-              // شكوى: "بعدها المسافات كبيرة، صغّرها وكبّر الأزرار بدرجة".
+              // 2026-08-26: مسافات مضغوطة أكثر — صفر بين الأزرار
+              // (crossAxisSpacing=0) + طول childAspect أقصر (1.05)
+              // ليقارب الشبكة عمودياً. طلب المستخدم "قلّص المسافات".
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
                 mainAxisSpacing: 0,
-                crossAxisSpacing: 2,
-                childAspectRatio: 0.95,
+                crossAxisSpacing: 0,
+                childAspectRatio: 1.05,
               ),
               itemCount: ops.length,
               itemBuilder: (_, i) => _OpCard(op: ops[i]),
@@ -1247,28 +1248,33 @@ class _OpCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // 2026-08-26: أيقونات مربّعة (rounded 12dp) بدل دائريّة + مسافات
+    // مضغوطة. المستخدم فضّل الشبكة المسطّحة الأصليّة مع لمسة modern.
     return InkResponse(
       onTap: () {
         HapticFeedback.selectionClick();
         op.onTap();
       },
-      radius: 36,
-      highlightShape: BoxShape.circle,
+      radius: 34,
+      containedInkWell: true,
+      highlightShape: BoxShape.rectangle,
+      customBorder: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 2026-07-13 (v3): كبّر لـ46dp + قلّل المسافة تحتها لـ2
           Container(
             width: 46,
             height: 46,
             decoration: BoxDecoration(
               color: op.color,
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
                   color: op.color.withValues(alpha: 0.28),
-                  blurRadius: 7,
+                  blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
@@ -1276,7 +1282,7 @@ class _OpCard extends StatelessWidget {
             alignment: Alignment.center,
             child: Icon(op.icon, color: Colors.white, size: 21),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Flexible(
             child: Text(
               op.label,
