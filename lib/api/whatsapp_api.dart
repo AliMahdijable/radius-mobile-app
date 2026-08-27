@@ -1,10 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../core/util/format.dart';
 import '../models/subscriber.dart';
 import '../models/whatsapp_schedule.dart';
 import '../services/auth_storage.dart';
+import '../services/manual_wa_prefs.dart';
+import '../services/manual_wa_sender.dart';
+import '../widgets/manual_wa_chip.dart';
 import 'api_client.dart';
 
 /// A WhatsApp template row as the backend returns from
@@ -993,6 +997,96 @@ class WhatsAppApi {
       );
     }
     final rendered = _renderTemplate(active.first.messageContent, sub);
+    return sendMessage(
+      to: phone,
+      message: rendered,
+      intent: templateType,
+      sas4Idx: sub.idx,
+    );
+  }
+
+  /// 2026-08-26: النسخة المعتَمدة للأزرار المباشرة (تذكير دين / تحذير
+  /// انتهاء / إرسال معلومات). تعرض mini-sheet بـ:
+  ///  - معاينة الرسالة كاملة (يرى المدير ماذا سيرسل)
+  ///  - chip يعكس الوضع الحالي (تلقائي/يدوي) — قابل للتبديل لهذه العمليّة
+  ///  - زر إرسال يفتح واتساب الشخصي (يدوي) أو يمرّر عبر السيرفر (تلقائي)
+  ///
+  /// الوضع الافتراضي يُقرأ من ManualWaPrefs.enabled (setting المدير).
+  ///
+  /// يرجع WhatsSendResult مثل sendMessage — لكن reason='cancelled' إذا
+  /// أغلق المدير الـsheet بلا تأكيد.
+  static Future<WhatsSendResult> sendTemplateWithPreview({
+    required BuildContext context,
+    required Subscriber sub,
+    required String templateType,
+  }) async {
+    final phone = sub.displayPhone;
+    if (phone.isEmpty) {
+      return const WhatsSendResult(
+        ok: false,
+        reason: 'no_phone',
+        message: 'لا يوجد رقم هاتف للمشترك',
+      );
+    }
+    final templates = await loadTemplates();
+    if (templates == null) {
+      return const WhatsSendResult(
+        ok: false,
+        reason: 'network',
+        message: 'تعذّر جلب قوالب الواتساب',
+      );
+    }
+    final matches =
+        templates.where((t) => t.templateType == templateType).toList();
+    if (matches.isEmpty) {
+      final arabic = _arabicForTemplate(templateType);
+      return WhatsSendResult(
+        ok: false,
+        reason: 'no_template',
+        message: 'لا يوجد قالب "$arabic" — أضفه من إعدادات الواتساب',
+      );
+    }
+    final active = matches.where((t) => t.isActive).toList();
+    if (active.isEmpty) {
+      final arabic = _arabicForTemplate(templateType);
+      return WhatsSendResult(
+        ok: false,
+        reason: 'inactive',
+        message: 'قالب "$arabic" مُعطَّل — فعّله من إعدادات الواتساب',
+      );
+    }
+    final rendered = _renderTemplate(active.first.messageContent, sub);
+
+    if (!context.mounted) {
+      return const WhatsSendResult(
+        ok: false,
+        reason: 'network',
+        message: 'الشاشة أُغلقت',
+      );
+    }
+    final choice = await showManualWaPreviewSheet(
+      context,
+      title: _arabicForTemplate(templateType),
+      phone: phone,
+      messagePreview: rendered,
+    );
+    if (choice == null || !choice.confirmed) {
+      return const WhatsSendResult(ok: false, reason: 'cancelled');
+    }
+
+    if (choice.manualMode) {
+      final ok = await openManualWa(
+        phone: phone,
+        message: rendered,
+        context: context,
+      );
+      return WhatsSendResult(
+        ok: ok,
+        channel: 'whatsapp',
+        reason: ok ? null : 'manual_wa_failed',
+        message: ok ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة' : 'تعذّر فتح واتساب',
+      );
+    }
     return sendMessage(
       to: phone,
       message: rendered,

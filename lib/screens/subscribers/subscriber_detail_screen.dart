@@ -469,15 +469,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   Future<void> _sendTemplate(String templateType) async {
     if (_sendingTemplate != null) return; // single flight per screen
     setState(() => _sendingTemplate = templateType);
-    final result = await WhatsAppApi.sendTemplateForSubscriber(
+    // 2026-08-26: sendTemplateWithPreview يعرض preview + chip قبل الإرسال.
+    // يقرأ ManualWaPrefs الافتراضي ويسمح للمدير بتبديل الوضع لهذه العمليّة.
+    final result = await WhatsAppApi.sendTemplateWithPreview(
+      context: context,
       sub: sub,
       templateType: templateType,
     );
     if (!mounted) return;
     setState(() => _sendingTemplate = null);
-    // Map the structured result to a per-state snackbar — admins want
-    // to see why a send failed (missing template / inactive /
-    // disconnected) so they can fix it inline.
+    // reason='cancelled' → المدير أغلق الـpreview sheet، لا snackbar.
+    if (result.reason == 'cancelled') return;
     final ok = result.ok;
     final defaultOkMsg = switch (templateType) {
       'debt_reminder' => 'subscribers.wa_debt_reminder_sent'.tr(),
@@ -486,13 +488,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       _ => 'subscribers.wa_message_sent'.tr(),
     };
     final chArabic = result.channelArabic;
-    showSheetSnack(
-      context,
-      ok
-          ? (chArabic != null ? '$defaultOkMsg · عبر $chArabic' : defaultOkMsg)
-          : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
-      isError: !ok,
-    );
+    // للوضع اليدوي: result.message يحمل تعليمة "افتح واتساب واضغط إرسال"
+    // — نعرضها كـsuccess (isError=false) رغم إن الإرسال لسّه ما تمّ فعلاً.
+    final msg = ok
+        ? (result.message ??
+            (chArabic != null ? '$defaultOkMsg · عبر $chArabic' : defaultOkMsg))
+        : (result.message ?? 'subscribers.wa_message_send_failed'.tr());
+    showSheetSnack(context, msg, isError: !ok);
   }
 
   Future<void> _runToggleEnabled(bool wantEnable) async {

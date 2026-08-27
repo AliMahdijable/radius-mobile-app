@@ -728,21 +728,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (_debtReminderInFlight.contains(s.username)) return;
     setState(() => _debtReminderInFlight.add(s.username));
     try {
-      final result = await WhatsAppApi.sendTemplateForSubscriber(
+      final result = await WhatsAppApi.sendTemplateWithPreview(
+        context: context,
         sub: s,
         templateType: 'debt_reminder',
       );
       if (!mounted) return;
+      if (result.reason == 'cancelled') return;
       final ok = result.ok;
       final okMsg = 'subscribers.wa_debt_reminder_sent'.tr();
       final chArabic = result.channelArabic;
-      showSheetSnack(
-        context,
-        ok
-            ? (chArabic != null ? '$okMsg · عبر $chArabic' : okMsg)
-            : (result.message ?? 'subscribers.wa_message_send_failed'.tr()),
-        isError: !ok,
-      );
+      final msg = ok
+          ? (result.message ??
+              (chArabic != null ? '$okMsg · عبر $chArabic' : okMsg))
+          : (result.message ?? 'subscribers.wa_message_send_failed'.tr());
+      showSheetSnack(context, msg, isError: !ok);
     } finally {
       if (mounted) {
         setState(() => _debtReminderInFlight.remove(s.username));

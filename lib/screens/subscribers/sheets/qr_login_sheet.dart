@@ -15,7 +15,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/manual_wa_sender.dart';
 import '../../../theme/colors.dart';
+import '../../../widgets/manual_wa_chip.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
@@ -171,6 +173,32 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
           '${_linkUrl!}\n\n'
           'الرمز صالح لمدة 30 يوم. لو انتهى، اطلب واحد جديد من الأدمن.\n\n'
           'شكراً 🙏';
+      // 2026-08-26: preview sheet مع chip auto/manual لهذه العمليّة أيضاً.
+      if (!mounted) return;
+      final choice = await showManualWaPreviewSheet(
+        context,
+        title: 'رمز QR دخول',
+        phone: phone,
+        messagePreview: message,
+        accent: const Color(0xFF7C3AED),
+      );
+      if (!mounted || choice == null || !choice.confirmed) return;
+
+      if (choice.manualMode) {
+        final ok = await openManualWa(
+          phone: phone,
+          message: message,
+          context: context,
+        );
+        if (!mounted) return;
+        if (ok) {
+          _snack('افتح واتساب واضغط "إرسال" لإتمام العمليّة', isError: false);
+        } else {
+          _snack('تعذّر فتح واتساب', isError: true);
+        }
+        return;
+      }
+
       final result = await WhatsAppApi.sendMessage(
         to: phone,
         message: message,

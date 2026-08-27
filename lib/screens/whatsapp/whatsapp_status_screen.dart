@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/whatsapp_api.dart';
+import '../../services/manual_wa_prefs.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -420,6 +421,11 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                 if (_status?.connected == true) ...[
                   const SizedBox(height: Sp.lg),
                   _featuresCard(accent),
+                  const SizedBox(height: Sp.md),
+                  // 2026-08-26: كارت الوضع اليدوي — يحمي جلسة السيرفر من
+                  // مخاطر WA (tctoken/reachoutTimelock/ban) عبر تحويل
+                  // الإرسالات الفرديّة لواتساب المدير الشخصي.
+                  _manualModeCard(accent),
                   const SizedBox(height: Sp.md),
                   // نطاق الإرسال — يظهر فقط لمن عنده مدراء فرعيون
                   // (SendScopePanel داخلياً يُخفي نفسه لو subManagers فارغة).
@@ -1136,6 +1142,75 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
       ),
       value: enabled ? value : false,
       onChanged: enabled ? onChanged : null,
+    );
+  }
+
+  Widget _manualModeCard(Color accent) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: ManualWaPrefs.enabled,
+      builder: (context, isManual, _) {
+        return Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.lg),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 34, height: 34,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(LucideIcons.shieldCheck,
+                          color: Color(0xFF7C3AED), size: 17),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'الوضع اليدوي',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textHi,
+                        ),
+                      ),
+                    ),
+                    Switch.adaptive(
+                      value: isManual,
+                      onChanged: (v) => ManualWaPrefs.setEnabled(v),
+                      activeThumbColor: const Color(0xFF7C3AED),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isManual
+                      ? 'الإرسالات الفرديّة (تذكير دين، تحذير انتهاء، إرسال معلومات، QR) تفتح واتسابك الشخصي مع نصّ جاهز — تضغط إرسال بيدك. يحمي جلسة السيرفر.'
+                      : 'الإرسالات تمرّ عبر جلسة السيرفر تلقائياً. لو حصل ban/تعليق للجلسة، فعّل الوضع اليدوي.',
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMid,
+                    height: 1.55,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

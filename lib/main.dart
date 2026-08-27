@@ -16,6 +16,7 @@ import 'services/device_alerts_service.dart';
 import 'services/fcm_service.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
+import 'services/manual_wa_prefs.dart';
 import 'services/notification_service.dart';
 import 'services/app_version.dart';
 import 'services/badge_service.dart';
@@ -57,6 +58,10 @@ void main() async {
     // Device alerts — client-side فقط (لا سيرفر). يحمّل الـalerts المحفوظة
     // + يهيّئ OS notifications channel. مطلوب قبل ما شاشة الأجهزة تشتغل.
     DeviceAlertsService.instance.init(),
+    // 2026-08-26: تفضيل "الوضع اليدوي للواتساب" — يقرّر لو الإرسالات
+    // الفرديّة تفتح واتساب المدير أو تمرّ عبر جلسة السيرفر. لازم يُقرأ
+    // قبل الشاشات حتى الـchip يعرض الوضع الصحيح من اللحظة الأولى.
+    ManualWaPrefs.init(),
     // Firebase — options baked في firebase_options.dart. Wrapped catchError
     // حتى TestFlight ما يصير white-screen لو plist مو registered.
     // 2026-08-05: أضفنا Crashlytics wiring داخل نفس الـchain — يبدأ
