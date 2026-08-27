@@ -5,7 +5,9 @@ import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../core/util/format.dart';
+import '../../../services/manual_wa_sender.dart';
 import '../../../theme/colors.dart';
+import '../../../widgets/manual_wa_chip.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
@@ -97,7 +99,35 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     }
     final message = _msgCtrl.text.trim();
     if (message.isEmpty) return;
+    // 2026-08-26: preview + chip للـmanual mode.
+    final choice = await showManualWaPreviewSheet(
+      context,
+      title: 'إرسال معلومات المدير',
+      phone: phone,
+      messagePreview: message,
+    );
+    if (!mounted || choice == null || !choice.confirmed) return;
+
     setState(() => _submitting = true);
+    if (choice.manualMode) {
+      final ok = await openManualWa(
+        phone: phone,
+        message: message,
+        context: context,
+      );
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      if (ok) {
+        showSheetSnack(
+          context,
+          'افتح واتساب واضغط "إرسال" لإتمام العمليّة',
+        );
+        Navigator.of(context).pop(true);
+      } else {
+        showSheetSnack(context, 'تعذّر فتح واتساب', isError: true);
+      }
+      return;
+    }
     final r = await WhatsAppApi.sendMessage(
       to: phone,
       message: message,
@@ -105,9 +135,11 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    showSheetSnack(context, r.ok
-            ? 'تم إرسال المعلومات'
-            : (r.message ?? 'تعذّر الإرسال'), isError: (r.ok) ? false : true);
+    showSheetSnack(
+      context,
+      r.ok ? 'تم إرسال المعلومات' : (r.message ?? 'تعذّر الإرسال'),
+      isError: !r.ok,
+    );
     if (r.ok) Navigator.of(context).pop(true);
   }
 

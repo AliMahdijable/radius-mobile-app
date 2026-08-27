@@ -10,11 +10,13 @@ import '../../core/util/format.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/app_resumed_signal.dart';
+import '../../services/manual_wa_sender.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/manual_wa_chip.dart';
 import '../reports/account_statement_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
@@ -446,6 +448,34 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         '⚠️ ملاحظة: هذا الرابط صالح لمدة ساعة واحدة فقط.\n'
         'في حال تجديد الاشتراك أو تسديد الدين، يرجى طلب رابط جديد للبيانات المحدثة.\n\n'
         'شكراً لك 🙏';
+    // 2026-08-26: preview sheet + chip للـmanual mode.
+    setState(() => _generatingLink = false);
+    if (!mounted) return;
+    final choice = await showManualWaPreviewSheet(
+      context,
+      title: 'رابط بيانات المشترك',
+      phone: sub.displayPhone,
+      messagePreview: body,
+    );
+    if (!mounted || choice == null || !choice.confirmed) return;
+
+    if (choice.manualMode) {
+      final ok = await openManualWa(
+        phone: sub.displayPhone,
+        message: body,
+        context: context,
+      );
+      if (!mounted) return;
+      showSheetSnack(
+        context,
+        ok
+            ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة'
+            : 'تعذّر فتح واتساب',
+        isError: !ok,
+      );
+      return;
+    }
+
     final sendResult = await WhatsAppApi.sendMessage(
       to: sub.displayPhone,
       message: body,
@@ -453,7 +483,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       sas4Idx: sub.idx,
     );
     if (!mounted) return;
-    setState(() => _generatingLink = false);
     final ok = sendResult.ok;
     final okMsg = 'subscribers.wa_link_sent'.tr();
     final chArabic = sendResult.channelArabic;
