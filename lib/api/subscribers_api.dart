@@ -54,6 +54,43 @@ class WhatsAppSendInfo {
   }
 }
 
+/// 2026-08-26 (manual WA phase 2): محتوى preview WA يُعاد من الـbackend
+/// عندما skipAutoWa=true. الـsheet يفتح modal بمحتوى الرسالة و chip
+/// auto/manual — المدير يقرّر يرسل من واتسابه الشخصي أو من السيرفر.
+///
+/// null من backend = لا preview متاح (لا هاتف / لا قالب / feature off /
+/// notifications disabled / WA غير متصل). الـsheet يتخطّى preview
+/// ويكمل مسار النجاح كالمعتاد.
+class WaPreview {
+  const WaPreview({
+    required this.phone,
+    required this.message,
+    required this.intent,
+    this.rawPhone,
+    this.channel,
+  });
+  final String phone;
+  final String? rawPhone;
+  final String message;
+  final String intent;
+  final String? channel;
+
+  static WaPreview? fromMap(dynamic raw) {
+    if (raw is! Map) return null;
+    final phone = raw['phone']?.toString() ?? '';
+    final message = raw['message']?.toString() ?? '';
+    final intent = raw['intent']?.toString() ?? '';
+    if (phone.isEmpty || message.isEmpty) return null;
+    return WaPreview(
+      phone: phone,
+      rawPhone: raw['raw_phone']?.toString(),
+      message: message,
+      intent: intent,
+      channel: raw['channel']?.toString(),
+    );
+  }
+}
+
 /// Live session data for one currently-connected subscriber. Pulled
 /// from /api/v2/online-users so we can show DL/UL bytes + session time
 /// on the detail screen without per-row fetches.
@@ -449,11 +486,12 @@ class SubscribersApi {
 
   /// Result of an activate call. ok=true on success; ok=false carries
   /// the backend's Arabic error message for the UI.
-  static Future<({bool ok, String? message})> activate({
+  static Future<({bool ok, String? message, WaPreview? waPreview})> activate({
     required String idx,
     required String paymentType, // 'cash' | 'partial-cash' | 'non-cash'
     required Map<String, dynamic> activationData,
     int? partialAmount,
+    bool skipAutoWa = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -463,19 +501,24 @@ class SubscribersApi {
           'activationData': activationData,
           if (paymentType == 'partial-cash' && partialAmount != null)
             'partialAmount': partialAmount,
+          if (skipAutoWa) 'skipAutoWa': true,
         },
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;
-      return (ok: ok, message: body['message']?.toString());
+      return (
+        ok: ok,
+        message: body['message']?.toString(),
+        waPreview: WaPreview.fromMap(body['wa_preview']),
+      );
     } on DioException catch (e) {
       _log('activate/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التفعيل');
+      return (ok: false, message: msg ?? 'تعذّر التفعيل', waPreview: null);
     } catch (e) {
       _log('activate/$idx', e);
-      return (ok: false, message: 'تعذّر التفعيل');
+      return (ok: false, message: 'تعذّر التفعيل', waPreview: null);
     }
   }
 
@@ -509,27 +552,36 @@ class SubscribersApi {
   /// POST /api/v2/subscribers/:idx/extend — extend into a new package.
   /// Method: 'balance' (charge manager wallet) or 'points' (deduct
   /// reward points).
-  static Future<({bool ok, String? message})> extend({
+  static Future<({bool ok, String? message, WaPreview? waPreview})> extend({
     required String idx,
     required String profileId,
     required String method, // 'balance' | 'points'
+    bool skipAutoWa = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/subscribers/$idx/extend',
-        data: {'profile_id': profileId, 'method': method},
+        data: {
+          'profile_id': profileId,
+          'method': method,
+          if (skipAutoWa) 'skipAutoWa': true,
+        },
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;
-      return (ok: ok, message: body['message']?.toString());
+      return (
+        ok: ok,
+        message: body['message']?.toString(),
+        waPreview: WaPreview.fromMap(body['wa_preview']),
+      );
     } on DioException catch (e) {
       _log('extend/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التمديد');
+      return (ok: false, message: msg ?? 'تعذّر التمديد', waPreview: null);
     } catch (e) {
       _log('extend/$idx', e);
-      return (ok: false, message: 'تعذّر التمديد');
+      return (ok: false, message: 'تعذّر التمديد', waPreview: null);
     }
   }
 
@@ -863,11 +915,12 @@ class SubscribersApi {
   /// (e.g. واتساب غير متصل). reasons like 'feature_off' or
   /// 'notifications_disabled' stay silent — admin intentionally
   /// disabled them.
-  static Future<({bool ok, String? message, WhatsAppSendInfo? wa})>
+  static Future<({bool ok, String? message, WhatsAppSendInfo? wa, WaPreview? waPreview})>
       payDebt({
     required String idx,
     required double amount,
     String? comment,
+    bool skipAutoWa = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -875,6 +928,7 @@ class SubscribersApi {
         data: {
           'amount': amount,
           if (comment != null && comment.isNotEmpty) 'comment': comment,
+          if (skipAutoWa) 'skipAutoWa': true,
         },
       );
       final body = r.data ?? const {};
@@ -883,6 +937,7 @@ class SubscribersApi {
         ok: ok,
         message: body['message']?.toString(),
         wa: WhatsAppSendInfo.fromMap(body['wa']),
+        waPreview: WaPreview.fromMap(body['wa_preview']),
       );
     } on DioException catch (e) {
       _log('pay-debt/$idx', e);
@@ -892,10 +947,11 @@ class SubscribersApi {
         ok: false,
         message: msg ?? 'تعذّر التسديد',
         wa: null,
+        waPreview: null,
       );
     } catch (e) {
       _log('pay-debt/$idx', e);
-      return (ok: false, message: 'تعذّر التسديد', wa: null);
+      return (ok: false, message: 'تعذّر التسديد', wa: null, waPreview: null);
     }
   }
 

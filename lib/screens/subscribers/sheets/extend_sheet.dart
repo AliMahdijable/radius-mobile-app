@@ -6,6 +6,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/manual_wa_prefs.dart';
+import '../../../services/manual_wa_sender.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -136,10 +138,14 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     final profileId = pkg['id']?.toString() ?? '';
     if (profileId.isEmpty) return;
     setState(() => _submitting = true);
+    // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يعيد wa_preview
+    // بلا إرسال، ونفتح modal بعد النجاح.
+    final manualMode = ManualWaPrefs.enabled.value;
     final result = await SubscribersApi.extend(
       idx: idx,
       profileId: profileId,
       method: _method == _Method.points ? 'points' : 'balance',
+      skipAutoWa: manualMode,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -162,6 +168,16 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       );
     }
     if (!mounted) return;
+    // 2026-08-26: preview WA بعد نجاح التمديد.
+    if (manualMode && result.waPreview != null) {
+      await handleWaPreviewAfterOp(
+        context: context,
+        preview: result.waPreview!,
+        opTitle: 'تأكيد التمديد',
+        sas4Idx: widget.sub.idx,
+      );
+      if (!mounted) return;
+    }
     Navigator.of(context).pop(true);
   }
 

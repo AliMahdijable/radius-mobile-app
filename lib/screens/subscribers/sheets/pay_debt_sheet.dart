@@ -7,6 +7,8 @@ import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/manual_wa_prefs.dart';
+import '../../../services/manual_wa_sender.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -151,12 +153,17 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final idx = widget.sub.idx;
     if (idx == null) return;
     setState(() => _submitting = true);
+    // 2026-08-26 (manual WA phase 2): لو المدير مفعّل الوضع اليدوي، backend
+    // ما يرسل WA تلقائياً — يرجع wa_preview بالنصّ الجاهز، ونفتح modal بعد
+    // النجاح ليختار المدير: إرسال يدوي من واتسابه أو تلقائي من السيرفر.
+    final manualMode = ManualWaPrefs.enabled.value;
     final result = await SubscribersApi.payDebt(
       idx: idx,
       amount: _effectiveAmount,
       comment: _notesCtrl.text.trim().isEmpty
           ? null
           : _notesCtrl.text.trim(),
+      skipAutoWa: manualMode,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -166,7 +173,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     }
     SubscriberEvents.notifyChange();
     showSheetSnack(context, 'تم التسديد بنجاح');
-    // مطلب 2026-06-11: لو الإرسال فشل لسبب فني، أظهر تحذير.
+    // مطلب 2026-06-11: لو الإرسال (التلقائي) فشل لسبب فني، أظهر تحذير.
     if (result.wa != null && result.wa!.shouldShowFailure) {
       showSheetSnack(
         context,
@@ -186,6 +193,17 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       );
     }
     if (!mounted) return;
+    // 2026-08-26: preview WA بعد النجاح (فقط لو مفعّل الوضع اليدوي والـbackend
+    // نجح ببناء الرسالة). لو wa_preview=null → تخطّى بلا modal.
+    if (manualMode && result.waPreview != null) {
+      await handleWaPreviewAfterOp(
+        context: context,
+        preview: result.waPreview!,
+        opTitle: 'تأكيد التسديد',
+        sas4Idx: widget.sub.idx,
+      );
+      if (!mounted) return;
+    }
     Navigator.of(context).pop(true);
   }
 
