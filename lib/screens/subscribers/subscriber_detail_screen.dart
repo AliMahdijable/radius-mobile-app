@@ -1028,50 +1028,22 @@ class _OperationsCard extends StatelessWidget {
     final phone = sub.displayPhone;
     // مطلب 2026-06-11: كل زر يختفي إذا الموظف ما عنده الصلاحية.
     // الـactions كثيرة، فنبني list مع شرط لكل عنصر بدل nested if.
-    // 2026-08-26: نظام tiers للـUX العالمي — hero contextual + primary
-    // row + secondary grid + danger overflow.
-    // اختيار hero ذكيّ حسب حالة المشترك:
-    //   1. لو عليه دين ويقدر يسدّد → تسديد دين (الفعل الأشدّ إلحاحاً)
-    //   2. لو منتهي/قارب الانتهاء ويقدر يفعّل → تفعيل الاشتراك
-    //   3. لو يقدر يمدّد → تمديد
-    //   4. لو يقدر يعدّل → تعديل
-    //   5. لا شيء → لا hero، فقط الشبكة.
-    _Tier _tierFor(String opKey) {
-      final heroKey = _heroKeyFor(sub);
-      if (opKey == heroKey) return _Tier.hero;
-      // primary = العمليّات الأساسيّة الأخرى (تجاوزنا الـhero)
-      const primaryPool = {'activate', 'extend', 'edit', 'pay_debt', 'add_debt'};
-      if (primaryPool.contains(opKey)) return _Tier.primary;
-      const dangerPool = {'toggle', 'delete', 'disconnect'};
-      if (dangerPool.contains(opKey)) return _Tier.danger;
-      return _Tier.secondary;
-    }
-
     final ops = <_Op>[
       if (Perms.has('subscribers.edit'))
         _Op(LucideIcons.pencil, 'subscribers.op_edit'.tr(), const Color(0xFF2D5F47),
-            () => showEditSubscriberSheet(context, sub),
-            tier: _tierFor('edit')),
+            () => showEditSubscriberSheet(context, sub)),
       if (Perms.has('subscribers.activate'))
         _Op(LucideIcons.zap, 'subscribers.op_activate_sub'.tr(), const Color(0xFF14B8A6),
-            () => showActivateSheet(context, sub),
-            tier: _tierFor('activate'),
-            subtitle: sub.isExpired
-                ? 'الاشتراك منتهي — جدّد الآن'
-                : (sub.isNearExpiry ? 'يقارب الانتهاء' : null)),
+            () => showActivateSheet(context, sub)),
       if (Perms.has('subscribers.extend'))
         _Op(LucideIcons.repeat, 'subscribers.op_extend'.tr(), const Color(0xFF3B82F6),
-            () => showExtendSheet(context, sub),
-            tier: _tierFor('extend')),
+            () => showExtendSheet(context, sub)),
       if (Perms.has('subscribers.add_debt'))
         _Op(LucideIcons.plus, 'subscribers.op_add_debt'.tr(), const Color(0xFFE08F2D),
-            () => showAddDebtSheet(context, sub),
-            tier: _tierFor('add_debt')),
+            () => showAddDebtSheet(context, sub)),
       if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
         _Op(LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(), const Color(0xFF14B8A6),
-            () => showPayDebtSheet(context, sub),
-            tier: _tierFor('pay_debt'),
-            subtitle: 'دين ${_formatCompact(sub.debtAbs)} د.ع'),
+            () => showPayDebtSheet(context, sub)),
       // 2026-08-26: الموقع — يظهر إذا:
       //  - الموقع مُعيَّن (يقدر أيّ موظّف يفتحه بالخرائط)، أو
       //  - الموظّف/المدير يقدر يعدّله (subscribers.edit_location).
@@ -1162,7 +1134,6 @@ class _OperationsCard extends StatelessWidget {
               : (sub.isDisabled ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr()),
           sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
           onToggleEnabled ?? () {},
-          tier: _Tier.danger,
         ),
       if (Perms.has('subscribers.delete'))
         _Op(
@@ -1170,7 +1141,6 @@ class _OperationsCard extends StatelessWidget {
           deleting ? 'subscribers.op_deleting'.tr() : 'common.delete'.tr(),
           AppColors.error,
           onDelete ?? () {},
-          tier: _Tier.danger,
         ),
       if (phone.isNotEmpty)
         _Op(LucideIcons.phone, 'subscribers.call'.tr(), const Color(0xFF14B8A6),
@@ -1185,21 +1155,17 @@ class _OperationsCard extends StatelessWidget {
         ),
       if (sub.isOnline && sub.idx != null)
         _Op(LucideIcons.power, disconnecting ? 'subscribers.op_disconnecting'.tr() : 'subscribers.disconnect_user'.tr(),
-            AppColors.error, onDisconnect ?? () {},
-            tier: _Tier.danger),
+            AppColors.error, onDisconnect ?? () {}),
     ];
-
-    // تقسيم على tiers.
-    final heroOps = ops.where((o) => o.tier == _Tier.hero).toList();
-    final primaryOps = ops.where((o) => o.tier == _Tier.primary).toList();
-    final secondaryOps = ops.where((o) => o.tier == _Tier.secondary).toList();
-    final dangerOps = ops.where((o) => o.tier == _Tier.danger).toList();
 
     return _SectionCard(
       icon: LucideIcons.layers,
       title: 'subscribers.actions'.tr(),
       accent: AppColors.brand,
       children: [
+        // Thin progress strip while busy — gives the admin an
+        // immediate signal that the tap registered and a request is
+        // mid-flight, instead of the previous silent freeze.
         if (busy) ...[
           const SizedBox(height: 2),
           ClipRRect(
@@ -1212,70 +1178,37 @@ class _OperationsCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
         ],
+        // Card-style tiles — white surface, border + soft shadow, tinted
+        // icon-box on top, label underneath. Same visual language as
+        // the section cards above so the whole screen reads as one
+        // family. 3-column grid keeps tiles tappable on mid-size phones.
+        //
+        // IgnorePointer + Opacity wrap so the whole grid blocks taps
+        // while busy without re-laying-out (children just dim, no
+        // shifting/repaint chains).
         IgnorePointer(
           ignoring: busy,
           child: Opacity(
             opacity: busy ? 0.55 : 1,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Hero — كارت عريض بارز للفعل الأشدّ إلحاحاً حسب حالة
-                // المشترك (تسديد → تجديد → تفعيل → تمديد → تعديل).
-                if (heroOps.isNotEmpty) ...[
-                  _HeroActionCard(op: heroOps.first),
-                  const SizedBox(height: 10),
-                ],
-                // Primary — صف 2-4 أزرار متوسّطة تحت الـhero.
-                if (primaryOps.isNotEmpty) ...[
-                  _PrimaryRow(ops: primaryOps),
-                  const SizedBox(height: 12),
-                ],
-                // Secondary — شبكة 4 أعمدة للأدوات المساعدة.
-                if (secondaryOps.isNotEmpty)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 0,
-                      crossAxisSpacing: 2,
-                      childAspectRatio: 0.95,
-                    ),
-                    itemCount: secondaryOps.length,
-                    itemBuilder: (_, i) => _OpCard(op: secondaryOps[i]),
-                  ),
-                // Danger overflow — زر "المزيد" يفتح sheet بالعمليّات
-                // المدمِّرة (تعطيل/فصل/حذف). يمنع الضغط الخطأ.
-                if (dangerOps.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _DangerMoreButton(ops: dangerOps),
-                ],
-              ],
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              // 2026-07-13 (تكرار ٣): مسافات near-zero + أزرار أكبر قليلاً.
+              // شكوى: "بعدها المسافات كبيرة، صغّرها وكبّر الأزرار بدرجة".
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisSpacing: 0,
+                crossAxisSpacing: 2,
+                childAspectRatio: 0.95,
+              ),
+              itemCount: ops.length,
+              itemBuilder: (_, i) => _OpCard(op: ops[i]),
             ),
           ),
         ),
       ],
     );
-  }
-
-  /// اختيار hero بناءً على حالة المشترك — أول match من الأعلى للأسفل.
-  /// null = لا hero، فقط الشبكة.
-  static String? _heroKeyFor(Subscriber s) {
-    if (s.hasDebt && Perms.has('subscribers.pay_debt')) return 'pay_debt';
-    if ((s.isExpired || s.isNearExpiry) && Perms.has('subscribers.activate')) {
-      return 'activate';
-    }
-    if (Perms.has('subscribers.extend')) return 'extend';
-    if (Perms.has('subscribers.edit')) return 'edit';
-    return null;
-  }
-
-  static String _formatCompact(num v) {
-    final abs = v.abs().toInt();
-    if (abs >= 1000000) return '${(abs / 1000000).toStringAsFixed(1)}م';
-    if (abs >= 1000) return '${(abs / 1000).toStringAsFixed(0)},000';
-    return abs.toString();
   }
 
   static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
@@ -1295,30 +1228,12 @@ class _OperationsCard extends StatelessWidget {
   }
 }
 
-/// مستوى الأهميّة البصريّة لكل عمليّة — يحدّد أين ترسم في الشاشة.
-///  - hero: كارت عريض بارز في الأعلى (عمليّة واحدة قصوى).
-///  - primary: صف 3-4 أزرار متوسّطة تحت الـhero.
-///  - secondary: شبكة 4 أعمدة صغيرة للأدوات المساعدة.
-///  - danger: مخفيّة خلف زر "المزيد" (حذف/تعطيل/فصل).
-enum _Tier { hero, primary, secondary, danger }
-
 class _Op {
-  const _Op(
-    this.icon,
-    this.label,
-    this.color,
-    this.onTap, {
-    this.tier = _Tier.secondary,
-    this.subtitle,
-  });
+  const _Op(this.icon, this.label, this.color, this.onTap);
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
-  final _Tier tier;
-
-  /// نصّ ثانوي — يظهر تحت الـlabel في الـhero card فقط.
-  final String? subtitle;
 }
 
 /// مطلب 2026-06-12 (screenshots reference): زر دائري ملوّن مع
@@ -1376,346 +1291,6 @@ class _OpCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 2026-08-26 — Hero action card: صف عريض بارز للفعل الأشدّ إلحاحاً
-/// (تسديد دين / تجديد اشتراك / تفعيل / إلخ). أيقونة كبيرة في مربّع
-/// ملوّن + label كبير + subtitle سياقي + chevron. يقود العين لأهمّ
-/// شيء يمكن للأدمن فعله الآن.
-class _HeroActionCard extends StatelessWidget {
-  const _HeroActionCard({required this.op});
-  final _Op op;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: op.color.withValues(alpha: 0.09),
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          op.onTap();
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: op.color.withValues(alpha: 0.28),
-              width: 0.8,
-            ),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(
-                  color: op.color,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: op.color.withValues(alpha: 0.32),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Icon(op.icon, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      op.label,
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textHi,
-                        height: 1.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (op.subtitle != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        op.subtitle!,
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: op.color,
-                          height: 1.3,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Icon(
-                LucideIcons.chevronLeft,
-                size: 20,
-                color: op.color,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 2026-08-26 — Primary row: 2-4 أزرار متوسّطة بجنب بعض، بأيقونة كبيرة
-/// وخلفيّة tint (بدل full-circle) — أخفّ بصرياً من الـhero لكن أبرز
-/// من الشبكة السفلى. Wrap يتكيّف مع عدد الأزرار.
-class _PrimaryRow extends StatelessWidget {
-  const _PrimaryRow({required this.ops});
-  final List<_Op> ops;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (int i = 0; i < ops.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(child: _PrimaryTile(op: ops[i])),
-        ],
-      ],
-    );
-  }
-}
-
-class _PrimaryTile extends StatelessWidget {
-  const _PrimaryTile({required this.op});
-  final _Op op;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: op.color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          op.onTap();
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: op.color.withValues(alpha: 0.22),
-              width: 0.7,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 38, height: 38,
-                decoration: BoxDecoration(
-                  color: op.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Icon(op.icon, color: op.color, size: 18),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                op.label,
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textHi,
-                  height: 1.1,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 2026-08-26 — زر "المزيد" العلوي: يفتح sheet بالعمليّات المدمِّرة
-/// (تعطيل/فصل/حذف). progressive disclosure — يمنع الضغط الخطأ ويُبقي
-/// شاشة العمليّات الرئيسيّة نظيفة.
-class _DangerMoreButton extends StatelessWidget {
-  const _DangerMoreButton({required this.ops});
-  final List<_Op> ops;
-
-  void _open(BuildContext context) {
-    HapticFeedback.selectionClick();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      builder: (_) => _DangerSheet(ops: ops),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _open(context),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border, width: 0.6),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(LucideIcons.ellipsis,
-                  size: 15, color: AppColors.textMid),
-              const SizedBox(width: 6),
-              Text(
-                'المزيد (${ops.length})',
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textMid,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DangerSheet extends StatelessWidget {
-  const _DangerSheet({required this.ops});
-  final List<_Op> ops;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  'عمليّات حسّاسة',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textMid,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final op in ops) ...[
-                _DangerRow(op: op),
-                const SizedBox(height: 6),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DangerRow extends StatelessWidget {
-  const _DangerRow({required this.op});
-  final _Op op;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: op.color.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          Navigator.of(context).pop();
-          op.onTap();
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: op.color.withValues(alpha: 0.22),
-              width: 0.6,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: op.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                alignment: Alignment.center,
-                child: Icon(op.icon, size: 17, color: op.color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  op.label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textHi,
-                  ),
-                ),
-              ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16, color: op.color.withValues(alpha: 0.6)),
-            ],
-          ),
-        ),
       ),
     );
   }
