@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,6 +10,7 @@ import '../../../models/subscriber.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
+import 'location_picker_screen.dart';
 
 /// 2026-08-26: chooser الصغير — نقرة على أيقونة الموقع تفتح قائمة
 /// خيارات فتح (Google Maps / Waze / نسخ). يتعامل مع فتح روابط
@@ -323,6 +325,20 @@ class _EditSheetState extends State<_EditSheet> {
     _onInputChanged(text);
   }
 
+  /// يفتح شاشة الخريطة — لو المدير عند بيت المشترك يقدر يضغط
+  /// "موقعي الحالي" داخل الشاشة، ويحرّك بيده لضبط بدقّة.
+  Future<void> _pickOnMap() async {
+    final initial = (_lat != null && _lng != null)
+        ? LatLng(_lat!, _lng!)
+        : null;
+    final picked = await showLocationPickerScreen(context, initial: initial);
+    if (picked == null || !mounted) return;
+    final txt = '${picked.latitude.toStringAsFixed(6)},'
+        '${picked.longitude.toStringAsFixed(6)}';
+    _inputCtrl.text = txt;
+    _onInputChanged(txt);
+  }
+
   Future<void> _save() async {
     final idx = widget.sub.idx;
     if (idx == null || _lat == null || _lng == null) return;
@@ -539,6 +555,48 @@ class _EditSheetState extends State<_EditSheet> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              // زر الخريطة — الطريقة الأسهل: المدير عند البيت يضغط
+              // "موقعي الحالي" داخل الشاشة، ويقدر يحرّك الدبّوس لضبط.
+              if (!widget.sub.hasManualAddressText) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _pickOnMap,
+                    icon: const Icon(LucideIcons.map, size: 16),
+                    label: const Text(
+                      'اختر من الخريطة (موقعك الحالي)',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF14B8A6),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: AppColors.border, height: 1)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('أو',
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            color: AppColors.textMid,
+                          )),
+                    ),
+                    Expanded(child: Divider(color: AppColors.border, height: 1)),
+                  ],
                 ),
                 const SizedBox(height: 12),
               ],

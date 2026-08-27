@@ -67,6 +67,14 @@ dependencies:
   # call / WhatsApp action buttons.
   url_launcher: ^6.3.1
 
+  # 2026-08-26: ميزة تحديد موقع المشترك — نسخة مطابقة لآليّة drdounat.
+  # geolocator يجلب موقع الجهاز الحالي عند "استخدم موقعي الحالي".
+  # flutter_map + latlong2 يعرضان خريطة OpenStreetMap بلا مفتاح ولا فوترة
+  # مع دبّوس ثابت في المركز يتحرّك بتحريك الخريطة (يطابق UX نسخة الدونات).
+  geolocator: ^14.0.2
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
   # System contact picker (مطلب 2026-06-10) — admin can tap the phone
   # field's contact icon on the add/edit subscriber sheets to pull a
   # number from the OS address book instead of re-typing. Supports
