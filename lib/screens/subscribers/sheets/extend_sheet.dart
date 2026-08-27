@@ -169,14 +169,22 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التمديد.
-    if (manualMode && result.waPreview != null) {
-      await handleWaPreviewAfterOp(
-        context: context,
-        preview: result.waPreview!,
-        opTitle: 'تأكيد التمديد',
-        sas4Idx: widget.sub.idx,
-      );
-      if (!mounted) return;
+    if (manualMode) {
+      if (result.waPreview != null) {
+        await handleWaPreviewAfterOp(
+          context: context,
+          preview: result.waPreview!,
+          opTitle: 'تأكيد التمديد',
+          sas4Idx: widget.sub.idx,
+        );
+        if (!mounted) return;
+      } else {
+        final reason = result.wa?.reason;
+        if (reason == 'no_phone') {
+          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك', isError: true);
+        }
+        // تمديد يستعمل literalMessage — بلا قالب فما نحصل no_template.
+      }
     }
     Navigator.of(context).pop(true);
   }

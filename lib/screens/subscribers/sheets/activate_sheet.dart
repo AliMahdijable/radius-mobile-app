@@ -240,14 +240,23 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التفعيل.
-    if (manualMode && result.waPreview != null) {
-      await handleWaPreviewAfterOp(
-        context: context,
-        preview: result.waPreview!,
-        opTitle: 'تأكيد التفعيل',
-        sas4Idx: widget.sub.idx,
-      );
-      if (!mounted) return;
+    if (manualMode) {
+      if (result.waPreview != null) {
+        await handleWaPreviewAfterOp(
+          context: context,
+          preview: result.waPreview!,
+          opTitle: 'تأكيد التفعيل',
+          sas4Idx: widget.sub.idx,
+        );
+        if (!mounted) return;
+      } else {
+        final reason = result.wa?.reason;
+        if (reason == 'no_phone') {
+          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك', isError: true);
+        } else if (reason == 'no_template') {
+          showSheetSnack(context, 'لم يُبنَ preview: قالب "تفعيل" غير موجود — أضفه من إعدادات الواتساب', isError: true);
+        }
+      }
     }
     Navigator.of(context).pop(true);
   }

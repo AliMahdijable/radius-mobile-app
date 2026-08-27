@@ -486,7 +486,8 @@ class SubscribersApi {
 
   /// Result of an activate call. ok=true on success; ok=false carries
   /// the backend's Arabic error message for the UI.
-  static Future<({bool ok, String? message, WaPreview? waPreview})> activate({
+  static Future<({bool ok, String? message, WhatsAppSendInfo? wa, WaPreview? waPreview})>
+      activate({
     required String idx,
     required String paymentType, // 'cash' | 'partial-cash' | 'non-cash'
     required Map<String, dynamic> activationData,
@@ -509,16 +510,17 @@ class SubscribersApi {
       return (
         ok: ok,
         message: body['message']?.toString(),
+        wa: WhatsAppSendInfo.fromMap(body['wa']),
         waPreview: WaPreview.fromMap(body['wa_preview']),
       );
     } on DioException catch (e) {
       _log('activate/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التفعيل', waPreview: null);
+      return (ok: false, message: msg ?? 'تعذّر التفعيل', wa: null, waPreview: null);
     } catch (e) {
       _log('activate/$idx', e);
-      return (ok: false, message: 'تعذّر التفعيل', waPreview: null);
+      return (ok: false, message: 'تعذّر التفعيل', wa: null, waPreview: null);
     }
   }
 
@@ -552,7 +554,8 @@ class SubscribersApi {
   /// POST /api/v2/subscribers/:idx/extend — extend into a new package.
   /// Method: 'balance' (charge manager wallet) or 'points' (deduct
   /// reward points).
-  static Future<({bool ok, String? message, WaPreview? waPreview})> extend({
+  static Future<({bool ok, String? message, WhatsAppSendInfo? wa, WaPreview? waPreview})>
+      extend({
     required String idx,
     required String profileId,
     required String method, // 'balance' | 'points'
@@ -572,16 +575,17 @@ class SubscribersApi {
       return (
         ok: ok,
         message: body['message']?.toString(),
+        wa: WhatsAppSendInfo.fromMap(body['wa']),
         waPreview: WaPreview.fromMap(body['wa_preview']),
       );
     } on DioException catch (e) {
       _log('extend/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التمديد', waPreview: null);
+      return (ok: false, message: msg ?? 'تعذّر التمديد', wa: null, waPreview: null);
     } catch (e) {
       _log('extend/$idx', e);
-      return (ok: false, message: 'تعذّر التمديد', waPreview: null);
+      return (ok: false, message: 'تعذّر التمديد', wa: null, waPreview: null);
     }
   }
 

@@ -193,16 +193,28 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       );
     }
     if (!mounted) return;
-    // 2026-08-26: preview WA بعد النجاح (فقط لو مفعّل الوضع اليدوي والـbackend
-    // نجح ببناء الرسالة). لو wa_preview=null → تخطّى بلا modal.
-    if (manualMode && result.waPreview != null) {
-      await handleWaPreviewAfterOp(
-        context: context,
-        preview: result.waPreview!,
-        opTitle: 'تأكيد التسديد',
-        sas4Idx: widget.sub.idx,
-      );
-      if (!mounted) return;
+    // 2026-08-26: preview WA بعد النجاح.
+    // لو manualMode مفعّل والـbackend نجح ببناء الرسالة → افتح modal.
+    // لو manualMode مفعّل لكن preview=null → snackbar يوضح السبب.
+    if (manualMode) {
+      if (result.waPreview != null) {
+        await handleWaPreviewAfterOp(
+          context: context,
+          preview: result.waPreview!,
+          opTitle: 'تأكيد التسديد',
+          sas4Idx: widget.sub.idx,
+        );
+        if (!mounted) return;
+      } else {
+        final reason = result.wa?.reason;
+        if (reason == 'no_phone') {
+          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك', isError: true);
+        } else if (reason == 'no_template') {
+          showSheetSnack(context, 'لم يُبنَ preview: قالب "تسديد" غير موجود — أضفه من إعدادات الواتساب', isError: true);
+        }
+        // reasons أخرى (feature_off/notifications_disabled ما تصير مع
+        // previewOnly) → صامتة كما كان الأدمن يريد الإخفاء.
+      }
     }
     Navigator.of(context).pop(true);
   }
