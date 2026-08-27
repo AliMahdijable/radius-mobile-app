@@ -415,17 +415,18 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                   const SizedBox(height: Sp.sm),
                 ],
                 _actionsBar(accent),
+                // 2026-08-26: كارت الوضع اليدوي يظهر دائماً — حتى قبل ربط WA.
+                // ⚠️ حرج: الفكرة الأساسيّة أنّ الوضع اليدوي يشتغل حتى لو WA
+                // السيرفر مقطوع/محظور — فتخبئته خلف `connected==true` كان
+                // يمنع المدير من تفعيلها في الحالة اللي يحتاجها فيها أشدّ.
+                const SizedBox(height: Sp.lg),
+                _manualModeCard(accent),
                 // Features + Templates تظهر فقط عند الاتصال — طلب المستخدم
                 // 2026-07-12: لا معنى لعرض toggles إشعارات وقوالب واتساب
                 // إذا الجلسة أصلاً غير مربوطة.
                 if (_status?.connected == true) ...[
-                  const SizedBox(height: Sp.lg),
-                  _featuresCard(accent),
                   const SizedBox(height: Sp.md),
-                  // 2026-08-26: كارت الوضع اليدوي — يحمي جلسة السيرفر من
-                  // مخاطر WA (tctoken/reachoutTimelock/ban) عبر تحويل
-                  // الإرسالات الفرديّة لواتساب المدير الشخصي.
-                  _manualModeCard(accent),
+                  _featuresCard(accent),
                   const SizedBox(height: Sp.md),
                   // نطاق الإرسال — يظهر فقط لمن عنده مدراء فرعيون
                   // (SendScopePanel داخلياً يُخفي نفسه لو subManagers فارغة).
@@ -1146,18 +1147,28 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   }
 
   Widget _manualModeCard(Color accent) {
+    const purple = Color(0xFF7C3AED);
     return ValueListenableBuilder<bool>(
       valueListenable: ManualWaPrefs.enabled,
       builder: (context, isManual, _) {
         return Material(
-          color: AppColors.surface,
+          // 2026-08-26: خلفيّة بنفسجيّة خفيفة عندما مفعّل — يبرز بصريّاً
+          // لأنه مسار "protected" مختلف عن الافتراضيّ.
+          color: isManual
+              ? purple.withValues(alpha: 0.06)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(R.lg),
           clipBehavior: Clip.antiAlias,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(R.lg),
-              border: Border.all(color: AppColors.border, width: 0.5),
+              border: Border.all(
+                color: isManual
+                    ? purple.withValues(alpha: 0.35)
+                    : AppColors.border,
+                width: isManual ? 1 : 0.5,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,45 +1176,61 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
                 Row(
                   children: [
                     Container(
-                      width: 34, height: 34,
+                      width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(9),
+                        color: purple.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(11),
                       ),
                       alignment: Alignment.center,
                       child: const Icon(LucideIcons.shieldCheck,
-                          color: Color(0xFF7C3AED), size: 17),
+                          color: purple, size: 20),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        'الوضع اليدوي',
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textHi,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'الوضع اليدوي للواتساب',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textHi,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isManual ? 'مفعّل — يفتح واتسابك' : 'مطفأ — الإرسال تلقائي',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isManual ? purple : AppColors.textMid,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Switch.adaptive(
                       value: isManual,
                       onChanged: (v) => ManualWaPrefs.setEnabled(v),
-                      activeThumbColor: const Color(0xFF7C3AED),
+                      activeThumbColor: purple,
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
                 Text(
                   isManual
-                      ? 'الإرسالات الفرديّة (تذكير دين، تحذير انتهاء، إرسال معلومات، QR) تفتح واتسابك الشخصي مع نصّ جاهز — تضغط إرسال بيدك. يحمي جلسة السيرفر.'
-                      : 'الإرسالات تمرّ عبر جلسة السيرفر تلقائياً. لو حصل ban/تعليق للجلسة، فعّل الوضع اليدوي.',
+                      ? '✅ بعد كل عمليّة (تسديد/تفعيل/تمديد/تذكير/QR/إرسال معلومات) تفتح نافذة معاينة الرسالة → تضغط "افتح واتسابي" → واتسابك يفتح مع النصّ جاهز → تضغط إرسال. يشتغل حتى لو WA السيرفر مقطوع.'
+                      : 'الإرسالات تمرّ عبر جلسة WA السيرفر تلقائياً. لو حصل ban/تعليق للجلسة أو تخاف من مخاطر WA على السيرفر، فعّل الوضع اليدوي.',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textMid,
-                    height: 1.55,
+                    height: 1.7,
                   ),
                 ),
               ],
