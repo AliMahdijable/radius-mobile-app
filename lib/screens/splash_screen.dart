@@ -176,6 +176,9 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Image.asset(
                 'assets/images/logo.png',
                 fit: BoxFit.contain,
+                // 2026-08-28: cache على 320px بدل الأصل الكامل
+                // (~4MB → ~200KB في imageCache)
+                cacheWidth: 320,
               ),
             ).animate().scale(
                   begin: const Offset(0.85, 0.85),

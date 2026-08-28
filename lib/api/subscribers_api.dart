@@ -393,6 +393,9 @@ class SubscribersApi {
   /// تسجيل الخروج عشان admin جديد ما يشوف بيانات admin السابق.
   static void clearAllCaches() {
     _SubsListCache.reset();
+    // 2026-08-28 (Google 2027 audit HIGH): _packagesCache كان يبقى لـ5د
+    // بعد logout — invalidatePackagesCache موجودة لكن غير مستدعاة.
+    invalidatePackagesCache();
   }
 
   /// Forces the next `loadAll` to re-fetch from the backend instead

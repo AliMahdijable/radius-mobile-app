@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
+import '../api/whatsapp_api.dart';
 import 'alerts_service.dart';
 import 'auth_storage.dart';
 import 'badge_service.dart';
+import 'dashboard_cache.dart';
 import 'device_alerts_service.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
@@ -51,6 +53,10 @@ class SessionManager {
     _guardSync('DeviceConfigApi.clearAllCaches',
         () => DeviceConfigApi.clearAllCaches());
     _guardSync('AlertsService.reset', () => AlertsService.reset());
+    // 2026-08-28 (Google 2027 audit CRITICAL): WhatsApp templates cache
+    // كان يسرّب بين المدراء على نفس الجهاز (10د TTL). أي إرسال آلي بعد
+    // login جديد قد يستعمل قوالب المدير السابق.
+    _guardSync('WhatsAppApi.clearCaches', () => WhatsAppApi.clearCaches());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).
@@ -65,6 +71,10 @@ class SessionManager {
       // تبقى للمدير التالي فتظهر تنبيهات أجهزة السابق.
       _guardAsync('DeviceAlertsService.reset',
           DeviceAlertsService.instance.reset()),
+      // 2026-08-28 (Google 2027 audit HIGH): docstring في dashboard_cache
+      // ينصّ صراحةً "call on logout" لكن ما استُدعيت من قبل — المدير
+      // الجديد كان يرى KPIs المدير السابق حتى تعود شبكته بأرقام جديدة.
+      _guardAsync('DashboardCache.clear', DashboardCache.clear()),
     ]);
 
     // 3) FCM unregister (network — only on real logout).

@@ -28,7 +28,8 @@ class WhatsAppStatusScreen extends StatefulWidget {
 /// Pairing method the admin selected before hitting Connect.
 enum _AuthMode { qr, code }
 
-class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
+class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
+    with WidgetsBindingObserver {
   WhatsConnectionStatus? _status;
   WhatsFeatures? _features;
   String? _qrData;
@@ -43,19 +44,45 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen> {
   int _qrPollElapsed = 0;
   static const int _qrPollTimeoutSec = 90;
   static const int _pairCodeTimeoutSec = 240; // ~4 min (WAHA gives ~3-5)
+  // 2026-08-28 (Google 2027 audit): نتذكّر إذا polling كان نشطاً قبل الـpause
+  // لنستأنفه على resume. بلا هذا كل مرة يقفل المستخدم الشاشة، الـpolling
+  // يستمر (battery drain) — أو لو أوقفناه بلا تذكّر، ما نعرف نُعيده.
+  bool _wasQrPolling = false;
+  bool _appActive = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _statusPoll?.cancel();
     _qrPoll?.cancel();
     _pairPhoneCtl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 2026-08-28 (Google 2027 audit HIGH): توفير بطارية + محافظة على backend.
+    // Timer.periodic كل 3-4ث كان يستمر لو المدير قفل الشاشة وتركها.
+    // نلغيها على paused/inactive ونعيدها على resumed.
+    _appActive = state == AppLifecycleState.resumed;
+    if (_appActive) {
+      _startStatusPolling();
+      if (_wasQrPolling && _qrPollElapsed < _qrPollTimeoutSec) {
+        _startQrPolling();
+      }
+    } else {
+      _wasQrPolling = _qrPoll?.isActive == true;
+      _statusPoll?.cancel();
+      _qrPoll?.cancel();
+    }
+    super.didChangeAppLifecycleState(state);
   }
 
   Future<void> _bootstrap() async {

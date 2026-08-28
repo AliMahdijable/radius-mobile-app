@@ -100,6 +100,7 @@ class SnmpV2c {
 
   Future<Uint8List> _send(Uint8List packet) async {
     RawDatagramSocket? socket;
+    StreamSubscription? sub;
     try {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       final addr = InternetAddress.tryParse(host) ??
@@ -107,18 +108,16 @@ class SnmpV2c {
       socket.send(packet, addr, port);
 
       final completer = Completer<Uint8List>();
-      late final StreamSubscription sub;
       sub = socket.listen((event) {
         if (event == RawSocketEvent.read) {
           final dg = socket!.receive();
           if (dg != null && !completer.isCompleted) {
             completer.complete(dg.data);
-            sub.cancel();
           }
         }
       }, onError: (e) {
         if (!completer.isCompleted) completer.completeError(e);
-      });
+      }, cancelOnError: true);
 
       return await completer.future.timeout(timeout, onTimeout: () {
         throw SnmpTimeoutException(
@@ -126,6 +125,12 @@ class SnmpV2c {
             'تحقّق: community="$community"، SNMP مفعّل على الجهاز، الـport مفتوح.');
       });
     } finally {
+      // 2026-08-28 (Google 2027 audit): subscription كان يُلغى فقط في
+      // success branch — timeout/onError كانا يتركانه معلّقاً (leak
+      // على كل poll لأي جهاز غير متجاوب). الآن unconditional cancel.
+      try {
+        await sub?.cancel();
+      } catch (_) {}
       socket?.close();
     }
   }

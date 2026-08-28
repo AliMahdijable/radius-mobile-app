@@ -455,6 +455,8 @@ class _Logo extends StatelessWidget {
         child: Image.asset(
           'assets/images/logo.png',
           fit: BoxFit.contain,
+          // 2026-08-28: cache thumbnail (~200KB بدل ~4MB في imageCache).
+          cacheWidth: 320,
         ),
       ),
     );

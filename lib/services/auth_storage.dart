@@ -8,7 +8,17 @@ class AuthStorage {
 
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+    // 2026-08-28 (Google 2027 Zero-Tap iOS parity):
+    // synchronizable=true → الـkeychain items تُنسخ عبر iCloud Keychain.
+    // المدير الذي ينتقل لـiPhone جديد ويستعيد من iCloud backup يفتح
+    // التطبيق وهو مسجَّل تلقائياً (نفس idea Android Restore Credentials
+    // بلا حاجة native code). يشتغل عبر Apple ID المشترك بين الأجهزة.
+    // accountName يعزل الـitems للتطبيق (لو مشترك iOS keychain group).
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock,
+      synchronizable: true,
+      accountName: 'mysvcs_radius_auth',
+    ),
   );
 
   static const _kToken = 'auth.token';

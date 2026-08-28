@@ -382,6 +382,15 @@ class WhatsAppApi {
   static DateTime? _templatesAt;
   static const _ttl = Duration(minutes: 10);
 
+  /// 2026-08-28 (Google 2027 audit CRITICAL fix): يُستدعى من
+  /// SessionManager.clearAllSessionData عند logout — يمسح cache
+  /// القوالب حتى المدير التالي على نفس الجهاز لا يرى/يعدّل قوالب
+  /// المدير السابق (تسريب PII استمرّ حتى 10 دقائق).
+  static void clearCaches() {
+    _templates = null;
+    _templatesAt = null;
+  }
+
   /// GET /api/whatsapp/templates/:adminId — returns the cached list
   /// when warm, else round-trips. Null on auth / network failure;
   /// callers fall back to a snackbar.

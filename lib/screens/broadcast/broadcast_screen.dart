@@ -1170,6 +1170,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               _imageBytes!,
               width: 56,
               height: 56,
+              // 2026-08-28 (Google 2027): cacheWidth/Height يفكّ الصورة
+              // بأبعاد thumbnail (56×2×DPR ≈ 112) بدل الأصل 1024×1024
+              // → ~4MB في imageCache تصبح ~50KB.
+              cacheWidth: 112,
+              cacheHeight: 112,
               fit: BoxFit.cover,
             ),
           ),
