@@ -32,6 +32,14 @@
 	<string>يستخدم التطبيق الكاميرا لتصوير المستندات والمعلومات المتعلقة بالاشتراكات والأجهزة.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يستخدم التطبيق الموقع لتحديد منطقة الخدمة وموقع المشتركين على الخريطة.</string>
+	<!-- 2026-08-28: Apple validator (90683) يطلب المفتاح "always and when in use"
+	     حتى لو التطبيق لا يستعمل الموقع بالخلفيّة — لأن مكتبة geolocator تشير
+	     للـAPI. نصّه نفس الأوّل — التطبيق يطلب "when in use" فقط عملياً. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>يستخدم التطبيق الموقع لتحديد منطقة الخدمة وموقع المشتركين على الخريطة.</string>
+	<!-- iOS 10 وأقدم — نفس الغرض. -->
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>يستخدم التطبيق الموقع لتحديد منطقة الخدمة وموقع المشتركين على الخريطة.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>يستخدم التطبيق جهات الاتصال لإضافة أرقام المشتركين بسهولة.</string>
 	<key>NSMicrophoneUsageDescription</key>
