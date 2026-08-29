@@ -247,7 +247,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.brand,
+        color: AppColors.brandSurface,
         borderRadius: BorderRadius.circular(22),
       ),
       child: Column(

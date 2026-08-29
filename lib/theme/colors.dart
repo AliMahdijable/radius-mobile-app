@@ -52,6 +52,18 @@ class AppColors {
   static const Color _darkBrand = Color(0xFF1E7A5B);
   static Color get brand => _isDark ? _darkBrand : _lightBrand;
 
+  /// سطح البطاقة الداكنة الكبيرة — بطاقة الهويّة وبطاقة الباقة وبطاقة
+  /// كشف الحساب وبانر النتيجة الداكن.
+  ///
+  /// ⚠️ **ثابت في الوضعين عمداً**، ولهذا وُجد أصلاً: `brand` يخدم دورين
+  /// متعارضين. كتعبئة زرّ يجب أن **يفتح** في الوضع الداكن ليبرز عن السطح
+  /// (#103D2E عليه 1.41:1 — يذوب)، وكسطح بطاقة كبيرة يجب أن **يبقى
+  /// داكناً** لأنّ كلّ طبقات `onBrand*` معايرة عليه. القياس يحسم:
+  /// الأبيض على #103D2E = 12.15:1 وعلى #1E7A5B = 5.26:1، و
+  /// `onBrandSecondary` ينزل من 5.41 إلى 2.95 (دون 3:1). فصل الدورين
+  /// يعيد البطاقة إلى معايرتها ويُبقي الزرّ بارزاً.
+  static const Color brandSurface = Color(0xFF103D2E);
+
   static const Color _lightBrandDark = Color(0xFF0C2E23);
   static const Color _darkBrandDark = Color(0xFF14563F);
   static Color get brandDark => _isDark ? _darkBrandDark : _lightBrandDark;
@@ -187,22 +199,24 @@ class AppColors {
   static Color get textBody =>
       _isDark ? const Color(0xFFCBD3CE) : const Color(0xFF3E4642);
 
-  static const Color _lightTextMid = Color(0xFF6E766F);
+  // 2026-08-29: #6E766F رسب بـ4.28:1 على `bg` (المطلوب 4.5). عُتّم
+  // بأربع درجات على القنوات الثلاث فحافظ على الـhue وبلغ 4.60.
+  static const Color _lightTextMid = Color(0xFF69716A);
   static const Color _darkTextMid = Color(0xFFA9B3AD);
   static Color get textMid => _isDark ? _darkTextMid : _lightTextMid;
 
   /// تسمية الحقل — «طريقة الدفع»، «الدين الحالي»، الجهة اليمنى من
   /// صفوف المعلومات. مقصود أن يكون خافتاً؛ لا تستعمله لنصّ يُقرأ طويلاً.
   static Color get textLabel =>
-      _isDark ? const Color(0xFF9BA5A0) : const Color(0xFF8A928C);
+      _isDark ? const Color(0xFF9BA5A0) : const Color(0xFF7A827C);
 
-  static const Color _lightTextLow = Color(0xFF9AA29C);
+  static const Color _lightTextLow = Color(0xFF808882);
   static const Color _darkTextLow = Color(0xFF8B958F);
   static Color get textLow => _isDark ? _darkTextLow : _lightTextLow;
 
   /// أيقونات الحقول الساكنة ونصوص المساعدة الصغرى.
   static Color get textHint =>
-      _isDark ? const Color(0xFF7C867F) : const Color(0xFFA2A9A3);
+      _isDark ? const Color(0xFF7C867F) : const Color(0xFF878E88);
 
   /// نصّ الحقل الفارغ فقط.
   static Color get textPlaceholder =>
@@ -212,6 +226,10 @@ class AppColors {
   // طبقات ثابتة في الوضعين — سطحها داكن أصلاً. لذلك بطاقة الهويّة
   // وبطاقة كشف الحساب وبطاقة التجديد لا تحتاج أيّ تعديل في dark mode.
   static const Color onBrand = Color(0xFFFFFFFF);
+
+  /// كلّ الرتب أدناه معايرة على `brandSurface` (#103D2E) لا على `brand`،
+  /// ولذلك تصحّ كـ`const`: سطحها ثابت في الوضعين. القياسات فوقه:
+  /// الأبيض 12.15 · fill1 9.34 · fill2 7.99 · secondary 5.41 · tertiary 4.27.
   static const Color onBrandSecondary = Color(0x99FFFFFF); // .60
   static const Color onBrandTertiary = Color(0x80FFFFFF); // .50
   static const Color onBrandStrong = Color(0xCCFFFFFF); // .80

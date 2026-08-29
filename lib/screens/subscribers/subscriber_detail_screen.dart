@@ -1213,7 +1213,9 @@ class _SubscriberHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(Sp.xl),
       decoration: BoxDecoration(
-        color: AppColors.brand,
+        // `brandSurface` لا `brand`: كلّ طبقات onBrand* داخل البطاقة
+        // معايرة على #103D2E الثابت. راجع تعليقه في colors.dart.
+        color: AppColors.brandSurface,
         borderRadius: BorderRadius.circular(R.hero),
       ),
       child: Column(

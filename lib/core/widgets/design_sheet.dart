@@ -741,7 +741,7 @@ class SheetBrandResultCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: Sp.lg),
       decoration: BoxDecoration(
-        color: AppColors.brand,
+        color: AppColors.brandSurface,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -947,7 +947,7 @@ class SheetPlanCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: Sp.lg),
       decoration: BoxDecoration(
-        color: AppColors.brand,
+        color: AppColors.brandSurface,
         borderRadius: BorderRadius.circular(R.card),
       ),
       child: Column(
