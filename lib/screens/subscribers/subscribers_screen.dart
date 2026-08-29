@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
@@ -22,12 +23,12 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
-import 'sheets/consumption_sheet.dart';
+import 'sheets/pay_debt_sheet.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
-import 'widgets/subscriber_card.dart';
+import 'widgets/subscriber_card_v3.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -105,7 +106,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// مطلب 2026-06-11: زر تكويل عام — true يخفي قسم الاتصال على
   /// كل البطاقات المعروضة. الـSubscriberCardV2 يلتقط الـprop عبر
   /// didUpdateWidget فيتزامن الكل لحظياً.
-  bool _allCollapsed = false;
 
   String _query = '';
   SubscriberFilter _filter = SubscriberFilter.all;
@@ -681,43 +681,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// نفس مسار الـbulk-disconnect (SubscribersApi.disconnect + notifyChange
   /// + _refresh) لكن لمشترك واحد. confirm dialog قبل الإجراء لأنه
   /// مؤثّر على المستخدم النهائي.
-  Future<void> _confirmDisconnect(Subscriber s) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('subscribers.disconnect_user'.tr()),
-        content: Text(
-          'subscribers.disconnect_user_body'.tr(namedArgs: {
-            'name': s.fullName.isNotEmpty ? s.fullName : s.username,
-          }),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('subscribers.disconnect'.tr()),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    final result = await SubscribersApi.disconnect(s.idx!);
-    if (!mounted) return;
-    if (result.ok) SubscriberEvents.notifyChange();
-    // 2026-08-18: overlay بدل ScaffoldMessenger — يظهر فوق أي modal مفتوح.
-    showSheetSnack(
-      context,
-      result.ok
-          ? 'subscribers.disconnect_ok'.tr()
-          : (result.message ?? 'subscribers.disconnect_failed'.tr()),
-      isError: !result.ok,
-    );
-  }
 
   /// إرسال تذكير دين من زر الكرت مباشرة. طلب 2026-07-13: يظهر لكل مدين
   /// بغض النظر عن حالة الاتصال. يستعمل نفس مسار زر الديون في شاشة
@@ -748,6 +711,56 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         setState(() => _debtReminderInFlight.remove(s.username));
       }
     }
+  }
+
+  /// «تسديد» من شريط الدين في الكارت. يفتح نفس شيت التفاصيل بلا
+  /// اختصار (قاعدة: عمليّات المشترك تطابق v1 حرفيّاً)، ثمّ يبثّ
+  /// dataChanged حتى يتحدّث الصفّ والدين فوراً.
+  Future<void> _payDebtFromList(Subscriber s) async {
+    final ok = await showPayDebtSheet(context, s);
+    if (ok == true) {
+      SubscriberEvents.dataChanged.value++;
+    }
+  }
+
+  Future<void> _openSortSheet() async {
+    final r = await showSortSheet(
+      context,
+      currentField: _sortField,
+      currentDirection: _sortDir,
+    );
+    if (r != null) {
+      setState(() {
+        _sortField = r.field;
+        _sortDir = r.direction;
+        _page = 0;
+      });
+    }
+  }
+
+  String _sortLabel() => sortFieldLabel(_sortField);
+
+  /// شيت «تصفية القائمة» — النسخة الخفيفة من المخطّط: بلا رأس مفصول،
+  /// عنوان 16/w700 مع «إعادة تعيين» في الطرف، شرائح، ثمّ زرّ «تطبيق».
+  /// يستبدل صفّ `_ManagerFilterBar` المسطّح الذي كان تحت البحث.
+  Future<void> _openManagerFilterSheet() async {
+    final picked = await showModalBottomSheet<Object?>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet)),
+      ),
+      builder: (ctx) => _ManagerFilterSheet(
+        current: _managerFilter,
+        managers: _availableManagers,
+      ),
+    );
+    if (picked == null) return; // أُغلق بلا «تطبيق»
+    setState(() {
+      _managerFilter = picked is String ? picked : null;
+      _page = 0;
+    });
   }
 
   Future<void> _openBulkDisconnect() async {
@@ -964,25 +977,18 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                       onExit: _exitSelection,
                       onSelectAll: () => _selectAllOnPage(page),
                     )
-                  : _SearchHeader(
+                  : _ListHeader(
                       controller: _searchCtrl,
-                      allCollapsed: _allCollapsed,
-                      onToggleCollapse: () => setState(
-                          () => _allCollapsed = !_allCollapsed),
-                      onSort: () async {
-                        final r = await showSortSheet(
-                          context,
-                          currentField: _sortField,
-                          currentDirection: _sortDir,
-                        );
-                        if (r != null) {
-                          setState(() {
-                            _sortField = r.field;
-                            _sortDir = r.direction;
-                            _page = 0;
-                          });
-                        }
-                      },
+                      total: _counts()[SubscriberFilter.all] ?? 0,
+                      online: _counts()[SubscriberFilter.online] ?? 0,
+                      sortActive: _sortField != SortField.remainingDays ||
+                          _sortDir != SortDirection.desc,
+                      filterActive: _managerFilter != null,
+                      sortLabel: _sortLabel(),
+                      onSort: _openSortSheet,
+                      onFilter: _availableManagers.isEmpty
+                          ? null
+                          : _openManagerFilterSheet,
                     ),
             ),
             // Sub-manager (parent) filter — sits right under the
@@ -992,15 +998,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             // to see the filter exists even with a single parent).
             // Hidden only for tenants where NO subscriber has a
             // parent (zero sub-managers, nothing to scope to).
-            if (!_selectionMode && _availableManagers.isNotEmpty)
-              _ManagerFilterBar(
-                current: _managerFilter,
-                managers: _availableManagers,
-                onSelect: (m) => setState(() {
-                  _managerFilter = m;
-                  _page = 0;
-                }),
-              ),
+            // 2026-08-29 (إعادة التصميم): الصفّ المسطّح انتقل إلى
+            // «شيت التصفية» خلف زرّ tune في الهيدر — المخطّط لا يضع
+            // فلاتر مسطّحة تحت البحث. الاكتشافيّة محفوظة بنقطة خضراء
+            // على الزرّ عند وجود فلتر مطبَّق.
             FilterChipsBar(
               current: _filter,
               counts: _counts(),
@@ -1010,6 +1011,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 _page = 0;
               }),
             ),
+            if (!_selectionMode)
+              _ResultSortBar(
+                count: _filteredAll.length,
+                sortLabel: _sortLabel(),
+                descending: _sortDir == SortDirection.desc,
+                onTap: _openSortSheet,
+              ),
             // مطلب 2026-07-14: كارت "إجمالي الديون" (نظير v1 —
             // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
             // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
@@ -1154,20 +1162,17 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               final s = page[i];
                               final isSelected = s.idx != null &&
                                   _selected.contains(s.idx);
-                              return SubscriberCardV2(
+                              return SubscriberCardV3(
+                                // بلا مفتاح ثابت يعيد Flutter استعمال
+                                // الـElement لمشترك آخر بعد كل موجة فحص
+                                // أجهزة فتنتقل حالة الصفّ للجار.
+                                key: ValueKey(s.idx ?? s.username),
                                 sub: s,
                                 selected: isSelected,
                                 lastPayment: _lastPayments[s.username],
                                 hasTelegram: s.idx != null &&
                                     _telegramBoundIdx
                                         .contains(s.idx.toString()),
-                                // مطلب 2026-07-12: showLiveSession
-                                // مفتوح لكل التابات — الكرت داخلياً
-                                // يقرّر: يعرض LiveSessionRow لو
-                                // المشترك متصل، ويعرض DeviceChipMicro
-                                // لكل من عنده IP بغضّ النظر عن حالة
-                                // الاتصال (يطابق v1).
-                                showLiveSession: true,
                                 onTap: () {
                                   if (_selectionMode) {
                                     _toggleSelect(s);
@@ -1176,17 +1181,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   }
                                 },
                                 onLongPress: () => _enterSelectionWith(s),
-                                // الـcallbacks تبقى للمتصلين حقيقياً —
-                                // زر الفصل لا معنى له لمشترك غير متصل،
-                                // والاستهلاك يجيب بيانات session لحظية.
-                                onShowConsumption: s.isOnline && !_selectionMode
-                                    ? () => showConsumptionSheet(context, s)
-                                    : null,
-                                onDisconnect: s.isOnline &&
-                                        !_selectionMode &&
-                                        s.idx != null
-                                    ? () => _confirmDisconnect(s)
-                                    : null,
                                 // تذكير دين — لكل مدين بغض النظر عن حالة
                                 // الاتصال. طلب 2026-07-13. مسار
                                 // /api/v2/subscribers/:idx/send-debt-reminder
@@ -1195,7 +1189,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                         s.idx != null
                                     ? () => _sendDebtReminderFromList(s)
                                     : null,
-                                collapsedAll: _allCollapsed,
+                                // «تسديد» داخل شريط الدين — نفس شيت
+                                // التفاصيل بلا اختصار، ومحكوم بنفس
+                                // الصلاحيّة (subscribers.pay_debt).
+                                onPayDebt: s.hasDebt &&
+                                        !_selectionMode &&
+                                        Perms.has('subscribers.pay_debt')
+                                    ? () => _payDebtFromList(s)
+                                    : null,
                               );
                             },
                           ),
@@ -1238,10 +1239,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
-  void _showSnack(String msg) {
-    // 2026-08-18: overlay-based → يظهر فوق أي modal مفتوح
-    showSheetSnack(context, msg);
-  }
 
   void _openDetail(Subscriber s) {
     Navigator.of(context).push(
@@ -1264,117 +1261,339 @@ enum _BulkAction {
   String get label => _key.tr();
 }
 
-class _SearchHeader extends StatelessWidget {
-  const _SearchHeader({
+class _ListHeader extends StatelessWidget {
+  const _ListHeader({
     required this.controller,
+    required this.total,
+    required this.online,
+    required this.sortActive,
+    required this.filterActive,
+    required this.sortLabel,
     required this.onSort,
-    required this.allCollapsed,
-    required this.onToggleCollapse,
+    required this.onFilter,
   });
+
   final TextEditingController controller;
+  final int total;
+  final int online;
+  final bool sortActive;
+  final bool filterActive;
+  final String sortLabel;
   final VoidCallback onSort;
-  /// مطلب 2026-06-11: زر تكويل/توسيع للكل بصف الـsort. نفس
-  /// قالب الـ42×42 المستدير + InkWell كي يطابق visually زر الفرز.
-  final bool allCollapsed;
-  final VoidCallback onToggleCollapse;
+
+  /// null = لا مدراء فرعيّون في هذا الحساب ⇒ الزرّ يختفي بدل أن يفتح
+  /// شيتاً فارغاً.
+  final VoidCallback? onFilter;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(R.pill),
-              border: Border.all(color: AppColors.border),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-            child: Row(
-              children: [
-                Icon(LucideIcons.search,
-                    color: AppColors.textMid, size: 18),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    style: AppType.input(color: AppColors.textHi),
-                    decoration: InputDecoration(
-                      hintText: 'subscribers.search_hint_full'.tr(),
-                      hintStyle: AppType.input(color: AppColors.textLow),
-                      border: InputBorder.none,
-                      isCollapsed: true,
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: Sp.md),
-                    ),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('subscribers.title'.tr(), style: AppType.title()),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$total مشترك • $online متصل الآن',
+                    style: AppType.body(color: AppColors.textMid)
+                        .copyWith(fontSize: 12.5),
                   ),
-                ),
-                if (controller.text.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(LucideIcons.x, size: 16),
-                    color: AppColors.textMid,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => controller.clear(),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
+            _HeaderIconButton(
+              icon: Icons.swap_vert_rounded,
+              active: sortActive,
+              onTap: onSort,
+            ),
+            if (onFilter != null) ...[
+              const SizedBox(width: Sp.sm),
+              _HeaderIconButton(
+                icon: Icons.tune_rounded,
+                active: filterActive,
+                onTap: onFilter!,
+              ),
+            ],
+          ],
         ),
-        const SizedBox(width: Sp.sm),
-        // Toggle تكويل/توسيع للكل — مطابق visually لزر الفرز إلى
-        // جواره: 42×42 دائرة بحدود الـsurface + لون brand. الفرق
-        // الوحيد أن الـicon هنا يدور حسب الحالة (chevron up vs down).
-        Tooltip(
-          message:
-              allCollapsed ? 'subscribers.expand_all'.tr() : 'subscribers.collapse_all'.tr(),
-          child: Material(
+        const SizedBox(height: Sp.lg),
+        // حقل البحث — 46 ارتفاعاً، r16، حدّ خفيف. المخطّط يرسمه نصّاً
+        // ساكناً بلا زرّ مسح؛ أبقينا زرّ المسح لأنّه سلوك قائم.
+        Container(
+          height: H.search,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
             color: AppColors.surface,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onToggleCollapse,
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.border),
-                ),
-                alignment: Alignment.center,
-                child: AnimatedRotation(
-                  turns: allCollapsed ? 0 : 0.5,
-                  duration: const Duration(milliseconds: 220),
-                  child: Icon(
-                    Icons.keyboard_arrow_up_rounded,
-                    color: AppColors.brand,
-                    size: 22,
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 20, color: AppColors.textLow),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: AppType.input(),
+                  decoration: InputDecoration(
+                    hintText: 'subscribers.search_hint_full'.tr(),
+                    hintStyle: AppType.subtitle(color: AppColors.textLow)
+                        .copyWith(fontSize: 14),
+                    border: InputBorder.none,
+                    isCollapsed: true,
                   ),
                 ),
               ),
-            ),
-          ),
-        ),
-        const SizedBox(width: Sp.sm),
-        Material(
-          color: AppColors.surface,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onSort,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Icon(LucideIcons.arrowDownUp,
-                  color: AppColors.brand, size: 18),
-            ),
+              if (controller.text.isNotEmpty)
+                InkResponse(
+                  radius: 18,
+                  onTap: controller.clear,
+                  child: Icon(Icons.close_rounded,
+                      size: 18, color: AppColors.textLow),
+                ),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// زرّ أيقوني 38×38 r14 في الهيدر. الحالة النشطة خضراء ناعمة مع نقطة
+/// 9×9 في الزاوية الخارجيّة محاطة بحدّ بلون الخلفيّة ليبدو مقطوعاً.
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          color: active ? AppColors.brandSoftBg : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.icon),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(R.icon),
+            child: Container(
+              width: H.iconBtn,
+              height: H.iconBtn,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(R.icon),
+                border: Border.all(
+                  color: active
+                      ? AppColors.brandSoftBorder
+                      : AppColors.borderSoft,
+                ),
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: active ? AppColors.brand : AppColors.textBody,
+              ),
+            ),
+          ),
+        ),
+        if (active)
+          Positioned(
+            top: -3,
+            left: -3,
+            child: Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: AppColors.brand,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.bg, width: 2),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// شريط «{n} نتيجة» ← «{حقل الفرز}» بسهم الاتجاه. الضغط على الطرف
+/// الأيسر يفتح شيت الفرز (نفس سلوك المخطّط).
+class _ResultSortBar extends StatelessWidget {
+  const _ResultSortBar({
+    required this.count,
+    required this.sortLabel,
+    required this.descending,
+    required this.onTap,
+  });
+  final int count;
+  final String sortLabel;
+  final bool descending;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, Sp.lg, 22, Sp.sm),
+      child: Row(
+        children: [
+          Text(
+            '$count نتيجة',
+            style: AppType.muted(color: AppColors.textLow)
+                .copyWith(fontSize: 11.5),
+          ),
+          const Spacer(),
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(R.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    descending
+                        ? Icons.arrow_downward_rounded
+                        : Icons.arrow_upward_rounded,
+                    size: 14,
+                    color: AppColors.brandAccent,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    sortLabel,
+                    style: AppType.muted(color: AppColors.brandAccent)
+                        .copyWith(fontSize: 11.5, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// شيت تصفية القائمة — النسخة الخفيفة (بلا رأس مفصول، عنوان + إعادة
+/// تعيين، شرائح، زرّ تطبيق). يرجع `String` = مدير مختار، أو
+/// `''` = الكل، أو `null` إن أُغلق بلا تطبيق.
+class _ManagerFilterSheet extends StatefulWidget {
+  const _ManagerFilterSheet({required this.current, required this.managers});
+  final String? current;
+  final List<String> managers;
+
+  @override
+  State<_ManagerFilterSheet> createState() => _ManagerFilterSheetState();
+}
+
+class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
+  late String? _picked = widget.current;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.md, Sp.xl, 26),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: H.grabber,
+                decoration: BoxDecoration(
+                  color: AppColors.grabber,
+                  borderRadius: BorderRadius.circular(R.pill),
+                ),
+              ),
+            ),
+            const SizedBox(height: Sp.lg),
+            Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 18, color: AppColors.brand),
+                const SizedBox(width: Sp.sm),
+                Text('تصفية القائمة', style: AppType.cardTitle()
+                    .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
+                const Spacer(),
+                InkWell(
+                  onTap: () => setState(() => _picked = null),
+                  child: Text(
+                    'إعادة تعيين',
+                    style: AppType.body(color: AppColors.textLabel),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Sp.lg),
+            Text('المدير الفرعي', style: AppType.pillLabel()),
+            const SizedBox(height: Sp.sm),
+            Wrap(
+              spacing: Sp.sm,
+              runSpacing: Sp.sm,
+              children: [
+                _chip(label: 'الكل', value: null),
+                for (final m in widget.managers) _chip(label: m, value: m),
+              ],
+            ),
+            const SizedBox(height: Sp.xl),
+            SizedBox(
+              height: H.button,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(R.button),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context, _picked ?? ''),
+                child: Text('تطبيق',
+                    style: AppType.button(color: AppColors.onBrand)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip({required String label, required String? value}) {
+    final on = _picked == value;
+    return InkWell(
+      onTap: () => setState(() => _picked = value),
+      borderRadius: BorderRadius.circular(R.chip),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: on ? AppColors.brand : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.chip),
+          border: Border.all(
+            color: on ? AppColors.brand : AppColors.border,
+            width: on ? BW.selected : BW.normal,
+          ),
+        ),
+        child: Text(
+          label,
+          textDirection: value == null ? null : ui.TextDirection.ltr,
+          style: AppType.bodyStrong(
+            color: on ? AppColors.onBrand : AppColors.textBody,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1557,101 +1776,6 @@ class _ArrowBtn extends StatelessWidget {
 /// tap الكل to clear. Mirrors v1's "كل المدراء" dropdown but the
 /// chip row reads at a glance instead of hiding the choices behind
 /// a tap (مطلب 2026-06-09).
-class _ManagerFilterBar extends StatelessWidget {
-  const _ManagerFilterBar({
-    required this.current,
-    required this.managers,
-    required this.onSelect,
-  });
-  final String? current;
-  final List<String> managers;
-  final ValueChanged<String?> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 4),
-      child: Row(
-        children: [
-          Icon(LucideIcons.shield,
-              size: 14, color: AppColors.textMid),
-          const SizedBox(width: 6),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _ManagerChip(
-                    label: 'subscribers.all_managers'.tr(),
-                    selected: current == null,
-                    onTap: () => onSelect(null),
-                  ),
-                  for (final m in managers) ...[
-                    const SizedBox(width: 6),
-                    _ManagerChip(
-                      label: m,
-                      selected: current == m,
-                      onTap: () => onSelect(m),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ManagerChip extends StatelessWidget {
-  const _ManagerChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return InkWell(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(R.pill),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.brand.withValues(alpha: 0.12)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(R.pill),
-          border: Border.all(
-            color: selected
-                ? AppColors.brand.withValues(alpha: 0.4)
-                : AppColors.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppType.label(
-            color: selected ? AppColors.brand : AppColors.textMid,
-          ).copyWith(
-            fontSize: 11,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-            height: 1.2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BulkActionBar extends StatelessWidget {
   const _BulkActionBar({
     required this.selectedCount,

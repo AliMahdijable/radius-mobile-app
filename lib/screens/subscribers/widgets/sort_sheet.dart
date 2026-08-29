@@ -33,6 +33,15 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.parentUsername, 'sort.parent', LucideIcons.userCog),
 ];
 
+/// تسمية حقل الفرز المترجَمة — يستعملها شريط النتيجة أعلى القائمة
+/// ليعرض «الأيام المتبقية» بجانب سهم الاتجاه (مطابق للمخطّط).
+String sortFieldLabel(SortField f) {
+  for (final d in _fieldDefs) {
+    if (d.$1 == f) return d.$2.tr();
+  }
+  return '';
+}
+
 Future<({SortField field, SortDirection direction})?> showSortSheet(
   BuildContext context, {
   required SortField currentField,

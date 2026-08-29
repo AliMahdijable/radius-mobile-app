@@ -24,6 +24,7 @@ import 'sheets/location_sheets.dart';
 import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
 import 'sheets/movements_sheet.dart';
+import 'sheets/consumption_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/qr_login_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
@@ -1075,6 +1076,12 @@ class _OperationsCard extends StatelessWidget {
       if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
         _Op(LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(), const Color(0xFF14B8A6),
             () => showPayDebtSheet(context, sub)),
+      // 2026-08-29: انتقل من كارت القائمة (المخطّط الجديد لا يضع
+      // أزراراً في الكارت). الشريحة 3 تدمجه inline في كارت «معلومات
+      // الاتصال» كما يفعل المخطّط، ويُحذف من هنا حينها.
+      if (sub.isOnline)
+        _Op(LucideIcons.chartLine, 'الاستهلاك', const Color(0xFF14B8A6),
+            () => showConsumptionSheet(context, sub)),
       // 2026-08-26: الموقع — يظهر إذا:
       //  - الموقع مُعيَّن (يقدر أيّ موظّف يفتحه بالخرائط)، أو
       //  - الموظّف/المدير يقدر يعدّله (subscribers.edit_location).

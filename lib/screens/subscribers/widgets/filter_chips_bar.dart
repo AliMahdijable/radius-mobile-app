@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -40,7 +42,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
     final idx = _defs.indexWhere((d) => d.key == widget.current);
     if (idx < 0 || !_scroll.hasClients) return;
     // تقدير موقع الـchip: عرض تقريبي 90px + spacing 6px.
-    const chipStride = 96.0;
+    const chipStride = 112.0;
     final target = (idx * chipStride) - 40; // 40px offset ليضل جزء من السابق مرئي
     final max = _scroll.position.maxScrollExtent;
     final clamped = target.clamp(0.0, max);
@@ -94,13 +96,13 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
-      height: 42,
+      height: H.chipSm,
       child: ListView.separated(
         controller: _scroll,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
         itemCount: _defs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, __) => const SizedBox(width: Sp.sm),
         itemBuilder: (_, i) {
           final d = _defs[i];
           final selected = widget.current == d.key;
@@ -138,6 +140,9 @@ class _Chip extends StatelessWidget {
   });
   final String label;
   final IconData icon;
+
+  /// لون دلالي للعدّاد حين تكون الشريحة خاملة (أخضر للمتصل، أحمر
+  /// للمنتهي…) — تماماً كما في المخطّط.
   final Color color;
   final int count;
   final bool selected;
@@ -146,59 +151,50 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: selected ? color : Colors.transparent,
-        borderRadius: BorderRadius.circular(R.pill),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(R.pill),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.symmetric(
-              horizontal: selected ? 12 : 10,
-              vertical: 6,
+    return Material(
+      color: selected ? AppColors.brand : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          height: H.chipSm,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(
+              color: selected ? AppColors.brand : AppColors.borderSoft,
             ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.pill),
-              border: Border.all(
-                color: selected
-                    ? Colors.transparent
-                    : AppColors.border,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: selected ? AppColors.onBrand : AppColors.textHint,
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  color: selected ? Colors.white : color,
-                  size: 13,
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: AppType.body(
+                  color: selected ? AppColors.onBrand : AppColors.textBody,
+                ).copyWith(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
-                if (selected) ...[
-                  const SizedBox(width: 5),
-                  Text(
-                    label,
-                    style: AppType.label(color: Colors.white).copyWith(
-                      fontSize: 11, // Caption tier
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 5),
-                Text(
-                  '$count',
-                  style: AppType.muted(
-                    color: selected ? Colors.white : AppColors.textMid,
-                  ).copyWith(
-                    fontSize: 11, // Caption tier
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                textDirection: ui.TextDirection.ltr,
+                style: AppType.body(
+                  color: selected
+                      ? AppColors.onBrand.withValues(alpha: 0.65)
+                      : color,
+                ).copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
         ),
       ),
