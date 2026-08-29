@@ -33,6 +33,7 @@ Future<bool?> showPayDebtSheet(
   num initialCustomRemaining = 0,
 }) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -500,7 +501,7 @@ class _SheetHeader extends StatelessWidget {
               children: [
                 Text(title,
                     style: AppType.title(color: AppColors.textHi)
-                        .copyWith(fontSize: 16, fontWeight: FontWeight.w800)),
+                        .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
                 Text(subtitle,
                     style: AppType.muted(color: AppColors.textMid)
                         .copyWith(fontSize: 12)),
@@ -569,7 +570,7 @@ class _SourceBadge extends StatelessWidget {
                 style: TextStyle(
                   color: color,
                   fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -646,7 +647,7 @@ class _PayPreview extends StatelessWidget {
             style: TextStyle(
               color: after == 0 ? AppColors.success : AppColors.textHi,
               fontSize: 14,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -765,7 +766,7 @@ class _SubmitBar extends StatelessWidget {
                 : Icon(icon, size: 16),
             label: Text(label,
                 style:
-                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           ),
         ),
       ),

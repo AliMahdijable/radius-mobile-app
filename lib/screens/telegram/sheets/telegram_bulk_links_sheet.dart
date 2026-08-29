@@ -56,7 +56,7 @@ class _BulkSheetState extends State<_BulkSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         content: Text(
             'سيُدرَج ${_preview!.eligible} رسالة في طابور واتساب. الإرسال يحترم حدود الإرسال.',
             style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
@@ -70,7 +70,7 @@ class _BulkSheetState extends State<_BulkSheet> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('أرسل الآن',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -150,7 +150,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 15,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             )),
                         const SizedBox(height: 2),
@@ -205,7 +205,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         )),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.warning,
@@ -259,7 +259,7 @@ class _BulkSheetState extends State<_BulkSheet> {
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: bold ? 13 : 12,
-                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
                 color: AppColors.textMid,
               )),
         ),
@@ -267,7 +267,7 @@ class _BulkSheetState extends State<_BulkSheet> {
             style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: bold ? 15 : 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: color,
             )),
       ],

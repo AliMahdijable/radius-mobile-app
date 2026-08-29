@@ -240,7 +240,7 @@ class _HeroAmount extends StatelessWidget {
             formatIQD(amount),
             style: AppType.title(color: color).copyWith(
               fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               height: 1.1,
               letterSpacing: -0.3,
             ),

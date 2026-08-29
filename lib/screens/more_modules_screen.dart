@@ -194,7 +194,7 @@ class MoreModulesScreen extends StatelessWidget {
                   'more.title'.tr(),
                   style: AppType.title(color: AppColors.textHi).copyWith(
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -294,7 +294,7 @@ class _ModuleCard extends StatelessWidget {
                       title,
                       style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 2),

@@ -264,7 +264,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         padding: const EdgeInsets.all(Sp.xl),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(R.lg),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(children: [
@@ -287,7 +287,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       Container(
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(R.lg),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(children: [
@@ -441,7 +441,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           height: 32,
           decoration: BoxDecoration(
             color: AppColors.brandSoftBg,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
         ),
@@ -513,7 +513,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.dangerSoftBg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(children: [
@@ -537,7 +537,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.brandSoftBg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
         Icon(LucideIcons.router, size: 14, color: AppColors.brand),
@@ -731,7 +731,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -754,7 +754,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               Text(value,
                   style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: value == '—' ? AppColors.textLow : color,
                       height: 1)),
               if (unit.isNotEmpty) ...[
@@ -785,7 +785,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -806,7 +806,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Text('${percent.round()}',
                 style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                     height: 1)),
             const SizedBox(width: 2),
@@ -837,7 +837,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -869,7 +869,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Text(hasData ? _formatBps(iface.bps) : '—',
               style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: hasData ? color : AppColors.textLow,
                   height: 1)),
         ],
@@ -906,7 +906,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1113,7 +1113,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Column(children: [
         Row(children: [
@@ -1183,7 +1183,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   Widget _miniBar(double ratio, Color color) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: BorderRadius.circular(R.pill),
       child: LinearProgressIndicator(
         value: ratio.clamp(0.0, 1.0),
         minHeight: 2,
@@ -1227,7 +1227,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -1386,7 +1386,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: signalColor)),
             const SizedBox(width: 2),
             Text('dBm',
@@ -1403,7 +1403,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: ccqColor)),
               ),
             ],

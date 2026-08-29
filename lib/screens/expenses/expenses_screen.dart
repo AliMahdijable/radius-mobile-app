@@ -280,7 +280,7 @@ class _CompactHeader extends StatelessWidget {
                       '${formatIQD(total)} د.ع',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                         letterSpacing: -0.4,
                         height: 1.1,
@@ -300,7 +300,7 @@ class _CompactHeader extends StatelessWidget {
                   '$count عملية',
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: accent,
                   ),
                 ),
@@ -450,7 +450,7 @@ class _ExpenseTile extends StatelessWidget {
                 '${formatIQD(row.amount)} د.ع',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.error,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),

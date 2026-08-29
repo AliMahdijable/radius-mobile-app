@@ -89,13 +89,13 @@ class _ExpandableSectionState extends State<ExpandableSection>
     return Container(
       decoration: BoxDecoration(
         color: widget.backgroundColor ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: widget.borderColor ?? AppColors.border),
       ),
       child: Column(children: [
         InkWell(
           onTap: _toggle,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(R.lg),
           child: Padding(
             padding: const EdgeInsets.all(Sp.md),
             child: Row(children: [

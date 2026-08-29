@@ -12,6 +12,7 @@ import '../../../services/subscriber_events.dart';
 /// _manager_form.dart، يفرّق فقط الـsubmit + العنوان.
 Future<bool?> showAddManagerSheet(BuildContext context) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

@@ -149,6 +149,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
 
   void _showDetail(MessageLog m) {
     showModalBottomSheet(
+      barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -303,7 +304,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
               '$value',
               style: AppType.title(color: color).copyWith(
                 fontSize: 15,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 height: 1.1,
               ),
             ),

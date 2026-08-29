@@ -304,7 +304,7 @@ class _MovementCard extends StatelessWidget {
                       child: Text(
                         movement.arabicLabel,
                         style: AppType.label(color: AppColors.textHi)
-                            .copyWith(fontWeight: FontWeight.w800),
+                            .copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
                     Text(
@@ -312,7 +312,7 @@ class _MovementCard extends StatelessWidget {
                       style: TextStyle(
                         color: style.color,
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],

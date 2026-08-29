@@ -249,7 +249,7 @@ class _Header extends StatelessWidget {
                   'سجل الحركات',
                   style: AppType.label(color: AppColors.textHi).copyWith(
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     height: 1.2,
                   ),
                 ),
@@ -351,7 +351,7 @@ class _FilterChips extends StatelessWidget {
                 ).copyWith(
                   fontSize: 12,
                   height: 1.2,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 ),
               ),
             ),
@@ -377,7 +377,7 @@ class _DateHeader extends StatelessWidget {
             label,
             style: AppType.muted(color: AppColors.brand).copyWith(
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
             ),
           ),
@@ -458,7 +458,7 @@ class _MovementTile extends StatelessWidget {
                         label,
                         style: AppType.label(color: color).copyWith(
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -478,7 +478,7 @@ class _MovementTile extends StatelessWidget {
                         '${formatIQD(amount.round())} د.ع',
                         style: AppType.label(color: color).copyWith(
                           fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                   ],

@@ -19,6 +19,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 /// يرجّع `true` لو تم تعديل/حذف شيء (الـcaller يعيد التحميل).
 Future<bool?> showExistingDiscountsSheet(BuildContext context) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -375,7 +376,7 @@ class _Tile extends StatelessWidget {
                       Text(
                         fullName!,
                         style: AppType.label(color: AppColors.textHi)
-                            .copyWith(fontWeight: FontWeight.w800),
+                            .copyWith(fontWeight: FontWeight.w700),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -390,7 +391,7 @@ class _Tile extends StatelessWidget {
                       Text(
                         discount.subscriberUsername,
                         style: AppType.label(color: AppColors.textHi)
-                            .copyWith(fontWeight: FontWeight.w800),
+                            .copyWith(fontWeight: FontWeight.w700),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -414,7 +415,7 @@ class _Tile extends StatelessWidget {
                 style: TextStyle(
                   color: AppColors.warning,
                   fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(width: 6),

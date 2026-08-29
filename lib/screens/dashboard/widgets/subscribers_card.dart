@@ -225,7 +225,7 @@ class _Ring extends StatelessWidget {
                   '$total',
                   style: AppType.title(color: AppColors.brand).copyWith(
                     fontSize: 30,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     height: 1,
                     letterSpacing: -0.5,
                   ),
@@ -294,7 +294,7 @@ class _RingStatRow extends StatelessWidget {
             '$value',
             style: AppType.title(color: tone.fill).copyWith(
               fontSize: 16,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               height: 1,
             ),
           ),

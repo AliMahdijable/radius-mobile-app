@@ -48,6 +48,7 @@ Future<({SortField field, SortDirection direction})?> showSortSheet(
   required SortDirection currentDirection,
 }) {
   return showModalBottomSheet<({SortField field, SortDirection direction})>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: AppColors.surface,
     showDragHandle: true,
@@ -93,7 +94,7 @@ class _SortSheetState extends State<_SortSheet> {
                 const SizedBox(width: Sp.sm),
                 Text('sort.title'.tr(),
                     style: AppType.title(color: AppColors.textHi)
-                        .copyWith(fontSize: 16, fontWeight: FontWeight.w800)),
+                        .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: Sp.md),

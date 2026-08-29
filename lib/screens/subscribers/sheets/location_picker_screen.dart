@@ -118,7 +118,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
         title: Text('اختر موقع المشترك',
             style: TextStyle(
               fontFamily: 'Cairo',
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               fontSize: 15,
               color: AppColors.textHi,
             )),
@@ -261,7 +261,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                       style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     style: FilledButton.styleFrom(

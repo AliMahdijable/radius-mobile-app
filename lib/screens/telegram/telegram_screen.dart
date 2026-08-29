@@ -76,7 +76,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('فصل البوت',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         content: const Text(
             'سيتوقّف كل إرسال تلغرام. المشتركون المربوطون يبقون في قاعدة البيانات — يمكن إعادة الربط لاحقاً بنفس التوكن.',
             style: TextStyle(fontFamily: 'Cairo', height: 1.5)),
@@ -90,7 +90,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('فصل',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -130,7 +130,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
           style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 16,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -262,7 +262,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 22,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: color,
                 fontFeatures: const [FontFeature.tabularFigures()],
                 letterSpacing: -0.4,
@@ -367,7 +367,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                       style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                         height: 1.15,
                       ),
@@ -407,7 +407,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           style: OutlinedButton.styleFrom(
@@ -457,7 +457,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                     height: 1.15,
                   ),
@@ -534,7 +534,7 @@ class _StepsCard extends StatelessWidget {
         children: [
           Text('الخطوات (دقيقتان)',
               style: AppType.label(color: AppColors.textHi)
-                  .copyWith(fontSize: 13, fontWeight: FontWeight.w800)),
+                  .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           _step(1, 'افتح ', botLink: '@BotFather', suffix: ' في تلغرام'),
           _step(2, 'أرسل الأمر ', code: '/newbot', suffix: ' واتّبع التعليمات'),
@@ -565,7 +565,7 @@ class _StepsCard extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: tgBlue,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 )),
@@ -594,7 +594,7 @@ class _StepsCard extends StatelessWidget {
                         style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: tgBlue,
                           decoration: TextDecoration.underline,
                         )),
@@ -621,7 +621,7 @@ class _StepsCard extends StatelessWidget {
                       style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       )),
                 if (suffix != null)
@@ -809,7 +809,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   )),
               style: FilledButton.styleFrom(
                 backgroundColor: widget.tgBlue,

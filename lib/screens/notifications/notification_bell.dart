@@ -65,7 +65,7 @@ class NotificationBell extends StatelessWidget {
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 9,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         height: 1,
                       ),
                       textAlign: TextAlign.center,

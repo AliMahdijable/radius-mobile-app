@@ -380,7 +380,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
           Text(
             title,
             style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 14, fontWeight: FontWeight.w800),
+                .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -405,7 +405,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               Text(
                 'شرح الحقول:',
                 style: AppType.label(color: AppColors.textHi)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -453,6 +453,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       child: InkWell(
         onTap: () async {
           final picked = await showModalBottomSheet<int?>(
+            barrierColor: AppColors.scrim,
             context: context,
             backgroundColor: Colors.transparent,
             // مطلب 2026-06-12 (إصلاح): الـListTile داخل sheet مع
@@ -565,7 +566,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 child: Text(
                   _selectedManagerLabel,
                   style: AppType.label(color: accent)
-                      .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
+                      .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -646,7 +647,7 @@ class _PackageTile extends StatelessWidget {
                 child: Text(
                   package.name,
                   style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 15, fontWeight: FontWeight.w800),
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
@@ -729,7 +730,7 @@ class _PackageTile extends StatelessWidget {
               textAlign: TextAlign.center,
               style: AppType.label(
                       color: highlight ? AppColors.brand : AppColors.textHi)
-                  .copyWith(fontSize: 14, fontWeight: FontWeight.w800),
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
               decoration: InputDecoration(
                 hintText: '0',
                 hintStyle: AppType.input(color: AppColors.textLow),

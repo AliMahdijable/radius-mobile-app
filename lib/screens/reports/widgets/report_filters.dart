@@ -228,7 +228,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                     const SizedBox(width: 6),
                     Text('filters.title'.tr(),
                         style: AppType.label(color: AppColors.textHi).copyWith(
-                            fontSize: 12, fontWeight: FontWeight.w800)),
+                            fontSize: 12, fontWeight: FontWeight.w700)),
                     const Spacer(),
                     if (!widget.value.isEmpty)
                       InkWell(
@@ -245,7 +245,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   style: TextStyle(
                                       color: AppColors.error,
                                       fontSize: 10.5,
-                                      fontWeight: FontWeight.w800)),
+                                      fontWeight: FontWeight.w700)),
                             ],
                           ),
                         ),
@@ -336,7 +336,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                       Text('filters.action_types_title'.tr(),
                           style: AppType.title(color: AppColors.textHi)
                               .copyWith(
-                                  fontSize: 14, fontWeight: FontWeight.w800)),
+                                  fontSize: 14, fontWeight: FontWeight.w700)),
                       const Spacer(),
                       if (set.isNotEmpty)
                         TextButton(
@@ -349,7 +349,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               style: TextStyle(
                                   color: AppColors.error,
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w800)),
+                                  fontWeight: FontWeight.w700)),
                         ),
                     ],
                   ),
@@ -446,7 +446,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   ? 'common.apply'.tr()
                                   : '${'common.apply'.tr()} (${set.length})',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 13)),
+                                  fontWeight: FontWeight.w700, fontSize: 13)),
                         ),
                       ),
                     ],

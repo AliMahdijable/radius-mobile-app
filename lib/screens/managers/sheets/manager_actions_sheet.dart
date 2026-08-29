@@ -67,6 +67,7 @@ Future<ManagerAction?> showManagerActionsSheet(
   double customDebt = 0,
 }) {
   return showModalBottomSheet<ManagerAction>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

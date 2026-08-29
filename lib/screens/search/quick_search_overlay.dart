@@ -779,7 +779,7 @@ class _ResultRow extends StatelessWidget {
                             style:
                                 AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -817,7 +817,7 @@ class _ResultRow extends StatelessWidget {
                             statusLabel,
                             style: AppType.muted(color: statusColor).copyWith(
                               fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -853,7 +853,7 @@ class _ResultRow extends StatelessWidget {
                               style: AppType.muted(color: AppColors.error)
                                   .copyWith(
                                 fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),

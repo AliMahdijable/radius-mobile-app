@@ -126,7 +126,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
         title: Text(
           'تأكيد إضافة الدين',
           style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: Text(
           'سيتم إضافة ${formatIQD(amount.round())} د.ع كدين على '

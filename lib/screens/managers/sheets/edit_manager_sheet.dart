@@ -9,6 +9,7 @@ import '../../../theme/colors.dart';
 /// تعديل مدير قائم. كلمة السر اختيارية (تترك فاضية = لا تغيير).
 Future<bool?> showEditManagerSheet(BuildContext context, Manager m) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

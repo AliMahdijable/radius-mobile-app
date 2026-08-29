@@ -118,7 +118,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         backgroundColor: AppColors.surface,
         title: const Text(
           'تبديل الحساب',
-          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
         ),
         content: Text(
           'سيتمّ تسجيل دخول بحساب "${row.username}". الحساب الحاليّ يُحفظ في شاشة الدخول للعودة السريعة.',
@@ -134,7 +134,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('تبديل',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -332,7 +332,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 16,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -413,7 +413,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                     height: 1.15,
                   ),
@@ -495,7 +495,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: Colors.white,
                           height: 1.15,
                         ),
@@ -602,7 +602,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                               height: 1.15,
                               fontFeatures: const [
@@ -627,7 +627,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.brand,
                               ),
                             ),
@@ -647,7 +647,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.error,
                               ),
                             ),
@@ -708,7 +708,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     style: FilledButton.styleFrom(

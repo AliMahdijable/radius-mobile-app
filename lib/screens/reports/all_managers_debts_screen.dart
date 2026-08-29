@@ -592,7 +592,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                 Text(
                   label,
                   style: AppType.title(color: color)
-                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w800),
+                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 1),
                 Text(
@@ -612,7 +612,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               Text(
                 formatIQD(value.round()),
                 style: AppType.title(color: color).copyWith(
-                    fontSize: 18, fontWeight: FontWeight.w800, height: 1.1),
+                    fontSize: 18, fontWeight: FontWeight.w700, height: 1.1),
               ),
               const SizedBox(width: 4),
               Text(
@@ -661,7 +661,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                     formatIQD(value.round()),
                     style: AppType.title(color: color).copyWith(
                       fontSize: emphasize ? 16 : 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       height: 1.1,
                     ),
                   ),
@@ -904,7 +904,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                           style: TextStyle(
                             color: meta.color,
                             fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -917,7 +917,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                                 ? AppColors.error
                                 : AppColors.success,
                             fontSize: 12,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                     ],
@@ -943,7 +943,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                                 ? AppColors.brandLight
                                 : AppColors.brand,
                             fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             height: 1.15,
                             letterSpacing: -0.1,
                           ),

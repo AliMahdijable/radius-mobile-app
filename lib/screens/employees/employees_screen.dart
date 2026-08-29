@@ -226,7 +226,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   '${_rows.length}',
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                     letterSpacing: -0.4,
                     height: 1.1,
@@ -265,7 +265,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             '$count',
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: color,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -402,7 +402,7 @@ class _EmployeeTile extends StatelessWidget {
                   display.characters.isEmpty ? '?' : display.characters.first,
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: accentColor,
                   ),
                 ),
@@ -420,7 +420,7 @@ class _EmployeeTile extends StatelessWidget {
                             display,
                             style: TextStyle(
                               fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                               height: 1.15,
                             ),
@@ -441,7 +441,7 @@ class _EmployeeTile extends StatelessWidget {
                               'معطّل',
                               style: TextStyle(
                                 fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.textLow,
                               ),
                             ),

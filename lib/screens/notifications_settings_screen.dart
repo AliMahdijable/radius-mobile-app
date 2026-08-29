@@ -220,7 +220,7 @@ class _SectionLabel extends StatelessWidget {
         label,
         style: AppType.muted(color: AppColors.textMid).copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           letterSpacing: 0.6,
         ),
       ),
@@ -341,7 +341,7 @@ class _TimePickerTile extends StatelessWidget {
                     value,
                     style: AppType.title(color: AppColors.textHi).copyWith(
                         fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 0.5),
                   ),
                 ],

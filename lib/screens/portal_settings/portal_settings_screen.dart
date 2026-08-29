@@ -399,6 +399,7 @@ class _PackagesTabState extends State<_PackagesTab> {
 
   Future<void> _editPackage(PortalPackage p) async {
     final result = await showModalBottomSheet<PortalPackage?>(
+      barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

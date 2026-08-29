@@ -19,6 +19,7 @@ Future<bool?> showAddCustomDebtSheet(
   Manager manager,
 ) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -364,7 +365,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
             style: TextStyle(
               color: accent,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),

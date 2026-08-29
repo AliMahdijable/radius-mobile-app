@@ -18,6 +18,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 /// قبل الإرسال.
 Future<bool?> showSendInfoSheet(BuildContext context, Manager m) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

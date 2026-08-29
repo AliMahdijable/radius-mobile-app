@@ -272,7 +272,7 @@ class _SectionLabel extends StatelessWidget {
         label,
         style: AppType.muted(color: AppColors.textMid).copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           letterSpacing: 0.6,
         ),
       ),
@@ -365,7 +365,7 @@ class _PermCard extends StatelessWidget {
                 : Text(
                     switchLabel,
                     style: const TextStyle(
-                        fontSize: 11.5, fontWeight: FontWeight.w800),
+                        fontSize: 11.5, fontWeight: FontWeight.w700),
                   ),
           ),
         ],

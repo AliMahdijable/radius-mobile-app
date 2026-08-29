@@ -882,7 +882,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 style: TextStyle(
                   color: active ? accent : AppColors.textMid,
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -930,7 +930,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               textDirection: ui.TextDirection.ltr,
               style: TextStyle(
                 fontSize: 28,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
                 letterSpacing: 6,
                 color: AppColors.textHi,
               ),
@@ -1054,7 +1054,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 style: TextStyle(
                   color: disabled ? AppColors.textLow : color,
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -1219,7 +1219,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             ),
                           ),

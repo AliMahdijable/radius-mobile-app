@@ -54,11 +54,12 @@ class _RegionsScreenState extends State<RegionsScreen> {
 
   Future<void> _openForm({DeviceRegion? initial}) async {
     final result = await showModalBottomSheet<DeviceRegion>(
+      barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
       ),
       builder: (_) => _RegionFormSheet(initial: initial),
     );
@@ -203,14 +204,14 @@ class _RegionsScreenState extends State<RegionsScreen> {
     final color = _parseColor(r.color) ?? AppColors.brand;
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         onTap: () => _openForm(initial: r),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(R.md),
             border: Border.all(color: AppColors.border),
           ),
           child: Row(
@@ -362,7 +363,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),
@@ -370,7 +371,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
                   style: TextStyle(
                       color: AppColors.textHi,
                       fontSize: 17,
-                      fontWeight: FontWeight.w800)),
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
               TextField(
                 controller: _nameCtrl,
@@ -383,7 +384,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
                   filled: true,
                   fillColor: AppColors.surfaceInput,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(R.sm),
                     borderSide: BorderSide.none,
                   ),
                 ),

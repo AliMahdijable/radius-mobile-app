@@ -18,6 +18,7 @@ import '../../../core/util/amount_input.dart';
 /// Submit → POST /api/admin/expenses.
 Future<bool?> showAddExpenseSheet(BuildContext context) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -439,7 +440,7 @@ class _SheetHeader extends StatelessWidget {
                 Text(title,
                     style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 15,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         height: 1.2)),
                 const SizedBox(height: 3),
                 Text(subtitle,
@@ -513,7 +514,7 @@ class _SubmitBar extends StatelessWidget {
                 : Icon(icon, size: 16),
             label: Text(label,
                 style:
-                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           ),
         ),
       ),

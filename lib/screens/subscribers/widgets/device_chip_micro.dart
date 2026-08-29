@@ -196,7 +196,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
           Text(
             label,
             style: AppType.label(color: color)
-                .copyWith(fontSize: 10, fontWeight: FontWeight.w800),
+                .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -227,7 +227,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
         Text(
           value,
           style: AppType.label(color: color)
-              .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
         ),
         // مطلب 2026-06-11: قيمة 'خطرة' لازم تنوّه — مثل v1.
         // المثلث الأحمر يظهر بجنب أي قيمة خارج النطاق الصحي

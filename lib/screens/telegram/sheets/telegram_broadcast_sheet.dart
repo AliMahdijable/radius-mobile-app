@@ -65,7 +65,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         content: Text(
             'سيتمّ إرسال الرسالة لـ${_preview!.eligible} مشترك مربوط. متأكّد؟',
             style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
@@ -80,7 +80,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('أرسل',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -157,7 +157,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 15,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             )),
                         const SizedBox(height: 2),
@@ -285,7 +285,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             )),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.textHi,
@@ -318,7 +318,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             )),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.brandAccent,

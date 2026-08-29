@@ -118,7 +118,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               Text(
                 'reports.account_statement'.tr(),
                 style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 15, fontWeight: FontWeight.w800),
+                    .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
               ),
               Text(
                 widget.displayName ?? widget.username,

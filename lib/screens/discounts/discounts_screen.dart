@@ -527,7 +527,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             style: TextStyle(
               color: accent,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -712,7 +712,7 @@ class _ActionCard extends StatelessWidget {
                     Text(
                       label,
                       style: AppType.label(color: fg).copyWith(
-                          fontWeight: FontWeight.w800, fontSize: 12.5),
+                          fontWeight: FontWeight.w700, fontSize: 12.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -791,7 +791,7 @@ class _SubscriberCard extends StatelessWidget {
                     child: Text(
                       hasName ? sub.fullName : sub.username,
                       style: AppType.label(color: AppColors.textHi).copyWith(
-                          fontSize: 10.5, fontWeight: FontWeight.w800),
+                          fontSize: 10.5, fontWeight: FontWeight.w700),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -835,7 +835,7 @@ class _SubscriberCard extends StatelessWidget {
                         style: TextStyle(
                           color: AppColors.warning,
                           fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),

@@ -17,6 +17,7 @@ import '../../../core/util/amount_input.dart';
 /// يرجع true عند الحفظ الناجح فالـcaller يعيد تحميل القائمة.
 Future<bool?> showEditExpenseSheet(BuildContext context, ExpenseRow row) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

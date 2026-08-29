@@ -373,7 +373,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                   '${formatIQD(_totalBalance)} د.ع',
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                     letterSpacing: -0.4,
                     height: 1.1,
@@ -392,7 +392,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               '$_total مدير',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: accent,
               ),
             ),
@@ -493,7 +493,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                 style: TextStyle(
                   color: active ? accent : AppColors.textMid,
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               if (active) ...[
@@ -617,7 +617,7 @@ class _ManagerTile extends StatelessWidget {
                                 manager.username,
                                 style: TextStyle(
                                   fontSize: 14.5,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w700,
                                   color: AppColors.textHi,
                                   height: 1.15,
                                 ),
@@ -639,7 +639,7 @@ class _ManagerTile extends StatelessWidget {
                                   'معطّل',
                                   style: TextStyle(
                                     fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                     color: AppColors.error,
                                   ),
                                 ),
@@ -778,7 +778,7 @@ class _ManagerTile extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: 10.5,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -817,7 +817,7 @@ class _ManagerTile extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: color,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),

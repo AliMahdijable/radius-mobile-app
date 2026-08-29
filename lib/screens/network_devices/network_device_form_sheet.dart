@@ -223,7 +223,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       builder: (context, scrollController) => Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceSunken,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(R.card)),
         ),
         padding: EdgeInsets.only(bottom: bottomInset),
         child: Column(children: [
@@ -305,7 +306,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: AppColors.info.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(R.sm),
                       border: Border.all(
                           color: AppColors.info.withValues(alpha: 0.3)),
                     ),
@@ -352,7 +353,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                         backgroundColor: AppColors.brand,
                         foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(R.sm)),
                       ),
                     ),
                   ),
@@ -372,7 +373,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         height: 4,
         decoration: BoxDecoration(
           color: AppColors.textLow.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.circular(R.pill),
         ),
       );
 
@@ -406,7 +407,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             height: 14,
             decoration: BoxDecoration(
               color: AppColors.brand,
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(R.pill),
             )),
         const SizedBox(width: 8),
         Text(text,
@@ -434,12 +435,12 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     final active = _protocol == value;
     return InkWell(
       onTap: () => _onProtocolChanged(value),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(R.sm),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: active ? AppColors.brand : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
             color: active ? AppColors.brand : AppColors.border,
           ),
@@ -464,7 +465,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -577,15 +578,15 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       filled: true,
       fillColor: AppColors.surfaceInput,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         borderSide: BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         borderSide: BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         borderSide: BorderSide(color: AppColors.brand, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -679,12 +680,12 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     if (_regionsLoaded && _regions.isEmpty) {
       return InkWell(
         onTap: _openRegionsAndReload,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: AppColors.brandSoftBg,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
               color: AppColors.brandSoftBorder,
               style: BorderStyle.solid,

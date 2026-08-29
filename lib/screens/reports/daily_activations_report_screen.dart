@@ -262,7 +262,7 @@ class _DailyActivationsReportScreenState
             style: TextStyle(
               color: AppColors.textHi,
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
@@ -292,7 +292,7 @@ class _DailyActivationsReportScreenState
               style: TextStyle(
                 color: AppColors.brand,
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -426,7 +426,7 @@ class _DailyActivationsReportScreenState
                       '${c.$3}',
                       style: TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: selected ? c.$4 : AppColors.textMid,
                       ),
                     ),

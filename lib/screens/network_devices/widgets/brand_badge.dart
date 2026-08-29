@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../theme/spacing.dart';
 
 /// Brand badge — تصميم قريب من هويّة كل براند بدون نسخ اللوقو الفعلي.
 ///
@@ -110,7 +111,7 @@ class _BrandGlyphPainter extends CustomPainter {
         style: TextStyle(
           color: color,
           fontSize: size.width * sizeFactor,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
           letterSpacing: -1,
           height: 1,
         ),

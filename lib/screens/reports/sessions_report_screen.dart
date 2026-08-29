@@ -353,7 +353,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                 Text(
                   s.username ?? '—',
                   style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 13, fontWeight: FontWeight.w800),
+                      .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

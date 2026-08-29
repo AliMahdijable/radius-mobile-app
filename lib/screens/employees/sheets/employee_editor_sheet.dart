@@ -18,6 +18,7 @@ Future<bool?> showEmployeeEditorSheet(
   Employee? employee,
 }) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -345,7 +346,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                           : const Icon(LucideIcons.save, size: 16),
                       label: Text(_saving ? 'جاري الحفظ...' : 'حفظ',
                           style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w800)),
+                              fontSize: 14, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ),
@@ -430,7 +431,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             'أدوار جاهزة',
             style: AppType.muted(color: AppColors.textMid).copyWith(
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
             ),
           ),
@@ -480,7 +481,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           Text(
             label,
             style: AppType.label(color: AppColors.textHi)
-                .copyWith(fontWeight: FontWeight.w800),
+                .copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(width: 6),
           Container(
@@ -750,7 +751,7 @@ class _PresetChip extends StatelessWidget {
                 style: TextStyle(
                   color: AppColors.brandAccent,
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -798,7 +799,7 @@ class _ActionChip extends StatelessWidget {
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

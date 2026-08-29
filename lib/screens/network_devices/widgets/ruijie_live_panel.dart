@@ -159,7 +159,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(R.lg),
           border: Border.all(color: AppColors.border),
         ),
         child: const Center(child: CircularProgressIndicator()),
@@ -170,7 +170,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(children: [
@@ -227,7 +227,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text(s.sysDescr?.split('\n').first ?? 'Ruijie / Reyee',
@@ -319,7 +319,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -336,7 +336,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             const Spacer(),
             Text(display,
                 style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w900, color: color)),
+                    fontSize: 13, fontWeight: FontWeight.w700, color: color)),
           ]),
           const SizedBox(height: 6),
           ClipRRect(
@@ -367,7 +367,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
         Container(
@@ -375,7 +375,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           height: 30,
           decoration: BoxDecoration(
             color: iface.operUp ? AppColors.success : AppColors.textLow,
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(R.pill),
           ),
         ),
         const SizedBox(width: 8),
@@ -404,7 +404,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           child: Text(speedText,
               style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textMid)),
         ),
         const SizedBox(width: 8),
@@ -413,13 +413,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.success)),
           Text('↑${_bpsShort(txBps)}',
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.brandAccent)),
         ]),
       ]),
@@ -432,7 +432,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppColors.dangerSoftBg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(children: [
@@ -451,7 +451,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Column(children: [
@@ -460,7 +460,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         Text('تعذّرت مراقبة الجهاز',
             style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
         const SizedBox(height: 4),
         Text(_error ?? '',

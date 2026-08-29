@@ -49,7 +49,7 @@ class PrintReceiptCheckbox extends StatelessWidget {
                   'sheets.print_receipt_after'.tr(),
                   style: AppType.subtitle(color: AppColors.textHi).copyWith(
                     fontSize: 12.5,
-                    fontWeight: value ? FontWeight.w800 : FontWeight.w600,
+                    fontWeight: value ? FontWeight.w700 : FontWeight.w600,
                   ),
                 ),
               ),

@@ -185,7 +185,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                   formatIQD(_amount!),
                   style: AppType.title(color: AppColors.textHi).copyWith(
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.4,
                     height: 1.05,
                   ),

@@ -11,6 +11,7 @@ import '../../../core/util/amount_input.dart';
 
 Future<bool?> showEditDiscountSheet(BuildContext context, Discount d) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -185,7 +186,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                               style: AppType.label(color: AppColors.textHi)
                                   .copyWith(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w800),
+                                      fontWeight: FontWeight.w700),
                             ),
                             const Spacer(),
                             if (_amount > 0)
@@ -204,7 +205,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                                   style: AppType.label(color: AppColors.brand)
                                       .copyWith(
                                           fontSize: 11,
-                                          fontWeight: FontWeight.w800),
+                                          fontWeight: FontWeight.w700),
                                 ),
                               ),
                           ],
@@ -327,7 +328,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
             style: TextStyle(
               color: accent,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),

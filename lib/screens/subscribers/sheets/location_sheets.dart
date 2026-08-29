@@ -320,7 +320,7 @@ class _EditSheetState extends State<_EditSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('حذف الموقع',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         content: const Text('سيُحذف موقع GPS المخزَّن. متأكّد؟',
             style: TextStyle(fontFamily: 'Cairo', height: 1.5)),
         actions: [
@@ -333,7 +333,7 @@ class _EditSheetState extends State<_EditSheet> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('حذف',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -358,7 +358,7 @@ class _EditSheetState extends State<_EditSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('الحقل مستخدَم',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,7 +398,7 @@ class _EditSheetState extends State<_EditSheet> {
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('فهمت',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -481,7 +481,7 @@ class _EditSheetState extends State<_EditSheet> {
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 style: FilledButton.styleFrom(

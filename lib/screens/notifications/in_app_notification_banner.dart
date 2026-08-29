@@ -155,7 +155,7 @@ class _BannerCardState extends State<_BannerCard>
                                 style: AppType.label(color: AppColors.textHi)
                                     .copyWith(
                                         fontSize: 13,
-                                        fontWeight: FontWeight.w900),
+                                        fontWeight: FontWeight.w700),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),

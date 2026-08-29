@@ -174,6 +174,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
   Future<void> _openEdit(_TemplateDef def) async {
     final existing = _templateOf(def.type);
     final result = await showModalBottomSheet<bool>(
+      barrierColor: AppColors.scrim,
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -367,7 +368,7 @@ class _TemplateTile extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontSize: 9.5,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -448,7 +449,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),
           const SizedBox(height: 8),
@@ -517,7 +518,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: selected ? color : AppColors.textMid,
                   ),
                   maxLines: 1,
@@ -881,7 +882,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                 style: const TextStyle(
                   color: Color(0xFF25D366),
                   fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   fontFamily: 'Cairo',
                 ),
               ),

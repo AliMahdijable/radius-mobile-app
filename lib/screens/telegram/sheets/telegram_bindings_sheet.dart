@@ -82,7 +82,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('فكّ الربط',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         content: Text('فكّ ربط "$display" من بوت تلغرام؟',
             style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
         actions: [
@@ -95,7 +95,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('فكّ',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -191,7 +191,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                               style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 15,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.textHi,
                               )),
                           const SizedBox(height: 2),
@@ -359,7 +359,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                               style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.textHi,
                               ),
                               maxLines: 1,
@@ -378,7 +378,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
                                   fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w700,
                                   color: AppColors.error,
                                 )),
                           ),

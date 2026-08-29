@@ -112,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text(
                 'settings.title'.tr(),
                 style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 18, fontWeight: FontWeight.w800),
+                    .copyWith(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
@@ -419,7 +419,7 @@ class _SectionLabel extends StatelessWidget {
         label,
         style: AppType.muted(color: AppColors.textMid).copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           letterSpacing: 0.6,
         ),
       ),
@@ -439,6 +439,7 @@ void _todo(BuildContext ctx, String msg) {
 
 void _openThemePicker(BuildContext ctx) {
   showModalBottomSheet<void>(
+    barrierColor: AppColors.scrim,
     context: ctx,
     backgroundColor: Colors.transparent,
     isScrollControlled: false,
@@ -448,6 +449,7 @@ void _openThemePicker(BuildContext ctx) {
 
 void _openPrinterFormatPicker(BuildContext ctx) {
   showModalBottomSheet<void>(
+    barrierColor: AppColors.scrim,
     context: ctx,
     backgroundColor: Colors.transparent,
     isScrollControlled: false,
@@ -470,6 +472,7 @@ String _themeLabel(ThemeMode mode) {
 
 void _openLanguagePicker(BuildContext ctx) {
   showModalBottomSheet<void>(
+    barrierColor: AppColors.scrim,
     context: ctx,
     backgroundColor: Colors.transparent,
     isScrollControlled: false,

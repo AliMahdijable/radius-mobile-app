@@ -227,7 +227,7 @@ class _ReportCard extends StatelessWidget {
                       title,
                       style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 2),

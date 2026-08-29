@@ -151,6 +151,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
 
   Future<void> _edit() async {
     final updated = await showModalBottomSheet<NetworkDevice>(
+      barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -420,7 +421,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     final online = _d.lastStatus == 'online';
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(R.card),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -605,7 +606,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 '${_d.lastResponseMs}',
                 style: TextStyle(
                   fontSize: 24,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: _statusColor,
                   height: 1,
                 ),
@@ -617,12 +618,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             // زر ICMP مدمج — icon فقط
             InkWell(
               onTap: _probing ? null : _probe,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(R.sm),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppColors.brandSoftBg,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
                 child: _probing
                     ? SizedBox(
@@ -735,7 +736,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -762,7 +763,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               value,
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
                 height: 1,
               ),
@@ -786,7 +787,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -852,7 +853,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.brandAccent.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.brandAccent.withValues(alpha: 0.3)),
       ),
       child: Row(children: [
@@ -861,7 +862,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
           height: 40,
           decoration: BoxDecoration(
             color: AppColors.brandAccent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(LucideIcons.radioTower,
               color: AppColors.brandAccent, size: 20),
@@ -896,7 +897,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.textLow.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [
@@ -905,7 +906,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
           height: 40,
           decoration: BoxDecoration(
             color: AppColors.textLow.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(LucideIcons.lock, color: AppColors.textMid, size: 20),
         ),
@@ -942,7 +943,7 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
       ),
       child: Row(children: [
@@ -951,7 +952,7 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
           height: 40,
           decoration: BoxDecoration(
             color: AppColors.info.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(LucideIcons.zap, color: AppColors.info, size: 20),
         ),
@@ -995,7 +996,7 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.warning.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
       ),
       child: Row(children: [
@@ -1004,13 +1005,13 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
           height: 40,
           decoration: BoxDecoration(
             color: AppColors.warning.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Center(
             child: Text('M',
                 style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.warning)),
           ),
         ),
@@ -1053,7 +1054,7 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.brandAccent.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border:
             Border.all(color: AppColors.brandAccent.withValues(alpha: 0.25)),
       ),
@@ -1063,13 +1064,13 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
           height: 40,
           decoration: BoxDecoration(
             color: AppColors.brandAccent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Center(
             child: Text('R',
                 style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.brandAccent)),
           ),
         ),

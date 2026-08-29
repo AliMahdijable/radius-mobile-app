@@ -549,7 +549,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: selected ? color : AppColors.textMid,
                 ),
                 maxLines: 1,

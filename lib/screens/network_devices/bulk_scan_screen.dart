@@ -236,11 +236,12 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
 
     // Sheet قبل الإضافة — يجمع region + creds + prefix تُطبّق على كل المُحدَّد
     final opts = await showModalBottomSheet<_BulkAddOptions>(
+      barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
       ),
       builder: (_) => _BulkAddOptionsSheet(
         count: count,
@@ -386,7 +387,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                 filled: true,
                 fillColor: AppColors.surfaceInput,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(R.sm),
                   borderSide: BorderSide.none,
                 ),
                 isDense: true,
@@ -438,7 +439,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
             filled: true,
             fillColor: AppColors.surfaceInput,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
               borderSide: BorderSide.none,
             ),
             isDense: true,
@@ -503,9 +504,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       color: alreadyExists
           ? AppColors.surfaceDisabled
           : (selected ? AppColors.brandSoftBg : AppColors.surface),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(R.sm),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         onTap: alreadyExists
             ? null
             : () => setState(() {
@@ -518,7 +519,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
               color: alreadyExists
                   ? AppColors.border
@@ -807,7 +808,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),
@@ -818,7 +819,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     style: TextStyle(
                         color: AppColors.textHi,
                         fontSize: 17,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w700)),
               ]),
               const SizedBox(height: 4),
               Text('كل الحقول اختياريّة — اتركها فارغة وسيُملأ تلقائياً',
@@ -838,7 +839,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                   filled: true,
                   fillColor: AppColors.surfaceInput,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(R.sm),
                     borderSide: BorderSide.none,
                   ),
                   isDense: true,
@@ -859,7 +860,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                   filled: true,
                   fillColor: AppColors.surfaceInput,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(R.sm),
                     borderSide: BorderSide.none,
                   ),
                   isDense: true,
@@ -934,7 +935,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                       filled: true,
                       fillColor: AppColors.surfaceInput,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(R.sm),
                         borderSide: BorderSide.none,
                       ),
                       isDense: true,
@@ -951,7 +952,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                       filled: true,
                       fillColor: AppColors.surfaceInput,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(R.sm),
                         borderSide: BorderSide.none,
                       ),
                       isDense: true,
@@ -975,7 +976,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     filled: true,
                     fillColor: AppColors.surfaceInput,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(R.sm),
                       borderSide: BorderSide.none,
                     ),
                     isDense: true,

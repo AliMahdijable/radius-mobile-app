@@ -169,7 +169,7 @@ class _RevealSheetState extends State<_RevealSheet>
                       firstChar,
                       style: const TextStyle(
                         fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
@@ -183,7 +183,7 @@ class _RevealSheetState extends State<_RevealSheet>
                           widget.title,
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             color: AppColors.textHi,
                             height: 1.2,
                           ),
@@ -237,7 +237,7 @@ class _RevealSheetState extends State<_RevealSheet>
                           style: TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -265,7 +265,7 @@ class _RevealSheetState extends State<_RevealSheet>
                           style: TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         style: FilledButton.styleFrom(
@@ -357,7 +357,7 @@ class _PasswordDisplay extends StatelessWidget {
                     'يُخفى بعد ${remaining}s',
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: accent,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
@@ -375,7 +375,7 @@ class _PasswordDisplay extends StatelessWidget {
                         textDirection: TextDirection.ltr,
                         style: TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.textHi,
                           fontFeatures: const [FontFeature.tabularFigures()],
                           height: 1.2,
@@ -386,7 +386,7 @@ class _PasswordDisplay extends StatelessWidget {
                         '•' * password.length.clamp(6, 16),
                         style: TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.textMid,
                           height: 1.2,
                           letterSpacing: 3,

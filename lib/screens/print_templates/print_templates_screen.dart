@@ -222,7 +222,7 @@ class _WebOnlyBanner extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.brand,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),

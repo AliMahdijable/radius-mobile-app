@@ -169,7 +169,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: AppColors.dangerSoftBg,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
           ),
           child: Row(children: [
@@ -223,7 +223,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           color: _monitoring
               ? AppColors.success.withValues(alpha: 0.12)
               : AppColors.border.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(R.card),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           // 2026-08-18: النقطة الخضراء تبقى دائماً — التبديل السابق
@@ -288,7 +288,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             signalColor.withValues(alpha: 0.02),
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: signalColor.withValues(alpha: 0.35)),
       ),
       child: Column(children: [
@@ -314,7 +314,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             child: Text(peerName,
                 style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
           ),
           Container(
@@ -326,7 +326,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             child: Text('60 GHz',
                 style: TextStyle(
                     fontSize: 9,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.brandAccent)),
           ),
         ]),
@@ -419,12 +419,12 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         const Spacer(),
         Text(badge,
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w900, color: color)),
+                fontSize: 10, fontWeight: FontWeight.w700, color: color)),
         const SizedBox(width: 6),
         Text('${percent.round()}%',
             textDirection: TextDirection.ltr,
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w800, color: color)),
+                fontSize: 10, fontWeight: FontWeight.w700, color: color)),
       ]),
       const SizedBox(height: 4),
       LayoutBuilder(builder: (context, constraints) {
@@ -488,7 +488,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           textDirection: TextDirection.ltr,
           style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               color: color,
               height: 1)),
       if (unit.isNotEmpty)
@@ -531,7 +531,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Text('هامش الإشارة والسعة',
               style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
         const SizedBox(height: 12),
@@ -577,7 +577,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: utilColor)),
           ]),
           const SizedBox(height: 4),
@@ -617,7 +617,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: color,
                   height: 1)),
           const SizedBox(width: 2),
@@ -651,7 +651,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Text('أداء اللنك',
               style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
         const SizedBox(height: 12),
@@ -730,7 +730,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Text('النظام',
               style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const Spacer(),
           if (s.host.temperature != 0)
@@ -742,7 +742,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: _tempColor(s.host.temperature))),
             ]),
         ]),
@@ -778,7 +778,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               textDirection: TextDirection.ltr,
               style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
       ]),
@@ -821,7 +821,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             textAlign: TextAlign.end,
             textDirection: TextDirection.ltr,
             style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+                fontSize: 11, fontWeight: FontWeight.w700, color: color)),
       ),
     ]);
   }
@@ -841,7 +841,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Text('Ethernet',
               style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const Spacer(),
           if (s.lanSpeed != null)
@@ -855,7 +855,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                       fontSize: 9,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.success)),
             ),
         ]),
@@ -882,7 +882,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Text(iface.ifname,
             style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
         if (iface.speed != null && iface.speed! > 0) ...[
           const SizedBox(width: 6),
@@ -895,7 +895,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             child: Text('${iface.speed}M',
                 style: TextStyle(
                     fontSize: 9,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.brand)),
           ),
         ],
@@ -938,7 +938,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Text('الموقع',
               style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
         const SizedBox(height: 8),
@@ -1007,7 +1007,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Text('معلومات الجهاز',
             style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
       ]),
       content: Column(children: [
@@ -1034,7 +1034,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end)),
@@ -1050,7 +1050,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
       child: child,
@@ -1070,7 +1070,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: color.withValues(alpha: 0.20)),
       ),
       child: Column(
@@ -1095,7 +1095,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                       textDirection: TextDirection.ltr,
                       style: TextStyle(
                           fontSize: valueSize,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           color: color,
                           height: 1)),
                   if (unit.isNotEmpty) ...[
@@ -1116,7 +1116,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.dangerSoftBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(children: [

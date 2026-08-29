@@ -192,7 +192,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                               style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 15,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.textHi,
                               )),
                           const SizedBox(height: 2),
@@ -417,7 +417,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                     style: TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.textHi,
                     )),
                 const SizedBox(height: 2),
@@ -586,7 +586,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                       style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       )),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF229ED9),
@@ -617,7 +617,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                       style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       )),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF25D366),

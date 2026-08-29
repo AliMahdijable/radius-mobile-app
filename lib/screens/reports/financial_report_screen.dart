@@ -218,7 +218,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             '${formatIQD(k.totalCashRevenue)} ${'common.currency'.tr()}',
             style: AppType.title(color: brand).copyWith(
               fontSize: 24,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
             ),
           ),
@@ -299,7 +299,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 style: TextStyle(
                   color: color,
                   fontSize: 13,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -390,7 +390,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                         ? AppColors.textHi
                         : (it.isDebit ? AppColors.error : AppColors.success),
                     fontSize: 12.5,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                   ),
                   maxLines: 1,
@@ -545,7 +545,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               const SizedBox(width: 6),
               Text('آخر الحركات',
                   style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 13, fontWeight: FontWeight.w800)),
+                      .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
               const Spacer(),
               Text('${filtered.length}',
                   style: AppType.muted().copyWith(fontSize: 11)),

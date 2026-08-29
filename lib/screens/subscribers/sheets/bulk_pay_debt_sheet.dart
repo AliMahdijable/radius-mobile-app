@@ -348,7 +348,7 @@ class _SummaryStrip extends StatelessWidget {
               '${'sheets.total_label'.tr()}: ${formatIQD(totalCash.round())} ${'common.currency'.tr()}',
               style: AppType.label(color: AppColors.textHi).copyWith(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
         ],
@@ -405,7 +405,7 @@ class _PayRowCard extends StatelessWidget {
                       row.sub.fullName,
                       style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -437,7 +437,7 @@ class _PayRowCard extends StatelessWidget {
                   '${formatIQD(row.debt.round())} د.ع',
                   style: AppType.muted(color: AppColors.error).copyWith(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -655,7 +655,7 @@ class _RowPreview extends StatelessWidget {
             '${formatIQD(balanceAfter.abs().round())} د.ع',
             style: AppType.label(color: color).copyWith(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

@@ -541,7 +541,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                   displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
                   style: AppType.title(color: AppColors.textHi).copyWith(
                     fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                   ),
                   maxLines: 1,

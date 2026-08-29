@@ -375,7 +375,7 @@ class _Row extends StatelessWidget {
                                     ? AppColors.brandLight
                                     : AppColors.brand,
                                 fontSize: 13,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 height: 1.3,
                                 letterSpacing: -0.1,
                               ),

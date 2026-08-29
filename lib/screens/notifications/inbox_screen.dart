@@ -401,7 +401,7 @@ class _SectionHeader extends StatelessWidget {
           Text(
             title,
             style: AppType.label(color: AppColors.textHi)
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
+                .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
           ),
           const SizedBox(width: 6),
           Container(
@@ -415,7 +415,7 @@ class _SectionHeader extends StatelessWidget {
               style: TextStyle(
                 color: color,
                 fontSize: 10.5,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
                 height: 1.2,
               ),
             ),
@@ -483,7 +483,7 @@ class _SubscriberAlertRow extends StatelessWidget {
                             style:
                                 AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -593,7 +593,7 @@ class _OnlineDot extends StatelessWidget {
             isOnline ? 'متصل' : 'غير متصل',
             style: AppType.muted(color: color).copyWith(
               fontSize: 9.5,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -714,7 +714,7 @@ class _NotificationRow extends StatelessWidget {
                                 AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
                               fontWeight:
-                                  n.isRead ? FontWeight.w700 : FontWeight.w900,
+                                  n.isRead ? FontWeight.w700 : FontWeight.w700,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

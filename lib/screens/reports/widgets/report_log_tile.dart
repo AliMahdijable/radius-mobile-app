@@ -81,7 +81,7 @@ class ReportLogTile extends StatelessWidget {
                         style: TextStyle(
                           color: meta.color,
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -93,7 +93,7 @@ class ReportLogTile extends StatelessWidget {
                           // debit → أحمر (سالب)، عكسه → أخضر (موجب).
                           color: meta.debit ? AppColors.error : _kPositive,
                           fontSize: 12,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                   ],
@@ -128,7 +128,7 @@ class ReportLogTile extends StatelessWidget {
                             style: TextStyle(
                               color: nameColor,
                               fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               height: 1.15,
                               letterSpacing: -0.1,
                             ),

@@ -66,7 +66,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
           Text('لا توجد تنبيهات',
               style: TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const SizedBox(height: 4),
           Text('التنبيهات تظهر هنا لو جهاز فصل أو عاد للاتصال',
@@ -98,7 +98,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           color: AppColors.dangerSoftBg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(R.md),
         ),
         child: Icon(LucideIcons.trash2, color: AppColors.error),
       ),
@@ -111,7 +111,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(R.md),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
         child: Row(children: [
@@ -120,7 +120,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
             height: 36,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Icon(icon, color: color, size: 18),
           ),
@@ -133,7 +133,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
                   child: Text(a.deviceName,
                       style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.textHi),
                       overflow: TextOverflow.ellipsis),
                 ),

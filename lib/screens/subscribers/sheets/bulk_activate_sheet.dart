@@ -332,7 +332,7 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
         title: Text(
           'sheets.confirm_bulk_renew'.tr(namedArgs: {'n': '${ready.length}'}),
           style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: Text(
           'sheets.bulk_renew_summary'.tr(namedArgs: {
@@ -524,7 +524,7 @@ class _SummaryStrip extends StatelessWidget {
               '${formatIQD(summary.cashTotal.round())} ${'common.currency'.tr()}',
               style: AppType.label(color: AppColors.textHi).copyWith(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
         ],
@@ -557,7 +557,7 @@ class _SummaryChip extends StatelessWidget {
         '$label $count',
         style: AppType.muted(color: color).copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -638,7 +638,7 @@ class _SetAllBtn extends StatelessWidget {
                 method.label,
                 style: AppType.muted(color: color).copyWith(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -693,7 +693,7 @@ class _RenewRowCard extends StatelessWidget {
                       row.sub.fullName,
                       style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -762,7 +762,7 @@ class _RenewRowCard extends StatelessWidget {
                         : AppColors.brand,
                   ).copyWith(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -915,7 +915,7 @@ class _PriceChip extends StatelessWidget {
             '${formatIQD(row.effectivePrice.round())} د.ع',
             style: AppType.muted(color: AppColors.warning).copyWith(
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -970,7 +970,7 @@ class _MethodTile extends StatelessWidget {
                 method.label,
                 style: AppType.label(color: color).copyWith(
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -1197,7 +1197,7 @@ class _AfterRow extends StatelessWidget {
             '${formatIQD(balanceAfter.abs().round())} د.ع',
             style: AppType.label(color: color).copyWith(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

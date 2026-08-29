@@ -19,6 +19,7 @@ Future<bool?> showPayCustomDebtSheet(
   ManagerDebt debt,
 ) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -290,7 +291,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                                     style: TextStyle(
                                       color: accent,
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
@@ -393,7 +394,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         Text(
           '${formatIQD(value)}',
           style: AppType.label(color: color)
-              .copyWith(fontSize: 12.5, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -442,7 +443,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                       Text(
                         '${formatIQD(p.amountPaid)} د.ع',
                         style: AppType.label(color: AppColors.brand).copyWith(
-                            fontSize: 12, fontWeight: FontWeight.w800),
+                            fontSize: 12, fontWeight: FontWeight.w700),
                       ),
                       Text(
                         _fmtIsoDate(p.paymentDate),

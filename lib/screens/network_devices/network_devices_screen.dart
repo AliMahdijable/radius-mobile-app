@@ -315,6 +315,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   Future<void> _openForm({NetworkDevice? existing}) async {
     final result = await showModalBottomSheet<NetworkDevice>(
+      barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -493,7 +494,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                           horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: AppColors.error,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(R.sm),
                         border:
                             Border.all(color: AppColors.surface, width: 1.5),
                       ),
@@ -504,7 +505,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 9,
-                            fontWeight: FontWeight.w900),
+                            fontWeight: FontWeight.w700),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -830,7 +831,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(R.md),
           onTap: () {
             HapticFeedback.selectionClick();
             setState(() {
@@ -843,7 +844,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             decoration: BoxDecoration(
               color: active ? color.withValues(alpha: 0.10) : AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(R.md),
               border: Border.all(
                 color: active ? color : AppColors.border,
                 width: active ? 1.5 : 1,
@@ -855,7 +856,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 height: 30,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
                 child: Icon(icon, size: 14, color: color),
               ),
@@ -874,7 +875,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       textDirection: TextDirection.ltr,
                       style: TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           color: color,
                           height: 1.1)),
                 ],
@@ -920,15 +921,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(R.icon),
             borderSide: BorderSide(color: AppColors.border),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(R.icon),
             borderSide: BorderSide(color: AppColors.border),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(R.icon),
             borderSide: BorderSide(color: AppColors.brand, width: 1.5),
           ),
         ),
@@ -958,12 +959,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final active = _typeFilter == type;
     return InkWell(
       onTap: () => setState(() => _typeFilter = active ? null : type),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(R.card),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 7),
         decoration: BoxDecoration(
           color: active ? AppColors.brand : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(R.card),
           border: Border.all(
             color: active ? AppColors.brand : AppColors.border,
             width: 1,
@@ -989,7 +990,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 color: active
                     ? Colors.white.withValues(alpha: 0.25)
                     : AppColors.brandSoftBg,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(R.sm),
               ),
               child: Text(
                 '$count',
@@ -1026,12 +1027,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final color = status == null ? AppColors.brand : _statusColor(status);
     return InkWell(
       onTap: () => setState(() => _statusFilter = active ? null : status),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(R.card),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
         decoration: BoxDecoration(
           color: active ? color : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(R.card),
           border: Border.all(
             color: active ? color : AppColors.border,
             width: 1,
@@ -1070,7 +1071,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final canManage = Perms.has('devices.manage');
     return Material(
       color: selected ? AppColors.brandSoftBg : AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(R.md),
       elevation: 0,
       child: InkWell(
         // في selection mode: tap = toggle. عادي: tap = يفتح التفاصيل.
@@ -1080,10 +1081,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         // مطلوب devices.manage — الـview-only ما يحتاج bulk delete.
         onLongPress:
             canManage && !_selectionMode ? () => _enterSelection(d) : null,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
               color: selected ? AppColors.brand : AppColors.border,
               width: selected ? 1.5 : 1,
@@ -1315,7 +1316,7 @@ class _EmptyDevices extends StatelessWidget {
             Text(hasActiveFilter ? 'لا نتائج بهذا الفلتر' : 'لا توجد أجهزة',
                 style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
             Text(

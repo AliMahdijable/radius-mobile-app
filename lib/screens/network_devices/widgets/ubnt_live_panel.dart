@@ -284,7 +284,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Text(title,
                 style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text(subtitle,
@@ -297,13 +297,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Text(count,
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 11,
-                  fontWeight: FontWeight.w800)),
+                  fontWeight: FontWeight.w700)),
         ),
     ]);
   }
@@ -315,7 +315,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
       child: child,
@@ -427,7 +427,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(Sp.xl),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -451,7 +451,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         height: 32,
         decoration: BoxDecoration(
           color: AppColors.brandAccent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(R.sm),
         ),
         child: Icon(LucideIcons.radioTower,
             size: 16, color: AppColors.brandAccent),
@@ -510,7 +510,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.dangerSoftBg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(children: [
@@ -530,7 +530,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.brandAccent.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
         Icon(LucideIcons.radioTower, size: 14, color: AppColors.brandAccent),
@@ -613,7 +613,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -634,7 +634,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Text('${percent.round()}',
                 style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                     height: 1)),
             const SizedBox(width: 2),
@@ -669,7 +669,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -692,7 +692,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               Text(value,
                   style: TextStyle(
                       fontSize: valueSize,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: value == '—' ? AppColors.textLow : color,
                       height: 1)),
               if (unit.isNotEmpty) ...[
@@ -728,7 +728,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             signalColor.withValues(alpha: 0.02),
           ],
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(R.icon),
         border:
             Border.all(color: signalColor.withValues(alpha: 0.25), width: 1),
       ),
@@ -752,7 +752,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
                         fontSize: 30,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: signalColor,
                         height: 1)),
                 const SizedBox(height: 2),
@@ -779,7 +779,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Text(_signalLabel(w.signal),
                 style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: signalColor,
                     height: 1.1)),
             const SizedBox(height: 10),
@@ -810,7 +810,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               style: TextStyle(fontSize: 10, color: AppColors.textLow))),
       Text(value,
           style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+              fontSize: 12, fontWeight: FontWeight.w700, color: color)),
       const SizedBox(width: 2),
       Text(unit, style: TextStyle(fontSize: 9, color: AppColors.textLow)),
     ]);
@@ -826,7 +826,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(
           color: AppColors.surfaceSunken,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(children: [
@@ -913,7 +913,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
         Icon(up ? LucideIcons.arrowUp : LucideIcons.arrowDown,
@@ -997,7 +997,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
         Container(
@@ -1005,7 +1005,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           height: 30,
           decoration: BoxDecoration(
             color: signalColor,
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(R.pill),
           ),
         ),
         const SizedBox(width: 8),
@@ -1033,7 +1033,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: signalColor)),
             if (s.ccq > 0) ...[
               const SizedBox(width: 6),
@@ -1048,7 +1048,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: _percentColor(s.ccq.toDouble()))),
               ),
             ],

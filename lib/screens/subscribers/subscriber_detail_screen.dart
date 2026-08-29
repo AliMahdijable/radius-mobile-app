@@ -284,7 +284,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         title: Text(
           'subscribers.disconnect_user'.tr(),
           style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: Text(
           'subscribers.disconnect_session_body'
@@ -340,7 +340,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         title: Text(
           'subscribers.confirm_action'.tr(namedArgs: {'action': action}),
           style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: Text(
           wantEnable
@@ -389,7 +389,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         title: Text(
           'subscribers.delete_confirm_title'.tr(),
           style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+              .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: Text(
           'subscribers.delete_confirm_body'

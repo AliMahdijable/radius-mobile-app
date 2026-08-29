@@ -805,7 +805,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),
           const SizedBox(height: 8),
@@ -873,7 +873,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: selected ? color : AppColors.textMid,
                   ),
                   maxLines: 1,

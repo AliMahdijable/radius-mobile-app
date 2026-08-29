@@ -25,6 +25,7 @@ Future<bool?> showBalanceOpSheet(
   BalanceOpKind? preselected,
 }) {
   return showModalBottomSheet<bool>(
+    barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -346,7 +347,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                             '${formatIQD(widget.manager.balance ?? 0)} د.ع',
                             style: AppType.label(color: AppColors.textHi)
                                 .copyWith(
-                                    fontSize: 14, fontWeight: FontWeight.w800),
+                                    fontSize: 14, fontWeight: FontWeight.w700),
                           ),
                         ],
                       ),
@@ -402,7 +403,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                                         AppType.label(color: AppColors.textHi)
                                             .copyWith(
                                                 fontSize: 12,
-                                                fontWeight: FontWeight.w800),
+                                                fontWeight: FontWeight.w700),
                                   ),
                                   Text(
                                     _isLoan
@@ -635,7 +636,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 style: TextStyle(
                   color: selected ? op.color : AppColors.textMid,
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -671,7 +672,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             style: TextStyle(
               color: _op.color,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),

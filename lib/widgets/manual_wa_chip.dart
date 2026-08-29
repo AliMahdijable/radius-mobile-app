@@ -70,7 +70,7 @@ class ManualWaChip extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: compact ? 11 : 11.5,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: color,
                 ),
               ),
@@ -217,7 +217,7 @@ class _WaPreviewSheet extends StatelessWidget {
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             )),
                         const SizedBox(height: 2),
@@ -294,7 +294,7 @@ class _WaPreviewSheet extends StatelessWidget {
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         style: FilledButton.styleFrom(

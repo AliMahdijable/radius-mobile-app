@@ -678,6 +678,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// يستبدل صفّ `_ManagerFilterBar` المسطّح الذي كان تحت البحث.
   Future<void> _openManagerFilterSheet() async {
     final picked = await showModalBottomSheet<Object?>(
+      barrierColor: AppColors.scrim,
       context: context,
       backgroundColor: AppColors.surface,
       isScrollControlled: true,
@@ -1556,7 +1557,7 @@ class _SelectionHeader extends StatelessWidget {
           Text(
             '$count محدد',
             style: AppType.label(color: AppColors.brand)
-                .copyWith(fontSize: 13, fontWeight: FontWeight.w800),
+                .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
           ),
           const Spacer(),
           TextButton(
@@ -1894,7 +1895,7 @@ class _PrimaryPill extends StatelessWidget {
           label,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
         ),
       ),
     );
@@ -2026,7 +2027,7 @@ class _DebtSummaryCard extends StatelessWidget {
                   '${formatIQD(total)} د.ع  •  $count مشترك',
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.warning,
                   ),
                 ),
