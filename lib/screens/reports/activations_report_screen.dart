@@ -327,7 +327,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
-        Text(label, style: AppType.muted().copyWith(fontSize: 10), maxLines: 1),
+        Text(label,
+            style: AppType.muted().copyWith(fontSize: 10.5), maxLines: 1),
       ],
     );
   }

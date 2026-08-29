@@ -293,7 +293,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             children: [
               Text(label,
                   style: AppType.muted()
-                      .copyWith(fontSize: 10, fontWeight: FontWeight.w600)),
+                      .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600)),
               Text(
                 value,
                 style: TextStyle(
@@ -505,7 +505,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               Icon(LucideIcons.fileText, size: 32, color: AppColors.textLow),
               const SizedBox(height: 8),
               Text('reports.no_financial_movements'.tr(),
-                  style: AppType.muted().copyWith(fontSize: 12)),
+                  style: AppType.muted().copyWith(fontSize: 12.5)),
             ],
           ),
         ),

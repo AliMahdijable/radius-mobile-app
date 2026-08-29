@@ -233,12 +233,12 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppType.muted().copyWith(fontSize: 10)),
+          Text(label, style: AppType.muted().copyWith(fontSize: 10.5)),
           const SizedBox(height: 2),
           Text(
             isCount ? '${value.toInt()}' : '${formatIQD(value)} د.ع',
             style: AppType.label(color: color)
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -352,7 +352,7 @@ class _DebtTile extends StatelessWidget {
                       child: Text(
                         'مسدَّد',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                           color: AppColors.brand,
                         ),
@@ -361,8 +361,8 @@ class _DebtTile extends StatelessWidget {
                   else
                     Text(
                       'تبقى ${formatIQD(debt.remainingAmount)}',
-                      style: AppType.label(color: AppColors.error)
-                          .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                      style: AppType.label(color: AppColors.error).copyWith(
+                          fontSize: 12.5, fontWeight: FontWeight.w700),
                     ),
                   const SizedBox(width: 6),
                   InkResponse(

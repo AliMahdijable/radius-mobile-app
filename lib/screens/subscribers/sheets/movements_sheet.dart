@@ -349,7 +349,7 @@ class _FilterChips extends StatelessWidget {
                 style: AppType.label(
                   color: selected ? AppColors.brand : AppColors.textMid,
                 ).copyWith(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   height: 1.2,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 ),
@@ -457,7 +457,7 @@ class _MovementTile extends StatelessWidget {
                       child: Text(
                         label,
                         style: AppType.label(color: color).copyWith(
-                          fontSize: 10,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -467,7 +467,7 @@ class _MovementTile extends StatelessWidget {
                       Text(
                         timeStr,
                         style: AppType.muted(color: AppColors.textLow).copyWith(
-                          fontSize: 10,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -477,7 +477,7 @@ class _MovementTile extends StatelessWidget {
                       Text(
                         '${formatIQD(amount.round())} د.ع',
                         style: AppType.label(color: color).copyWith(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -488,7 +488,7 @@ class _MovementTile extends StatelessWidget {
                   Text(
                     desc,
                     style: AppType.subtitle(color: AppColors.textHi)
-                        .copyWith(fontSize: 12, height: 1.55),
+                        .copyWith(fontSize: 12.5, height: 1.55),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -503,7 +503,7 @@ class _MovementTile extends StatelessWidget {
                       Text(
                         admin,
                         style: AppType.muted(color: AppColors.textLow).copyWith(
-                          fontSize: 10,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

@@ -597,7 +597,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                 const SizedBox(height: 1),
                 Text(
                   hint,
-                  style: AppType.muted().copyWith(fontSize: 10),
+                  style: AppType.muted().copyWith(fontSize: 10.5),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -612,7 +612,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               Text(
                 formatIQD(value.round()),
                 style: AppType.title(color: color).copyWith(
-                    fontSize: 18, fontWeight: FontWeight.w700, height: 1.1),
+                    fontSize: 17, fontWeight: FontWeight.w700, height: 1.1),
               ),
               const SizedBox(width: 4),
               Text(
@@ -669,7 +669,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                   Text(
                     'د.ع',
                     style: AppType.muted(color: color)
-                        .copyWith(fontSize: 9, fontWeight: FontWeight.w700),
+                        .copyWith(fontSize: 9.5, fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -690,7 +690,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
         onChanged: (v) => setState(() => _managerFilter = v),
         decoration: InputDecoration(
           hintText: 'ابحث باسم المدير…',
-          hintStyle: AppType.muted().copyWith(fontSize: 12),
+          hintStyle: AppType.muted().copyWith(fontSize: 12.5),
           prefixIcon:
               Icon(LucideIcons.search, size: 15, color: AppColors.textMid),
           suffixIcon: _managerSearchCtrl.text.isEmpty
@@ -778,7 +778,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
           child: Text(
             label,
             style: AppType.button(color: active ? color : AppColors.textMid)
-                .copyWith(fontSize: 12, height: 1.2),
+                .copyWith(fontSize: 12.5, height: 1.2),
           ),
         ),
       ),
@@ -803,7 +803,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                     ? '${_fmtDateShort(_dateFrom!)} → ${_fmtDateShort(_dateTo!)}'
                     : 'كل الفترات',
                 style: AppType.button(color: AppColors.textHi)
-                    .copyWith(fontSize: 12),
+                    .copyWith(fontSize: 12.5),
               ),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: AppColors.border),
@@ -903,7 +903,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                           meta.label,
                           style: TextStyle(
                             color: meta.color,
-                            fontSize: 10,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -916,7 +916,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                             color: meta.debit
                                 ? AppColors.error
                                 : AppColors.success,
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -990,8 +990,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                       const SizedBox(width: 3),
                       Text(
                         _fmtDateTime(e.date),
-                        style:
-                            AppType.muted().copyWith(fontSize: 10, height: 1.2),
+                        style: AppType.muted()
+                            .copyWith(fontSize: 10.5, height: 1.2),
                       ),
                       if (e.movement.source != null) ...[
                         const SizedBox(width: 6),

@@ -155,8 +155,8 @@ Widget _sectionLabel(String text, IconData icon) => Row(
         Icon(icon, size: 14, color: AppColors.brand),
         const SizedBox(width: Sp.xs),
         Text(text,
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 12)),
+            style: AppType.title(color: AppColors.textHi)
+                .copyWith(fontSize: 12.5)),
       ],
     );
 
@@ -180,7 +180,7 @@ class _WebOnlyBanner extends StatelessWidget {
               Text(
                 'print_templates.web_only_title'.tr(),
                 style: AppType.title(color: AppColors.brand)
-                    .copyWith(fontSize: 12),
+                    .copyWith(fontSize: 12.5),
               ),
             ],
           ),
@@ -220,7 +220,7 @@ class _WebOnlyBanner extends StatelessWidget {
                     child: Text(
                       'rad.mysvcs.net/v2',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: AppColors.brand,
                         fontWeight: FontWeight.w700,
                       ),
@@ -309,7 +309,7 @@ class _TemplateViewCard extends StatelessWidget {
                       color: (exists && template!.isActive)
                           ? AppColors.brand
                           : AppColors.textMid,
-                    ).copyWith(fontSize: 10),
+                    ).copyWith(fontSize: 10.5),
                   ),
                 ),
               ],

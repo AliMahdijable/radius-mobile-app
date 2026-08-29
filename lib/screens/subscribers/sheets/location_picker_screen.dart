@@ -212,7 +212,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                             child: Text(_error!,
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                   color: AppColors.error,
                                   height: 1.6,
                                 )),

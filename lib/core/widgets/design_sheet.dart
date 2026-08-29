@@ -708,7 +708,7 @@ class SheetResultBanner extends StatelessWidget {
             value,
             textDirection: TextDirection.ltr,
             style: AppType.cardTitle(color: strong)
-                .copyWith(fontSize: 14.5, fontWeight: FontWeight.w700),
+                .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -987,7 +987,7 @@ class SheetPlanCard extends StatelessWidget {
                   child: Text(
                     durationLabel!,
                     style: AppType.bodyStrong(color: AppColors.onBrand)
-                        .copyWith(fontSize: 12),
+                        .copyWith(fontSize: 12.5),
                   ),
                 ),
               ],

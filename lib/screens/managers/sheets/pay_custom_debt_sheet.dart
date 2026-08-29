@@ -290,7 +290,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                                     'تسديد كامل المتبقي',
                                     style: TextStyle(
                                       color: accent,
-                                      fontSize: 12,
+                                      fontSize: 12.5,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -389,7 +389,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(label, style: AppType.muted().copyWith(fontSize: 10)),
+        Text(label, style: AppType.muted().copyWith(fontSize: 10.5)),
         const SizedBox(height: 2),
         Text(
           '${formatIQD(value)}',
@@ -443,7 +443,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                       Text(
                         '${formatIQD(p.amountPaid)} د.ع',
                         style: AppType.label(color: AppColors.brand).copyWith(
-                            fontSize: 12, fontWeight: FontWeight.w700),
+                            fontSize: 12.5, fontWeight: FontWeight.w700),
                       ),
                       Text(
                         _fmtIsoDate(p.paymentDate),

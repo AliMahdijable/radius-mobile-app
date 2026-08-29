@@ -239,7 +239,7 @@ class _FieldChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label,
                 style: AppType.muted(color: color).copyWith(
-                  fontSize: 12, // Card title tier
+                  fontSize: 12.5, // Card title tier
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 )),
           ],

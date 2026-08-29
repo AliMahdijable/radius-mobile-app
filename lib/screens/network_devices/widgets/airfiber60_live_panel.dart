@@ -248,7 +248,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   ? (freshMs != null ? 'مباشر · قبل ${freshMs}ث' : 'مباشر')
                   : 'موقوف',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 color: _monitoring ? AppColors.success : AppColors.textMid,
               )),
@@ -325,7 +325,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             ),
             child: Text('60 GHz',
                 style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.brandAccent)),
           ),
@@ -395,7 +395,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           alignment: Alignment.centerRight,
           child: Text(peer.mac,
               textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+              style: TextStyle(fontSize: 10.5, color: AppColors.textLow)),
         ),
       ]),
     );
@@ -413,18 +413,18 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       Row(children: [
         Text(label,
             style: TextStyle(
-                fontSize: 10,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMid)),
         const Spacer(),
         Text(badge,
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+                fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
         const SizedBox(width: 6),
         Text('${percent.round()}%',
             textDirection: TextDirection.ltr,
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+                fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
       ]),
       const SizedBox(height: 4),
       LayoutBuilder(builder: (context, constraints) {
@@ -480,21 +480,21 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       const SizedBox(height: 2),
       Text(label,
           style: TextStyle(
-              fontSize: 9,
+              fontSize: 9.5,
               fontWeight: FontWeight.w700,
               color: AppColors.textMid)),
       const SizedBox(height: 2),
       Text(value,
           textDirection: TextDirection.ltr,
           style: TextStyle(
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w700,
               color: color,
               height: 1)),
       if (unit.isNotEmpty)
         Text(unit,
             style: TextStyle(
-                fontSize: 8,
+                fontSize: 9.5,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textLow)),
     ]);
@@ -530,7 +530,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           const SizedBox(width: 6),
           Text('هامش الإشارة والسعة',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -569,14 +569,14 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Row(children: [
             Text('استغلال السعة',
                 style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textMid)),
             const Spacer(),
             Text('${utilization.round()}%',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: utilColor)),
           ]),
@@ -604,7 +604,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Text(label,
           style: TextStyle(
-              fontSize: 9,
+              fontSize: 9.5,
               fontWeight: FontWeight.w700,
               color: AppColors.textMid)),
       const SizedBox(height: 2),
@@ -621,7 +621,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   color: color,
                   height: 1)),
           const SizedBox(width: 2),
-          Text(unit, style: TextStyle(fontSize: 9, color: AppColors.textLow)),
+          Text(unit, style: TextStyle(fontSize: 9.5, color: AppColors.textLow)),
         ],
       ),
     ]);
@@ -650,7 +650,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           const SizedBox(width: 6),
           Text('أداء اللنك',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -729,7 +729,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           const SizedBox(width: 6),
           Text('النظام',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const Spacer(),
@@ -777,7 +777,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Text(_formatUptime(s.host.uptime),
               textDirection: TextDirection.ltr,
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -840,7 +840,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           const SizedBox(width: 6),
           Text('Ethernet',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const Spacer(),
@@ -854,7 +854,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               child: Text(s.lanSpeed!,
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                       color: AppColors.success)),
             ),
@@ -894,7 +894,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             ),
             child: Text('${iface.speed}M',
                 style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.brand)),
           ),
@@ -906,7 +906,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             Text(' ${_formatBps(rate.rxBps)}',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(width: 8),
@@ -914,7 +914,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             Text(' ${_formatBps(rate.txBps)}',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
           ]),
@@ -937,7 +937,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           const SizedBox(width: 6),
           Text('الموقع',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -955,7 +955,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                         color: AppColors.textHi)),
                 const SizedBox(height: 2),
                 Text('اضغط لنسخ الإحداثيّات',
-                    style: TextStyle(fontSize: 9, color: AppColors.textLow)),
+                    style: TextStyle(fontSize: 9.5, color: AppColors.textLow)),
               ])),
           IconButton(
             onPressed: () async {
@@ -1006,7 +1006,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         const SizedBox(width: 6),
         Text('معلومات الجهاز',
             style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
       ]),
@@ -1082,7 +1082,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               const SizedBox(width: 4),
               Text(label,
                   style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textMid)),
             ]),
@@ -1102,7 +1102,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                     const SizedBox(width: 2),
                     Text(unit,
                         style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textLow)),
                   ],
@@ -1125,7 +1125,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Expanded(
             child: Text(_error ?? 'خطأ',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.error))),
         TextButton(onPressed: _fetch, child: const Text('إعادة')),

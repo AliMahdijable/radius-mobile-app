@@ -228,7 +228,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                     const SizedBox(width: 6),
                     Text('filters.title'.tr(),
                         style: AppType.label(color: AppColors.textHi).copyWith(
-                            fontSize: 12, fontWeight: FontWeight.w700)),
+                            fontSize: 12.5, fontWeight: FontWeight.w700)),
                     const Spacer(),
                     if (!widget.value.isEmpty)
                       InkWell(

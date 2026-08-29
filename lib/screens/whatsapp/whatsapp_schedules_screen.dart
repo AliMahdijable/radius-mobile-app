@@ -386,7 +386,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               const SizedBox(height: 2),
               Text(subtitle,
                   style: AppType.label(color: AppColors.textMid)
-                      .copyWith(fontSize: 12)),
+                      .copyWith(fontSize: 12.5)),
             ],
           ),
         ),
@@ -449,7 +449,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         return FilterChip(
           label: Text(labels[i],
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: isSelected ? AppColors.onBrand : AppColors.textMid,
               )),
@@ -541,7 +541,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           const SizedBox(height: Sp.md),
           Text('wa_schedules.days_before_label'.tr(),
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12)),
+                  .copyWith(fontSize: 12.5)),
           const SizedBox(height: 6),
           TextField(
             controller: _daysBeforeCtrl,
@@ -572,7 +572,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           const SizedBox(height: Sp.md),
           Text('wa_schedules.weekly_days'.tr(),
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12)),
+                  .copyWith(fontSize: 12.5)),
           const SizedBox(height: 8),
           _weekdayChips(
             selected: _expiryDays,
@@ -653,7 +653,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           if (_debtMode == 'weekly') ...[
             Text('wa_schedules.weekly_days'.tr(),
                 style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12)),
+                    .copyWith(fontSize: 12.5)),
             const SizedBox(height: 8),
             _weekdayChips(
               selected: _debtDays,
@@ -663,7 +663,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           ] else ...[
             Text('wa_schedules.monthly_days'.tr(),
                 style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12)),
+                    .copyWith(fontSize: 12.5)),
             const SizedBox(height: 8),
             _monthDayChips(color: color),
           ],
@@ -729,7 +729,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         return FilterChip(
           label: Text(label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: selected ? AppColors.onBrand : AppColors.textMid,
               )),
@@ -804,7 +804,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           Text('قناة الإرسال',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),

@@ -636,7 +636,7 @@ class _QuickItem extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(subtitle,
                         style: AppType.subtitle(color: AppColors.textMid)
-                            .copyWith(fontSize: 12)),
+                            .copyWith(fontSize: 12.5)),
                   ],
                 ),
               ),

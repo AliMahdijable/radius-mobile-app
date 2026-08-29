@@ -347,7 +347,7 @@ class _SummaryStrip extends StatelessWidget {
             Text(
               '${'sheets.total_label'.tr()}: ${formatIQD(totalCash.round())} ${'common.currency'.tr()}',
               style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -414,7 +414,7 @@ class _PayRowCard extends StatelessWidget {
                     Text(
                       row.sub.username,
                       style: AppType.muted(color: AppColors.textLow).copyWith(
-                        fontSize: 10,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
@@ -580,7 +580,7 @@ class _PayRowCard extends StatelessWidget {
                   child: Text(
                     row.err!,
                     style: AppType.muted(color: AppColors.error).copyWith(
-                      fontSize: 10,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 2,
@@ -638,7 +638,7 @@ class _RowPreview extends StatelessWidget {
           Text(
             isCredit ? 'sheets.after_pay'.tr() : 'sheets.remaining_debt'.tr(),
             style: AppType.muted(color: AppColors.textMid).copyWith(
-              fontSize: 10,
+              fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -647,14 +647,14 @@ class _RowPreview extends StatelessWidget {
             Text(
               '${'subscribers.balance_short'.tr()} ',
               style: AppType.muted(color: color).copyWith(
-                fontSize: 10,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           Text(
             '${formatIQD(balanceAfter.abs().round())} د.ع',
             style: AppType.label(color: color).copyWith(
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
             ),
           ),

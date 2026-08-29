@@ -448,7 +448,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
           Text('قناة الإرسال',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),

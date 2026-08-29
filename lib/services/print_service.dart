@@ -181,7 +181,8 @@ class PrintService {
           pw.Center(
             child: pw.Text(
               companyName,
-              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+              style:
+                  pw.TextStyle(fontSize: 12.5, fontWeight: pw.FontWeight.bold),
             ),
           ),
         pw.SizedBox(height: 4),
@@ -195,13 +196,13 @@ class PrintService {
         pw.Center(
           child: pw.Text(
             data['invoice_number'] ?? '',
-            style: const pw.TextStyle(fontSize: 9),
+            style: const pw.TextStyle(fontSize: 9.5),
           ),
         ),
         pw.Center(
           child: pw.Text(
             data['date'] ?? '',
-            style: const pw.TextStyle(fontSize: 9),
+            style: const pw.TextStyle(fontSize: 9.5),
           ),
         ),
         pw.SizedBox(height: 6),
@@ -225,7 +226,7 @@ class PrintService {
         pw.Center(
           child: pw.Text(
             'شكراً لتعاملكم معنا',
-            style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic),
+            style: pw.TextStyle(fontSize: 9.5, fontStyle: pw.FontStyle.italic),
           ),
         ),
       ],
@@ -240,12 +241,13 @@ class PrintService {
         children: [
           pw.Text(
             '$label:',
-            style: const pw.TextStyle(fontSize: 9),
+            style: const pw.TextStyle(fontSize: 9.5),
           ),
           pw.Flexible(
             child: pw.Text(
               value ?? '—',
-              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+              style:
+                  pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold),
               textAlign: pw.TextAlign.left,
             ),
           ),
@@ -295,9 +297,9 @@ class PrintService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('رقم الوصل: ${data['invoice_number'] ?? ''}',
-                      style: const pw.TextStyle(fontSize: 10)),
+                      style: const pw.TextStyle(fontSize: 10.5)),
                   pw.Text('التاريخ: ${data['date'] ?? ''}',
-                      style: const pw.TextStyle(fontSize: 10)),
+                      style: const pw.TextStyle(fontSize: 10.5)),
                 ],
               ),
             ],

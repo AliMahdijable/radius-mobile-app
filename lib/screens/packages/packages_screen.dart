@@ -405,7 +405,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               Text(
                 'شرح الحقول:',
                 style: AppType.label(color: AppColors.textHi)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -566,7 +566,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 child: Text(
                   _selectedManagerLabel,
                   style: AppType.label(color: accent)
-                      .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

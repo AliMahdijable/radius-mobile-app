@@ -296,7 +296,7 @@ class _Row extends StatelessWidget {
                               '(${sub.username})',
                               style: AppType.muted(color: AppColors.textLow)
                                   .copyWith(
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w500,
                               ),
                               maxLines: 1,

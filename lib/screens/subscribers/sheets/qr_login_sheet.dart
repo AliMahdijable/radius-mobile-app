@@ -374,7 +374,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                   child: Text(
                     _linkUrl!,
                     style: AppType.subtitle(color: AppColors.textMid)
-                        .copyWith(fontSize: 10),
+                        .copyWith(fontSize: 10.5),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -419,7 +419,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                 label: Text(
                   'qr_login.share_or_save'.tr(),
                   style: AppType.button(color: AppColors.brand)
-                      .copyWith(fontSize: 12),
+                      .copyWith(fontSize: 12.5),
                 ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -445,7 +445,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                 label: Text(
                   'qr_login.send_wa'.tr(),
                   style: AppType.button(color: Colors.white)
-                      .copyWith(fontSize: 12),
+                      .copyWith(fontSize: 12.5),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF25D366),

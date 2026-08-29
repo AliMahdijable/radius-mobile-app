@@ -54,7 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         title: Text('settings.logout_title'.tr(),
             style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 18)),
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 17)),
         content: Text(
           'settings.logout_body'.tr(),
           style:
@@ -112,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text(
                 'settings.title'.tr(),
                 style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 18, fontWeight: FontWeight.w700),
+                    .copyWith(fontSize: 17, fontWeight: FontWeight.w700),
               ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
@@ -514,14 +514,14 @@ class _LanguagePickerSheet extends StatelessWidget {
                 'settings.language'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 18),
+                    .copyWith(fontSize: 17),
               ),
               const SizedBox(height: 4),
               Text(
                 'settings.language_hint'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.subtitle(color: AppColors.textMid)
-                    .copyWith(fontSize: 12, height: 1.5),
+                    .copyWith(fontSize: 12.5, height: 1.5),
               ),
               const SizedBox(height: Sp.lg),
               _ThemeOptionTile(
@@ -586,14 +586,14 @@ class _ThemePickerSheet extends StatelessWidget {
                 'settings.theme'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 18),
+                    .copyWith(fontSize: 17),
               ),
               const SizedBox(height: 4),
               Text(
                 'settings.theme_desc'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.subtitle(color: AppColors.textMid)
-                    .copyWith(fontSize: 12, height: 1.5),
+                    .copyWith(fontSize: 12.5, height: 1.5),
               ),
               const SizedBox(height: Sp.lg),
               ValueListenableBuilder<ThemeMode>(
@@ -676,14 +676,14 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
                 'settings.default_printer'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 18),
+                    .copyWith(fontSize: 17),
               ),
               const SizedBox(height: 4),
               Text(
                 'settings.default_printer_desc'.tr(),
                 textAlign: TextAlign.center,
                 style: AppType.subtitle(color: AppColors.textMid)
-                    .copyWith(fontSize: 12, height: 1.5),
+                    .copyWith(fontSize: 12.5, height: 1.5),
               ),
               const SizedBox(height: Sp.lg),
               ValueListenableBuilder<PrintFormatChoice>(
@@ -847,7 +847,7 @@ class _Row extends StatelessWidget {
           if (trailing != null) ...[
             Text(trailing!,
                 style: AppType.muted(color: AppColors.textLow)
-                    .copyWith(fontSize: 12)),
+                    .copyWith(fontSize: 12.5)),
             const SizedBox(width: 6),
           ],
           if (onTap != null)

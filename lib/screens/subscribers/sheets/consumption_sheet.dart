@@ -133,7 +133,7 @@ class _ConsumptionSheet extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     'إجمالي اليوم:',
-                    style: AppType.muted().copyWith(fontSize: 12),
+                    style: AppType.muted().copyWith(fontSize: 12.5),
                   ),
                   const Spacer(),
                   Text(
@@ -247,7 +247,7 @@ class _ConsumptionSheet extends StatelessWidget {
               Text(
                 label,
                 style: AppType.muted()
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -255,7 +255,7 @@ class _ConsumptionSheet extends StatelessWidget {
           Text(
             value,
             style: AppType.title(color: color)
-                .copyWith(fontSize: 18, letterSpacing: -0.3),
+                .copyWith(fontSize: 17, letterSpacing: -0.3),
           ),
         ],
       ),
@@ -280,7 +280,7 @@ class _ConsumptionSheet extends StatelessWidget {
           Text(
             label,
             style: AppType.muted(color: AppColors.textMid)
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 8),
           // مطلب 2026-06-11: اسم الجهاز الطويل (مثل

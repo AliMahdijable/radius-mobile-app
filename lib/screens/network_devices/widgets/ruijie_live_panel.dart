@@ -190,7 +190,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
               const SizedBox(width: 6),
               Text('Interfaces (${s.ifaces.length})',
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi)),
             ]),
@@ -248,7 +248,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             Icon(LucideIcons.clock, size: 10, color: AppColors.textMid),
             const SizedBox(width: 4),
             Text(_formatUptime(s.uptime!),
-                style: TextStyle(fontSize: 10, color: AppColors.textMid)),
+                style: TextStyle(fontSize: 10.5, color: AppColors.textMid)),
           ]),
         ),
     ]);
@@ -278,7 +278,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           _monitoring
               ? 'مراقبة حيّة (SNMP) • تحديث كل ${_refreshInterval.inSeconds}s'
               : 'المراقبة متوقّفة',
-          style: TextStyle(fontSize: 10, color: AppColors.textLow),
+          style: TextStyle(fontSize: 10.5, color: AppColors.textLow),
         ),
       ),
     ]);
@@ -330,7 +330,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             const SizedBox(width: 4),
             Text(label,
                 style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textMid)),
             const Spacer(),
@@ -390,7 +390,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
                 overflow: TextOverflow.ellipsis),
             Text(iface.operUp ? 'up' : 'down',
                 style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 9.5,
                     color:
                         iface.operUp ? AppColors.success : AppColors.textLow)),
           ]),
@@ -403,7 +403,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           ),
           child: Text(speedText,
               style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textMid)),
         ),
@@ -412,13 +412,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           Text('↓${_bpsShort(rxBps)}',
               textDirection: TextDirection.ltr,
               style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.success)),
           Text('↑${_bpsShort(txBps)}',
               textDirection: TextDirection.ltr,
               style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.brandAccent)),
         ]),

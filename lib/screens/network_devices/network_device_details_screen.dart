@@ -489,7 +489,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       ? 'متّصل'
                       : (_d.lastStatus == 'offline' ? 'غير متّصل' : 'لم يُفحص'),
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: _statusColor,
                   ),
@@ -508,7 +508,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   Flexible(
                     child: Text(_d.model!,
                         style:
-                            TextStyle(fontSize: 12, color: AppColors.textMid),
+                            TextStyle(fontSize: 12.5, color: AppColors.textMid),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ],
@@ -520,7 +520,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 const SizedBox(width: 4),
                 Text(_d.ip,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textHi,
                     )),
@@ -545,7 +545,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       ),
                       child: Text(_region!.name,
                           style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               color: color)),
                     ),
@@ -585,7 +585,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       Text(
                         '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}${_d.apiPort != null ? ":${_d.apiPort}" : ""}',
                         style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w700,
                             color: AppColors.brand),
                       ),
@@ -613,7 +613,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 ),
               ),
               Text('ms',
-                  style: TextStyle(fontSize: 9, color: AppColors.textMid)),
+                  style: TextStyle(fontSize: 9.5, color: AppColors.textMid)),
               const SizedBox(height: 6),
             ],
             // زر ICMP مدمج — icon فقط
@@ -637,7 +637,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                         const SizedBox(width: 3),
                         Text('ping',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               color: AppColors.brand,
                             )),
@@ -748,7 +748,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             child: Text(
               label,
               style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textMid),
               overflow: TextOverflow.ellipsis,
@@ -763,7 +763,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             Text(
               value,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
                 height: 1,
@@ -772,7 +772,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             if (unit.isNotEmpty) ...[
               const SizedBox(width: 3),
               Text(unit,
-                  style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+                  style: TextStyle(fontSize: 10.5, color: AppColors.textLow)),
             ],
           ],
         ),
@@ -797,15 +797,15 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           const SizedBox(width: 6),
           Text('ملاحظات',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),
         ]),
         const SizedBox(height: 8),
         Text(_d.notes!,
-            style:
-                TextStyle(fontSize: 12, color: AppColors.textMid, height: 1.6)),
+            style: TextStyle(
+                fontSize: 12.5, color: AppColors.textMid, height: 1.6)),
       ]),
     );
   }
@@ -874,7 +874,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة UBNT airOS متوفّرة',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
@@ -917,7 +917,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('المراقبة الحيّة مقفلة',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
@@ -963,7 +963,7 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة حيّة متوفّرة لـMikrotik',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
@@ -1011,7 +1011,7 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
           child: Center(
             child: Text('M',
                 style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: AppColors.warning)),
           ),
@@ -1022,7 +1022,7 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة Mimosa عبر SNMP',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
@@ -1070,7 +1070,7 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
           child: Center(
             child: Text('R',
                 style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: AppColors.brandAccent)),
           ),
@@ -1081,7 +1081,7 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة Ruijie / Reyee عبر SNMP',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),

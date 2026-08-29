@@ -41,7 +41,7 @@ class SectionHeader extends StatelessWidget {
               child: Text(
                 trailingLabel!,
                 style: AppType.link(color: AppColors.brand)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
             ),
         ],

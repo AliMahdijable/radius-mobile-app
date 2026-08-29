@@ -234,7 +234,7 @@ class _Ring extends StatelessWidget {
                 Text(
                   'dashboard.subscriber_singular'.tr(),
                   style: AppType.muted(color: AppColors.textLow)
-                      .copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                      .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -287,7 +287,7 @@ class _RingStatRow extends StatelessWidget {
             child: Text(
               label,
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
           ),
           Text(

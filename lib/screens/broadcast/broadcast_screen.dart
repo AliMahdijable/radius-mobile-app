@@ -843,11 +843,11 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     Text(
                       title,
                       style: AppType.title(color: AppColors.textHi)
-                          .copyWith(fontSize: 12),
+                          .copyWith(fontSize: 12.5),
                     ),
                     Text(
                       subtitle,
-                      style: AppType.muted().copyWith(fontSize: 10),
+                      style: AppType.muted().copyWith(fontSize: 10.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -892,7 +892,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'ابحث بالاسم أو الهاتف…',
-              hintStyle: AppType.muted().copyWith(fontSize: 12),
+              hintStyle: AppType.muted().copyWith(fontSize: 12.5),
               prefixIcon:
                   Icon(LucideIcons.search, size: 14, color: AppColors.textMid),
               filled: true,
@@ -921,7 +921,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'لا نتائج',
-                style: AppType.muted().copyWith(fontSize: 12),
+                style: AppType.muted().copyWith(fontSize: 12.5),
                 textAlign: TextAlign.center,
               ),
             )
@@ -971,7 +971,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   Text(
                     s.fullName,
                     style: AppType.title(color: AppColors.textHi)
-                        .copyWith(fontSize: 12),
+                        .copyWith(fontSize: 12.5),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -980,7 +980,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     children: [
                       Text(
                         s.username,
-                        style: AppType.muted().copyWith(fontSize: 10),
+                        style: AppType.muted().copyWith(fontSize: 10.5),
                       ),
                       const SizedBox(width: 6),
                       Container(
@@ -994,7 +994,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       const SizedBox(width: 6),
                       Text(
                         s.phone ?? s.mobile ?? '',
-                        style: AppType.muted().copyWith(fontSize: 10),
+                        style: AppType.muted().copyWith(fontSize: 10.5),
                         textDirection: TextDirection.ltr,
                       ),
                     ],
@@ -1017,7 +1017,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         children: [
           // Variables strip
           Text('اضغط متغيّراً لإدراجه:',
-              style: AppType.muted().copyWith(fontSize: 10)),
+              style: AppType.muted().copyWith(fontSize: 10.5)),
           const SizedBox(height: 6),
           SizedBox(
             height: 34,
@@ -1068,7 +1068,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               hintText: _messageOptional
                   ? 'اختياري — يستخدم القالب التلقائي لو فاضي'
                   : 'اكتب الرسالة هنا…',
-              hintStyle: AppType.muted().copyWith(fontSize: 12),
+              hintStyle: AppType.muted().copyWith(fontSize: 12.5),
               filled: true,
               fillColor: AppColors.surfaceInput,
               border: OutlineInputBorder(
@@ -1098,13 +1098,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   _messageOptional
                       ? 'لو فاضي، يُستخدم قالب افتراضي'
                       : 'المتغيرات تُستبدل تلقائياً لكل مشترك',
-                  style: AppType.muted().copyWith(fontSize: 10),
+                  style: AppType.muted().copyWith(fontSize: 10.5),
                 ),
               ),
               Text(
                 '${_msg.text.length} / 2000',
                 style: AppType.muted().copyWith(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontFamily: 'Cairo',
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -1128,7 +1128,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           label: Text(
             'إرفاق صورة (اختياري)',
             style:
-                AppType.button(color: AppColors.brand).copyWith(fontSize: 12),
+                AppType.button(color: AppColors.brand).copyWith(fontSize: 12.5),
           ),
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: AppColors.brandSoftBorder),
@@ -1174,12 +1174,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.subtitle(color: AppColors.textHi)
-                      .copyWith(fontSize: 12),
+                      .copyWith(fontSize: 12.5),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '$sizeKb KB',
-                  style: AppType.muted().copyWith(fontSize: 10),
+                  style: AppType.muted().copyWith(fontSize: 10.5),
                 ),
               ],
             ),
@@ -1213,7 +1213,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 children: [
                   Text(
                     _scope == _Scope.all ? 'إرسال للكل' : 'إرسال للمحدّدين',
-                    style: AppType.muted().copyWith(fontSize: 10),
+                    style: AppType.muted().copyWith(fontSize: 10.5),
                   ),
                   Text(
                     '${_targets.length} مشترك',
@@ -1308,7 +1308,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 child: Text(
                   title,
                   style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 12),
+                      .copyWith(fontSize: 12.5),
                 ),
               ),
               if (trailing != null) trailing,

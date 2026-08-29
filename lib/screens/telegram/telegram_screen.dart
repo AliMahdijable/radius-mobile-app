@@ -751,7 +751,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                     obscureText: false,
                     style: const TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
@@ -761,7 +761,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                       hintText: '123456789:AAE...',
                       hintStyle: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: AppColors.textLow,
                       ),
                     ),

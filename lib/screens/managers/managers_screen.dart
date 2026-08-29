@@ -391,7 +391,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             child: Text(
               '$_total مدير',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: accent,
               ),
@@ -616,7 +616,7 @@ class _ManagerTile extends StatelessWidget {
                               child: Text(
                                 manager.username,
                                 style: TextStyle(
-                                  fontSize: 14.5,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.textHi,
                                   height: 1.15,

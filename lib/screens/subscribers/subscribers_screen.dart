@@ -1565,7 +1565,7 @@ class _SelectionHeader extends StatelessWidget {
             child: Text(
               '${'subscribers.select_all'.tr()} ($total)',
               style: AppType.label(color: AppColors.brand)
-                  .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -1644,7 +1644,7 @@ class _Pager extends StatelessWidget {
             'subscribers.page_of'
                 .tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
             style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 12, // Card title tier — secondary nav text
+              fontSize: 12.5, // Card title tier — secondary nav text
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -2026,7 +2026,7 @@ class _DebtSummaryCard extends StatelessWidget {
                 child: Text(
                   '${formatIQD(total)} د.ع  •  $count مشترك',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.warning,
                   ),

@@ -644,7 +644,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             const SizedBox(height: 10),
             Text(
               _query.isEmpty ? 'لا يوجد مشتركون' : 'لا توجد نتائج لـ "$_query"',
-              style: AppType.muted().copyWith(fontSize: 12),
+              style: AppType.muted().copyWith(fontSize: 12.5),
             ),
           ],
         ),
@@ -719,7 +719,7 @@ class _ActionCard extends StatelessWidget {
                     Text(
                       sub,
                       style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 10),
+                          .copyWith(fontSize: 10.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -803,7 +803,7 @@ class _SubscriberCard extends StatelessWidget {
               if (hasName)
                 Text(
                   sub.username,
-                  style: AppType.muted().copyWith(fontSize: 9),
+                  style: AppType.muted().copyWith(fontSize: 9.5),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -814,8 +814,8 @@ class _SubscriberCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         sub.profileName!,
-                        style: AppType.label(color: AppColors.success)
-                            .copyWith(fontSize: 9, fontWeight: FontWeight.w700),
+                        style: AppType.label(color: AppColors.success).copyWith(
+                            fontSize: 9.5, fontWeight: FontWeight.w700),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -834,7 +834,7 @@ class _SubscriberCard extends StatelessWidget {
                         '-${formatIQD(existingDiscount!)}',
                         style: TextStyle(
                           color: AppColors.warning,
-                          fontSize: 8.5,
+                          fontSize: 9.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

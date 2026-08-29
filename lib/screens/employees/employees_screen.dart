@@ -264,7 +264,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           Text(
             '$count',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
               color: color,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -327,7 +327,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               const SizedBox(height: 4),
               Text(
                 'اضغط "موظف جديد" لإضافة أول موظف.',
-                style: AppType.muted().copyWith(fontSize: 12),
+                style: AppType.muted().copyWith(fontSize: 12.5),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -419,7 +419,7 @@ class _EmployeeTile extends StatelessWidget {
                           child: Text(
                             display,
                             style: TextStyle(
-                              fontSize: 14.5,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                               height: 1.15,

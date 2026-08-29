@@ -451,7 +451,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(width: 6),
           Text(label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: active ? AppColors.onBrand : AppColors.textHi,
               )),
@@ -496,7 +496,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               'mimosa' => '💡 Mimosa يستعمل HTTPS 443 — أدخل admin credentials',
               _ => '💡 تأكّد من تفعيل API service على الجهاز',
             },
-            style: TextStyle(fontSize: 9, color: AppColors.textLow),
+            style: TextStyle(fontSize: 9.5, color: AppColors.textLow),
           ),
         ],
         const SizedBox(height: 10),
@@ -528,7 +528,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   List<Widget> _snmpFields() => [
         Row(children: [
           Text('SNMP version:',
-              style: TextStyle(fontSize: 12, color: AppColors.textMid)),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMid)),
           const SizedBox(width: 8),
           ChoiceChip(
             label: const Text('v2c', style: TextStyle(fontSize: 11)),
@@ -709,7 +709,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                 children: [
                   Text('لا توجد مناطق بعد',
                       style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textHi)),
                   const SizedBox(height: 2),
@@ -792,7 +792,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               icon:
                   Icon(LucideIcons.settings2, size: 14, color: AppColors.brand),
               label: Text('إدارة المناطق',
-                  style: TextStyle(color: AppColors.brand, fontSize: 12)),
+                  style: TextStyle(color: AppColors.brand, fontSize: 12.5)),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 minimumSize: Size.zero,

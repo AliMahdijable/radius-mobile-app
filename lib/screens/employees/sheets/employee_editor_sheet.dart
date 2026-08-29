@@ -295,7 +295,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                           _error!,
                           style: TextStyle(
                             color: AppColors.error,
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             height: 1.4,
                           ),
@@ -497,7 +497,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             child: Text(
               '$activeInCat / ${perms.length}',
               style: AppType.muted(color: AppColors.textMid).copyWith(
-                fontSize: 10,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -532,7 +532,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                   p.key,
                   style: TextStyle(
                     color: AppColors.textLow,
-                    fontSize: 10,
+                    fontSize: 10.5,
                   ),
                 ),
               ],
@@ -568,7 +568,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             Text('جارٍ تحميل المدراء...',
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: AppColors.textLow,
                 )),
           ],

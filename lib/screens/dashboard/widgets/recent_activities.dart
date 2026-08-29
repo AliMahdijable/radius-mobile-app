@@ -477,7 +477,7 @@ class _Row extends StatelessWidget {
                                   ? AppColors.error
                                   : AppColors.brand,
                             ).copyWith(
-                                fontSize: 12, fontWeight: FontWeight.w700),
+                                fontSize: 12.5, fontWeight: FontWeight.w700),
                           ),
                         ],
                       ],

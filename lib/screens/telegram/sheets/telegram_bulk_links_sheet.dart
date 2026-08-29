@@ -219,7 +219,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                     style: TextStyle(
                       fontFamily: 'Cairo',
                       color: AppColors.textMid,
-                      fontSize: 12,
+                      fontSize: 12.5,
                     )),
             ],
           ),

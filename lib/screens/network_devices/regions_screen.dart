@@ -194,7 +194,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
               style: TextStyle(color: AppColors.textMid, fontSize: 14)),
           const SizedBox(height: 6),
           Text('اضغط + لإضافة أول منطقة',
-              style: TextStyle(color: AppColors.textLow, fontSize: 12)),
+              style: TextStyle(color: AppColors.textLow, fontSize: 12.5)),
         ],
       ),
     );
@@ -241,7 +241,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
                       r.deviceCount == 0
                           ? 'لا يوجد أجهزة'
                           : '${r.deviceCount} جهاز',
-                      style: TextStyle(color: AppColors.textMid, fontSize: 12),
+                      style:
+                          TextStyle(color: AppColors.textMid, fontSize: 12.5),
                     ),
                   ],
                 ),
@@ -393,7 +394,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
               Text('اللون (اختياري)',
                   style: TextStyle(
                       color: AppColors.textMid,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Wrap(

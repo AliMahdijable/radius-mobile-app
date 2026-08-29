@@ -165,12 +165,12 @@ class _SendScopePanelState extends State<SendScopePanel> {
                   Text(
                     'تغطية كل المدراء الفرعيين',
                     style: AppType.label(color: AppColors.textHi)
-                        .copyWith(fontSize: 12),
+                        .copyWith(fontSize: 12.5),
                   ),
                   const SizedBox(height: 1),
                   Text(
                     'يشمل أيّ مدير يُضاف لاحقاً',
-                    style: AppType.muted().copyWith(fontSize: 10),
+                    style: AppType.muted().copyWith(fontSize: 10.5),
                   ),
                 ],
               ),
@@ -226,7 +226,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
                 onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: AppColors.textHi,
                 ),
                 decoration: InputDecoration(

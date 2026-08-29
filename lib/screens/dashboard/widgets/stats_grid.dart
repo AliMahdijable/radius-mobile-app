@@ -208,7 +208,7 @@ class _ShellCard extends StatelessWidget {
             Text(
               title,
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -239,7 +239,7 @@ class _HeroAmount extends StatelessWidget {
           Text(
             formatIQD(amount),
             style: AppType.title(color: color).copyWith(
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w700,
               height: 1.1,
               letterSpacing: -0.3,
@@ -249,7 +249,7 @@ class _HeroAmount extends StatelessWidget {
           Text(
             'IQD',
             style: AppType.muted(color: AppColors.textLow)
-                .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+                .copyWith(fontSize: 10.5, fontWeight: FontWeight.w700),
           ),
         ],
       ),

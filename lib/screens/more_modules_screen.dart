@@ -220,7 +220,7 @@ class MoreModulesScreen extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             'more.empty_perms_hint'.tr(),
-                            style: AppType.muted().copyWith(fontSize: 12),
+                            style: AppType.muted().copyWith(fontSize: 12.5),
                           ),
                         ],
                       ),

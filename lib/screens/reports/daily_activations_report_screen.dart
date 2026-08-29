@@ -266,7 +266,8 @@ class _DailyActivationsReportScreenState
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
-        Text(label, style: AppType.muted().copyWith(fontSize: 10), maxLines: 1),
+        Text(label,
+            style: AppType.muted().copyWith(fontSize: 10.5), maxLines: 1),
       ],
     );
   }
@@ -291,7 +292,7 @@ class _DailyActivationsReportScreenState
               r.day,
               style: TextStyle(
                 color: AppColors.brand,
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -350,7 +351,7 @@ class _DailyActivationsReportScreenState
           const SizedBox(width: 6),
           Text('اليوم — ${_fmtToday()}',
               style: AppType.label(color: AppColors.textHi)
-                  .copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -425,7 +426,7 @@ class _DailyActivationsReportScreenState
                     child: Text(
                       '${c.$3}',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.w700,
                         color: selected ? c.$4 : AppColors.textMid,
                       ),

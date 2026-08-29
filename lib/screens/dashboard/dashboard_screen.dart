@@ -476,7 +476,7 @@ class _NoActivitiesYet extends StatelessWidget {
           const SizedBox(height: 4),
           Text('dashboard.activity_will_show'.tr(),
               style: AppType.muted(color: AppColors.textLow)
-                  .copyWith(fontSize: 12, fontWeight: FontWeight.w500),
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center),
         ],
       ),
@@ -534,13 +534,13 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                 Text(
                   greeting,
                   style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 12, fontWeight: FontWeight.w500),
+                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
                   style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                   ),
@@ -728,7 +728,7 @@ class _IconChip extends StatelessWidget {
               alignment: Alignment.center,
               child: Text('$badge',
                   style: AppType.muted(color: AppColors.onBrand)
-                      .copyWith(fontSize: 10, height: 1)),
+                      .copyWith(fontSize: 10.5, height: 1)),
             ),
           ),
       ],

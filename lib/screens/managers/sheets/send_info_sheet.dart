@@ -244,7 +244,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                               child: Text(
                                 'لا يوجد رقم هاتف محفوظ — لن يُرسل واتساب',
                                 style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 12.5,
                                     color: AppColors.error,
                                     fontWeight: FontWeight.w700),
                               ),

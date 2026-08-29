@@ -148,7 +148,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               Text(
                 '${'dashboard.revenue'.tr()} • $_periodLabel',
                 style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               _PeriodTabs(current: _period, onSelect: _select),
@@ -175,8 +175,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                     const SizedBox(width: 6),
                     Text(
                       'dashboard.fetch_failed_swipe'.tr(),
-                      style: AppType.label(color: AppColors.error)
-                          .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: AppType.label(color: AppColors.error).copyWith(
+                          fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
                   ],
                 )

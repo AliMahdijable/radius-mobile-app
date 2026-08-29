@@ -508,7 +508,7 @@ class _SheetHeader extends StatelessWidget {
                         .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
                 Text(subtitle,
                     style: AppType.muted(color: AppColors.textMid)
-                        .copyWith(fontSize: 12)),
+                        .copyWith(fontSize: 12.5)),
               ],
             ),
           ),
@@ -612,7 +612,7 @@ class _Chip extends StatelessWidget {
             label,
             style: TextStyle(
               color: emphasized ? accent : AppColors.textHi,
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -643,7 +643,7 @@ class _PayPreview extends StatelessWidget {
             child: Text(
               'الدين بعد التسديد',
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12),
+                  .copyWith(fontSize: 12.5),
             ),
           ),
           Text(

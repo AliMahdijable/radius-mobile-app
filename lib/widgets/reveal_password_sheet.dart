@@ -356,7 +356,7 @@ class _PasswordDisplay extends StatelessWidget {
                   child: Text(
                     'يُخفى بعد ${remaining}s',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w700,
                       color: accent,
                       fontFeatures: const [FontFeature.tabularFigures()],

@@ -512,7 +512,7 @@ class _EditSheetState extends State<_EditSheet> {
           Text('الصق رابط Google Maps أو "lat,lng"',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMid,
               )),
@@ -602,7 +602,7 @@ class _EditSheetState extends State<_EditSheet> {
                       'تمّ استخراج: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       ),

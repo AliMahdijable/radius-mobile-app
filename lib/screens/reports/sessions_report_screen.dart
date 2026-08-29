@@ -239,7 +239,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                           _loading
                               ? '...'
                               : '${visible.length} ${_onlineOnly ? 'reports.online_users'.tr() : 'reports.session_singular'.tr()}',
-                          style: AppType.muted().copyWith(fontSize: 12),
+                          style: AppType.muted().copyWith(fontSize: 12.5),
                         ),
                       ],
                     ),
@@ -365,7 +365,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                           size: 10, color: AppColors.textLow),
                       const SizedBox(width: 3),
                       Text(s.ipAddress!,
-                          style: AppType.muted().copyWith(fontSize: 10)),
+                          style: AppType.muted().copyWith(fontSize: 10.5)),
                       const SizedBox(width: 8),
                     ],
                     if (s.userManager != null && s.userManager!.isNotEmpty) ...[
@@ -374,7 +374,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       const SizedBox(width: 3),
                       Flexible(
                         child: Text(s.userManager!,
-                            style: AppType.muted().copyWith(fontSize: 10),
+                            style: AppType.muted().copyWith(fontSize: 10.5),
                             overflow: TextOverflow.ellipsis),
                       ),
                     ],
@@ -390,7 +390,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       Text(
                         'MAC: ${s.mac!}',
                         style: AppType.muted().copyWith(
-                          fontSize: 10,
+                          fontSize: 10.5,
                         ),
                       ),
                     ],
@@ -404,15 +404,15 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                           size: 10, color: AppColors.brand),
                       const SizedBox(width: 3),
                       Text(_humanBytes(s.bytesIn),
-                          style: AppType.muted()
-                              .copyWith(fontSize: 10, color: AppColors.brand)),
+                          style: AppType.muted().copyWith(
+                              fontSize: 10.5, color: AppColors.brand)),
                       const SizedBox(width: 10),
                       Icon(LucideIcons.arrowUp,
                           size: 10, color: AppColors.warning),
                       const SizedBox(width: 3),
                       Text(_humanBytes(s.bytesOut),
                           style: AppType.muted().copyWith(
-                              fontSize: 10, color: AppColors.warning)),
+                              fontSize: 10.5, color: AppColors.warning)),
                     ],
                   ),
                 ],

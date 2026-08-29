@@ -326,7 +326,7 @@ class _CompactHeader extends StatelessWidget {
                     child: Text(
                       '${_fmt(from)}  →  ${_fmt(to)}',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       ),

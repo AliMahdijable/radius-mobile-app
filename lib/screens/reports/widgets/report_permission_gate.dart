@@ -74,7 +74,7 @@ class ReportPermissionGate extends StatelessWidget {
                           .tr(namedArgs: {'perm': permission}),
                       textAlign: TextAlign.center,
                       style:
-                          AppType.muted().copyWith(fontSize: 12, height: 1.6),
+                          AppType.muted().copyWith(fontSize: 12.5, height: 1.6),
                     ),
                     const SizedBox(height: Sp.lg),
                     ElevatedButton.icon(

@@ -80,7 +80,7 @@ class ReportLogTile extends StatelessWidget {
                         meta.label,
                         style: TextStyle(
                           color: meta.color,
-                          fontSize: 10,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -92,7 +92,7 @@ class ReportLogTile extends StatelessWidget {
                         style: TextStyle(
                           // debit → أحمر (سالب)، عكسه → أخضر (موجب).
                           color: meta.debit ? AppColors.error : _kPositive,
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -173,7 +173,7 @@ class ReportLogTile extends StatelessWidget {
                     Text(
                       _formatDate(createdAt),
                       style:
-                          AppType.muted().copyWith(fontSize: 10, height: 1.2),
+                          AppType.muted().copyWith(fontSize: 10.5, height: 1.2),
                     ),
                     if (employeeFullName != null &&
                         employeeFullName!.isNotEmpty) ...[
@@ -185,7 +185,7 @@ class ReportLogTile extends StatelessWidget {
                         child: Text(
                           employeeFullName!,
                           style: AppType.muted().copyWith(
-                              fontSize: 10,
+                              fontSize: 10.5,
                               color: AppColors.brand,
                               fontWeight: FontWeight.w700),
                           overflow: TextOverflow.ellipsis,

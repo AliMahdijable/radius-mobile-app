@@ -345,7 +345,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                           const SizedBox(width: 8),
                           Text(
                             'الرصيد الحالي ',
-                            style: AppType.muted().copyWith(fontSize: 12),
+                            style: AppType.muted().copyWith(fontSize: 12.5),
                           ),
                           Text(
                             '${formatIQD(widget.manager.balance ?? 0)} د.ع',
@@ -406,7 +406,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                                     style:
                                         AppType.label(color: AppColors.textHi)
                                             .copyWith(
-                                                fontSize: 12,
+                                                fontSize: 12.5,
                                                 fontWeight: FontWeight.w700),
                                   ),
                                   Text(
@@ -574,7 +574,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                         ? 'إرسال رسالة واتساب للمدير'
                         : 'إرسال واتساب — لا يوجد رقم',
                     style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
+                        fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -593,7 +593,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 Expanded(
                   child: Text(
                     'إشعار داخل تطبيق المدير',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -639,7 +640,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 op.label,
                 style: TextStyle(
                   color: selected ? op.color : AppColors.textMid,
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),
               ),

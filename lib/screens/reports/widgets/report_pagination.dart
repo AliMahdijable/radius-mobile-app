@@ -90,7 +90,7 @@ class ReportPager extends StatelessWidget {
             'subscribers.page_of'
                 .tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
             style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
             ),
           ),

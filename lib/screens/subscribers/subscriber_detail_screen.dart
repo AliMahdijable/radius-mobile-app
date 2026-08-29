@@ -1282,7 +1282,7 @@ class _SubscriberHero extends StatelessWidget {
               Text(
                 st.$1,
                 style: AppType.body(color: AppColors.onBrand)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
             ],
           ),

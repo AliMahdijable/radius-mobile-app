@@ -122,10 +122,10 @@ class ReportExportBar extends StatelessWidget {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(title,
-                    style: pw.TextStyle(fontSize: 18, font: fontBold)),
+                    style: pw.TextStyle(fontSize: 17, font: fontBold)),
                 pw.Text(_nowStr(),
                     style:
-                        pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                        pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
               ],
             ),
             if (subtitle != null && subtitle!.isNotEmpty) ...[
@@ -150,7 +150,7 @@ class ReportExportBar extends StatelessWidget {
                     font: fontBold, fontSize: 11, color: PdfColors.white),
                 headerDecoration:
                     const pw.BoxDecoration(color: PdfColors.teal600),
-                cellStyle: pw.TextStyle(font: font, fontSize: 9),
+                cellStyle: pw.TextStyle(font: font, fontSize: 9.5),
                 cellAlignment: pw.Alignment.centerRight,
                 headerAlignment: pw.Alignment.center,
                 border:
@@ -170,7 +170,7 @@ class ReportExportBar extends StatelessWidget {
               alignment: pw.Alignment.centerLeft,
               child: pw.Text('عدد الصفوف: ${rows.length}',
                   style: pw.TextStyle(
-                      fontSize: 9, color: PdfColors.grey700, font: font)),
+                      fontSize: 9.5, color: PdfColors.grey700, font: font)),
             ),
           ],
         ),

@@ -328,7 +328,7 @@ class _MovementCard extends StatelessWidget {
                   Text(
                     movement.note!.trim(),
                     style: AppType.muted(color: AppColors.textMid)
-                        .copyWith(fontSize: 12),
+                        .copyWith(fontSize: 12.5),
                   ),
                 ],
                 if (movement.source != null)
@@ -346,7 +346,7 @@ class _MovementCard extends StatelessWidget {
                             ? 'الساس'
                             : 'يدوي',
                         style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 10),
+                            .copyWith(fontSize: 10.5),
                       ),
                     ),
                   ),

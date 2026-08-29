@@ -365,7 +365,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               'لا يوجد مدراء تحت هذا الحساب — استعمل زر "العودة" أعلاه للرجوع للحساب الأصلي.',
                               style: TextStyle(
                                 fontFamily: 'Cairo',
-                                fontSize: 12,
+                                fontSize: 12.5,
                                 fontWeight: FontWeight.w500,
                                 color: AppColors.textMid,
                                 height: 1.5,
@@ -601,7 +601,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             row.username,
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 14.5,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                               height: 1.15,
@@ -682,7 +682,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     'الحالي',
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textLow,
                     ),
@@ -707,7 +707,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       'دخول',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -759,7 +759,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             _error ?? 'خطأ',
             style: TextStyle(
               fontFamily: 'Cairo',
-              fontSize: 12,
+              fontSize: 12.5,
               color: AppColors.textMid,
             ),
             textAlign: TextAlign.center,

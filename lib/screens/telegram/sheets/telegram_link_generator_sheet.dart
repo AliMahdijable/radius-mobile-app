@@ -295,7 +295,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
           child: Text('ابدأ الكتابة للبحث بين ${_allSubs.length} مشترك',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12,
+                fontSize: 12.5,
                 color: AppColors.textLow,
               ),
               textAlign: TextAlign.center),
@@ -306,7 +306,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       return Center(
         child: Text('لا نتائج',
             style: TextStyle(
-                fontFamily: 'Cairo', fontSize: 12, color: AppColors.textLow)),
+                fontFamily: 'Cairo', fontSize: 12.5, color: AppColors.textLow)),
       );
     }
     return ListView.builder(
@@ -382,7 +382,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
             Text(_err!,
                 style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12,
+                    fontSize: 12.5,
                     color: AppColors.textMid),
                 textAlign: TextAlign.center),
           ],
@@ -502,7 +502,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textHi,
                   ),

@@ -697,7 +697,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 Text(
                   label,
                   style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 18, letterSpacing: -0.4),
+                      .copyWith(fontSize: 17, letterSpacing: -0.4),
                 ),
                 if (connected && (_status?.phone ?? '').isNotEmpty)
                   Text(
@@ -739,7 +739,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
       }
     } else {
       body = SelectableText(qr,
-          style: AppType.input(color: AppColors.textHi).copyWith(fontSize: 9));
+          style:
+              AppType.input(color: AppColors.textHi).copyWith(fontSize: 9.5));
     }
     return Container(
       padding: const EdgeInsets.all(Sp.md),
@@ -881,7 +882,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 label,
                 style: TextStyle(
                   color: active ? accent : AppColors.textMid,
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1053,7 +1054,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 label,
                 style: TextStyle(
                   color: disabled ? AppColors.textLow : color,
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1218,7 +1219,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                             'الوضع اليدوي للواتساب',
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 14.5,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             ),
@@ -1252,7 +1253,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                       : 'الإرسالات تمرّ عبر جلسة WA السيرفر تلقائياً. لو حصل ban/تعليق للجلسة أو تخاف من مخاطر WA على السيرفر، فعّل الوضع اليدوي.',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textMid,
                     height: 1.7,

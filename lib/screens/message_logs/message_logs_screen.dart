@@ -234,7 +234,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
         onChanged: _onSearchChanged,
         decoration: InputDecoration(
           hintText: 'ابحث بالاسم، رقم الهاتف، أو نصّ الرسالة…',
-          hintStyle: AppType.muted().copyWith(fontSize: 12),
+          hintStyle: AppType.muted().copyWith(fontSize: 12.5),
           prefixIcon:
               Icon(LucideIcons.search, size: 15, color: AppColors.textMid),
           suffixIcon: _searchCtrl.text.isEmpty
@@ -507,7 +507,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                     child: Text(
                       statusText,
                       style:
-                          AppType.button(color: color).copyWith(fontSize: 10),
+                          AppType.button(color: color).copyWith(fontSize: 10.5),
                     ),
                   ),
                 ],
@@ -558,7 +558,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                   const SizedBox(width: 3),
                   Text(
                     _formatTime(m.createdAt),
-                    style: AppType.muted().copyWith(fontSize: 10),
+                    style: AppType.muted().copyWith(fontSize: 10.5),
                   ),
                   if ((m.messageType ?? '').isNotEmpty) ...[
                     const SizedBox(width: 8),
@@ -566,7 +566,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                     const SizedBox(width: 3),
                     Text(
                       _typeLabel(m.messageType!),
-                      style: AppType.muted().copyWith(fontSize: 10),
+                      style: AppType.muted().copyWith(fontSize: 10.5),
                     ),
                   ],
                   const Spacer(),
@@ -741,7 +741,7 @@ class _MessageDetailSheet extends StatelessWidget {
                       child: Text(
                         message.errorMessage!,
                         style: AppType.subtitle(color: AppColors.error)
-                            .copyWith(fontSize: 12),
+                            .copyWith(fontSize: 12.5),
                       ),
                     ),
                   ],
@@ -751,7 +751,7 @@ class _MessageDetailSheet extends StatelessWidget {
             Text(
               'نصّ الرسالة',
               style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12),
+                  .copyWith(fontSize: 12.5),
             ),
             const SizedBox(height: 6),
             Container(

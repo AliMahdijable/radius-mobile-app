@@ -164,7 +164,7 @@ class ReportsHubScreen extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'reports.empty_perms_hint'.tr(),
-              style: AppType.muted().copyWith(fontSize: 12),
+              style: AppType.muted().copyWith(fontSize: 12.5),
             ),
           ],
         ),

@@ -476,7 +476,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         ),
         child: Text(
           'لا توجد مجموعات صلاحيات متاحة',
-          style: AppType.muted(color: AppColors.error).copyWith(fontSize: 12),
+          style: AppType.muted(color: AppColors.error).copyWith(fontSize: 12.5),
         ),
       );
     }

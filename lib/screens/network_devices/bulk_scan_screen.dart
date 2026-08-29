@@ -421,8 +421,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           padding: const EdgeInsets.only(top: 4, right: 4, left: 4),
           child: Text(
             'الصيغ المدعومة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100',
-            style:
-                TextStyle(color: AppColors.textLow, fontSize: 10, height: 1.4),
+            style: TextStyle(
+                color: AppColors.textLow, fontSize: 10.5, height: 1.4),
             textDirection: TextDirection.rtl,
           ),
         ),
@@ -580,7 +580,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                         ),
                         child: Text('${r.responseMs}ms',
                             style: TextStyle(
-                                color: AppColors.textLow, fontSize: 10)),
+                                color: AppColors.textLow, fontSize: 10.5)),
                       ),
                       if (alreadyExists) ...[
                         const SizedBox(width: 6),
@@ -597,7 +597,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                           child: Text('مضاف مسبقاً',
                               style: TextStyle(
                                 color: AppColors.success,
-                                fontSize: 9,
+                                fontSize: 9.5,
                                 fontWeight: FontWeight.w700,
                               )),
                         ),
@@ -669,7 +669,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                     size: 16,
                     color: AppColors.brand),
                 label: Text(allSelected ? 'إلغاء' : 'تحديد الكل',
-                    style: TextStyle(color: AppColors.brand, fontSize: 12)),
+                    style: TextStyle(color: AppColors.brand, fontSize: 12.5)),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
@@ -912,7 +912,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     Text('بيانات الدخول المشتركة (اختياريّة)',
                         style: TextStyle(
                             color: AppColors.brand,
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700)),
                   ]),
                 ),
@@ -922,7 +922,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                 Text(
                     'تُطبَّق على كل الأجهزة — Mikrotik/UBNT (user+pass) و Mimosa (community)',
                     style: TextStyle(
-                        color: AppColors.textLow, fontSize: 10, height: 1.4)),
+                        color: AppColors.textLow, fontSize: 10.5, height: 1.4)),
                 const SizedBox(height: 8),
                 Row(children: [
                   Expanded(

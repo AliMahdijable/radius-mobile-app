@@ -357,7 +357,7 @@ class _PreviewCard extends StatelessWidget {
                 Text(
                   'portal.preview_sub'.tr(),
                   style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 10),
+                      .copyWith(fontSize: 10.5),
                 ),
               ],
             ),
@@ -565,7 +565,7 @@ class _PackageRow extends StatelessWidget {
                             child: Text(
                               'portal.hidden'.tr(),
                               style: AppType.button(color: AppColors.error)
-                                  .copyWith(fontSize: 10),
+                                  .copyWith(fontSize: 10.5),
                             ),
                           ),
                       ],
@@ -577,7 +577,7 @@ class _PackageRow extends StatelessWidget {
                           Text(
                             pkg.sasName,
                             style: AppType.subtitle(color: AppColors.textMid)
-                                .copyWith(fontSize: 10),
+                                .copyWith(fontSize: 10.5),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -835,7 +835,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                             style: AppType.subtitle(color: AppColors.textHi)),
                         subtitle: Text('portal.pkg_hidden_hint'.tr(),
                             style: AppType.subtitle(color: AppColors.textMid)
-                                .copyWith(fontSize: 10)),
+                                .copyWith(fontSize: 10.5)),
                         activeColor: AppColors.brand,
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -904,7 +904,8 @@ Widget _sectionLabel(String text, IconData icon) {
       Icon(icon, size: 14, color: AppColors.brand),
       const SizedBox(width: Sp.xs),
       Text(text,
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 12)),
+          style:
+              AppType.title(color: AppColors.textHi).copyWith(fontSize: 12.5)),
     ],
   );
 }
@@ -960,7 +961,7 @@ Widget _labeledField({
         const SizedBox(height: 4),
         Text(helperText,
             style: AppType.subtitle(color: AppColors.textMid)
-                .copyWith(fontSize: 10, height: 1.4)),
+                .copyWith(fontSize: 10.5, height: 1.4)),
       ],
     ],
   );

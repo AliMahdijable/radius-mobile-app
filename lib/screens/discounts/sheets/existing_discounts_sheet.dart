@@ -288,7 +288,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                                           ? 'لا توجد خصومات مطبّقة بعد'
                                           : 'لا توجد نتائج لـ "$_query"',
                                       style: AppType.muted()
-                                          .copyWith(fontSize: 12),
+                                          .copyWith(fontSize: 12.5),
                                     ),
                                   ],
                                 ),

@@ -529,7 +529,7 @@ class _Results extends StatelessWidget {
                       ? 'أول $_maxResults من ${matches.length} نتيجة'
                       : '${matches.length} نتيجة',
                   style: AppType.muted(color: AppColors.textLow)
-                      .copyWith(fontSize: 10, letterSpacing: 0.4),
+                      .copyWith(fontSize: 10.5, letterSpacing: 0.4),
                 ),
               ),
               for (final s in clipped) _ResultRow(sub: s),

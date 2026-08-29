@@ -216,7 +216,7 @@ class _WaPreviewSheet extends StatelessWidget {
                         Text(title,
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 14.5,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             )),

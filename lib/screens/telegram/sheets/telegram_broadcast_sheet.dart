@@ -214,7 +214,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     ),
                     counterStyle: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 10,
+                      fontSize: 10.5,
                       color: AppColors.textLow,
                     ),
                   ),
@@ -243,7 +243,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                               : '🎯 سيصل: ${_preview!.eligible} مشترك · مرتبطون: ${_preview!.totalBound} · محظورون: ${_preview!.blocked}',
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             color: AppColors.textHi,
                             height: 1.4,

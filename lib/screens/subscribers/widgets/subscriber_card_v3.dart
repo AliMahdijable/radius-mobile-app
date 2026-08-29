@@ -163,7 +163,7 @@ class SubscriberCardV3 extends StatelessWidget {
                   Text(
                     st.label,
                     style: AppType.body(color: st.color).copyWith(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -182,7 +182,7 @@ class SubscriberCardV3 extends StatelessWidget {
                       sub.username,
                       textDirection: TextDirection.ltr,
                       style: AppType.body(color: AppColors.textLabel)
-                          .copyWith(fontSize: 12),
+                          .copyWith(fontSize: 12.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -236,7 +236,7 @@ class SubscriberCardV3 extends StatelessWidget {
           Flexible(
             child: Text(
               sub.profileName ?? '—',
-              style: AppType.body().copyWith(fontSize: 12),
+              style: AppType.body().copyWith(fontSize: 12.5),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -254,8 +254,8 @@ class SubscriberCardV3 extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               '${formatIQD(price)} د.ع',
-              style:
-                  AppType.body(color: AppColors.textMid).copyWith(fontSize: 12),
+              style: AppType.body(color: AppColors.textMid)
+                  .copyWith(fontSize: 12.5),
             ),
           ],
           const Spacer(),
@@ -276,7 +276,7 @@ class SubscriberCardV3 extends StatelessWidget {
         Text(
           'ينتهي',
           style:
-              AppType.body(color: AppColors.textLabel).copyWith(fontSize: 12),
+              AppType.body(color: AppColors.textLabel).copyWith(fontSize: 12.5),
         ),
         const SizedBox(width: 6),
         Flexible(
@@ -284,7 +284,7 @@ class SubscriberCardV3 extends StatelessWidget {
             _formatExpiry(sub.parsedExpiration),
             textDirection: TextDirection.ltr,
             style: AppType.body()
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -669,7 +669,7 @@ class _MiniButton extends StatelessWidget {
                 label,
                 style: AppType.body(
                   color: filled ? AppColors.onBrand : color,
-                ).copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                ).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
             ],
           ),

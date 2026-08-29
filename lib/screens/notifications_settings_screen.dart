@@ -340,7 +340,7 @@ class _TimePickerTile extends StatelessWidget {
                   Text(
                     value,
                     style: AppType.title(color: AppColors.textHi).copyWith(
-                        fontSize: 18,
+                        fontSize: 17,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5),
                   ),

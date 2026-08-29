@@ -175,7 +175,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   'notifications.mark_all_read'.tr(),
                   style: TextStyle(
                     color: AppColors.brand,
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -318,7 +318,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   style: AppType.label(color: AppColors.textMid)),
               const SizedBox(height: 4),
               Text('notifications.empty_hint'.tr(),
-                  style: AppType.muted().copyWith(fontSize: 12)),
+                  style: AppType.muted().copyWith(fontSize: 12.5)),
             ],
           ),
         ),
@@ -401,7 +401,7 @@ class _SectionHeader extends StatelessWidget {
           Text(
             title,
             style: AppType.label(color: AppColors.textHi)
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
           ),
           const SizedBox(width: 6),
           Container(
@@ -736,7 +736,7 @@ class _NotificationRow extends StatelessWidget {
                       Text(
                         n.body,
                         style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 12, height: 1.4),
+                            .copyWith(fontSize: 12.5, height: 1.4),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
