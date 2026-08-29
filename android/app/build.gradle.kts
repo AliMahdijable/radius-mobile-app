@@ -29,10 +29,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {
@@ -68,6 +64,16 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+}
+
+// Kotlin 2.2 رفع إهمال `kotlinOptions` إلى مستوى ERROR في سكربتات
+// .kts. هذا هو البديل الرسمي المستعمل في قالب Flutter 3.47 نفسه.
+// JVM_11 مُبقىً كما كان — رفعه إلى 17 حركة زائدة تمسّ desugaring
+// وتوافق الحزم بلا داعٍ.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
 
