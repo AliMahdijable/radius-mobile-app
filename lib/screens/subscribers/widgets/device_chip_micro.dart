@@ -117,8 +117,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
   // ── ONT layout: [ONT badge]  RX -22.5 dBm  •  45 °C ───────────────
   Widget _ontMetrics(OntOpticalInfo o) {
     final rxColor = o.rxOk ? AppColors.brand : AppColors.error;
-    final tempColor =
-        o.tempOk ? AppColors.brand : const Color(0xFFE08F2D);
+    final tempColor = o.tempOk ? AppColors.brand : const Color(0xFFE08F2D);
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 6,
@@ -286,8 +285,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
                     color: Color(0xFF7C3AED),
                   ),
                 )
-              : Icon(LucideIcons.refreshCw,
-                  size: 14, color: AppColors.textMid),
+              : Icon(LucideIcons.refreshCw, size: 14, color: AppColors.textMid),
         ),
       ),
     );

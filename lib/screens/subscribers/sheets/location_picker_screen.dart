@@ -125,8 +125,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
         iconTheme: IconThemeData(color: AppColors.textHi),
         actions: [
           IconButton(
-            icon: Icon(LucideIcons.check,
-                color: const Color(0xFF14B8A6)),
+            icon: Icon(LucideIcons.check, color: const Color(0xFF14B8A6)),
             tooltip: 'تأكيد',
             onPressed: () => Navigator.of(context).pop(_center),
           ),
@@ -144,8 +143,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                     initialZoom: widget.initial != null ? 17 : 13,
                     // الدبّوس ثابت في مركز الشاشة — نقرأ المركز عند
                     // كل تحريك بحيث "الموقع المختار" = ما تحت الدبّوس.
-                    onPositionChanged: (camera, _) =>
-                        _center = camera.center,
+                    onPositionChanged: (camera, _) => _center = camera.center,
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.pinchZoom |
                           InteractiveFlag.drag |
@@ -185,23 +183,24 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                     onPressed: _locating ? null : _locate,
                     child: _locating
                         ? const SizedBox(
-                            width: 20, height: 20,
+                            width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
-                                color: Color(0xFF14B8A6)))
+                                strokeWidth: 2.2, color: Color(0xFF14B8A6)))
                         : const Icon(LucideIcons.locateFixed),
                   ),
                 ),
                 if (_error != null)
                   PositionedDirectional(
-                    top: 12, start: 12, end: 12,
+                    top: 12,
+                    start: 12,
+                    end: 12,
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: AppColors.error, width: 1),
+                        border: Border.all(color: AppColors.error, width: 1),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,13 +226,15 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
           ),
           Container(
             padding: EdgeInsets.fromLTRB(
-              20, 12, 20,
+              20,
+              12,
+              20,
               12 + MediaQuery.viewPaddingOf(context).bottom,
             ),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              border: Border(
-                  top: BorderSide(color: AppColors.border, width: 0.5)),
+              border:
+                  Border(top: BorderSide(color: AppColors.border, width: 0.5)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -288,7 +289,8 @@ class _Pin extends StatelessWidget {
       children: [
         Icon(LucideIcons.mapPin, size: 44, color: Color(0xFF14B8A6)),
         SizedBox(
-          width: 10, height: 4,
+          width: 10,
+          height: 4,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: Color(0x33000000),

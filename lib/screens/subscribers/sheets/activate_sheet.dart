@@ -1,4 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -295,13 +297,16 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     );
   }
 
+  /// جسم الشيت بلغة المخطّط (2026-08-29). الترتيب: بطاقة الباقة الداكنة
+  /// → صفوف الحالة → طريقة الدفع → (المبلغ الجزئي) → بانر النتيجة.
   List<Widget> _buildBody() {
     if (_loading) {
       return [
         Padding(
-          padding: EdgeInsets.symmetric(vertical: Sp.huge),
+          padding: const EdgeInsets.symmetric(vertical: Sp.mega),
           child: Center(
-            child: CircularProgressIndicator(color: AppColors.brand),
+            child: CircularProgressIndicator(
+                color: AppColors.brandAccent, strokeWidth: 2.5),
           ),
         ),
       ];
@@ -314,443 +319,190 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             children: [
               Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
               const SizedBox(height: Sp.sm),
-              Text(_loadError!, style: AppType.label(color: AppColors.error)),
+              Text(_loadError!,
+                  style: AppType.rowValue(color: AppColors.error),
+                  textAlign: TextAlign.center),
               const SizedBox(height: Sp.sm),
-              TextButton(
-                onPressed: _load,
-                child: Text('common.retry'.tr()),
-              ),
+              TextButton(onPressed: _load, child: Text('common.retry'.tr())),
             ],
           ),
         ),
       ];
     }
     final price = _effectivePrice > 0 ? _effectivePrice : _userPrice;
+    final cur = 'common.currency'.tr();
+    final after = _balanceAfter;
     return [
-      _InfoCard(
-        title: 'sheets.package_details'.tr(),
-        rows: [
-          (
-            LucideIcons.package,
-            'subscribers.label_package'.tr(),
-            _profileName.isEmpty ? '—' : _profileName,
-            null
-          ),
-          if (_duration != null && _duration!.isNotEmpty)
-            (LucideIcons.clock, 'sheets.duration'.tr(), _duration!, null),
-          (
-            LucideIcons.tag,
-            'sheets.original_price'.tr(),
-            '${formatIQD(_userPrice.round())} ${'common.currency'.tr()}',
-            _discount > 0 ? AppColors.textLow : null,
-          ),
-          if (_discount > 0)
-            (
-              LucideIcons.percent,
-              'subscribers.label_discount'.tr(),
-              '-${formatIQD(_discount.round())} ${'common.currency'.tr()}',
-              const Color(0xFF14B8A6),
-            ),
-          if (_discount > 0)
-            (
-              LucideIcons.tag,
-              'sheets.final_price'.tr(),
-              '${formatIQD(_effectivePrice.round())} ${'common.currency'.tr()}',
-              AppColors.brand,
-            ),
-        ],
+      SheetPlanCard(
+        planLabel: 'subscribers.label_package'.tr(),
+        planName: _profileName.isEmpty ? '—' : _profileName,
+        durationLabel: (_duration ?? '').isEmpty ? null : _duration,
+        amountLabel: 'sheets.amount_due'.tr(),
+        amount: '${formatIQD(price.round())} $cur',
+        // السعر الأصلي مشطوباً بجانب النهائي — أوضح من صفَّي «السعر
+        // الأصلي» و«الخصم» المنفصلين اللذين كانا في الكارت الأبيض.
+        strikethrough: _discount > 0 ? formatIQD(_userPrice.round()) : null,
       ),
-      const SizedBox(height: Sp.sm),
-      _InfoCard(
-        title: 'sheets.current_state'.tr(),
+      const SizedBox(height: 14),
+      SheetRowsGroup(
         rows: [
-          (
-            _currentBalance < 0 ? LucideIcons.creditCard : LucideIcons.wallet,
-            _currentBalance < 0
+          if (_discount > 0)
+            SheetRowData(
+              label: 'subscribers.label_discount'.tr(),
+              value: '-${formatIQD(_discount.round())} $cur',
+              valueColor: AppColors.brandAccent,
+            ),
+          SheetRowData(
+            label: _currentBalance < 0
                 ? 'sheets.current_debt'.tr()
                 : 'sheets.current_credit'.tr(),
-            '${formatIQD(_currentBalance.abs().round())} ${'common.currency'.tr()}',
-            _currentBalance < 0 ? AppColors.error : AppColors.brand,
+            value: '${formatIQD(_currentBalance.abs().round())} $cur',
+            valueColor:
+                _currentBalance < 0 ? AppColors.error : AppColors.brandAccent,
+            strong: true,
           ),
-          (
-            LucideIcons.wallet,
-            'dashboard.manager_balance'.tr(),
-            '${formatIQD(_managerBalance.round())} ${'common.currency'.tr()}',
-            AppColors.textHi,
+          SheetRowData(
+            label: 'dashboard.manager_balance'.tr(),
+            value: '${formatIQD(_managerBalance.round())} $cur',
           ),
           if (_rewardPoints > 0)
-            (
-              LucideIcons.star,
-              'sheets.points'.tr(),
-              '${formatIQD(_rewardPoints.round())}',
-              const Color(0xFFCD8B00),
+            SheetRowData(
+              label: 'sheets.points'.tr(),
+              value: formatIQD(_rewardPoints.round()),
+              valueColor: AppColors.warningFill,
             ),
         ],
       ),
-      const SizedBox(height: Sp.md),
-      _SectionTitle('sheets.payment_method'.tr()),
-      const SizedBox(height: Sp.xs),
-      _PayPicker(
-        current: _pay,
-        onSelect: (p) => setState(() => _pay = p),
-      ),
-      if (_pay == _PayType.partial) ...[
-        const SizedBox(height: Sp.sm),
-        _PartialAmountField(
-          controller: _partialCtrl,
-          price: price.round(),
-          onChipTap: _addToPartial,
+      const SizedBox(height: 14),
+      SheetSection(
+        label: 'sheets.payment_method'.tr(),
+        gap: Sp.sm,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SheetChoiceTiles(
+              labels: [
+                'sheets.pay_cash'.tr(),
+                'sheets.pay_debt'.tr(),
+                'sheets.pay_partial'.tr(),
+              ],
+              icons: const [
+                LucideIcons.banknote,
+                LucideIcons.creditCard,
+                LucideIcons.chartPie,
+              ],
+              selectedIndex: switch (_pay) {
+                _PayType.cash => 0,
+                _PayType.debt => 1,
+                _PayType.partial => 2,
+              },
+              enabled: !_submitting,
+              onSelect: (i) => setState(() => _pay = switch (i) {
+                    0 => _PayType.cash,
+                    1 => _PayType.debt,
+                    _ => _PayType.partial,
+                  }),
+            ),
+            if (_pay == _PayType.partial) ...[
+              const SizedBox(height: Sp.md),
+              SheetSection(
+                label: 'sheets.cash_paid_amount'.tr(),
+                gap: 9,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SheetBox(
+                      focused: _partialAmount > 0,
+                      radius: 18,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: Sp.lg, vertical: 14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _partialCtrl,
+                              enabled: !_submitting,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9,]')),
+                              ],
+                              textDirection: ui.TextDirection.ltr,
+                              textAlign: TextAlign.right,
+                              style: AppType.amount(),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                                hintText: '0',
+                                hintStyle: AppType.amount(
+                                    color: AppColors.textPlaceholder),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: Sp.sm),
+                          Text(cur,
+                              style: AppType.input(color: AppColors.textLabel)
+                                  .copyWith(fontSize: 13)),
+                          if (_partialAmount > 0) ...[
+                            const SizedBox(width: Sp.sm),
+                            InkWell(
+                              onTap: () {
+                                _suppressFormat = true;
+                                _partialCtrl.clear();
+                                _suppressFormat = false;
+                                setState(() => _partialAmount = 0);
+                              },
+                              borderRadius: BorderRadius.circular(R.pill),
+                              child: Icon(LucideIcons.x,
+                                  size: 16, color: AppColors.textHint),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    // الشرائح تُضيف (سلوك v1)، ويُقصّ السلّم عند السعر
+                    // حتى لا يتجاوز المدفوع جزئيّاً قيمة الباقة.
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: [
+                        for (final c in _partialChips(price.round()))
+                          SheetQuickChip(
+                            label: _formatThousands(c),
+                            selected: _partialAmount == c,
+                            enabled: !_submitting,
+                            onTap: () => _addToPartial(c),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
-      ],
-      const SizedBox(height: Sp.md),
-      _AfterCard(
-        balanceAfter: _balanceAfter,
+      ),
+      const SizedBox(height: 14),
+      SheetResultBanner(
+        icon: LucideIcons.arrowLeft,
+        label: after < 0
+            ? 'sheets.debt_after_activation'.tr()
+            : 'sheets.credit_after_activation'.tr(),
+        value: '${formatIQD(after.abs().round())} $cur',
+        tone: after < 0 ? SheetTone.danger : SheetTone.brand,
       ),
     ];
   }
-}
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.title, required this.rows});
-  final String title;
-  final List<(IconData, String, String, Color?)> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style: AppType.label(color: AppColors.textMid).copyWith(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              )),
-          const SizedBox(height: 3),
-          for (final (icon, label, value, color) in rows)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  Icon(icon, color: AppColors.textMid, size: 13),
-                  const SizedBox(width: 6),
-                  Text(label,
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  Flexible(
-                    child: Text(
-                      value,
-                      style: AppType.label(color: color ?? AppColors.textHi)
-                          .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Text(
-        text,
-        style: AppType.label(color: AppColors.textHi)
-            .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
-      ),
-    );
-  }
-}
-
-class _PayPicker extends StatelessWidget {
-  const _PayPicker({required this.current, required this.onSelect});
-  final _PayType current;
-  final ValueChanged<_PayType> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Row(
-      children: [
-        Expanded(
-          child: _PayBtn(
-            label: 'sheets.pay_cash'.tr(),
-            icon: LucideIcons.banknote,
-            color: AppColors.brand,
-            selected: current == _PayType.cash,
-            onTap: () => onSelect(_PayType.cash),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _PayBtn(
-            label: 'sheets.pay_debt'.tr(),
-            icon: LucideIcons.creditCard,
-            color: AppColors.error,
-            selected: current == _PayType.debt,
-            onTap: () => onSelect(_PayType.debt),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _PayBtn(
-            label: 'sheets.pay_partial'.tr(),
-            icon: LucideIcons.walletCards,
-            color: const Color(0xFF8B5CF6),
-            selected: current == _PayType.partial,
-            onTap: () => onSelect(_PayType.partial),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Transparent card-style picker — same visual language as the
-/// operations grid on the detail screen (white surface + border +
-/// soft shadow + tinted icon-box on top + colored label). When
-/// selected, the surface gets a soft tint of the op's color and the
-/// border thickens — selection reads as a glow, not a filled chip.
-class _PayBtn extends StatelessWidget {
-  const _PayBtn({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Material(
-      color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(
-              color: selected ? color.withValues(alpha: 0.5) : AppColors.border,
-              width: selected ? 1.4 : 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: selected ? 0.15 : 0.1),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                label,
-                style: AppType.label(color: color).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PartialAmountField extends StatelessWidget {
-  const _PartialAmountField({
-    required this.controller,
-    required this.price,
-    required this.onChipTap,
-  });
-  final TextEditingController controller;
-  final int price;
-
-  /// Called with the chip value; the parent ADDS it to the current
-  /// amount (v1 behaviour — tap 25k twice → 50k).
-  final ValueChanged<int> onChipTap;
-
-  // Dense up to 50k so the admin can dial in any common partial-cash
-  // amount in one tap. Each chip is filtered out when ≥ effective
-  // price (no point offering 25k on a 20k package). Chips ACCUMULATE
-  // — tap 10k twice → 20k — so even denser sets stay short to render.
-  static const _chips = [
-    5000,
-    10000,
-    15000,
-    20000,
-    25000,
-    30000,
-    35000,
-    40000,
-    45000,
-    50000,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final filtered = _chips.where((c) => c < price).toList();
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF8B5CF6).withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(
-          color: const Color(0xFF8B5CF6).withValues(alpha: 0.18),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'sheets.paid_cash_amount'.tr(),
-            style: AppType.label(color: AppColors.textHi)
-                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            style: AppType.input(color: AppColors.textHi),
-            decoration: InputDecoration(
-              hintText: 'sheets.amount_example'.tr(),
-              hintStyle: AppType.input(color: AppColors.textLow),
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              suffixText: 'common.currency'.tr(),
-            ),
-          ),
-          if (filtered.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final amount in filtered)
-                  InkWell(
-                    onTap: () => onChipTap(amount),
-                    borderRadius: BorderRadius.circular(R.pill),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.pill),
-                        border: Border.all(
-                          color:
-                              const Color(0xFF8B5CF6).withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Text(
-                        formatIQD(amount),
-                        style: AppType.muted(color: const Color(0xFF8B5CF6))
-                            .copyWith(
-                                fontSize: 11, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _AfterCard extends StatelessWidget {
-  const _AfterCard({required this.balanceAfter});
-  final num balanceAfter;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final isDebt = balanceAfter < 0;
-    final color = isDebt ? AppColors.error : AppColors.brand;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.arrowRight, color: color, size: 13),
-          const SizedBox(width: 6),
-          Text(
-            'sheets.after_activation'.tr(),
-            style: AppType.label(color: AppColors.textHi)
-                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-          const Spacer(),
-          Text(
-            isDebt
-                ? '${'subscribers.debt_short'.tr()} '
-                : '${'subscribers.balance_short'.tr()} ',
-            style: AppType.muted(color: color)
-                .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-          ),
-          Text(
-            '${formatIQD(balanceAfter.abs().round())} د.ع',
-            style: AppType.label(color: color)
-                .copyWith(fontSize: 13, fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
+  /// سلّم المبالغ الجزئيّة — يُقصّ عند سعر الباقة.
+  static List<int> _partialChips(int price) {
+    const scale = [5000, 10000, 15000, 20000, 25000, 30000, 40000, 50000];
+    final out = scale.where((c) => c < price).toList();
+    return out.isEmpty ? [price] : out;
   }
 }
 

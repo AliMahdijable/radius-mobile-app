@@ -114,7 +114,8 @@ class _SortSheetState extends State<_SortSheet> {
                     label: 'sort.desc'.tr(),
                     icon: LucideIcons.arrowDown,
                     selected: _direction == SortDirection.desc,
-                    onTap: () => setState(() => _direction = SortDirection.desc),
+                    onTap: () =>
+                        setState(() => _direction = SortDirection.desc),
                   ),
                 ),
               ],

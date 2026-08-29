@@ -99,9 +99,8 @@ class _ActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = action.onTap != null && !action.busy;
-    final color = enabled
-        ? (action.color ?? AppColors.brandAccent)
-        : AppColors.textHint;
+    final color =
+        enabled ? (action.color ?? AppColors.brandAccent) : AppColors.textHint;
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
@@ -113,7 +112,8 @@ class _ActionTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(R.lg),
             border: Border.all(color: AppColors.border),
           ),
-          padding: const EdgeInsets.symmetric(vertical: Sp.md, horizontal: Sp.x6),
+          padding:
+              const EdgeInsets.symmetric(vertical: Sp.md, horizontal: Sp.x6),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -248,7 +248,8 @@ class _MoreActionsSheet extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(R.sheet)),
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(R.sheet)),
         boxShadow: Sh.sheet,
       ),
       child: SafeArea(
@@ -348,7 +349,8 @@ class _Group extends StatelessWidget {
             borderRadius: BorderRadius.circular(R.lg),
             border: Border.all(color: AppColors.dividerStrong),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xxs),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xxs),
           child: Column(
             children: [
               for (var i = 0; i < group.items.length; i++) ...[
@@ -370,9 +372,8 @@ class _ActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = action.onTap != null && !action.busy;
-    final color = enabled
-        ? (action.color ?? AppColors.textBody)
-        : AppColors.textHint;
+    final color =
+        enabled ? (action.color ?? AppColors.textBody) : AppColors.textHint;
     return InkWell(
       onTap: enabled
           ? () {

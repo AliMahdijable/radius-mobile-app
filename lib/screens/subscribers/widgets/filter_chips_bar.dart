@@ -13,7 +13,17 @@ import '../../../theme/typography.dart';
 /// pill; inactive chips collapse to a tiny icon-only circle with the
 /// count next to it. This keeps the row visually quiet until the user
 /// has picked something, then makes the active choice obvious.
-enum SubscriberFilter { all, active, online, offline, disabled, expired, debtors, nearExpiry, onlineNoPlan }
+enum SubscriberFilter {
+  all,
+  active,
+  online,
+  offline,
+  disabled,
+  expired,
+  debtors,
+  nearExpiry,
+  onlineNoPlan
+}
 
 class FilterChipsBar extends StatefulWidget {
   const FilterChipsBar({
@@ -43,7 +53,8 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
     if (idx < 0 || !_scroll.hasClients) return;
     // تقدير موقع الـchip: عرض تقريبي 90px + spacing 6px.
     const chipStride = 112.0;
-    final target = (idx * chipStride) - 40; // 40px offset ليضل جزء من السابق مرئي
+    final target =
+        (idx * chipStride) - 40; // 40px offset ليضل جزء من السابق مرئي
     final max = _scroll.position.maxScrollExtent;
     final clamped = target.clamp(0.0, max);
     _scroll.animateTo(
@@ -79,17 +90,26 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
   /// الفلتر مطبَّق على البطاقات لكن الـchip المُظلَّل غير مرئي. مطابق
   /// لموضعه في الويب — علاقة دلاليّة مع "منتهي".
   static final _defs = <_ChipDef>[
-    _ChipDef(SubscriberFilter.all, 'subscribers.filter_all', LucideIcons.users, AppColors.brand),
-    _ChipDef(SubscriberFilter.active, 'subscribers.filter_active', LucideIcons.circleCheck, Color(0xFF14B8A6)),
-    _ChipDef(SubscriberFilter.online, 'subscribers.filter_online', LucideIcons.wifi, Color(0xFF3B82F6)),
-    _ChipDef(SubscriberFilter.offline, 'subscribers.filter_offline', LucideIcons.wifiOff, Color(0xFF90A4AE)),
-    _ChipDef(SubscriberFilter.disabled, 'subscribers.filter_disabled', LucideIcons.ban, Color(0xFF6D4C41)),
-    _ChipDef(SubscriberFilter.expired, 'subscribers.filter_expired', LucideIcons.timerOff, Color(0xFFC62828)),
+    _ChipDef(SubscriberFilter.all, 'subscribers.filter_all', LucideIcons.users,
+        AppColors.brand),
+    _ChipDef(SubscriberFilter.active, 'subscribers.filter_active',
+        LucideIcons.circleCheck, Color(0xFF14B8A6)),
+    _ChipDef(SubscriberFilter.online, 'subscribers.filter_online',
+        LucideIcons.wifi, Color(0xFF3B82F6)),
+    _ChipDef(SubscriberFilter.offline, 'subscribers.filter_offline',
+        LucideIcons.wifiOff, Color(0xFF90A4AE)),
+    _ChipDef(SubscriberFilter.disabled, 'subscribers.filter_disabled',
+        LucideIcons.ban, Color(0xFF6D4C41)),
+    _ChipDef(SubscriberFilter.expired, 'subscribers.filter_expired',
+        LucideIcons.timerOff, Color(0xFFC62828)),
     // "بدون نت" — متصل + منتهي. لون بنفسجي يطابق status_online_expired
     // في الويب حتى الإدمن يربط الـchip بالحالة اللونية للصف.
-    _ChipDef(SubscriberFilter.onlineNoPlan, 'subscribers.filter_online_no_plan', LucideIcons.wifiOff, Color(0xFF9333EA)),
-    _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors', LucideIcons.creditCard, Color(0xFFF57F17)),
-    _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry', LucideIcons.triangleAlert, Color(0xFFE08F2D)),
+    _ChipDef(SubscriberFilter.onlineNoPlan, 'subscribers.filter_online_no_plan',
+        LucideIcons.wifiOff, Color(0xFF9333EA)),
+    _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors',
+        LucideIcons.creditCard, Color(0xFFF57F17)),
+    _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry',
+        LucideIcons.triangleAlert, Color(0xFFE08F2D)),
   ];
 
   @override

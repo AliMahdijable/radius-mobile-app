@@ -13,7 +13,6 @@ import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/sheet_scaffold.dart';
-import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
 import '../../services/auth_storage.dart';
 import '../../services/permissions_service.dart';
@@ -82,6 +81,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   Set<String> _telegramBoundIdx = const {};
   bool _loading = true;
   bool _refreshing = false;
+
   /// مطلب المستخدم 2026-07-12: تحديث صامت كل 5 ثواني حتى الحالة
   /// (online/offline/expiration) تبقى fresh بدون تدخّل الأدمن. الـtimer
   /// يوقفه AppLifecycle لما التطبيق يروح للـbackground حتى ما يستهلك
@@ -97,11 +97,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   bool _probing = false;
   int _probeDone = 0;
   int _probeTotal = 0;
-
-  /// مطلب 2026-06-11: device-metric sort. null=off. Otherwise
-  /// '<metric>_<dir>' where metric is rx/sig/ccq/lan and dir is
-  /// asc/desc. Matches v1's _deviceSort string format.
-  String? _deviceSort;
 
   /// مطلب 2026-06-11: زر تكويل عام — true يخفي قسم الاتصال على
   /// كل البطاقات المعروضة. الـSubscriberCardV2 يلتقط الـprop عبر
@@ -463,21 +458,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // العادي. مشتركون بلا snapshot (الـwave لم يصلهم بعد، أو الفحص
     // فشل) يسقطون لأسفل القائمة بأي اتجاه — admin ما يريد سطور
     // غامضة فوق السطور المفحوصة.
-    if (_deviceSort != null) {
-      final isAsc = _deviceSort!.endsWith('_asc');
-      final base = _deviceSort!.split('_').first;
-      list.sort((a, b) {
-        final ka = _deviceSortKey(
-            base, DeviceProbeApi.cached(a.ipAddress ?? ''));
-        final kb = _deviceSortKey(
-            base, DeviceProbeApi.cached(b.ipAddress ?? ''));
-        if (ka == null && kb == null) return 0;
-        if (ka == null) return 1; // unrated sinks
-        if (kb == null) return -1;
-        return isAsc ? ka.compareTo(kb) : kb.compareTo(ka);
-      });
-      return;
-    }
     // 2026-08-26: ترتيب أبجدي حقيقي — case-insensitive + trim + normalize
     // بديل قوي لـString.compareTo. للعربي: Unicode order = أبجدي طبيعي
     // (ألف→ياء). للاتيني: نتجاهل حالة الأحرف (Ali و ali نفس الشيء).
@@ -491,6 +471,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       if (nb.isEmpty) return -1;
       return na.compareTo(nb);
     }
+
     int cmp(Subscriber a, Subscriber b) {
       switch (_sortField) {
         case SortField.username:
@@ -515,8 +496,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             return aExp.compareTo(bExp);
           }
           // Fallback لـremainingDays فقط لو date فاضي (نادر).
-          return (a.remainingDays ?? 99999)
-              .compareTo(b.remainingDays ?? 99999);
+          return (a.remainingDays ?? 99999).compareTo(b.remainingDays ?? 99999);
         case SortField.notes:
           return a.balanceAmount.compareTo(b.balanceAmount);
         case SortField.parentUsername:
@@ -532,57 +512,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           return a.sessionTime!.compareTo(b.sessionTime!);
       }
     }
-    list.sort(_sortDir == SortDirection.asc
-        ? cmp
-        : (a, b) => -cmp(a, b));
-  }
 
-  /// Maps a device-sort key to a single comparable number. Mirrors v1
-  /// at mobile-app/lib/screens/subscribers/subscribers_screen.dart:1818.
-  /// Sign conventions:
-  ///   • RX (optical) and signal (wireless) are negative — closer to 0
-  ///     = stronger. asc shows worst (more negative) first.
-  ///   • CCQ and LAN are positive — higher = better.
-  /// Unplugged Ubiquiti LAN reports -1 so it sinks below any 10Mbps
-  /// link in either direction (the admin almost always wants them
-  /// last).
-  double? _deviceSortKey(String key, DeviceHealthSnapshot? snap) {
-    if (snap == null) return null;
-    switch (key) {
-      case 'rx':
-        if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
-        return double.tryParse(snap.ont!.rxPower);
-      case 'sig':
-        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
-        return snap.ubnt!.signalDbm?.toDouble();
-      case 'ccq':
-        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
-        return snap.ubnt!.ccqPercent?.toDouble();
-      case 'lan':
-        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
-        final s = snap.ubnt!.primaryLan?.speed ?? '';
-        final m = RegExp(r'^(\d+)Mbps').firstMatch(s);
-        if (m == null) return snap.ubnt!.lanUp ? 0 : -1;
-        return double.tryParse(m.group(1)!);
-    }
-    return null;
-  }
-
-  /// Tap handler for a device-sort chip. Three-way toggle matching v1:
-  ///   off       → desc  (highest first)
-  ///   desc      → asc   (lowest first)
-  ///   asc       → off
-  void _toggleDeviceSort(String metric) {
-    setState(() {
-      if (_deviceSort == '${metric}_desc') {
-        _deviceSort = '${metric}_asc';
-      } else if (_deviceSort == '${metric}_asc') {
-        _deviceSort = null;
-      } else {
-        _deviceSort = '${metric}_desc';
-      }
-      _page = 0;
-    });
+    list.sort(_sortDir == SortDirection.asc ? cmp : (a, b) => -cmp(a, b));
   }
 
   Map<SubscriberFilter, int> _counts() {
@@ -594,7 +525,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       SubscriberFilter.all: src.length,
       SubscriberFilter.active: src.where((s) => s.isActive).length,
       // 2026-07-16: نفس التغيير في العدّ — مطابق لمنطق الفلتر أعلاه.
-      SubscriberFilter.online: src.where((s) => s.isOnline && !s.isExpired).length,
+      SubscriberFilter.online:
+          src.where((s) => s.isOnline && !s.isExpired).length,
       SubscriberFilter.offline: src.where((s) => s.isOffline).length,
       SubscriberFilter.disabled: src.where((s) => s.isDisabled).length,
       SubscriberFilter.expired: src.where((s) => s.isExpired).length,
@@ -671,6 +603,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _filteredSubscribersForBulk().where((s) => !s.isDisabled).length;
   int get _disabledInSelection =>
       _filteredSubscribersForBulk().where((s) => s.isDisabled).length;
+
   /// Rows currently online — the disconnect button affects only
   /// these. Subscribers who aren't connected have no session to
   /// kick, so we skip them in the loop AND hide the count when zero.
@@ -773,7 +706,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       builder: (_) => AlertDialog(
         title: Text('subscribers.disconnect_users'.tr()),
         content: Text(
-          'subscribers.disconnect_users_body'.tr(namedArgs: {'count': '${online.length}'}),
+          'subscribers.disconnect_users_body'
+              .tr(namedArgs: {'count': '${online.length}'}),
         ),
         actions: [
           TextButton(
@@ -781,8 +715,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('subscribers.disconnect'.tr()),
           ),
@@ -811,7 +744,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       context,
       'subscribers.disconnected_count'.tr(namedArgs: {
         'ok': '$ok',
-        'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
+        'fail': fail > 0
+            ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}'
+            : '',
       }),
       isError: fail != 0,
     );
@@ -828,9 +763,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   Future<void> _openBulkPayDebt() async {
-    final debtors = _filteredSubscribersForBulk()
-        .where((s) => s.hasDebt)
-        .toList();
+    final debtors =
+        _filteredSubscribersForBulk().where((s) => s.hasDebt).toList();
     if (debtors.isEmpty) return;
     await showBulkPayDebtSheet(context, subs: debtors);
     if (!mounted) return;
@@ -855,10 +789,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // the backend rejects it. Delete affects the whole selection.
     final selectedSubs = _filteredSubscribersForBulk();
     final eligible = switch (action) {
-      _BulkAction.disable =>
-        selectedSubs.where((s) => !s.isDisabled).toList(),
-      _BulkAction.enable =>
-        selectedSubs.where((s) => s.isDisabled).toList(),
+      _BulkAction.disable => selectedSubs.where((s) => !s.isDisabled).toList(),
+      _BulkAction.enable => selectedSubs.where((s) => s.isDisabled).toList(),
       _BulkAction.delete => selectedSubs,
     };
     final ids = eligible.map((s) => s.idx).whereType<String>().toList();
@@ -870,15 +802,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     var ok = 0, fail = 0;
     for (final id in ids) {
       final success = await switch (action) {
-        _BulkAction.disable =>
-          SubscribersApi.toggle(id, enable: false),
+        _BulkAction.disable => SubscribersApi.toggle(id, enable: false),
         _BulkAction.enable => SubscribersApi.toggle(id, enable: true),
         // delete now returns a structured result so we map to bool
         // before tallying. The error message is already surfaced via
         // the per-row tracking in the single-delete confirm flow;
         // bulk just counts ok/fail and shows a summary snackbar.
-        _BulkAction.delete =>
-          SubscribersApi.delete(id).then((r) => r.ok),
+        _BulkAction.delete => SubscribersApi.delete(id).then((r) => r.ok),
       };
       success ? ok++ : fail++;
     }
@@ -892,7 +822,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       context,
       'subscribers.done_count'.tr(namedArgs: {
         'ok': '$ok',
-        'fail': fail > 0 ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}' : '',
+        'fail': fail > 0
+            ? ' — ${'subscribers.failed_count'.tr(namedArgs: {'n': '$fail'})}'
+            : '',
       }),
       isError: fail != 0,
     );
@@ -902,10 +834,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final res = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('subscribers.confirm_bulk_action'.tr(namedArgs: {'label': action.label, 'count': '$count'})),
+        title: Text('subscribers.confirm_bulk_action'
+            .tr(namedArgs: {'label': action.label, 'count': '$count'})),
         content: Text(action == _BulkAction.delete
-            ? 'subscribers.confirm_bulk_delete'.tr(namedArgs: {'count': '$count'})
-            : 'subscribers.confirm_bulk_generic'.tr(namedArgs: {'label': action.label, 'count': '$count'})),
+            ? 'subscribers.confirm_bulk_delete'
+                .tr(namedArgs: {'count': '$count'})
+            : 'subscribers.confirm_bulk_generic'
+                .tr(namedArgs: {'label': action.label, 'count': '$count'})),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1027,8 +962,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
             // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
             // _filteredAll الي بنفسه محكوم بـ_managerScoped.
-            if (_filter == SubscriberFilter.debtors &&
-                !_selectionMode)
+            if (_filter == SubscriberFilter.debtors && !_selectionMode)
               _DebtSummaryCard(subscribers: _filteredAll),
             // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
             // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
@@ -1048,67 +982,18 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'subscribers.probing_devices'.tr(namedArgs: {'done': '$_probeDone', 'total': '$_probeTotal'}),
+                      'subscribers.probing_devices'.tr(namedArgs: {
+                        'done': '$_probeDone',
+                        'total': '$_probeTotal'
+                      }),
                       style: AppType.muted().copyWith(fontSize: 10.5),
                     ),
                   ],
                 ),
               ),
-            // مطلب 2026-06-11: شريط ترتيب حسب معلومات الجهاز —
-            // مثل v1 (subscribers_screen.dart:1268). 4 chips: RX
-            // (ONT) / إشارة + CCQ + LAN (UBNT). كل chip ثلاثي
-            // الحالة: off → desc → asc → off. مشتركون بلا snapshot
-            // يسقطون لأسفل في أي اتجاه.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 0),
-              child: SizedBox(
-                height: 32,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    // 2026-08-29: شريحة «فحص الأجهزة» انتقلت إلى ترويسة
-                    // القائمة بجانب الفرز والتصفية — هذا الشريط للفرز فقط.
-                    _DeviceSortChip(
-                      metric: 'rx',
-                      label: 'RX',
-                      icon: LucideIcons.signalHigh,
-                      current: _deviceSort,
-                      onTap: () => _toggleDeviceSort('rx'),
-                    ),
-                    const SizedBox(width: 6),
-                    _DeviceSortChip(
-                      metric: 'sig',
-                      label: 'subscribers.signal'.tr(),
-                      icon: LucideIcons.signal,
-                      current: _deviceSort,
-                      onTap: () => _toggleDeviceSort('sig'),
-                    ),
-                    const SizedBox(width: 6),
-                    _DeviceSortChip(
-                      metric: 'ccq',
-                      label: 'CCQ',
-                      icon: LucideIcons.gauge,
-                      current: _deviceSort,
-                      onTap: () => _toggleDeviceSort('ccq'),
-                    ),
-                    const SizedBox(width: 6),
-                    _DeviceSortChip(
-                      metric: 'lan',
-                      label: 'LAN',
-                      icon: LucideIcons.cable,
-                      current: _deviceSort,
-                      onTap: () => _toggleDeviceSort('lan'),
-                    ),
-                    if (_deviceSort != null) ...[
-                      const SizedBox(width: 6),
-                      _ClearSortChip(
-                          onTap: () => setState(() => _deviceSort = null)),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: Sp.sm),
+            // 2026-08-29: شريط شرائح فرز الأجهزة (RX · إشارة · CCQ ·
+            // LAN) حُذف بطلب المستخدم — شيت «ترتيب القائمة» يغطّي
+            // الحاجة، والشريط كان يزاحم كلّ نتيجة بصفّ إضافي.
             // Stats bar — keep the row tight; the page-size picker is a
             // plain text link.
             Padding(
@@ -1124,11 +1009,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                   _PageSizePicker(
                     current: _pageSize,
                     options: _pageSizeOptions,
-                    onChange: (s) =>
-                        setState(() {
-                          _pageSize = s;
-                          _page = 0;
-                        }),
+                    onChange: (s) => setState(() {
+                      _pageSize = s;
+                      _page = 0;
+                    }),
                   ),
                 ],
               ),
@@ -1139,8 +1023,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 onRefresh: _refresh,
                 child: _loading
                     ? Center(
-                        child: CircularProgressIndicator(
-                            color: AppColors.brand))
+                        child:
+                            CircularProgressIndicator(color: AppColors.brand))
                     : page.isEmpty
                         ? _EmptyState(filter: _filter, query: _query)
                         : ListView.separated(
@@ -1159,8 +1043,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 const SizedBox(height: 6),
                             itemBuilder: (_, i) {
                               final s = page[i];
-                              final isSelected = s.idx != null &&
-                                  _selected.contains(s.idx);
+                              final isSelected =
+                                  s.idx != null && _selected.contains(s.idx);
                               return SubscriberCardV3(
                                 // بلا مفتاح ثابت يعيد Flutter استعمال
                                 // الـElement لمشترك آخر بعد كل موجة فحص
@@ -1228,8 +1112,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
               onlineCount: _onlineInSelection,
               onRenew: _openBulkActivate,
               onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
-              onDisconnect:
-                  _onlineInSelection > 0 ? _openBulkDisconnect : null,
+              onDisconnect: _onlineInSelection > 0 ? _openBulkDisconnect : null,
               onDisable: () => _bulk(_BulkAction.disable),
               onEnable: () => _bulk(_BulkAction.enable),
               onDelete: () => _bulk(_BulkAction.delete),
@@ -1237,7 +1120,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           : null,
     );
   }
-
 
   void _openDetail(Subscriber s) {
     Navigator.of(context).push(
@@ -1317,8 +1199,11 @@ class _ListHeader extends StatelessWidget {
                 ],
               ),
             ),
+            // رادار لا «تحديث»: الزرّ يفحص أجهزة المشتركين
+            // (RX/إشارة/CCQ/LAN) ولا يعيد تحميل القائمة — كان يُقرأ
+            // كـreload. طلب المستخدم 2026-08-29.
             _HeaderIconButton(
-              icon: Icons.refresh_rounded,
+              icon: Icons.radar_rounded,
               active: false,
               busy: probing,
               onTap: onScanDevices ?? () {},
@@ -1424,9 +1309,8 @@ class _HeaderIconButton extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(R.icon),
                 border: Border.all(
-                  color: active
-                      ? AppColors.brandSoftBorder
-                      : AppColors.borderSoft,
+                  color:
+                      active ? AppColors.brandSoftBorder : AppColors.borderSoft,
                 ),
               ),
               child: busy
@@ -1564,8 +1448,9 @@ class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
               children: [
                 Icon(Icons.tune_rounded, size: 18, color: AppColors.brand),
                 const SizedBox(width: Sp.sm),
-                Text('تصفية القائمة', style: AppType.cardTitle()
-                    .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text('تصفية القائمة',
+                    style: AppType.cardTitle()
+                        .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 InkWell(
                   onTap: () => setState(() => _picked = null),
@@ -1716,8 +1601,7 @@ class _PageSizePicker extends StatelessWidget {
               style: AppType.muted(color: AppColors.textLow)
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
           const SizedBox(width: 2),
-          Icon(LucideIcons.chevronDown,
-              size: 11, color: AppColors.textLow),
+          Icon(LucideIcons.chevronDown, size: 11, color: AppColors.textLow),
         ],
       ),
     );
@@ -1756,7 +1640,8 @@ class _Pager extends StatelessWidget {
           ),
           const SizedBox(width: Sp.md),
           Text(
-            'subscribers.page_of'.tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
+            'subscribers.page_of'
+                .tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
             style: AppType.label(color: AppColors.textHi).copyWith(
               fontSize: 12, // Card title tier — secondary nav text
               fontWeight: FontWeight.w700,
@@ -1829,19 +1714,23 @@ class _BulkActionBar extends StatelessWidget {
   });
   final int selectedCount;
   final int debtorCount;
+
   /// Selected rows currently enabled — these are the ones a tap on
   /// 'تعطيل' will actually affect. Shown as '(N)' next to the label
   /// so the admin sees how many will flip even when the selection
   /// mixes states (مطلب 2026-06-07).
   final int enabledCount;
   final int disabledCount;
+
   /// Rows currently online — the disconnect button only affects
   /// these. Hidden when zero so the bar doesn't show an empty action.
   final int onlineCount;
   final VoidCallback onRenew;
+
   /// null = no debtors in selection → button disabled. Non-null →
   /// opens the bulk pay-debt sheet against the debtor subset.
   final VoidCallback? onPayDebt;
+
   /// null = no online rows in selection → button hidden entirely
   /// (no greyed-out state — disconnect is a hot action and the row
   /// is otherwise reserved for the toggle/delete trio).
@@ -1855,8 +1744,8 @@ class _BulkActionBar extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     // مطلب 2026-06-12: كل زر في الـbulk bar مربوط بصلاحية. لو الموظف
     // ما يقدر يجدّد/يسدّد/يفعّل/يحذف الزر يختفي تماماً (مو disable).
-    final canRenew = Perms.hasAny(
-        const ['subscribers.activate', 'subscribers.extend']);
+    final canRenew =
+        Perms.hasAny(const ['subscribers.activate', 'subscribers.extend']);
     final canPayDebt = Perms.has('subscribers.pay_debt');
     final canToggle = Perms.has('subscribers.toggle');
     final canDelete = Perms.has('subscribers.delete');
@@ -2007,8 +1896,7 @@ class _PrimaryPill extends StatelessWidget {
           label,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
-          style:
-              const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
         ),
       ),
     );
@@ -2027,6 +1915,7 @@ class _SecondaryBtn extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+
   /// When false the button greys out — used by the bulk bar to signal
   /// that no rows in the current selection are eligible for this
   /// action (e.g. all rows already disabled → 'تعطيل' has nothing
@@ -2050,8 +1939,7 @@ class _SecondaryBtn extends StatelessWidget {
       icon: Icon(icon, size: 13),
       label: Text(label,
           overflow: TextOverflow.ellipsis,
-          style:
-              const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5)),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5)),
     );
   }
 }
@@ -2072,8 +1960,7 @@ class _EmptyState extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
-        Icon(LucideIcons.inbox,
-            size: 40, color: AppColors.textLow),
+        Icon(LucideIcons.inbox, size: 40, color: AppColors.textLow),
         const SizedBox(height: Sp.sm),
         Text(
           msg,
@@ -2082,114 +1969,6 @@ class _EmptyState extends StatelessWidget {
               .copyWith(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ],
-    );
-  }
-}
-
-/// Three-state chip for the device-sort bar above the subscriber
-/// list. Cycles off → desc → asc → off on tap. Active state shows
-/// the current direction arrow and a colored accent.
-class _DeviceSortChip extends StatelessWidget {
-  const _DeviceSortChip({
-    required this.metric,
-    required this.label,
-    required this.icon,
-    required this.current,
-    required this.onTap,
-  });
-  final String metric;
-  final String label;
-  final IconData icon;
-  final String? current;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final isActive = current != null && current!.startsWith('${metric}_');
-    final isAsc = current == '${metric}_asc';
-    final accent = const Color(0xFF7C3AED);
-    final fg = isActive ? accent : AppColors.textMid;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive
-                ? accent.withValues(alpha: 0.1)
-                : AppColors.surfaceInput,
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(
-              color: isActive
-                  ? accent.withValues(alpha: 0.4)
-                  : AppColors.border,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 12, color: fg),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: AppType.label(color: fg).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              if (isActive) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  isAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown,
-                  size: 11,
-                  color: accent,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ClearSortChip extends StatelessWidget {
-  const _ClearSortChip({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.error.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              Icon(LucideIcons.x, size: 12, color: AppColors.error),
-              const SizedBox(width: 3),
-              Text(
-                'subscribers.stop'.tr(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.error,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

@@ -216,8 +216,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.lg, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 14),
           decoration: BoxDecoration(
             color: AppColors.surfaceSunken,
             borderRadius: BorderRadius.circular(R.lg),
@@ -241,8 +240,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
                     Text('جارٍ فحص الجهاز تلقائياً…',
                         style: AppType.rowValue()),
                     const SizedBox(height: Sp.xxs),
-                    Text('يتم تجربة Ubiquiti ثم ONT',
-                        style: AppType.muted()),
+                    Text('يتم تجربة Ubiquiti ثم ONT', style: AppType.muted()),
                   ],
                 ),
               ),
@@ -270,8 +268,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
 
   Widget _unreachable() {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.lg, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(R.lg),
@@ -333,8 +330,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
                 icon: LucideIcons.zap,
                 label: 'الفولتية',
                 value: '${o.voltage} mV',
-                color:
-                    o.voltageOk ? AppColors.textHi : AppColors.warningFill,
+                color: o.voltageOk ? AppColors.textHi : AppColors.warningFill,
               ),
             ),
             const SizedBox(width: Sp.sm),
@@ -445,8 +441,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
     final unplugged = !p.plugged;
     final speed = p.displaySpeed;
     final Color fg = unplugged ? AppColors.textLow : _speedColor(speed);
-    final Color bg =
-        unplugged ? AppColors.bg : AppColors.brandSoftBg;
+    final Color bg = unplugged ? AppColors.bg : AppColors.brandSoftBg;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: Sp.xs),
       decoration: BoxDecoration(

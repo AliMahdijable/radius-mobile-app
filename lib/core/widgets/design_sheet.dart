@@ -775,3 +775,254 @@ class SheetBrandResultCard extends StatelessWidget {
     );
   }
 }
+
+/// صفّ داخل `SheetRowsGroup`.
+class SheetRowData {
+  const SheetRowData({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.strong = false,
+  });
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  /// القيمة بوزن 700 بدل 600 — «دين حالي» في شيت التجديد.
+  final bool strong;
+}
+
+/// مجموعة صفوف بيضاء r16 تفصلها خطوط شعريّة — «دين حالي · رصيد المدير ·
+/// النقاط». المخطّط يجمعها في حاوية واحدة لا في كروت منفصلة.
+class SheetRowsGroup extends StatelessWidget {
+  const SheetRowsGroup({super.key, required this.rows});
+  final List<SheetRowData> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: AppColors.divider),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(rows[i].label,
+                        style: AppType.body(color: AppColors.textLabel),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  Text(
+                    rows[i].value,
+                    textDirection: TextDirection.ltr,
+                    style: AppType.body(
+                      color: rows[i].valueColor ?? AppColors.textHi,
+                    ).copyWith(
+                      fontWeight:
+                          rows[i].strong ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// بلاطات اختيار عموديّة (أيقونة فوق تسمية) — «نقدي · دين · جزئي».
+/// المختارة **مملوءة بالبراند** لا ملوّنة بلون خاصّ بها؛ المخطّط لا
+/// يعطي كلّ طريقة دفع لوناً، والألوان القديمة (بنفسجي/أحمر) كانت
+/// تُقرأ كحالة لا كاختيار.
+class SheetChoiceTiles extends StatelessWidget {
+  const SheetChoiceTiles({
+    super.key,
+    required this.labels,
+    required this.icons,
+    required this.selectedIndex,
+    required this.onSelect,
+    this.enabled = true,
+  });
+
+  final List<String> labels;
+  final List<IconData> icons;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final children = <Widget>[];
+    for (var i = 0; i < labels.length; i++) {
+      if (i > 0) children.add(const SizedBox(width: Sp.sm));
+      final on = i == selectedIndex;
+      children.add(Expanded(
+        child: Material(
+          color: on ? AppColors.brand : AppColors.surface,
+          borderRadius: BorderRadius.circular(15),
+          child: InkWell(
+            onTap: enabled ? () => onSelect(i) : null,
+            borderRadius: BorderRadius.circular(15),
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: on ? AppColors.brand : AppColors.border,
+                  width: on ? BW.selected : BW.normal,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(
+                  vertical: Sp.md, horizontal: Sp.x6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icons[i],
+                      size: 20,
+                      color: on ? AppColors.onBrand : AppColors.textLabel),
+                  const SizedBox(height: Sp.x6),
+                  Text(
+                    labels[i],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body(
+                      color: on ? AppColors.onBrand : AppColors.textBody,
+                    ).copyWith(
+                        fontWeight: on ? FontWeight.w600 : FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ));
+    }
+    // نفس فخّ 2026-08-29: صفّ داخل ListView + stretch = ارتفاع لا نهائي.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+  }
+}
+
+/// بطاقة الباقة الداكنة في شيت التجديد — اسم الباقة وحبّة المدّة،
+/// وتحت خطّ شعري «المبلغ المطلوب» بقيمة 22/w700 (والسعر الأصلي
+/// مشطوباً بجانبها عند وجود خصم).
+class SheetPlanCard extends StatelessWidget {
+  const SheetPlanCard({
+    super.key,
+    required this.planLabel,
+    required this.planName,
+    required this.durationLabel,
+    required this.amountLabel,
+    required this.amount,
+    this.strikethrough,
+  });
+
+  final String planLabel;
+  final String planName;
+  final String? durationLabel;
+  final String amountLabel;
+  final String amount;
+  final String? strikethrough;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: Sp.lg),
+      decoration: BoxDecoration(
+        color: AppColors.brand,
+        borderRadius: BorderRadius.circular(R.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(planLabel,
+                        style: AppType.muted(color: AppColors.onBrandSecondary)
+                            .copyWith(fontSize: 11.5)),
+                    const SizedBox(height: Sp.xxs),
+                    Text(
+                      planName,
+                      textDirection: TextDirection.ltr,
+                      style: AppType.cardTitle(color: AppColors.onBrand)
+                          .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if ((durationLabel ?? '').isNotEmpty) ...[
+                const SizedBox(width: Sp.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: Sp.md, vertical: Sp.x6),
+                  decoration: BoxDecoration(
+                    color: AppColors.onBrandFill2,
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                  child: Text(
+                    durationLabel!,
+                    style: AppType.bodyStrong(color: AppColors.onBrand)
+                        .copyWith(fontSize: 12),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(height: 1, color: AppColors.onBrandFill2),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: Text(amountLabel,
+                    style: AppType.body(color: AppColors.onBrandSecondary)),
+              ),
+              if ((strikethrough ?? '').isNotEmpty) ...[
+                Text(
+                  strikethrough!,
+                  textDirection: TextDirection.ltr,
+                  style: AppType.body(color: AppColors.onBrandTertiary)
+                      .copyWith(decoration: TextDecoration.lineThrough),
+                ),
+                const SizedBox(width: 9),
+              ],
+              Text(
+                amount,
+                textDirection: TextDirection.ltr,
+                style: AppType.amount(color: AppColors.onBrand)
+                    .copyWith(fontSize: 22),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

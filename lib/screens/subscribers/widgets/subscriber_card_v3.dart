@@ -254,8 +254,8 @@ class SubscriberCardV3 extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               '${formatIQD(price)} د.ع',
-              style: AppType.body(color: AppColors.textMid)
-                  .copyWith(fontSize: 12),
+              style:
+                  AppType.body(color: AppColors.textMid).copyWith(fontSize: 12),
             ),
           ],
           const Spacer(),
@@ -275,8 +275,8 @@ class SubscriberCardV3 extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           'ينتهي',
-          style: AppType.body(color: AppColors.textLabel)
-              .copyWith(fontSize: 12),
+          style:
+              AppType.body(color: AppColors.textLabel).copyWith(fontSize: 12),
         ),
         const SizedBox(width: 6),
         Flexible(
@@ -414,8 +414,8 @@ class SubscriberCardV3 extends StatelessWidget {
           AppColors.dangerSoftBg);
     }
     if (sub.isOnline) {
-      return _StatusVisual('متصل', Icons.wifi_rounded, AppColors.success,
-          AppColors.brandSoftBg);
+      return _StatusVisual(
+          'متصل', Icons.wifi_rounded, AppColors.success, AppColors.brandSoftBg);
     }
     return _StatusVisual('غير متصل', Icons.wifi_off_rounded,
         AppColors.textLabel, AppColors.surfaceDisabled);
@@ -454,15 +454,15 @@ class SubscriberCardV3 extends StatelessWidget {
     }
     final word = days == 1 ? 'يوم متبقي' : 'أيام متبقية';
     if (days <= 1) {
-      return _DaysVisual('$days', word, AppColors.error,
-          AppColors.dangerSoftBg, AppColors.dangerSoftBorder);
+      return _DaysVisual('$days', word, AppColors.error, AppColors.dangerSoftBg,
+          AppColors.dangerSoftBorder);
     }
     if (days <= 7) {
       return _DaysVisual('$days', word, AppColors.warning,
           AppColors.warningSoftBg, AppColors.warningSoftBorder);
     }
-    return _DaysVisual('$days', word, AppColors.success,
-        AppColors.brandSoftBg, AppColors.brandSoftBorder);
+    return _DaysVisual('$days', word, AppColors.success, AppColors.brandSoftBg,
+        AppColors.brandSoftBorder);
   }
 
   /// نصّ الجلسة. متّصل ⇒ «متصل منذ …» أخضر بأيقونة ساعة؛ غير متّصل ⇒
@@ -556,8 +556,8 @@ class _NetworkMetrics extends StatelessWidget {
         if (snap.kind == DeviceKind.ubiquiti && snap.ubnt != null) {
           final u = snap.ubnt!;
           if (u.signalDbm != null) {
-            items.add(_metric(Icons.network_wifi_rounded,
-                '${u.signalDbm} dBm', _health(u.signalHealth)));
+            items.add(_metric(Icons.network_wifi_rounded, '${u.signalDbm} dBm',
+                _health(u.signalHealth)));
           }
           if (u.lanSpeedShort != null) {
             items.add(_metric(

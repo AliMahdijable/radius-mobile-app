@@ -35,21 +35,25 @@ class SubscriberCardV2 extends StatefulWidget {
   final Subscriber sub;
   final bool selected;
   final Map<String, dynamic>? lastPayment;
+
   /// Surfaces IP / session / DL / UL / device on the card. v1 only
   /// shows this row on the 'متصل' filter — the general list stays
   /// scannable without per-row network noise.
   final bool showLiveSession;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+
   /// مطلب 2026-06-11: زرّا الاستهلاك والفصل أسفل كل صف في تاب
   /// "متصل". null = الزر يختفي (مستخدم في كل التابات الأخرى).
   final VoidCallback? onShowConsumption;
   final VoidCallback? onDisconnect;
+
   /// طلب المستخدم 2026-07-13: زر "تذكير دين" جنب زرَّي الاستهلاك/فصل
   /// لكل مشترك عليه دين. null = مخفي. المسار عبر
   /// /api/v2/subscribers/:idx/send-debt-reminder (نفس زر الديون في شاشة
   /// التفاصيل، ونفس مسار v1 web).
   final VoidCallback? onSendDebtReminder;
+
   /// مطلب 2026-06-11: زر تكويل عام في الـtoolbar فوق القائمة يطبّق
   /// حالة "مكوّل" على كل البطاقات معاً. didUpdateWidget يعيد سنكروز
   /// _expanded عند تغيّر القيمة فالكل ينطبق فوراً. الـchevron الفردي
@@ -120,9 +124,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
               // border 0.5dp بدل 1dp — hairline يوفّر ~2dp بصرياً + يقلّل
               // العبء البصري لمّا في 6+ كارت على الشاشة.
               border: Border.all(
-                color: selected
-                    ? AppColors.brand
-                    : AppColors.border,
+                color: selected ? AppColors.brand : AppColors.border,
                 width: selected ? 1.5 : 0.5,
               ),
               // shadow أخف — كان blur 8 offset 2؛ الآن blur 3 offset 1
@@ -213,8 +215,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                 style: AppType.label(color: AppColors.textHi).copyWith(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w800,
-                  decoration:
-                      disabled ? TextDecoration.lineThrough : null,
+                  decoration: disabled ? TextDecoration.lineThrough : null,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -276,19 +277,18 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                   if (sub.hasLocation) ...[
                     const SizedBox(width: 6),
                     InkResponse(
-                      onTap: () =>
-                          showLocationChooserSheet(context, sub: sub),
+                      onTap: () => showLocationChooserSheet(context, sub: sub),
                       radius: 14,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 4, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF14B8A6)
-                              .withValues(alpha: 0.12),
+                          color:
+                              const Color(0xFF14B8A6).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: const Color(0xFF14B8A6)
-                                .withValues(alpha: 0.4),
+                            color:
+                                const Color(0xFF14B8A6).withValues(alpha: 0.4),
                             width: 0.5,
                           ),
                         ),
@@ -309,9 +309,8 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
                     Flexible(
                       child: Text(
                         sub.username,
-                        style: AppType.muted(color: AppColors.textLow)
-                            .copyWith(
-                                fontSize: 11, fontWeight: FontWeight.w500),
+                        style: AppType.muted(color: AppColors.textLow).copyWith(
+                            fontSize: 11, fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -381,7 +380,8 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
         const SizedBox(height: 3),
         _MetaRow(
           icon: LucideIcons.calendar,
-          text: 'subscribers.expires_at'.tr(namedArgs: {'date': _formatExpiration(sub.expiration)}),
+          text: 'subscribers.expires_at'
+              .tr(namedArgs: {'date': _formatExpiration(sub.expiration)}),
           color: AppColors.textLow,
         ),
       ],
@@ -398,9 +398,7 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
   // Decide if there's any content under the divider — the divider
   // shouldn't draw if we're not going to render anything.
   bool get _hasFinance =>
-      _hasDeviceInfo ||
-      sub.balanceAmount != 0 ||
-      lastPayment != null;
+      _hasDeviceInfo || sub.balanceAmount != 0 || lastPayment != null;
 
   // ───────── FINANCE: debt/credit chip + last-payment line ─────────
   Widget _buildFinance() {
@@ -446,7 +444,9 @@ class _SubscriberCardV2State extends State<SubscriberCardV2> {
         // Actions row — الاستهلاك + فصل (للمتصلين) + تذكير الدين (لكل
         // مدين). طلب 2026-07-13: زر تذكير الدين يظهر جنب زرَّي المتصل،
         // وإذا المشترك offline+مدين يظهر بمفرده. كل زر مستقل بالـcallback.
-        if (onShowConsumption != null || onDisconnect != null || onSendDebtReminder != null) ...[
+        if (onShowConsumption != null ||
+            onDisconnect != null ||
+            onSendDebtReminder != null) ...[
           const SizedBox(height: 4),
           Row(
             children: [
@@ -577,6 +577,7 @@ class _ExpiryBadge extends StatelessWidget {
     required this.disabled,
   });
   final int? remaining;
+
   /// Parsed expiration timestamp. Used when [remaining]==0 so we can
   /// switch the badge from a useless 'اليوم'/'0 يوم' to the actual
   /// hours/minutes left — admins want to know if the sub expires in
@@ -699,11 +700,22 @@ class _ExpiryBadge extends StatelessWidget {
       // ولا نريد رقم كبير يكسر التصميم.
       final past = now.difference(exp);
       final pd = past.inDays;
-      if (pd >= 1) return ('subscribers.ago_prefix'.tr(), '$pd ${'subscribers.day_unit'.tr()}');
+      if (pd >= 1)
+        return (
+          'subscribers.ago_prefix'.tr(),
+          '$pd ${'subscribers.day_unit'.tr()}'
+        );
       final ph = past.inHours;
-      if (ph >= 1) return ('subscribers.ago_prefix'.tr(), '$ph ${'subscribers.hour_unit'.tr()}');
+      if (ph >= 1)
+        return (
+          'subscribers.ago_prefix'.tr(),
+          '$ph ${'subscribers.hour_unit'.tr()}'
+        );
       final pm = past.inMinutes.clamp(1, 59);
-      return ('subscribers.ago_prefix'.tr(), '$pm ${'subscribers.minute_unit'.tr()}');
+      return (
+        'subscribers.ago_prefix'.tr(),
+        '$pm ${'subscribers.minute_unit'.tr()}'
+      );
     }
     final h = diff.inHours;
     final mLeft = diff.inMinutes - h * 60;
@@ -838,7 +850,9 @@ class _BalanceChip extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            isDebt ? 'subscribers.debt_short'.tr() : 'subscribers.balance_short'.tr(),
+            isDebt
+                ? 'subscribers.debt_short'.tr()
+                : 'subscribers.balance_short'.tr(),
             style: AppType.muted(color: color).copyWith(
               fontSize: 10, // Tiny label tier
               fontWeight: FontWeight.w700,
@@ -896,8 +910,7 @@ class _LiveSessionRow extends StatelessWidget {
                 Text(
                   ip,
                   style: AppType.label(color: const Color(0xFF26A69A))
-                      .copyWith(
-                          fontSize: 11, fontWeight: FontWeight.w800),
+                      .copyWith(fontSize: 11, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(width: 2),
                 const Icon(LucideIcons.externalLink,
@@ -909,8 +922,7 @@ class _LiveSessionRow extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.timer,
-                  size: 12, color: AppColors.textMid),
+              Icon(LucideIcons.timer, size: 12, color: AppColors.textMid),
               const SizedBox(width: 3),
               Text(
                 _formatDuration(session),
@@ -956,8 +968,8 @@ class _LiveSessionRow extends StatelessWidget {
             device.toLowerCase() != 'unknown')
           Text(
             device,
-            style: AppType.muted(color: AppColors.textLow)
-                .copyWith(fontSize: 10),
+            style:
+                AppType.muted(color: AppColors.textLow).copyWith(fontSize: 10),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -994,7 +1006,8 @@ class _LastPaymentLine extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final amount = _readAmount(payment);
     final createdRaw = payment['created_at']?.toString();
-    final action = (payment['action_type'] ?? payment['action'] ?? '').toString();
+    final action =
+        (payment['action_type'] ?? payment['action'] ?? '').toString();
     final paymentType = payment['payment_type']?.toString();
     if (createdRaw == null || createdRaw.isEmpty) {
       return const SizedBox.shrink();
@@ -1007,8 +1020,7 @@ class _LastPaymentLine extends StatelessWidget {
     final actionLabel = _humanAction(action, paymentType: paymentType);
     return Row(
       children: [
-        Icon(LucideIcons.banknote,
-            size: 12, color: AppColors.brand),
+        Icon(LucideIcons.banknote, size: 12, color: AppColors.brand),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
@@ -1032,8 +1044,11 @@ class _LastPaymentLine extends StatelessWidget {
 
   static String _humanAgo(Duration d) {
     if (d.inMinutes < 1) return 'subscribers.now'.tr();
-    if (d.inHours < 1) return 'subscribers.ago_minutes_short'.tr(namedArgs: {'n': '${d.inMinutes}'});
-    if (d.inDays < 1) return 'subscribers.ago_hours_short'.tr(namedArgs: {'n': '${d.inHours}'});
+    if (d.inHours < 1)
+      return 'subscribers.ago_minutes_short'
+          .tr(namedArgs: {'n': '${d.inMinutes}'});
+    if (d.inDays < 1)
+      return 'subscribers.ago_hours_short'.tr(namedArgs: {'n': '${d.inHours}'});
     if (d.inDays == 1) return 'subscribers.ago_one_day'.tr();
     return 'subscribers.ago_days_short'.tr(namedArgs: {'n': '${d.inDays}'});
   }

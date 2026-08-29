@@ -21,21 +21,18 @@ class PrintReceiptCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: value
-          ? AppColors.brand.withOpacity(0.08)
-          : AppColors.surface,
+      color: value ? AppColors.brand.withOpacity(0.08) : AppColors.surface,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => onChanged(!value),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: Sp.sm),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
           decoration: BoxDecoration(
             border: Border.all(
-              color: value
-                  ? AppColors.brand.withOpacity(0.35)
-                  : AppColors.border,
+              color:
+                  value ? AppColors.brand.withOpacity(0.35) : AppColors.border,
               width: value ? 1.2 : 1,
             ),
             borderRadius: BorderRadius.circular(R.sm),
@@ -51,11 +48,9 @@ class PrintReceiptCheckbox extends StatelessWidget {
               Expanded(
                 child: Text(
                   'sheets.print_receipt_after'.tr(),
-                  style: AppType.subtitle(color: AppColors.textHi)
-                      .copyWith(
+                  style: AppType.subtitle(color: AppColors.textHi).copyWith(
                     fontSize: 12.5,
-                    fontWeight:
-                        value ? FontWeight.w800 : FontWeight.w600,
+                    fontWeight: value ? FontWeight.w800 : FontWeight.w600,
                   ),
                 ),
               ),
@@ -68,8 +63,7 @@ class PrintReceiptCheckbox extends StatelessWidget {
                   onChanged: (v) => onChanged(v ?? false),
                   activeColor: AppColors.brand,
                   visualDensity: VisualDensity.compact,
-                  materialTapTargetSize:
-                      MaterialTapTargetSize.shrinkWrap,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
             ],

@@ -1,4 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -221,202 +223,140 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     );
   }
 
+  /// جسم شيت التمديد بلغة المخطّط (2026-08-29): صفوف الحالة → قائمة
+  /// الباقات كصفوف اختيار في حاوية واحدة → بطاقة الباقة المختارة
+  /// الداكنة → طريقة الدفع كبلاطتين.
   List<Widget> _buildBody() {
     if (_loading) {
       return [
         Padding(
-          padding: EdgeInsets.symmetric(vertical: Sp.huge),
+          padding: const EdgeInsets.symmetric(vertical: Sp.mega),
           child: Center(
-            child: CircularProgressIndicator(color: AppColors.brand),
+            child: CircularProgressIndicator(
+                color: AppColors.brandAccent, strokeWidth: 2.5),
           ),
         ),
       ];
     }
     if (_loadError != null) {
       return [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: Sp.huge),
-          child: Column(
-            children: [
-              Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
-              const SizedBox(height: Sp.sm),
-              Text(_loadError!, style: AppType.label(color: AppColors.error)),
-              const SizedBox(height: Sp.sm),
-              TextButton(onPressed: _load, child: const Text('إعادة المحاولة')),
-            ],
-          ),
-        ),
+        _stateBlock(LucideIcons.triangleAlert, _loadError!,
+            color: AppColors.error, onRetry: _load)
       ];
     }
     final pkgs = (_data?['packages'] as List?) ?? const [];
     if (pkgs.isEmpty) {
       return [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: Sp.huge),
+        _stateBlock(LucideIcons.inbox, 'لا توجد باقات متاحة للتمديد'),
+      ];
+    }
+    final cur = 'common.currency'.tr();
+    final list =
+        pkgs.cast<Map>().map((e) => e.cast<String, dynamic>()).toList();
+    return [
+      SheetRowsGroup(
+        rows: [
+          SheetRowData(
+            label: 'الباقة الحالية',
+            value: _currentProfileName.isEmpty ? '—' : _currentProfileName,
+          ),
+          SheetRowData(
+            label: 'dashboard.manager_balance'.tr(),
+            value: '${formatIQD(_managerBalance.round())} $cur',
+          ),
+          if (_pointsBalance > 0)
+            SheetRowData(
+              label: 'sheets.points'.tr(),
+              value: formatIQD(_pointsBalance.round()),
+              valueColor: AppColors.warningFill,
+            ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      SheetSection(
+        label: 'اختر باقة التمديد',
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Column(
             children: [
-              Icon(LucideIcons.inbox, color: AppColors.textLow, size: 32),
-              const SizedBox(height: Sp.sm),
-              Text('لا توجد باقات متاحة للتمديد',
-                  style: AppType.label(color: AppColors.textMid)),
+              for (var i = 0; i < list.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: AppColors.divider),
+                _PackageRow(
+                  pkg: list[i],
+                  selected: _selectedPkg == list[i],
+                  onTap: () => setState(() => _selectedPkg = list[i]),
+                ),
+              ],
             ],
           ),
         ),
-      ];
-    }
-    return [
-      _MetaCard(
-        currentProfileName: _currentProfileName,
-        managerBalance: _managerBalance,
-        pointsBalance: _pointsBalance,
-      ),
-      const SizedBox(height: Sp.sm),
-      _SectionTitle('اختر باقة التمديد'),
-      const SizedBox(height: Sp.xs),
-      _PackagePicker(
-        packages:
-            pkgs.cast<Map>().map((e) => e.cast<String, dynamic>()).toList(),
-        selected: _selectedPkg,
-        onSelect: (p) => setState(() => _selectedPkg = p),
       ),
       if (_selectedPkg != null) ...[
-        const SizedBox(height: Sp.sm),
-        _SelectedSummary(
-          price: _selectedPrice,
-          points: _selectedPoints,
-          duration: _selectedDuration,
+        const SizedBox(height: 14),
+        SheetPlanCard(
+          planLabel: 'الباقة المختارة',
+          planName: (_selectedPkg!['name'] ?? '—').toString(),
+          durationLabel:
+              (_selectedDuration ?? '').isEmpty ? null : _selectedDuration,
+          amountLabel: 'sheets.amount_due'.tr(),
+          amount: _method == _Method.points
+              ? '${formatIQD(_selectedPoints.round())} نقطة'
+              : '${formatIQD(_selectedPrice.round())} $cur',
         ),
-        const SizedBox(height: Sp.md),
-        _SectionTitle('طريقة الدفع'),
-        const SizedBox(height: Sp.xs),
-        _MethodPicker(
-          current: _method,
-          pointsAvailable: _selectedPoints > 0,
-          onSelect: (m) => setState(() => _method = m),
+        const SizedBox(height: 14),
+        SheetSection(
+          label: 'sheets.payment_method'.tr(),
+          gap: Sp.sm,
+          child: SheetChoiceTiles(
+            labels: [
+              'الرصيد',
+              _selectedPoints > 0
+                  ? 'النقاط (${formatIQD(_selectedPoints.round())})'
+                  : 'النقاط',
+            ],
+            icons: const [LucideIcons.wallet, LucideIcons.star],
+            selectedIndex: _method == _Method.balance ? 0 : 1,
+            enabled: !_submitting,
+            onSelect: (i) {
+              // الدفع بالنقاط متاح فقط حين تتطلّب الباقة نقاطاً.
+              if (i == 1 && _selectedPoints <= 0) return;
+              setState(
+                  () => _method = i == 0 ? _Method.balance : _Method.points);
+            },
+          ),
         ),
       ],
     ];
   }
-}
 
-class _MetaCard extends StatelessWidget {
-  const _MetaCard({
-    required this.currentProfileName,
-    required this.managerBalance,
-    required this.pointsBalance,
-  });
-  final String currentProfileName;
-  final num managerBalance;
-  final num pointsBalance;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+  Widget _stateBlock(IconData icon, String text,
+      {Color? color, VoidCallback? onRetry}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.huge),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _row(LucideIcons.package, 'الباقة الحالية',
-              currentProfileName.isEmpty ? '—' : currentProfileName, null),
-          _row(
-            LucideIcons.wallet,
-            'رصيد المدير',
-            '${formatIQD(managerBalance.round())} د.ع',
-            AppColors.textHi,
-          ),
-          if (pointsBalance > 0)
-            _row(
-              LucideIcons.star,
-              'النقاط المتاحة',
-              '${formatIQD(pointsBalance.round())}',
-              const Color(0xFFCD8B00),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(IconData icon, String label, String value, Color? c) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.textMid, size: 13),
-          const SizedBox(width: 6),
-          Text(label,
-              style: AppType.muted(color: AppColors.textMid)
-                  .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              value,
-              style: AppType.label(color: c ?? AppColors.textHi)
-                  .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-            ),
-          ),
+          Icon(icon, color: color ?? AppColors.textHint, size: 32),
+          const SizedBox(height: Sp.md),
+          Text(text,
+              style: AppType.rowValue(color: color ?? AppColors.textMid),
+              textAlign: TextAlign.center),
+          if (onRetry != null) ...[
+            const SizedBox(height: Sp.sm),
+            TextButton(onPressed: onRetry, child: Text('common.retry'.tr())),
+          ],
         ],
       ),
     );
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Text(text,
-          style: AppType.label(color: AppColors.textHi)
-              .copyWith(fontSize: 12, fontWeight: FontWeight.w800)),
-    );
-  }
-}
-
-class _PackagePicker extends StatelessWidget {
-  const _PackagePicker({
-    required this.packages,
-    required this.selected,
-    required this.onSelect,
-  });
-  final List<Map<String, dynamic>> packages;
-  final Map<String, dynamic>? selected;
-  final ValueChanged<Map<String, dynamic>> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Column(
-      children: [
-        for (final p in packages)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: _PackageRow(
-              pkg: p,
-              selected: selected != null && selected!['id'] == p['id'],
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onSelect(p);
-              },
-            ),
-          ),
-      ],
-    );
-  }
-}
-
+/// صفّ باقة داخل حاوية الاختيار — دائرة اختيار + الاسم + حبّة النقاط
+/// + السعر. الأزرق `#3B82F6` القديم استُبدل بالبراند.
 class _PackageRow extends StatelessWidget {
   const _PackageRow({
     required this.pkg,
@@ -437,270 +377,55 @@ class _PackageRow extends StatelessWidget {
     final points = pkg['reward_points_required'] is num
         ? (pkg['reward_points_required'] as num).toInt()
         : int.tryParse(pkg['reward_points_required']?.toString() ?? '') ?? 0;
-    return Material(
-      color: selected
-          ? const Color(0xFF3B82F6).withValues(alpha: 0.08)
-          : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.sm),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.sm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(
-              color: selected ? const Color(0xFF3B82F6) : AppColors.border,
-              width: selected ? 1.5 : 1,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Row(
+          children: [
+            Icon(
+              selected ? LucideIcons.circleCheck : LucideIcons.circle,
+              color: selected ? AppColors.brand : AppColors.textHint,
+              size: 18,
             ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                selected ? LucideIcons.circleCheck : LucideIcons.circle,
-                color: selected ? const Color(0xFF3B82F6) : AppColors.textLow,
-                size: 16,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                name,
+                style: AppType.input(
+                  color: selected ? AppColors.textHi : AppColors.textBody,
+                ).copyWith(
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  name,
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (points > 0) ...[
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFCD8B00).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.star,
-                          color: Color(0xFFCD8B00), size: 10),
-                      const SizedBox(width: 3),
-                      Text(
-                        formatIQD(points),
-                        style: AppType.muted(color: const Color(0xFFCD8B00))
-                            .copyWith(
-                                fontSize: 10, fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                '${formatIQD(price)} د.ع',
-                style: AppType.label(color: AppColors.brand)
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SelectedSummary extends StatelessWidget {
-  const _SelectedSummary({
-    required this.price,
-    required this.points,
-    required this.duration,
-  });
-  final num price;
-  final num points;
-  final String? duration;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF3B82F6).withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(
-          color: const Color(0xFF3B82F6).withValues(alpha: 0.18),
-        ),
-      ),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _Chip(
-            icon: LucideIcons.tag,
-            text: '${formatIQD(price.round())} د.ع',
-            color: AppColors.brand,
-          ),
-          if (points > 0)
-            _Chip(
-              icon: LucideIcons.star,
-              text: '${formatIQD(points.round())} نقطة',
-              color: const Color(0xFFCD8B00),
             ),
-          if (duration != null && duration!.isNotEmpty)
-            _Chip(
-              icon: LucideIcons.clock,
-              text: duration!,
-              color: AppColors.textMid,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.icon, required this.text, required this.color});
-  final IconData icon;
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 12),
-        const SizedBox(width: 4),
-        Text(text,
-            style: AppType.muted(color: color)
-                .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
-      ],
-    );
-  }
-}
-
-class _MethodPicker extends StatelessWidget {
-  const _MethodPicker({
-    required this.current,
-    required this.pointsAvailable,
-    required this.onSelect,
-  });
-  final _Method current;
-  final bool pointsAvailable;
-  final ValueChanged<_Method> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Row(
-      children: [
-        Expanded(
-          child: _MethodBtn(
-            label: 'برصيد المدير',
-            icon: LucideIcons.wallet,
-            color: AppColors.brand,
-            selected: current == _Method.balance,
-            enabled: true,
-            onTap: () => onSelect(_Method.balance),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _MethodBtn(
-            label: 'بالنقاط',
-            icon: LucideIcons.star,
-            color: const Color(0xFFCD8B00),
-            selected: current == _Method.points,
-            enabled: pointsAvailable,
-            onTap: pointsAvailable ? () => onSelect(_Method.points) : null,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Transparent card-style picker — same visual language as the
-/// operations grid on the detail screen (white surface + border +
-/// soft shadow + tinted icon-box on top + colored label). Selected
-/// state tints the surface and thickens the border; disabled state
-/// drops opacity so the option still reads but signals it's locked.
-class _MethodBtn extends StatelessWidget {
-  const _MethodBtn({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final Color color;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final tile = Material(
-      color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap == null
-            ? null
-            : () {
-                HapticFeedback.selectionClick();
-                onTap!();
-              },
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(
-              color: selected ? color.withValues(alpha: 0.5) : AppColors.border,
-              width: selected ? 1.4 : 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+            if (points > 0) ...[
               Container(
-                padding: const EdgeInsets.all(7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: Sp.xs),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: selected ? 0.15 : 0.1),
+                  color: AppColors.warningSoftBg,
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                label,
-                style: AppType.label(color: color).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                child: Text(
+                  '${formatIQD(points)} نقطة',
+                  style: AppType.pillLabel(color: AppColors.warningOnSoft)
+                      .copyWith(letterSpacing: 0),
                 ),
               ),
+              const SizedBox(width: Sp.x6),
             ],
-          ),
+            Text(
+              '${formatIQD(price)} ${'common.currency'.tr()}',
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.bodyStrong(color: AppColors.brandAccent)
+                  .copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
       ),
     );
-    if (enabled) return tile;
-    return Opacity(opacity: 0.45, child: tile);
   }
 }
 
