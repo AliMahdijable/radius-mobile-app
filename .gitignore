@@ -32,3 +32,6 @@ android/key.properties
 
 # macOS
 .DS_Store
+
+# Kotlin compiler session files (build artifact)
+android/.kotlin/
