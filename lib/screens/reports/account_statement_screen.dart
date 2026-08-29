@@ -1,4 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -29,8 +31,7 @@ class AccountStatementScreen extends StatefulWidget {
   final String? phone;
 
   @override
-  State<AccountStatementScreen> createState() =>
-      _AccountStatementScreenState();
+  State<AccountStatementScreen> createState() => _AccountStatementScreenState();
 }
 
 class _AccountStatementScreenState extends State<AccountStatementScreen> {
@@ -106,259 +107,282 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       permission: 'reports.account_statement',
       title: 'reports.account_statement'.tr(),
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'reports.account_statement'.tr(),
-              style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 15, fontWeight: FontWeight.w800),
-            ),
-            Text(
-              widget.displayName ?? widget.username,
-              style: AppType.muted().copyWith(fontSize: 11),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: AppColors.brand,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DateRangeChipBar(
-                value: _range,
-                onChanged: (r) {
-                  setState(() => _range = r);
-                  _load();
-                },
+              Text(
+                'reports.account_statement'.tr(),
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 15, fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: Sp.sm),
-              ReportFiltersPanel(
-                value: _filters,
-                actionTypeOptions: kAccountStatementActionTypes,
-                // المشترك محدّد سلفاً — لا نحتاج مدير/موظف.
-                includeActionManager: false,
-                includeUserManager: false,
-                includeEmployee: false,
-                onChanged: (v) {
-                  setState(() {
-                    _filters = v;
-                    _page = 0;
-                  });
-                  _load();
-                },
+              Text(
+                widget.displayName ?? widget.username,
+                style: AppType.muted().copyWith(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: Sp.md),
-              _summaryCard(summary),
-              const SizedBox(height: Sp.md),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Sp.huge),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                _errorBlock()
-              else if (rows.isEmpty)
-                _emptyBlock()
-              else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: ReportStatsBar(
-                        totalItems: rows.length,
-                        pageStart: pageStart,
-                        pageEnd: pageEnd,
-                        pageSize: _pageSize,
-                        onPageSizeChange: (s) => setState(() {
-                          _pageSize = s;
-                          _page = 0;
-                        }),
-                      ),
-                    ),
-                    ReportExportBar(
-                      title: '${'reports.account_statement'.tr()} — ${widget.displayName ?? widget.username}',
-                      subtitle:
-                          '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                      fileNameBase:
-                          'account_statement_${widget.username.replaceAll(RegExp(r"[^a-zA-Z0-9_]"), "_")}',
-                      columns: [
-                        'reports.col_subscriber'.tr(),
-                        'reports.col_username'.tr(),
-                        'reports.col_amount'.tr(),
-                        'reports.col_date'.tr(),
-                        'reports.col_description'.tr(),
-                        'reports.col_type'.tr(),
-                        'reports.col_executor'.tr(),
-                      ],
-                      columnWeights: _pdfWeights,
-                      rows: _exportRows(rows),
-                    ),
-                  ],
+            ],
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+        ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            color: AppColors.brand,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+              children: [
+                DateRangeChipBar(
+                  value: _range,
+                  onChanged: (r) {
+                    setState(() => _range = r);
+                    _load();
+                  },
                 ),
                 const SizedBox(height: Sp.sm),
-                for (final r in pageRows) ...[
-                  ReportLogTile(
-                    actionType: r.actionType ?? '',
-                    description: r.description ?? '',
-                    amount: r.amount,
-                    adminUsername: r.adminName,
-                    targetName: widget.displayName ?? widget.username,
-                    createdAt: r.createdAt,
+                ReportFiltersPanel(
+                  value: _filters,
+                  actionTypeOptions: kAccountStatementActionTypes,
+                  // المشترك محدّد سلفاً — لا نحتاج مدير/موظف.
+                  includeActionManager: false,
+                  includeUserManager: false,
+                  includeEmployee: false,
+                  onChanged: (v) {
+                    setState(() {
+                      _filters = v;
+                      _page = 0;
+                    });
+                    _load();
+                  },
+                ),
+                const SizedBox(height: Sp.md),
+                _summaryCard(summary),
+                const SizedBox(height: Sp.md),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Sp.huge),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  _errorBlock()
+                else if (rows.isEmpty)
+                  _emptyBlock()
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ReportStatsBar(
+                          totalItems: rows.length,
+                          pageStart: pageStart,
+                          pageEnd: pageEnd,
+                          pageSize: _pageSize,
+                          onPageSizeChange: (s) => setState(() {
+                            _pageSize = s;
+                            _page = 0;
+                          }),
+                        ),
+                      ),
+                      ReportExportBar(
+                        title:
+                            '${'reports.account_statement'.tr()} — ${widget.displayName ?? widget.username}',
+                        subtitle:
+                            '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                        fileNameBase:
+                            'account_statement_${widget.username.replaceAll(RegExp(r"[^a-zA-Z0-9_]"), "_")}',
+                        columns: [
+                          'reports.col_subscriber'.tr(),
+                          'reports.col_username'.tr(),
+                          'reports.col_amount'.tr(),
+                          'reports.col_date'.tr(),
+                          'reports.col_description'.tr(),
+                          'reports.col_type'.tr(),
+                          'reports.col_executor'.tr(),
+                        ],
+                        columnWeights: _pdfWeights,
+                        rows: _exportRows(rows),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: Sp.sm),
+                  for (final r in pageRows) ...[
+                    ReportLogTile(
+                      actionType: r.actionType ?? '',
+                      description: r.description ?? '',
+                      amount: r.amount,
+                      adminUsername: r.adminName,
+                      targetName: widget.displayName ?? widget.username,
+                      createdAt: r.createdAt,
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  if (totalPages > 1)
+                    ReportPager(
+                      page: _page,
+                      totalPages: totalPages,
+                      onPrev: () => setState(() => _page--),
+                      onNext: () => setState(() => _page++),
+                    ),
                 ],
-                if (totalPages > 1)
-                  ReportPager(
-                    page: _page,
-                    totalPages: totalPages,
-                    onPrev: () => setState(() => _page--),
-                    onNext: () => setState(() => _page++),
-                  ),
               ],
-            ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
+  /// بطاقة الملخّص — المخطّط يجعلها بطاقة براند داكنة r22 لا كارتاً
+  /// أبيض: الرصيد بارز 24/w700 مع حبّة المدى في الطرف، وتحته صفّ
+  /// إحصاءات غاطس بفواصل شعريّة.
+  ///
+  /// طبقاتها `onBrand*` ثابتة في الوضعين — لا تحتاج تعديلاً في الوضع
+  /// الداكن.
   Widget _summaryCard(StatementSummary s) {
     final balance = s.balance;
     return Container(
-      padding: const EdgeInsets.all(Sp.md),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.brand,
+        borderRadius: BorderRadius.circular(22),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // الرصيد الصافي بارز
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: (balance < 0 ? AppColors.error : AppColors.brand)
-                      .withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(
-                  balance < 0
-                      ? LucideIcons.trendingDown
-                      : LucideIcons.trendingUp,
-                  size: 15,
-                  color: balance < 0 ? AppColors.error : AppColors.brand,
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      balance < 0 ? 'reports.owes_manager'.tr() : 'reports.has_credit'.tr(),
-                      style: AppType.muted().copyWith(
-                          fontSize: 10.5, fontWeight: FontWeight.w700),
+                      balance < 0
+                          ? 'reports.owes_manager'.tr()
+                          : 'reports.has_credit'.tr(),
+                      style: AppType.muted(color: AppColors.onBrandSecondary)
+                          .copyWith(fontSize: 11.5),
                     ),
+                    const SizedBox(height: 3),
                     Text(
                       '${balance < 0 ? '-' : ''}${formatIQD(balance.abs())} د.ع',
-                      style: TextStyle(
+                      textDirection: ui.TextDirection.ltr,
+                      style: AppType.amount(
                         color: balance < 0
-                            ? AppColors.error
-                            : AppColors.brand,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.3,
+                            ? AppColors.onBrandDanger
+                            : AppColors.onBrand,
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: Sp.x6),
+                decoration: BoxDecoration(
+                  color: AppColors.onBrandFill2,
+                  borderRadius: BorderRadius.circular(R.pill),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      balance < 0
+                          ? LucideIcons.trendingDown
+                          : LucideIcons.trendingUp,
+                      size: 15,
+                      color: AppColors.onBrand,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                      textDirection: ui.TextDirection.ltr,
+                      style: AppType.bodyStrong(color: AppColors.onBrand)
+                          .copyWith(fontSize: 11.5),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: Sp.sm),
-          Container(height: 1, color: AppColors.border),
-          const SizedBox(height: Sp.sm),
-          Row(
-            children: [
-              Expanded(
-                child: _miniStat(
-                  icon: LucideIcons.banknote,
-                  label: 'reports.paid'.tr(),
-                  value: formatIQD(s.totalPayments),
-                  color: AppColors.brand,
+          const SizedBox(height: Sp.lg),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: Sp.xs, vertical: Sp.md),
+            decoration: BoxDecoration(
+              color: AppColors.onBrandFill1,
+              borderRadius: BorderRadius.circular(R.lg),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _miniStat(
+                    label: 'reports.paid'.tr(),
+                    value: formatIQD(s.totalPayments),
+                  ),
                 ),
-              ),
-              Container(width: 1, height: 26, color: AppColors.border),
-              Expanded(
-                child: _miniStat(
-                  icon: LucideIcons.plus,
-                  label: 'subscribers.debt_short'.tr(),
-                  value: formatIQD(s.totalDebt),
-                  color: AppColors.error,
+                _hair(),
+                Expanded(
+                  child: _miniStat(
+                    label: 'subscribers.debt_short'.tr(),
+                    value: formatIQD(s.totalDebt),
+                    color: AppColors.onBrandDanger,
+                  ),
                 ),
-              ),
-              Container(width: 1, height: 26, color: AppColors.border),
-              Expanded(
-                child: _miniStat(
-                  icon: LucideIcons.zap,
-                  label: 'reports.activations_count'.tr(),
-                  value: '${s.totalActivations}',
-                  color: const Color(0xFF14B8A6),
+                _hair(),
+                Expanded(
+                  child: _miniStat(
+                    label: 'reports.activations_count'.tr(),
+                    value: '${s.totalActivations}',
+                  ),
                 ),
-              ),
-              Container(width: 1, height: 26, color: AppColors.border),
-              Expanded(
-                child: _miniStat(
-                  icon: LucideIcons.list,
-                  label: 'reports.movements_count'.tr(),
-                  value: '${s.totalTransactions}',
-                  color: AppColors.textMid,
+                _hair(),
+                Expanded(
+                  child: _miniStat(
+                    label: 'reports.movements_count'.tr(),
+                    value: '${s.totalTransactions}',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  Widget _hair() =>
+      Container(width: 1, height: 30, color: AppColors.onBrandFill2);
+
   Widget _miniStat({
-    required IconData icon,
     required String label,
     required String value,
-    required Color color,
+    Color? color,
   }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(height: 3),
         Text(
           value,
-          style: TextStyle(
-              color: AppColors.textHi,
-              fontSize: 12,
-              fontWeight: FontWeight.w900),
+          textDirection: ui.TextDirection.ltr,
+          style: AppType.cardTitle(color: color ?? AppColors.onBrand)
+              .copyWith(fontWeight: FontWeight.w700),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        Text(label,
-            style: AppType.muted().copyWith(fontSize: 9.5), maxLines: 1),
+        const SizedBox(height: Sp.xxs),
+        Text(
+          label,
+          style: AppType.micro(color: AppColors.onBrandSecondary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -382,11 +406,9 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
         child: Center(
           child: Column(
             children: [
-              Icon(LucideIcons.triangleAlert,
-                  size: 32, color: AppColors.error),
+              Icon(LucideIcons.triangleAlert, size: 32, color: AppColors.error),
               const SizedBox(height: 8),
-              Text(_error!,
-                  style: AppType.subtitle(color: AppColors.textMid)),
+              Text(_error!, style: AppType.subtitle(color: AppColors.textMid)),
               const SizedBox(height: Sp.md),
               ElevatedButton.icon(
                 onPressed: _load,

@@ -12,7 +12,7 @@ import 'dashboard/dashboard_screen.dart';
 import 'login_screen.dart';
 import 'more_modules_screen.dart';
 import 'network_devices/network_devices_screen.dart';
-import 'reports_screen.dart';  // نستوردها لأنّ more_modules_screen يفتحها كصفحة كاملة
+import 'reports_screen.dart'; // نستوردها لأنّ more_modules_screen يفتحها كصفحة كاملة
 import 'search/quick_search_overlay.dart';
 import 'expenses/sheets/add_expense_sheet.dart';
 import 'subscribers/sheets/activate_sheet.dart';
@@ -86,11 +86,9 @@ class _MainShellState extends State<MainShell> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         icon: const Icon(Icons.block, color: Color(0xFFDC2626), size: 40),
-        title: const Text('تم إيقاف حسابك',
-            textAlign: TextAlign.center),
+        title: const Text('تم إيقاف حسابك', textAlign: TextAlign.center),
         content: Text(msg,
-            textAlign: TextAlign.center,
-            style: const TextStyle(height: 1.5)),
+            textAlign: TextAlign.center, style: const TextStyle(height: 1.5)),
         actions: [
           FilledButton(
             style: FilledButton.styleFrom(
@@ -241,31 +239,26 @@ class _MainShellState extends State<MainShell> {
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Sp.lg,
-            0,
-            Sp.lg,
-            Sp.sm,
-          ),
-          child: _PillBar(
-            current: _tab,
-            onTabTap: (i) => setState(() => _tab = i),
-            onFabTap: _onFabTap,
-          ),
-        ),
+      // 2026-08-29 (S6): الشريط صار مسطّحاً من الحافة للحافة بحدّ علوي
+      // بدل الحبّة العائمة — لغة المخطّط. الـSafeArea داخل _PillBar
+      // ليمتدّ البياض تحت شريط الإيماءات.
+      bottomNavigationBar: _PillBar(
+        current: _tab,
+        onTabTap: (i) => setState(() => _tab = i),
+        onFabTap: _onFabTap,
       ),
     );
   }
 }
 
-/// Clean professional bottom nav — 4 tab icons with a brand-green tint
-/// + label for the active one, plus a center FAB. No oversized pill, no
-/// sliding background. Active state = icon turns brand-green and shows a
-/// tiny dot underneath. Inactive = muted icon only. The shell is a
-/// floating white pill with a soft shadow, slim enough to feel light.
+/// الشريط السفلي — لغة المخطّط: سطح أبيض ممتدّ للحافتين بحدّ علوي
+/// شعري، بلا نصف قطر وبلا ظلّ. أربعة تبويبات (أيقونة 24 + تسمية 10.5)
+/// وزرّ إضافة مربّع 52×52/r18 مرفوع 14 فوق خطّ الشريط بظلّ ملوّن
+/// بالبراند نفسه (`Sh.fab`) لا بالأسود.
+///
+/// ترتيب التبويبات محفوظ كما هو (الرئيسية أوّلاً) — المخطّط يعرضها
+/// بترتيب مختلف لأنّه مرسوم على شاشة المشتركين، والتبديل يربك مَن
+/// اعتاد مواضعها.
 class _PillBar extends StatelessWidget {
   const _PillBar({
     required this.current,
@@ -280,45 +273,36 @@ class _PillBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return LayoutBuilder(
-      builder: (context, c) {
-        const totalSlots = 5;
-        final slotWidth = c.maxWidth / totalSlots;
-        return Container(
-          height: 64,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, Sp.sm),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _TabSlot(
                 icon: Icons.home_rounded,
                 label: 'nav.home'.tr(),
-                slotWidth: slotWidth,
                 selected: current == 0,
                 onTap: () => _select(0),
               ),
               _TabSlot(
                 icon: Icons.people_alt_rounded,
                 label: 'nav.subscribers'.tr(),
-                slotWidth: slotWidth,
                 selected: current == 1,
                 onTap: () => _select(1),
               ),
-              _FabSlot(slotWidth: slotWidth, onTap: onFabTap),
+              _FabSlot(onTap: onFabTap),
               _TabSlot(
                 // مطلب 2026-08-12: أجهزة الشبكة بدل التقارير
                 icon: Icons.router_rounded,
                 label: 'nav.devices'.tr(),
-                slotWidth: slotWidth,
                 selected: current == 2,
                 onTap: () => _select(2),
               ),
@@ -328,14 +312,13 @@ class _PillBar extends StatelessWidget {
                 // الإعدادات الفعلية انتقلت لزر الـgear بالشريط العلوي.
                 icon: Icons.apps_rounded,
                 label: 'nav.more'.tr(),
-                slotWidth: slotWidth,
                 selected: current == 3,
                 onTap: () => _select(3),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -349,14 +332,12 @@ class _TabSlot extends StatelessWidget {
   const _TabSlot({
     required this.icon,
     required this.label,
-    required this.slotWidth,
     required this.selected,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
-  final double slotWidth;
   final bool selected;
   final VoidCallback onTap;
 
@@ -365,46 +346,31 @@ class _TabSlot extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final fg = selected ? AppColors.brand : AppColors.textLow;
     return SizedBox(
-      width: slotWidth,
+      width: 58,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: fg, size: selected ? 24 : 22),
-              const SizedBox(height: 3),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: AppType.muted(color: fg).copyWith(
-                  fontSize: 10,
-                  fontWeight:
-                      selected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                child: Text(label, maxLines: 1, overflow: TextOverflow.fade),
-              ),
-              const SizedBox(height: 3),
-              // Tiny dot under the active tab. Reserves the same 4px of
-              // vertical space whether selected or not so labels don't shift.
-              SizedBox(
-                height: 4,
-                child: AnimatedOpacity(
+          borderRadius: BorderRadius.circular(R.icon),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: fg, size: 24),
+                const SizedBox(height: 3),
+                // المخطّط لا يضع نقطة تحت التبويب النشط — اللون
+                // والوزن وحدهما يميّزانه، والنقطة كانت تضيف 7dp
+                // ارتفاعاً بلا مقابل.
+                AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 200),
-                  opacity: selected ? 1 : 0,
-                  child: Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.brand,
-                      shape: BoxShape.circle,
-                    ),
+                  style: AppType.micro(color: fg).copyWith(
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                   ),
+                  child: Text(label, maxLines: 1, overflow: TextOverflow.fade),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -413,44 +379,34 @@ class _TabSlot extends StatelessWidget {
 }
 
 class _FabSlot extends StatelessWidget {
-  const _FabSlot({required this.slotWidth, required this.onTap});
+  const _FabSlot({required this.onTap});
 
-  final double slotWidth;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return SizedBox(
-      width: slotWidth,
-      child: Center(
+    // مرفوع 14 فوق خطّ الشريط كما في المخطّط، ومربّع r18 لا دائرة.
+    return Transform.translate(
+      offset: const Offset(0, -14),
+      child: Container(
+        width: H.fab,
+        height: H.fab,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: Sh.fab,
+        ),
         child: Material(
           color: AppColors.brand,
-          shape: const CircleBorder(),
-          elevation: 0,
+          borderRadius: BorderRadius.circular(18),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {
               HapticFeedback.selectionClick();
               onTap();
             },
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.brand.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.add_rounded,
-                  color: Colors.white, size: 26),
-            ),
+            child: const Icon(Icons.add_rounded,
+                color: AppColors.onBrand, size: 26),
           ),
         ),
       ),
@@ -489,8 +445,7 @@ class _SearchPill extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(Icons.search_rounded,
-              color: AppColors.brand, size: 20),
+          child: Icon(Icons.search_rounded, color: AppColors.brand, size: 20),
         ),
       ),
     );
@@ -626,6 +581,7 @@ class _QuickItem extends StatelessWidget {
   final Color color;
   final String title;
   final String subtitle;
+
   /// Defaults to closing the sheet — items without a wired action
   /// still let the admin dismiss the sheet by tapping.
   final VoidCallback? onTap;
