@@ -325,7 +325,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   List<Widget> _buildBody() {
     if (_loading) {
       return [
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(vertical: Sp.huge),
           child: Center(
             child: CircularProgressIndicator(color: AppColors.brand),
@@ -339,7 +339,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           padding: const EdgeInsets.symmetric(vertical: Sp.huge),
           child: Column(
             children: [
-              const Icon(LucideIcons.triangleAlert,
+              Icon(LucideIcons.triangleAlert,
                   color: AppColors.error, size: 32),
               const SizedBox(height: Sp.sm),
               Text(_loadError!,

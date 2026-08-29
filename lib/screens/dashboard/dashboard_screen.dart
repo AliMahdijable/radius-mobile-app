@@ -408,7 +408,7 @@ class _ActivitiesLoading extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Center(
+      child: Center(
         child: SizedBox(
           width: 22,
           height: 22,
@@ -437,7 +437,7 @@ class _ActivitiesError extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.triangleAlert,
+          Icon(LucideIcons.triangleAlert,
               color: AppColors.error, size: 28),
           const SizedBox(height: Sp.sm),
           Text('dashboard.recent_fetch_failed'.tr(),

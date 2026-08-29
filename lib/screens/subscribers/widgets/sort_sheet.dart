@@ -80,7 +80,7 @@ class _SortSheetState extends State<_SortSheet> {
           children: [
             Row(
               children: [
-                const Icon(LucideIcons.arrowDownUp, color: AppColors.brand),
+                Icon(LucideIcons.arrowDownUp, color: AppColors.brand),
                 const SizedBox(width: Sp.sm),
                 Text('sort.title'.tr(),
                     style: AppType.title(color: AppColors.textHi)

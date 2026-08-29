@@ -447,7 +447,7 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
               ],
               Expanded(
                 child: _loading
-                    ? const Center(
+                    ? Center(
                         child:
                             CircularProgressIndicator(color: AppColors.brand),
                       )

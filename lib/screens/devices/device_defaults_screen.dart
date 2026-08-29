@@ -284,7 +284,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.md),
-          borderSide: const BorderSide(color: AppColors.brand, width: 1.4),
+          borderSide: BorderSide(color: AppColors.brand, width: 1.4),
         ),
       );
 }

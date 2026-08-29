@@ -323,7 +323,7 @@ class _AddSheetState extends State<_AddSheet> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(LucideIcons.info,
+                          Icon(LucideIcons.info,
                               size: 14, color: AppColors.brand),
                           const SizedBox(width: 6),
                           Expanded(
@@ -444,7 +444,7 @@ class _PackagePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     if (loading) {
-      return const SizedBox(
+      return SizedBox(
         height: 38,
         child: Center(
           child: SizedBox(
@@ -648,7 +648,7 @@ class _ManagerPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     if (loading) {
-      return const SizedBox(
+      return SizedBox(
         height: 38,
         child: Center(
           child: SizedBox(

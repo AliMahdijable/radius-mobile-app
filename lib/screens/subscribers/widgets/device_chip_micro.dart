@@ -235,7 +235,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
         // (rx/temp/signal/ccq/lan) فالأمر يلاحظها المدير ع الفور.
         if (danger) ...[
           const SizedBox(width: 3),
-          const Icon(
+          Icon(
             LucideIcons.triangleAlert,
             size: 10,
             color: AppColors.error,

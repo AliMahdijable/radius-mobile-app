@@ -359,7 +359,7 @@ class _DebtTile extends StatelessWidget {
                         border: Border.all(
                             color: AppColors.brand.withValues(alpha: 0.3)),
                       ),
-                      child: const Text(
+                      child: Text(
                         'مسدَّد',
                         style: TextStyle(
                           fontSize: 10,
@@ -387,7 +387,7 @@ class _DebtTile extends StatelessWidget {
                         color: AppColors.error.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(LucideIcons.trash2,
+                      child: Icon(LucideIcons.trash2,
                           size: 13, color: AppColors.error),
                     ),
                   ),

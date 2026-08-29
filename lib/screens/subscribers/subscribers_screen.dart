@@ -927,7 +927,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(color: AppColors.brand),
+              CircularProgressIndicator(color: AppColors.brand),
               const SizedBox(height: Sp.md),
               Text('subscribers.busy_action'.tr(namedArgs: {'label': label}),
                   style: AppType.label(color: AppColors.textHi)),
@@ -1131,7 +1131,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 color: AppColors.brand,
                 onRefresh: _refresh,
                 child: _loading
-                    ? const Center(
+                    ? Center(
                         child: CircularProgressIndicator(
                             color: AppColors.brand))
                     : page.isEmpty
@@ -1210,7 +1210,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 onNext: () => setState(() => _page++),
               ),
             if (_refreshing)
-              const LinearProgressIndicator(
+              LinearProgressIndicator(
                 color: AppColors.brand,
                 backgroundColor: Colors.transparent,
                 minHeight: 2,
@@ -1345,7 +1345,7 @@ class _SearchHeader extends StatelessWidget {
                 child: AnimatedRotation(
                   turns: allCollapsed ? 0 : 0.5,
                   duration: const Duration(milliseconds: 220),
-                  child: const Icon(
+                  child: Icon(
                     Icons.keyboard_arrow_up_rounded,
                     color: AppColors.brand,
                     size: 22,
@@ -1369,7 +1369,7 @@ class _SearchHeader extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.border),
               ),
-              child: const Icon(LucideIcons.arrowDownUp,
+              child: Icon(LucideIcons.arrowDownUp,
                   color: AppColors.brand, size: 18),
             ),
           ),
@@ -2015,11 +2015,11 @@ class _ClearSortChip extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(LucideIcons.x, size: 12, color: AppColors.error),
+              Icon(LucideIcons.x, size: 12, color: AppColors.error),
               const SizedBox(width: 3),
               Text(
                 'subscribers.stop'.tr(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.error,

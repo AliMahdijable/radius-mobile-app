@@ -134,7 +134,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   Future<void> _startScan() async {
     final parsed = _parseRange(_baseCtrl.text);
     if (parsed == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,

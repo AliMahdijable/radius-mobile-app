@@ -233,7 +233,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                               color: AppColors.error.withValues(alpha: 0.3)),
                         ),
                         child: Row(
-                          children: const [
+                          children: [
                             Icon(LucideIcons.triangleAlert,
                                 size: 14, color: AppColors.error),
                             SizedBox(width: 6),

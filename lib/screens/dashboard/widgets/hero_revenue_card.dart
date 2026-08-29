@@ -139,7 +139,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               Container(
                 width: 6,
                 height: 6,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.brand,
                   shape: BoxShape.circle,
                 ),
@@ -159,7 +159,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (_periodLoading)
-                const SizedBox(
+                SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
@@ -170,7 +170,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               else if (_periodFailed)
                 Row(
                   children: [
-                    const Icon(LucideIcons.triangleAlert,
+                    Icon(LucideIcons.triangleAlert,
                         color: AppColors.error, size: 16),
                     const SizedBox(width: 6),
                     Text(

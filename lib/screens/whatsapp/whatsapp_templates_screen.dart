@@ -837,7 +837,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                                         .withValues(alpha: 0.4),
                                   ),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   LucideIcons.trash2,
                                   size: 18,
                                   color: AppColors.error,

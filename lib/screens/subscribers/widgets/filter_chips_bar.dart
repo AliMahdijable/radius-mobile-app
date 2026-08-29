@@ -76,7 +76,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
   /// و debtors. في RTL كان يختفي لليمين خارج الشاشة، فالمستخدم يشوف
   /// الفلتر مطبَّق على البطاقات لكن الـchip المُظلَّل غير مرئي. مطابق
   /// لموضعه في الويب — علاقة دلاليّة مع "منتهي".
-  static const _defs = <_ChipDef>[
+  static final _defs = <_ChipDef>[
     _ChipDef(SubscriberFilter.all, 'subscribers.filter_all', LucideIcons.users, AppColors.brand),
     _ChipDef(SubscriberFilter.active, 'subscribers.filter_active', LucideIcons.circleCheck, Color(0xFF14B8A6)),
     _ChipDef(SubscriberFilter.online, 'subscribers.filter_online', LucideIcons.wifi, Color(0xFF3B82F6)),

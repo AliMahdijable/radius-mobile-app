@@ -197,7 +197,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   duration: const Duration(milliseconds: 300),
                 ),
             const SizedBox(height: Sp.huge),
-            const SizedBox(
+            SizedBox(
               width: 22,
               height: 22,
               child: CircularProgressIndicator(

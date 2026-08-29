@@ -120,7 +120,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
 
   Widget _buildBody(ScrollController controller) {
     if (_loading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(color: AppColors.brand),
       );
     }
@@ -131,7 +131,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(LucideIcons.circleAlert,
+              Icon(LucideIcons.circleAlert,
                   size: 36, color: AppColors.error),
               const SizedBox(height: Sp.sm),
               Text(
@@ -251,7 +251,7 @@ class _Header extends StatelessWidget {
               color: AppColors.brand.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(R.sm),
             ),
-            child: const Icon(LucideIcons.history,
+            child: Icon(LucideIcons.history,
                 color: AppColors.brand, size: 18),
           ),
           const SizedBox(width: Sp.sm),
@@ -285,7 +285,7 @@ class _Header extends StatelessWidget {
           IconButton(
             tooltip: 'تحديث',
             icon: loading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(

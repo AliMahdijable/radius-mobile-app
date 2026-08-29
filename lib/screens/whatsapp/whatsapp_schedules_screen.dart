@@ -519,7 +519,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
 
   // ─── Expiry Warning Card ────────────────────────────────
   Widget _expiryCard() {
-    const color = AppColors.brand;
+    final color = AppColors.brand;
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -61,7 +61,8 @@ class _BalancePointsCard extends StatelessWidget {
   const _BalancePointsCard({required this.wallet});
   final WalletResult? wallet;
 
-  static const _accent = AppColors.brand;
+  // getter لا حقل: القيمة theme-aware ويجب أن تُقرأ عند كل بناء
+  static Color get _accent => AppColors.brand;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +72,7 @@ class _BalancePointsCard extends StatelessWidget {
       iconAccent: _accent,
       title: 'dashboard.balance'.tr(),
       body: wallet == null
-          ? const _Spinner(color: _accent)
+          ? _Spinner(color: _accent)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -119,7 +120,7 @@ class _DebtCard extends StatelessWidget {
       title: 'dashboard.debtors'.tr(),
       onTap: onTap,
       body: debtors == null
-          ? const _Spinner(color: _accent)
+          ? _Spinner(color: _accent)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,

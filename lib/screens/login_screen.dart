@@ -610,7 +610,7 @@ class _FormCard extends StatelessWidget {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(R.md),
-        borderSide: const BorderSide(color: AppColors.brand, width: 1.5),
+        borderSide: BorderSide(color: AppColors.brand, width: 1.5),
       ),
     );
   }
@@ -745,7 +745,7 @@ class _BiometricButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.fingerprint_rounded,
+              Icon(Icons.fingerprint_rounded,
                   color: AppColors.brand, size: 22),
               const SizedBox(width: Sp.sm),
               Text(

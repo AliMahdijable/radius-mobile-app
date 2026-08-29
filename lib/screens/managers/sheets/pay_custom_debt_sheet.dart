@@ -435,7 +435,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
             ),
             child: Row(
               children: [
-                const Icon(LucideIcons.circleCheck,
+                Icon(LucideIcons.circleCheck,
                     size: 13, color: AppColors.brand),
                 const SizedBox(width: 6),
                 Expanded(
@@ -468,7 +468,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                 InkResponse(
                   onTap: () => _deletePayment(p),
                   radius: 16,
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.all(4),
                     child: Icon(LucideIcons.x,
                         size: 13, color: AppColors.error),

@@ -533,7 +533,7 @@ class _PackagePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     if (loading) {
-      return const SizedBox(
+      return SizedBox(
         height: 38,
         child: Center(
           child: SizedBox(
@@ -750,7 +750,7 @@ class _ManagerPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     if (loading) {
-      return const SizedBox(
+      return SizedBox(
         height: 38,
         child: Center(
           child: SizedBox(

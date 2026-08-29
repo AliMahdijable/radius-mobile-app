@@ -267,7 +267,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                                   color: AppColors.error.withValues(alpha: 0.4),
                                 ),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 LucideIcons.trash2,
                                 size: 18,
                                 color: AppColors.error,
@@ -368,7 +368,7 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.md),
-          borderSide: const BorderSide(color: AppColors.brand, width: 1.4),
+          borderSide: BorderSide(color: AppColors.brand, width: 1.4),
         ),
       );
 }

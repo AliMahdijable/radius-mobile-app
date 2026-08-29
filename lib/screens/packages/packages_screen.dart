@@ -665,7 +665,7 @@ class _PackageTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(R.md),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(LucideIcons.wifi,
+                child: Icon(LucideIcons.wifi,
                     size: 16, color: AppColors.brand),
               ),
             ],
@@ -760,7 +760,7 @@ class _PackageTile extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.sm),
-              borderSide: const BorderSide(
+              borderSide: BorderSide(
                   color: AppColors.brand, width: 1.8),
             ),
             isDense: true,

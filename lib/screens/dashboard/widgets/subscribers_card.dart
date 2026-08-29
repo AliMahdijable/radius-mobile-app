@@ -189,7 +189,7 @@ class _Skeleton extends StatelessWidget {
           color: AppColors.brand.withValues(alpha: 0.08),
         ),
       ),
-      child: const Center(
+      child: Center(
         child: SizedBox(
           width: 24,
           height: 24,

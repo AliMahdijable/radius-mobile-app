@@ -181,7 +181,7 @@ class _PickerSheetState extends State<_PickerSheet> {
 
   Widget _buildBody(ScrollController controller) {
     if (_loading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(color: AppColors.brand),
       );
     }
@@ -190,7 +190,7 @@ class _PickerSheetState extends State<_PickerSheet> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(LucideIcons.circleAlert,
+            Icon(LucideIcons.circleAlert,
                 color: AppColors.error, size: 32),
             const SizedBox(height: Sp.sm),
             Text(

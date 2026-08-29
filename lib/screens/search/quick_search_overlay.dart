@@ -354,7 +354,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                             padding: const EdgeInsets.all(Sp.lg),
                             child: Row(
                               children: [
-                                const SizedBox(
+                                SizedBox(
                                   width: 14,
                                   height: 14,
                                   child: CircularProgressIndicator(
@@ -475,7 +475,7 @@ class _Results extends StatelessWidget {
       future: SubscribersApi.loadAllWithOnline(),
       builder: (_, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
+          return Padding(
             padding: EdgeInsets.symmetric(vertical: Sp.huge),
             child: Center(
               child: CircularProgressIndicator(color: AppColors.brand),

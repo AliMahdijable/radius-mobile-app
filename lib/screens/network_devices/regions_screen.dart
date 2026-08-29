@@ -306,7 +306,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('اسم المنطقة مطلوب'),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,

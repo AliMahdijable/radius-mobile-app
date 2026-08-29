@@ -1007,7 +1007,7 @@ class _LastPaymentLine extends StatelessWidget {
     final actionLabel = _humanAction(action, paymentType: paymentType);
     return Row(
       children: [
-        const Icon(LucideIcons.banknote,
+        Icon(LucideIcons.banknote,
             size: 12, color: AppColors.brand),
         const SizedBox(width: 4),
         Expanded(

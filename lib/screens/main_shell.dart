@@ -397,7 +397,7 @@ class _TabSlot extends StatelessWidget {
                   child: Container(
                     width: 4,
                     height: 4,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.brand,
                       shape: BoxShape.circle,
                     ),
@@ -489,7 +489,7 @@ class _SearchPill extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.search_rounded,
+          child: Icon(Icons.search_rounded,
               color: AppColors.brand, size: 20),
         ),
       ),
