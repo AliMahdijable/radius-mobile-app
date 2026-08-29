@@ -179,14 +179,9 @@ class _ShellCard extends StatelessWidget {
           padding: const EdgeInsets.all(Sp.md),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.lg),
+            // بلا ظلّ: المخطّط يفصل بالحدود لا بالارتفاع، والظلّ الأسود
+            // على سطح #0E1512 لا يُنتج شيئاً فيضيع الفصل الذي كان يوفّره.
             border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: _buildBody(),
         ),

@@ -625,34 +625,36 @@ class _WAStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // 3 visual states: loading dot, connected (brand), disconnected (red).
-    final Color c;
+    // خمس حالات بنغمة دلاليّة واحدة لكلٍّ. النغمة تحمل التعبئة
+    // والخلفيّة والحدّ والنصّ معاً — كان الأربعة يُشتقّون من لون واحد
+    // بـ`.withValues(.1)` و`.25`، وهو ما ينهار ليلاً.
+    final AppTone tone;
     final String label;
     if (!loaded) {
-      c = AppColors.textMid;
+      tone = AppTone.neutral;
       label = 'dashboard.wa_checking'.tr();
     } else if (status?.needsPairing == true) {
-      c = AppColors.warning;
+      tone = AppTone.warning;
       label = 'wa.needs_pairing'.tr();
     } else if (status?.sendingRestricted == true) {
-      c = AppColors.error;
+      tone = AppTone.danger;
       label = 'wa.connected_limited'.tr();
     } else if (status?.cappingWarning == true) {
-      c = AppColors.warning;
+      tone = AppTone.warning;
       label = 'wa.outreach_warning'.tr();
     } else if (status?.connected == true) {
-      c = AppColors.brand;
+      tone = AppTone.success;
       label = 'dashboard.wa_connected'.tr();
     } else {
-      c = AppColors.error;
+      tone = AppTone.danger;
       label = 'dashboard.wa_disconnected'.tr();
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),
       decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.1),
+        color: tone.softBg,
         borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: c.withValues(alpha: 0.25)),
+        border: Border.all(color: tone.softBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -661,16 +663,19 @@ class _WAStatusChip extends StatelessWidget {
             SizedBox(
               width: 10,
               height: 10,
-              child: CircularProgressIndicator(strokeWidth: 1.4, color: c),
+              child:
+                  CircularProgressIndicator(strokeWidth: 1.4, color: tone.fill),
             )
           else
             Container(
               width: 7,
               height: 7,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+              decoration:
+                  BoxDecoration(color: tone.fill, shape: BoxShape.circle),
             ),
           const SizedBox(width: 6),
-          Text(label, style: AppType.muted(color: c).copyWith(fontSize: 11)),
+          Text(label,
+              style: AppType.muted(color: tone.onSoft).copyWith(fontSize: 11)),
         ],
       ),
     );

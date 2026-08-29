@@ -49,7 +49,7 @@ class _Row extends StatelessWidget {
 
   ({
     IconData icon,
-    Color color,
+    AppTone tone,
     String title,
     // مطلب المستخدم 2026-07-12: نمرّر الاسم واليوزر منفصلين للـUI حتى
     // يمنح كل واحد لون منفصل (name = brand، username = رمادي). الـ
@@ -111,7 +111,7 @@ class _Row extends StatelessWidget {
     }
     return (
       icon: visual.$1,
-      color: visual.$2,
+      tone: visual.$2,
       title: title,
       // نمرّر السـtwo parts منفصلتين لتلوينهما بشكل مستقل في الـUI.
       subscriberFullName: fullName.isEmpty ? null : fullName,
@@ -347,10 +347,10 @@ class _Row extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: n.color.withValues(alpha: 0.12),
+                  color: n.tone.softBg,
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(n.icon, color: n.color, size: 18),
+                child: Icon(n.icon, color: n.tone.fill, size: 18),
               ),
               const SizedBox(width: Sp.md),
               Expanded(
@@ -413,7 +413,7 @@ class _Row extends StatelessWidget {
                         if (n.subLabel != null) ...[
                           Text(
                             n.subLabel!,
-                            style: AppType.muted(color: n.color).copyWith(
+                            style: AppType.muted(color: n.tone.fill).copyWith(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                             ),
@@ -525,48 +525,53 @@ class _Row extends StatelessWidget {
   }
 
   /// Maps backend action_type strings to (icon, color).
-  static (IconData, Color) _visualForAction(String action) {
+  /// أيقونة الحركة ونغمتها.
+  ///
+  /// كانت تُرجع `(IconData, Color)` فيشتقّ المستدعي الخلفيّة بـ
+  /// `color.withValues(alpha: .1)` — وهذا ما ينهار ليلاً. الآن تُرجع
+  /// [AppTone] فتأتي التعبئة والخلفيّة والحدّ من اللوحة معاً.
+  static (IconData, AppTone) _visualForAction(String action) {
     final lower = action.toLowerCase();
-    // Order matters — subscriber_edit contains 'edit' (and 'subscrib')
-    // so check the specific labels before the generic 'activ' match.
+    // الترتيب مهمّ — `subscriber_edit` يحوي 'edit' و'subscrib' معاً،
+    // فالتسميات المحدّدة تُفحص قبل المطابقة العامّة لـ'activ'.
     if (lower.contains('subscriber_add') || lower.contains('add_subscriber')) {
-      return (Icons.person_add_rounded, AppColors.brandAccent);
+      return (Icons.person_add_rounded, AppTone.brand);
     }
     if (lower.contains('subscriber_edit') ||
         lower.contains('edit_subscriber')) {
-      return (Icons.edit_rounded, AppColors.brand);
+      return (Icons.edit_rounded, AppTone.brand);
     }
     if (lower.contains('subscriber_delete') ||
         lower.contains('delete_subscriber')) {
-      return (Icons.delete_rounded, AppColors.error);
+      return (Icons.delete_rounded, AppTone.danger);
     }
-    if (lower.contains('activ')) return (Icons.bolt_rounded, AppColors.brand);
+    if (lower.contains('activ')) return (Icons.bolt_rounded, AppTone.brand);
     if (lower.contains('extend')) {
-      return (Icons.loop_rounded, AppColors.brandAccent);
+      return (Icons.loop_rounded, AppTone.brand);
     }
     if (lower.contains('pay') || lower.contains('debt_pay')) {
-      return (Icons.payments_rounded, AppColors.brand);
+      return (Icons.payments_rounded, AppTone.success);
     }
     if (lower.contains('debt') || lower.contains('add_debt')) {
-      return (Icons.account_balance_wallet_rounded, AppColors.error);
+      return (Icons.account_balance_wallet_rounded, AppTone.danger);
     }
     if (lower.contains('whatsapp') || lower.contains('message')) {
-      return (Icons.chat_bubble_rounded, AppColors.warning);
+      return (Icons.chat_bubble_rounded, AppTone.warning);
     }
-    // 2026-07-12: تشغيل/تعطيل/فصل — نُميّزهم بأيقونات + ألوان مناسبة.
+    // 2026-07-12: تشغيل/تعطيل/فصل — أيقونات ونغمات مميّزة.
     if (lower.contains('subscriber_enable') ||
         lower.contains('enable_subscriber')) {
-      return (Icons.check_circle_rounded, AppColors.success);
+      return (Icons.check_circle_rounded, AppTone.success);
     }
     if (lower.contains('subscriber_disable') ||
         lower.contains('disable_subscriber')) {
-      return (Icons.block_rounded, AppColors.warning);
+      return (Icons.block_rounded, AppTone.warning);
     }
     if (lower.contains('subscriber_disconnect') ||
         lower.contains('disconnect_subscriber')) {
-      return (Icons.power_settings_new_rounded, AppColors.error);
+      return (Icons.power_settings_new_rounded, AppTone.danger);
     }
-    return (Icons.history_rounded, AppColors.textMid);
+    return (Icons.history_rounded, AppTone.neutral);
   }
 
   static int _readAmount(Map<String, dynamic> m) {

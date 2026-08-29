@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../api/api_client.dart'
     show authExpiredSignal, accessBlockedSignal, blockedMessage;
 import '../services/permissions_service.dart';
+import '../core/widgets/design_sheet.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -81,31 +82,49 @@ class _MainShellState extends State<MainShell> {
     final msg = blockedMessage ?? 'تم إيقاف حسابك — تواصل مع الإدارة';
     // dialog أوضح من snackbar للحالة الحرجة (المدير لن يرى الـsnackbar
     // لو انتقل مباشرة لـLoginScreen).
-    showDialog<void>(
+    // شيت خطر لا AlertDialog: الحوار الافتراضي يرث ثيم Material
+    // (نصف قطر 28 وحشوة وأزرار خارج السلّم) ولا يعرف لغة المخطّط.
+    showModalBottomSheet<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.block, color: AppColors.errorFill, size: 40),
-        title: const Text('تم إيقاف حسابك', textAlign: TextAlign.center),
-        content: Text(msg,
-            textAlign: TextAlign.center, style: const TextStyle(height: 1.5)),
-        actions: [
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.errorFill,
-              minimumSize: const Size(double.infinity, 40),
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (_) => false,
-              );
-            },
-            child: const Text('حسناً'),
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: DesignSheet(
+          header: SheetHeaderBar(
+            icon: Icons.block_rounded,
+            title: 'تم إيقاف حسابك',
+            subtitle: '',
+            tint: AppColors.error,
+            tintBg: AppColors.dangerSoftBg,
+            onClose: () => _leaveToLogin(ctx),
           ),
-        ],
+          footer: SheetFooterBar(
+            label: 'حسناً',
+            icon: Icons.logout_rounded,
+            color: AppColors.errorFill,
+            onPressed: () => _leaveToLogin(ctx),
+          ),
+          body: Text(
+            msg,
+            textAlign: TextAlign.center,
+            style: AppType.rowValue(color: AppColors.textBody)
+                .copyWith(height: 1.6),
+          ),
+        ),
       ),
+    );
+  }
+
+  void _leaveToLogin(BuildContext sheetCtx) {
+    Navigator.of(sheetCtx).pop();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
     );
   }
 
@@ -137,11 +156,9 @@ class _MainShellState extends State<MainShell> {
     final rootCtx = context;
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
       builder: (_) => _QuickAddSheet(rootContext: rootCtx),
     );
   }
@@ -436,14 +453,8 @@ class _SearchPill extends StatelessWidget {
           height: 44,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.brand, width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            // بلا ظلّ — نفس سبب stats_grid.
+            border: Border.all(color: AppColors.brand, width: BW.selected),
           ),
           child: Icon(Icons.search_rounded, color: AppColors.brand, size: 20),
         ),
@@ -473,16 +484,17 @@ class _QuickAddSheet extends StatelessWidget {
       'subscribers.add_debt',
       'reports.expenses',
     ]);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
-      child: Column(
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: Icons.add_rounded,
+        title: 'dashboard.quick_add'.tr(),
+        subtitle: '',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('dashboard.quick_add'.tr(),
-              style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 18)),
-          const SizedBox(height: Sp.lg),
           if (!hasAny)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Sp.lg),

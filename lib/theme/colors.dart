@@ -249,3 +249,63 @@ class AppColors {
   static Color get info =>
       _isDark ? const Color(0xFF8FAEE8) : const Color(0xFF3F5C99);
 }
+
+/// النغمة الدلاليّة — رباعيّة `fill · softBg · softBorder · onSoft`
+/// تُمرَّر ككيان واحد بدل تمرير `Color` مفرد.
+///
+/// لماذا: النمط الغالب في التطبيق كان تمرير لون واحد ثمّ اشتقاق
+/// خلفيّته بـ`color.withValues(alpha: .1)` وحدّه بـ`.3`. هذا **ينهار
+/// ليلاً** لسببين: الاشتقاق بالشفافيّة لا يورث وعي الوضع، وبعض التوكنات
+/// تنقلب اتّجاهاً (`error` يفتح من #B02A22 إلى #F0837A فتصير خلفيّته
+/// الشفّافة ضباباً وردياً بدل عتمة حمراء).
+///
+/// تمرير `AppTone` بدل `Color` يجعل الأربعة تأتي من اللوحة معاً، فتصحّ
+/// في الوضعين بلا اشتقاق.
+enum AppTone {
+  brand,
+  success,
+  warning,
+  danger,
+  info,
+  neutral;
+
+  /// اللون الصلب — الأيقونة والقيمة والتعبئة.
+  Color get fill => switch (this) {
+        AppTone.brand => AppColors.brandAccent,
+        AppTone.success => AppColors.success,
+        AppTone.warning => AppColors.warningFill,
+        AppTone.danger => AppColors.error,
+        AppTone.info => AppColors.info,
+        AppTone.neutral => AppColors.textMid,
+      };
+
+  /// خلفيّة الحبّة/المربّع الخفيفة.
+  Color get softBg => switch (this) {
+        AppTone.brand => AppColors.brandSoftBg,
+        AppTone.success => AppColors.successSoftBg,
+        AppTone.warning => AppColors.warningSoftBg,
+        AppTone.danger => AppColors.dangerSoftBg,
+        AppTone.info => AppColors.brandSoftBg,
+        AppTone.neutral => AppColors.surfaceSunken,
+      };
+
+  /// حدّ الحبّة/الكارت الخفيف.
+  Color get softBorder => switch (this) {
+        AppTone.brand => AppColors.brandSoftBorder,
+        AppTone.success => AppColors.successSoftBorder,
+        AppTone.warning => AppColors.warningSoftBorder,
+        AppTone.danger => AppColors.dangerSoftBorder,
+        AppTone.info => AppColors.brandSoftBorder,
+        AppTone.neutral => AppColors.border,
+      };
+
+  /// النصّ فوق `softBg` — أغمق من `fill` ليبلغ 4.5:1.
+  Color get onSoft => switch (this) {
+        AppTone.brand => AppColors.brandOnSoft,
+        AppTone.success => AppColors.brandOnSoft,
+        AppTone.warning => AppColors.warningOnSoft,
+        AppTone.danger => AppColors.dangerOnSoft,
+        AppTone.info => AppColors.brandOnSoft,
+        AppTone.neutral => AppColors.textBody,
+      };
+}

@@ -38,10 +38,10 @@ class SubscribersCard extends StatelessWidget {
       padding: const EdgeInsets.all(Sp.xl),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.xl),
-        border: Border.all(
-          color: AppColors.brandSoftBg,
-        ),
+        borderRadius: BorderRadius.circular(R.card),
+        // حدّ محايد لا مشتقّ من البراند: `brandSoftBg` كحدٍّ يذوب في
+        // السطح ليلاً ويصبغ الكارت أخضر بلا داعٍ نهاراً.
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
@@ -60,7 +60,7 @@ class SubscribersCard extends StatelessWidget {
                 child: Column(
                   children: [
                     _RingStatRow(
-                      color: AppColors.brand,
+                      tone: AppTone.brand,
                       icon: LucideIcons.circleCheck,
                       label: 'dashboard.active'.tr(),
                       value: s.active,
@@ -70,7 +70,7 @@ class SubscribersCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 7),
                     _RingStatRow(
-                      color: AppColors.success,
+                      tone: AppTone.success,
                       icon: LucideIcons.wifi,
                       label: 'dashboard.online'.tr(),
                       value: s.online,
@@ -80,7 +80,7 @@ class SubscribersCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 7),
                     _RingStatRow(
-                      color: AppColors.textMid,
+                      tone: AppTone.neutral,
                       icon: LucideIcons.wifiOff,
                       label: 'dashboard.offline'.tr(),
                       value: s.offline,
@@ -90,7 +90,7 @@ class SubscribersCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 7),
                     _RingStatRow(
-                      color: AppColors.error,
+                      tone: AppTone.danger,
                       icon: LucideIcons.timerOff,
                       label: 'dashboard.expired'.tr(),
                       value: s.expired,
@@ -100,7 +100,7 @@ class SubscribersCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 7),
                     _RingStatRow(
-                      color: Colors.deepOrange,
+                      tone: AppTone.warning,
                       icon: LucideIcons.triangleAlert,
                       label: 'dashboard.near_expiry'.tr(),
                       value: s.nearExpiry,
@@ -112,7 +112,7 @@ class SubscribersCard extends StatelessWidget {
                     // "بدون نت" — متصل + منتهي. لون بنفسجي مطابق
                     // للـchip في صفحة المشتركين والويب.
                     _RingStatRow(
-                      color: AppColors.brandAccent,
+                      tone: AppTone.info,
                       icon: LucideIcons.wifiOff,
                       label: 'dashboard.online_no_plan'.tr(),
                       value: s.onlineNoPlan,
@@ -129,38 +129,23 @@ class SubscribersCard extends StatelessWidget {
           // Active vs expired gradient bar. Flex ratios match v1: when
           // there are 0 active subs the active strip still shows a
           // 1-flex hint so the bar isn't entirely red.
+          // ألوان مصمتة لا تدرّجات: المخطّط لا يستعمل تدرّجاً واحداً،
+          // والتدرّج هنا كان يمزج أربع درجات لا تحمل أيّ معلومة إضافيّة
+          // عن النسبة — الطول وحده يحملها.
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(R.pill),
             child: SizedBox(
               height: 6,
               child: Row(
                 children: [
                   Expanded(
                     flex: s.active > 0 ? s.active : 1,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppColors.brandDark, // brand darker
-                            AppColors.success, // teal400
-                          ],
-                        ),
-                      ),
-                    ),
+                    child: ColoredBox(color: AppColors.brandAccent),
                   ),
                   if (s.expired > 0)
                     Expanded(
                       flex: s.expired,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.red.shade400,
-                              Colors.red.shade700,
-                            ],
-                          ),
-                        ),
-                      ),
+                      child: ColoredBox(color: AppColors.errorFill),
                     ),
                 ],
               ),
@@ -183,10 +168,10 @@ class _Skeleton extends StatelessWidget {
       height: 220,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.xl),
-        border: Border.all(
-          color: AppColors.brandSoftBg,
-        ),
+        borderRadius: BorderRadius.circular(R.card),
+        // حدّ محايد لا مشتقّ من البراند: `brandSoftBg` كحدٍّ يذوب في
+        // السطح ليلاً ويصبغ الكارت أخضر بلا داعٍ نهاراً.
+        border: Border.all(color: AppColors.border),
       ),
       child: Center(
         child: SizedBox(
@@ -265,14 +250,16 @@ class _Ring extends StatelessWidget {
 /// press; matches v1's _RingStatRow 1:1.
 class _RingStatRow extends StatelessWidget {
   const _RingStatRow({
-    required this.color,
+    required this.tone,
     required this.icon,
     required this.label,
     required this.value,
     this.onTap,
   });
 
-  final Color color;
+  /// نغمة دلاليّة لا لون مفرد — تحمل التعبئة والخلفيّة معاً من اللوحة
+  /// بدل اشتقاق الخلفيّة بشفافيّة لا تعرف الوضع الليلي.
+  final AppTone tone;
   final IconData icon;
   final String label;
   final int value;
@@ -287,13 +274,13 @@ class _RingStatRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: tone.softBg,
+              borderRadius: BorderRadius.circular(R.icon),
             ),
-            child: Icon(icon, color: color, size: 15),
+            child: Icon(icon, color: tone.fill, size: 16),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -305,7 +292,7 @@ class _RingStatRow extends StatelessWidget {
           ),
           Text(
             '$value',
-            style: AppType.title(color: color).copyWith(
+            style: AppType.title(color: tone.fill).copyWith(
               fontSize: 16,
               fontWeight: FontWeight.w800,
               height: 1,
@@ -341,7 +328,7 @@ class _RingPainter extends CustomPainter {
     final radius = size.width / 2 - 10;
 
     final bgPaint = Paint()
-      ..color = AppColors.brandSoftBg.withValues(alpha: 0.4)
+      ..color = AppColors.brandSoftBg
       ..style = PaintingStyle.stroke
       ..strokeWidth = _stroke
       ..strokeCap = StrokeCap.round;
@@ -352,18 +339,10 @@ class _RingPainter extends CustomPainter {
     final rect = Rect.fromCircle(center: center, radius: radius);
     final activeSweep = 2 * math.pi * activeRatio;
 
-    final activeGradient = SweepGradient(
-      startAngle: _startAngle,
-      endAngle: _startAngle + activeSweep,
-      colors: [
-        AppColors.brandSoftBorder, // teal300
-        AppColors.success, // teal400
-        AppColors.brand, // brand (teal800-ish)
-      ],
-      stops: const [0.0, 0.5, 1.0],
-    );
+    // قوس مصمت: التدرّج كان يمرّ بثلاث درجات براند فيقرأ كأنّه ثلاث
+    // شرائح لا قوساً واحداً، والنسبة تُقرأ من الطول لا من اللون.
     final activePaint = Paint()
-      ..shader = activeGradient.createShader(rect)
+      ..color = AppColors.brandAccent
       ..style = PaintingStyle.stroke
       ..strokeWidth = _stroke
       ..strokeCap = StrokeCap.round;
@@ -373,18 +352,8 @@ class _RingPainter extends CustomPainter {
 
     const gap = 0.04;
     final expiredSweep = 2 * math.pi * expiredRatio;
-    final expiredGradient = SweepGradient(
-      startAngle: _startAngle + activeSweep + gap,
-      endAngle: _startAngle + activeSweep + expiredSweep,
-      colors: [
-        AppColors.dangerSoftBorder,
-        AppColors.error,
-        AppColors.errorFill,
-      ],
-      stops: const [0.0, 0.5, 1.0],
-    );
     final expiredPaint = Paint()
-      ..shader = expiredGradient.createShader(rect)
+      ..color = AppColors.errorFill
       ..style = PaintingStyle.stroke
       ..strokeWidth = _stroke
       ..strokeCap = StrokeCap.round;
