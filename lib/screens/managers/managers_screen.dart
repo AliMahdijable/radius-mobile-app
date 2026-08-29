@@ -598,7 +598,7 @@ class _ManagerTile extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.brandAccent.withValues(alpha: 0.12),
+                      color: AppColors.brandSoftBg,
                       borderRadius: BorderRadius.circular(R.card),
                     ),
                     alignment: Alignment.center,
@@ -631,8 +631,7 @@ class _ManagerTile extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 5, vertical: 1),
                                 decoration: BoxDecoration(
-                                  color:
-                                      AppColors.error.withValues(alpha: 0.15),
+                                  color: AppColors.dangerSoftBg,
                                   borderRadius: BorderRadius.circular(R.pill),
                                 ),
                                 child: Text(

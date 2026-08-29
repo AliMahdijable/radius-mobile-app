@@ -556,7 +556,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: AppColors.brand.withValues(alpha: 0.14),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -574,7 +574,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.15),
+              color: AppColors.successSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Text('PPP: ${s.pppActiveCount}',
@@ -940,7 +940,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 drawVerticalLine: false,
                 horizontalInterval: maxY / 4,
                 getDrawingHorizontalLine: (_) => FlLine(
-                  color: AppColors.border.withValues(alpha: 0.35),
+                  color: AppColors.borderSoft,
                   strokeWidth: 0.5,
                 ),
               ),
@@ -1189,7 +1189,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       child: LinearProgressIndicator(
         value: ratio.clamp(0.0, 1.0),
         minHeight: 2,
-        backgroundColor: AppColors.border.withValues(alpha: 0.3),
+        backgroundColor: AppColors.borderSoft,
         valueColor: AlwaysStoppedAnimation(color.withValues(alpha: 0.6)),
       ),
     );

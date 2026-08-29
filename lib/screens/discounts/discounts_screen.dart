@@ -827,7 +827,7 @@ class _SubscriberCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
-                        color: AppColors.warning.withValues(alpha: 0.15),
+                        color: AppColors.warningSoftBg,
                         borderRadius: BorderRadius.circular(R.sm),
                       ),
                       child: Text(

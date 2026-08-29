@@ -152,7 +152,7 @@ class _ActionsSheet extends StatelessWidget {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: AppColors.brandAccent.withValues(alpha: 0.12),
+                      color: AppColors.brandSoftBg,
                       borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,

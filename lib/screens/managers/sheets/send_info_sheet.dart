@@ -271,13 +271,11 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                          borderSide: BorderSide(color: AppColors.borderSoft),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                          borderSide: BorderSide(color: AppColors.borderSoft),
                         ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(

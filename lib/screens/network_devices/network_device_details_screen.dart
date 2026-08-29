@@ -428,7 +428,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           end: Alignment.bottomRight,
           colors: [
             AppColors.brandSoftBg,
-            AppColors.brand.withValues(alpha: 0.02),
+            AppColors.brandSoftBg,
           ],
         ),
         border: Border.all(color: AppColors.border, width: 1),
@@ -853,16 +853,16 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.brandAccent.withValues(alpha: 0.06),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.brandAccent.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.brandSoftBorder),
       ),
       child: Row(children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.brandAccent.withValues(alpha: 0.12),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(LucideIcons.radioTower,
@@ -943,16 +943,16 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.06),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.brandSoftBorder),
       ),
       child: Row(children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.info.withValues(alpha: 0.12),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(LucideIcons.zap, color: AppColors.info, size: 20),
@@ -996,16 +996,16 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.06),
+        color: AppColors.warningSoftBg,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.warningSoftBorder),
       ),
       child: Row(children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.warning.withValues(alpha: 0.12),
+            color: AppColors.warningSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Center(
@@ -1054,17 +1054,16 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.brandAccent.withValues(alpha: 0.06),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.lg),
-        border:
-            Border.all(color: AppColors.brandAccent.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.brandSoftBorder),
       ),
       child: Row(children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.brandAccent.withValues(alpha: 0.12),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Center(

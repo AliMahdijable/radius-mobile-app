@@ -1997,10 +1997,10 @@ class _DebtSummaryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.warning.withValues(alpha: 0.08),
+          color: AppColors.warningSoftBg,
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
-            color: AppColors.warning.withValues(alpha: 0.22),
+            color: AppColors.warningSoftBorder,
           ),
         ),
         child: Row(

@@ -177,7 +177,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.14),
+                        color: AppColors.successSoftBg,
                         borderRadius: BorderRadius.circular(R.chip),
                       ),
                       alignment: Alignment.center,

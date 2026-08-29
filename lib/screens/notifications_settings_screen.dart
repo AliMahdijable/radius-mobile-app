@@ -260,9 +260,7 @@ class _Toggle extends StatelessWidget {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: value
-                  ? AppColors.brand.withValues(alpha: 0.14)
-                  : AppColors.surfaceInput,
+              color: value ? AppColors.brandSoftBg : AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             alignment: Alignment.center,

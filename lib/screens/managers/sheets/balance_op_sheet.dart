@@ -377,13 +377,13 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: _isLoan
-                              ? AppColors.warning.withValues(alpha: 0.08)
+                              ? AppColors.warningSoftBg
                               : AppColors.surfaceInput,
                           borderRadius: BorderRadius.circular(R.sm),
                           border: Border.all(
                               color: _isLoan
-                                  ? AppColors.warning.withValues(alpha: 0.4)
-                                  : AppColors.border.withValues(alpha: 0.5)),
+                                  ? AppColors.warningSoftBorder
+                                  : AppColors.borderSoft),
                         ),
                         child: Row(
                           children: [

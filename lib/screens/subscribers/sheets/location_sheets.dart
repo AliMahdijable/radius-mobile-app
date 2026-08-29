@@ -586,10 +586,10 @@ class _EditSheetState extends State<_EditSheet> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.08),
+                color: AppColors.successSoftBg,
                 borderRadius: BorderRadius.circular(R.sm),
                 border: Border.all(
-                  color: AppColors.success.withValues(alpha: 0.3),
+                  color: AppColors.successSoftBorder,
                   width: 0.5,
                 ),
               ),

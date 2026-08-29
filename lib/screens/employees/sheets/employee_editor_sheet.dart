@@ -233,7 +233,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: AppColors.brandAccent.withValues(alpha: 0.12),
+                        color: AppColors.brandSoftBg,
                         borderRadius: BorderRadius.circular(R.md),
                       ),
                       child: Icon(
@@ -732,7 +732,7 @@ class _PresetChip extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: AppColors.brandAccent.withValues(alpha: 0.08),
+      color: AppColors.brandSoftBg,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -741,8 +741,7 @@ class _PresetChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.sm),
-            border:
-                Border.all(color: AppColors.brandAccent.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.brandSoftBorder),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

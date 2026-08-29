@@ -380,7 +380,7 @@ class _ExpenseTile extends StatelessWidget {
                 width: 3,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.7),
+                  color: AppColors.dangerSoftBorder,
                   borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),

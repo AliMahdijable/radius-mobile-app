@@ -170,7 +170,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           decoration: BoxDecoration(
             color: AppColors.dangerSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+            border: Border.all(color: AppColors.dangerSoftBorder),
           ),
           child: Row(children: [
             Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.error),
@@ -220,9 +220,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: _monitoring
-              ? AppColors.success.withValues(alpha: 0.12)
-              : AppColors.border.withValues(alpha: 0.4),
+          color: _monitoring ? AppColors.successSoftBg : AppColors.borderSoft,
           borderRadius: BorderRadius.circular(R.card),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -303,8 +301,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               boxShadow: peer.isLinked60
                   ? [
                       BoxShadow(
-                          color: AppColors.success.withValues(alpha: 0.4),
-                          blurRadius: 6),
+                          color: AppColors.successSoftBorder, blurRadius: 6),
                     ]
                   : null,
             ),
@@ -320,7 +317,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppColors.brandAccent.withValues(alpha: 0.12),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text('60 GHz',
@@ -848,7 +845,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.12),
+                color: AppColors.successSoftBg,
                 borderRadius: BorderRadius.circular(R.pill),
               ),
               child: Text(s.lanSpeed!,

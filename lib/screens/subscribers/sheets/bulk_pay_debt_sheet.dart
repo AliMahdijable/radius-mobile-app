@@ -321,10 +321,10 @@ class _SummaryStrip extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
+              color: AppColors.successSoftBg,
               borderRadius: BorderRadius.circular(R.pill),
               border: Border.all(
-                color: AppColors.success.withValues(alpha: 0.3),
+                color: AppColors.successSoftBorder,
               ),
             ),
             child: Text(
@@ -598,10 +598,10 @@ class _PayRowCard extends StatelessWidget {
   /// Border color reflects per-row state — soft border by default,
   /// brand-tinted while configured, success/error when done.
   static Color _statusBorderColor(_PayRow r) {
-    if (r.ok == true) return AppColors.success.withValues(alpha: 0.5);
+    if (r.ok == true) return AppColors.successSoftBorder;
     if (r.ok == false) return AppColors.dangerSoftBorder;
     if (r.ready) {
-      return AppColors.success.withValues(alpha: 0.35);
+      return AppColors.successSoftBorder;
     }
     return AppColors.border;
   }

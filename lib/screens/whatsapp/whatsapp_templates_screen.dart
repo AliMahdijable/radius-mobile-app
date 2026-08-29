@@ -752,13 +752,11 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                           fillColor: AppColors.surface,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(R.sm),
-                            borderSide: BorderSide(
-                                color: AppColors.border.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(color: AppColors.borderSoft),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(R.sm),
-                            borderSide: BorderSide(
-                                color: AppColors.border.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(color: AppColors.borderSoft),
                           ),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
@@ -815,8 +813,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                                   height: 50,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color:
-                                        AppColors.error.withValues(alpha: 0.08),
+                                    color: AppColors.dangerSoftBg,
                                     borderRadius: BorderRadius.circular(R.md),
                                     border: Border.all(
                                       color: AppColors.error

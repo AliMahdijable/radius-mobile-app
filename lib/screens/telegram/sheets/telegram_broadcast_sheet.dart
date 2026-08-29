@@ -142,7 +142,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppColors.brandAccent.withValues(alpha: 0.14),
+                      color: AppColors.brandSoftBg,
                       borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,
@@ -226,11 +226,10 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.08),
+                    color: AppColors.successSoftBg,
                     borderRadius: BorderRadius.circular(R.sm),
                     border: Border.all(
-                        color: AppColors.success.withValues(alpha: 0.3),
-                        width: 0.5),
+                        color: AppColors.successSoftBorder, width: 0.5),
                   ),
                   child: Row(
                     children: [

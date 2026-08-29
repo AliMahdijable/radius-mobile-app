@@ -240,8 +240,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                               horizontal: 10, vertical: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(R.sm),
-                            border: Border.all(
-                                color: AppColors.border.withValues(alpha: 0.5)),
+                            border: Border.all(color: AppColors.borderSoft),
                           ),
                           child: Row(
                             children: [

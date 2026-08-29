@@ -588,10 +588,10 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.15),
+                            color: AppColors.successSoftBg,
                             borderRadius: BorderRadius.circular(R.pill),
                             border: Border.all(
-                              color: AppColors.success.withValues(alpha: 0.4),
+                              color: AppColors.successSoftBorder,
                             ),
                           ),
                           child: Text('مضاف مسبقاً',

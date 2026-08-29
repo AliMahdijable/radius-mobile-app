@@ -358,7 +358,7 @@ class _Tile extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.14),
+                  color: AppColors.successSoftBg,
                   borderRadius: BorderRadius.circular(R.md),
                 ),
                 alignment: Alignment.center,

@@ -598,7 +598,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.08),
+                color: AppColors.warningSoftBg,
                 borderRadius: BorderRadius.circular(R.sm),
               ),
               child: Row(
@@ -1246,7 +1246,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       size: 18, color: AppColors.warning),
               onPressed: _retrying ? null : _retryFailed,
               style: IconButton.styleFrom(
-                backgroundColor: AppColors.warning.withValues(alpha: 0.08),
+                backgroundColor: AppColors.warningSoftBg,
               ),
             ),
             const SizedBox(width: 6),

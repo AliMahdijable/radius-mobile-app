@@ -307,7 +307,7 @@ class _AddSheetState extends State<_AddSheet> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.brand.withValues(alpha: 0.05),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(
                 color: AppColors.brandSoftBg,

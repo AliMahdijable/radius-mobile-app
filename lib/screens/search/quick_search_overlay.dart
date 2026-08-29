@@ -678,7 +678,7 @@ class _EmptyHints extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.mic_rounded,
-                  color: AppColors.brand.withValues(alpha: 0.7), size: 16),
+                  color: AppColors.brandSoftBorder, size: 16),
               const SizedBox(width: 6),
               Text(
                 'أو اضغط الميكروفون للبحث الصوتي',
@@ -845,7 +845,7 @@ class _ResultRow extends StatelessWidget {
                               color: AppColors.dangerSoftBg,
                               borderRadius: BorderRadius.circular(R.pill),
                               border: Border.all(
-                                color: AppColors.error.withValues(alpha: 0.25),
+                                color: AppColors.dangerSoftBorder,
                               ),
                             ),
                             child: Text(

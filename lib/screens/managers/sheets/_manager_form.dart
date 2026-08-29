@@ -470,7 +470,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
       return Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.05),
+          color: AppColors.dangerSoftBg,
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(color: AppColors.dangerSoftBorder),
         ),

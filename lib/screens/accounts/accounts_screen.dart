@@ -398,7 +398,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.brand.withValues(alpha: 0.14),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             alignment: Alignment.center,
@@ -449,7 +449,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         gradient: LinearGradient(
           colors: [
             AppColors.brand,
-            AppColors.brand.withValues(alpha: 0.8),
+            AppColors.brandSoftBorder,
           ],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
@@ -457,7 +457,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         borderRadius: BorderRadius.circular(R.icon),
         boxShadow: [
           BoxShadow(
-            color: AppColors.brand.withValues(alpha: 0.28),
+            color: AppColors.brandSoftBorder,
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -582,7 +582,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.brandAccent.withValues(alpha: 0.12),
+                  color: AppColors.brandSoftBg,
                   borderRadius: BorderRadius.circular(R.card),
                 ),
                 alignment: Alignment.center,

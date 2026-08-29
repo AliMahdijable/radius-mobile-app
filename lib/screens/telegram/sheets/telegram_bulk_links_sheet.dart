@@ -135,7 +135,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.14),
+                      color: AppColors.warningSoftBg,
                       borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,

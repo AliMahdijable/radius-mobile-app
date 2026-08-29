@@ -450,7 +450,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: AppColors.brandAccent.withValues(alpha: 0.12),
+          color: AppColors.brandSoftBg,
           borderRadius: BorderRadius.circular(R.sm),
         ),
         child: Icon(LucideIcons.radioTower,
@@ -529,7 +529,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.brandAccent.withValues(alpha: 0.06),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
@@ -548,7 +548,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: AppColors.brandAccent.withValues(alpha: 0.14),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1296,7 +1296,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
                 drawVerticalLine: false,
                 horizontalInterval: maxY / 4,
                 getDrawingHorizontalLine: (_) => FlLine(
-                  color: AppColors.border.withValues(alpha: 0.35),
+                  color: AppColors.borderSoft,
                   strokeWidth: 0.5,
                 ),
               ),

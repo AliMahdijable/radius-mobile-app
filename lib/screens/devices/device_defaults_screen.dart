@@ -165,10 +165,9 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   Widget _intro() => Container(
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(
-          color: AppColors.brandAccent.withValues(alpha: 0.06),
+          color: AppColors.brandSoftBg,
           borderRadius: BorderRadius.circular(R.lg),
-          border:
-              Border.all(color: AppColors.brandAccent.withValues(alpha: 0.2)),
+          border: Border.all(color: AppColors.brandSoftBorder),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

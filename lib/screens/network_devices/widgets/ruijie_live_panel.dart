@@ -211,10 +211,9 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: AppColors.brandAccent.withValues(alpha: 0.12),
+          color: AppColors.brandSoftBg,
           shape: BoxShape.circle,
-          border: Border.all(
-              color: AppColors.brandAccent.withValues(alpha: 0.3), width: 1.5),
+          border: Border.all(color: AppColors.brandSoftBorder, width: 1.5),
         ),
         child: Icon(LucideIcons.router, color: AppColors.brandAccent, size: 20),
       ),

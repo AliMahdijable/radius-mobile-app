@@ -377,7 +377,7 @@ class _IdentityCard extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: AppColors.brand.withValues(alpha: 0.14),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.md),
             ),
             alignment: Alignment.center,

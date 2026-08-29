@@ -184,9 +184,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: _monitoring
-              ? AppColors.success.withValues(alpha: 0.12)
-              : AppColors.border.withValues(alpha: 0.4),
+          color: _monitoring ? AppColors.successSoftBg : AppColors.borderSoft,
           borderRadius: BorderRadius.circular(R.card),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -262,10 +260,9 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.12),
+              color: AppColors.warningSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
-              border:
-                  Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              border: Border.all(color: AppColors.warningSoftBorder),
             ),
             child: Center(
               child: Text('M',
@@ -483,7 +480,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           width: 26,
           height: 26,
           decoration: BoxDecoration(
-            color: AppColors.warning.withValues(alpha: 0.10),
+            color: AppColors.warningSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Center(
@@ -542,7 +539,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
-            color: AppColors.success.withValues(alpha: 0.15),
+            color: AppColors.successSoftBg,
             borderRadius: BorderRadius.circular(R.pill),
           ),
           child: Text('$online online',

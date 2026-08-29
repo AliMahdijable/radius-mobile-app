@@ -232,10 +232,9 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
                   Container(
                     padding: const EdgeInsets.all(Sp.md),
                     decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.08),
+                      color: AppColors.warningSoftBg,
                       borderRadius: BorderRadius.circular(R.md),
-                      border: Border.all(
-                          color: AppColors.warning.withValues(alpha: 0.25)),
+                      border: Border.all(color: AppColors.warningSoftBorder),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,9 +315,7 @@ class _PermCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: granted
-                  ? AppColors.brand.withValues(alpha: 0.14)
-                  : AppColors.surfaceInput,
+              color: granted ? AppColors.brandSoftBg : AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             alignment: Alignment.center,
@@ -351,9 +348,7 @@ class _PermCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               foregroundColor: granted ? AppColors.textMid : AppColors.brand,
               side: BorderSide(
-                color: granted
-                    ? AppColors.border
-                    : AppColors.brand.withValues(alpha: 0.5),
+                color: granted ? AppColors.border : AppColors.brandSoftBorder,
               ),
             ),
             child: busy
@@ -409,9 +404,7 @@ class _BioCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: enabled
-                  ? AppColors.brand.withValues(alpha: 0.14)
-                  : AppColors.surfaceInput,
+              color: enabled ? AppColors.brandSoftBg : AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             alignment: Alignment.center,

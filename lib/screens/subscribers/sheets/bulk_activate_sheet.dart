@@ -826,7 +826,7 @@ class _RenewRowCard extends StatelessWidget {
   }
 
   static Color _statusBorderColor(_RenewRow r) {
-    if (r.ok == true) return AppColors.brand.withValues(alpha: 0.5);
+    if (r.ok == true) return AppColors.brandSoftBorder;
     if (r.ok == false) return AppColors.dangerSoftBorder;
     if (r.ready) return AppColors.brandSoftBorder;
     return AppColors.border;
@@ -843,7 +843,7 @@ class _FailedRowCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.04),
+        color: AppColors.dangerSoftBg,
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.dangerSoftBorder),
       ),
@@ -892,10 +892,10 @@ class _PriceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.1),
+        color: AppColors.warningSoftBg,
         borderRadius: BorderRadius.circular(R.pill),
         border: Border.all(
-          color: AppColors.warning.withValues(alpha: 0.3),
+          color: AppColors.warningSoftBorder,
         ),
       ),
       child: Row(

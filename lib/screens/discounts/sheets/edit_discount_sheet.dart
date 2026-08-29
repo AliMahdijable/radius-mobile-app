@@ -198,7 +198,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.brand.withValues(alpha: 0.1),
+                                  color: AppColors.brandSoftBg,
                                   borderRadius: BorderRadius.circular(R.sm),
                                   border: Border.all(
                                       color: AppColors.brand

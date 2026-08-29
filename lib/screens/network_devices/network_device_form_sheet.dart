@@ -305,10 +305,9 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.info.withValues(alpha: 0.08),
+                      color: AppColors.brandSoftBg,
                       borderRadius: BorderRadius.circular(R.sm),
-                      border: Border.all(
-                          color: AppColors.info.withValues(alpha: 0.3)),
+                      border: Border.all(color: AppColors.brandSoftBorder),
                     ),
                     child: Row(children: [
                       Icon(LucideIcons.info, size: 14, color: AppColors.info),

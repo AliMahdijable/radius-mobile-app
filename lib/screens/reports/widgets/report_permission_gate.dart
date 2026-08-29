@@ -56,7 +56,7 @@ class ReportPermissionGate extends StatelessWidget {
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.10),
+                        color: AppColors.dangerSoftBg,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(LucideIcons.lock,

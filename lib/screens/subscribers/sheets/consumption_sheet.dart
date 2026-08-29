@@ -67,10 +67,10 @@ class _ConsumptionSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.08),
+                color: AppColors.warningSoftBg,
                 borderRadius: BorderRadius.circular(R.md),
                 border: Border.all(
-                  color: AppColors.warning.withValues(alpha: 0.25),
+                  color: AppColors.warningSoftBorder,
                 ),
               ),
               child: Row(
@@ -124,7 +124,7 @@ class _ConsumptionSheet extends StatelessWidget {
                 color: AppColors.brandSoftBg,
                 borderRadius: BorderRadius.circular(R.md),
                 border: Border.all(
-                  color: AppColors.brand.withValues(alpha: 0.2),
+                  color: AppColors.brandSoftBorder,
                 ),
               ),
               child: Row(
