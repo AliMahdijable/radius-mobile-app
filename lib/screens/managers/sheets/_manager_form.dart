@@ -189,8 +189,12 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
       builder: (_, controller) {
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
+            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
+            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
+            // أن يعلو الشاشة لا أن يغرق فيها.
+            color: AppColors.surfaceSheet,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
           ),
           padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
@@ -198,11 +202,11 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
               const SizedBox(height: 8),
               Center(
                 child: Container(
-                  width: 36,
-                  height: 4,
+                  width: 42,
+                  height: H.grabber,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    color: AppColors.grabber,
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),

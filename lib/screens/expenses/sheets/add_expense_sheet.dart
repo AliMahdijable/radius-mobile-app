@@ -130,8 +130,12 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
       builder: (_, controller) {
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
+            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
+            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
+            // أن يعلو الشاشة لا أن يغرق فيها.
+            color: AppColors.surfaceSheet,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
           ),
           child: Column(
             children: [
