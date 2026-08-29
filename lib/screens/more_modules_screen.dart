@@ -54,7 +54,7 @@ class MoreModulesScreen extends StatelessWidget {
           ]))
             _ModuleCard(
               icon: LucideIcons.chartLine,
-              color: AppColors.success,
+              tone: AppTone.success,
               title: 'nav.reports'.tr(),
               subtitle: 'more.reports_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -64,7 +64,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('reports.expenses'))
             _ModuleCard(
               icon: LucideIcons.receipt,
-              color: AppColors.warning,
+              tone: AppTone.warning,
               title: 'more.expenses'.tr(),
               subtitle: 'more.expenses_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -79,7 +79,8 @@ class MoreModulesScreen extends StatelessWidget {
               ['whatsapp.broadcast', 'whatsapp.send', 'settings.edit']))
             _ModuleCard(
               icon: LucideIcons.send,
-              color: const Color(0xFF229ED9),
+              tone: AppTone.brand,
+              brandGlyph: const Color(0xFF229ED9), // أزرق تلغرام
               title: 'تلغرام',
               subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
               onTap: () => Navigator.of(context).push(
@@ -93,7 +94,8 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('whatsapp.broadcast'))
             _ModuleCard(
               icon: LucideIcons.bell,
-              color: const Color(0xFF25D366),
+              tone: AppTone.brand,
+              brandGlyph: const Color(0xFF25D366), // أخضر واتساب
               title: 'more.broadcast'.tr(),
               subtitle: 'more.broadcast_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -108,7 +110,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.hasAny(['whatsapp.broadcast', 'whatsapp.send']))
             _ModuleCard(
               icon: LucideIcons.messageSquare,
-              color: AppColors.brandAccent,
+              tone: AppTone.brand,
               title: 'more.message_logs'.tr(),
               subtitle: 'more.message_logs_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -120,7 +122,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('managers.view'))
             _ModuleCard(
               icon: LucideIcons.userCog,
-              color: AppColors.brandAccent,
+              tone: AppTone.brand,
               title: 'more.managers'.tr(),
               subtitle: 'more.managers_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -132,7 +134,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.hasAny(['packages.view', 'packages.edit_prices']))
             _ModuleCard(
               icon: LucideIcons.package,
-              color: AppColors.brandAccent,
+              tone: AppTone.brand,
               title: 'more.packages'.tr(),
               subtitle: 'more.packages_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -144,7 +146,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('discounts.view'))
             _ModuleCard(
               icon: LucideIcons.percent,
-              color: AppColors.success,
+              tone: AppTone.success,
               title: 'more.discounts'.tr(),
               subtitle: 'more.discounts_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -156,7 +158,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('employees.view'))
             _ModuleCard(
               icon: LucideIcons.users,
-              color: AppColors.brandAccent,
+              tone: AppTone.brand,
               title: 'more.employees'.tr(),
               subtitle: 'more.employees_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -169,7 +171,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('settings.edit'))
             _ModuleCard(
               icon: LucideIcons.smartphone,
-              color: AppColors.brand,
+              tone: AppTone.brand,
               title: 'portal.title'.tr(),
               subtitle: 'portal.subtitle_more'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -243,13 +245,22 @@ class MoreModulesScreen extends StatelessWidget {
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({
     required this.icon,
-    required this.color,
+    required this.tone,
+    this.brandGlyph,
     required this.title,
     required this.subtitle,
     required this.onTap,
   });
   final IconData icon;
-  final Color color;
+
+  /// نغمة دلاليّة لا لون: الخلفيّة والأيقونة تأتيان من اللوحة معاً،
+  /// فلا اشتقاق بشفافيّة لا يعرف الوضع الليلي.
+  final AppTone tone;
+
+  /// لون علامة طرف ثالث للأيقونة وحدها (أخضر واتساب · أزرق تلغرام).
+  /// المربّع خلفه يبقى محايداً — هويّة القناة في الرمز لا في السطح،
+  /// وصبغ السطح بلون خارجي يكسر اللوحة ولا يعرف الوضع الليلي.
+  final Color? brandGlyph;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -279,10 +290,12 @@ class _ModuleCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.md),
+                  color: brandGlyph == null
+                      ? tone.softBg
+                      : AppColors.surfaceSunken,
+                  borderRadius: BorderRadius.circular(R.icon),
                 ),
-                child: Icon(icon, color: color, size: 22),
+                child: Icon(icon, color: brandGlyph ?? tone.fill, size: 22),
               ),
               const SizedBox(width: Sp.md),
               Expanded(

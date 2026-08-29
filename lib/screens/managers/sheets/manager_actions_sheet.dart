@@ -45,15 +45,27 @@ enum ManagerAction {
   ///
   /// التوزيع دلاليّ لا لونيّ: المال الداخل نجاح، والخارج تحذير،
   /// والحذف خطر، وأخضر واتساب يبقى خاماً لأنّه تعريف قناة.
-  Color get color => switch (this) {
-        ManagerAction.deposit || ManagerAction.payDebt => AppColors.success,
-        ManagerAction.withdraw || ManagerAction.addPoints => AppColors.warning,
-        ManagerAction.otherDebts => AppColors.info,
-        ManagerAction.sendInfo => const Color(0xFF25D366), // أخضر واتساب
-        ManagerAction.copyUsername => AppColors.textMid,
-        ManagerAction.delete => AppColors.error,
-        _ => AppColors.brandAccent,
+  /// ⚠️ **نغمة لا حقل `const`**. الحقل الثابت كان يحمل
+  /// `Color(0xFF3B82F6)` وأمثاله — أرقاماً لا تعرف الوضع الليلي، وenum
+  /// بحقل const لا يمكنه استدعاء getter من اللوحة. نقلُه إلى getter هو
+  /// ما يجعل هذه القائمة تتبدّل مع الوضع.
+  ///
+  /// التوزيع دلاليّ لا لونيّ: المال الداخل نجاح، والخارج تحذير،
+  /// والحذف خطر.
+  AppTone get tone => switch (this) {
+        ManagerAction.deposit || ManagerAction.payDebt => AppTone.success,
+        ManagerAction.withdraw || ManagerAction.addPoints => AppTone.warning,
+        ManagerAction.otherDebts => AppTone.info,
+        ManagerAction.copyUsername => AppTone.neutral,
+        ManagerAction.delete => AppTone.danger,
+        _ => AppTone.brand,
       };
+
+  /// أخضر واتساب للأيقونة وحدها — تعريف قناة لا حالة.
+  Color? get brandGlyph =>
+      this == ManagerAction.sendInfo ? const Color(0xFF25D366) : null;
+
+  Color get color => brandGlyph ?? tone.fill;
 
   String get label => labelKey.tr();
 }
@@ -178,20 +190,20 @@ class _ActionsSheet extends StatelessWidget {
                     LucideIcons.wallet,
                     'managers.chip_balance'.tr(
                         namedArgs: {'amount': formatIQD(manager.balance ?? 0)}),
-                    AppColors.brand,
+                    AppTone.brand,
                   ),
                   if (hasDebt)
                     _summaryChip(
                       LucideIcons.alertTriangle,
                       'managers.chip_debt'
                           .tr(namedArgs: {'amount': formatIQD(totalDebt)}),
-                      AppColors.warning,
+                      AppTone.warning,
                     ),
                   _summaryChip(
                     LucideIcons.users,
                     'managers.chip_subs'
                         .tr(namedArgs: {'n': '${manager.usersCount ?? 0}'}),
-                    AppColors.brandAccent,
+                    AppTone.brand,
                   ),
                 ],
               ),
@@ -221,27 +233,20 @@ class _ActionsSheet extends StatelessWidget {
     );
   }
 
-  Widget _summaryChip(IconData icon, String label, Color color) {
+  Widget _summaryChip(IconData icon, String label, AppTone tone) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.pill),
+        border: Border.all(color: tone.softBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Icon(icon, size: 12, color: tone.fill),
+          const SizedBox(width: Sp.xs),
+          Text(label, style: AppType.pillLabel(color: tone.onSoft)),
         ],
       ),
     );
@@ -250,49 +255,42 @@ class _ActionsSheet extends StatelessWidget {
   Widget _actionTile(BuildContext context, ManagerAction action) {
     // مطابق subscriber_detail_screen _OpCard:
     //   دائرة ملوّنة 52dp + أيقونة بيضاء 22 + label تحتها بـtextHi.
-    return InkResponse(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        Navigator.of(context).pop(action);
-      },
-      radius: 36,
-      highlightShape: BoxShape.circle,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: action.color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: action.color.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: Icon(action.icon, color: AppColors.onBrand, size: 22),
+    // 2026-08-29: من دائرة 52 ملوّنة بأيقونة بيضاء وظلّ ملوّن (لغة v1)
+    // إلى بلاطة المخطّط: سطح أبيض r16 بحدّ، وأيقونة ملوّنة بالنغمة.
+    // نفس لغة `SubscriberActionTiles` — الشاشتان صارتا تُقرآن كعائلة.
+    final tone = action.tone;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          Navigator.of(context).pop(action);
+        },
+        borderRadius: BorderRadius.circular(R.lg),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: AppColors.border),
           ),
-          const SizedBox(height: 7),
-          Flexible(
-            child: Text(
-              action.label,
-              style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
+          padding:
+              const EdgeInsets.symmetric(vertical: Sp.md, horizontal: Sp.x6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(action.icon,
+                  color: action.brandGlyph ?? tone.fill, size: 22),
+              const SizedBox(height: Sp.sm),
+              Text(
+                action.label,
+                style: AppType.muted(color: AppColors.textBody),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
