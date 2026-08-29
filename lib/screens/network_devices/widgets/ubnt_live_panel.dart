@@ -11,6 +11,7 @@ import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
+import '_grade.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -707,19 +708,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     );
   }
 
-  Color _percentGradeColor(double p) {
-    if (p >= 85) return AppColors.error;
-    if (p >= 65) return AppColors.warning;
-    return AppColors.success;
-  }
+  Color _percentGradeColor(double p) => Grade.percentLowerBetter(p).fill;
 
-  Color _tempColor(int t) {
-    if (t <= 0) return AppColors.textLow;
-    if (t >= 75) return AppColors.error;
-    if (t >= 60) return AppColors.warning;
-    if (t >= 45) return AppColors.info;
-    return AppColors.success;
-  }
+  Color _tempColor(int t) => Grade.temperature(t).fill;
 
   // ══════════════════════════════════════════════════════════════
   // Signal Hero — النجم! semi-circular gauge بلوّن حسب جودة الإشارة
@@ -1074,12 +1065,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Helpers
   // ══════════════════════════════════════════════════════════════
-  Color _signalColor(int dbm) {
-    if (dbm >= -60) return AppColors.success;
-    if (dbm >= -70) return AppColors.info;
-    if (dbm >= -80) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _signalColor(int dbm) => Grade.signal(dbm).fill;
 
   String _signalLabel(int dbm) {
     if (dbm >= -60) return 'ممتازة';
@@ -1088,26 +1074,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     return 'ضعيفة';
   }
 
-  Color _snrColor(int snr) {
-    if (snr >= 30) return AppColors.success;
-    if (snr >= 20) return AppColors.info;
-    if (snr >= 15) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _snrColor(int snr) => Grade.snr(snr).fill;
 
-  Color _percentColor(double p) {
-    if (p >= 80) return AppColors.success;
-    if (p >= 50) return AppColors.info;
-    if (p >= 30) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _percentColor(double p) => Grade.percentHigherBetter(p).fill;
 
-  Color _speedColor(int mbps) {
-    if (mbps >= 1000) return AppColors.success;
-    if (mbps >= 100) return AppColors.info;
-    if (mbps >= 10) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _speedColor(int mbps) => Grade.speedMbps(mbps).fill;
 
   String _speedLabel(int mbps) {
     if (mbps >= 1000) return '${mbps ~/ 1000}G';

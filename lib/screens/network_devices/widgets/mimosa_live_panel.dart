@@ -11,6 +11,7 @@ import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
+import '_grade.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Mimosa (B5/B5c/B11/B24/A5/C5/C5c) — SNMP v2c فقط.
 ///
@@ -674,13 +675,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   }
 
   /// لون حسب قوّة الـRSSI (dBm — أقرب للصفر أفضل)
-  Color _rssiColor(int? dbm) {
-    if (dbm == null) return AppColors.textLow;
-    if (dbm >= -50) return AppColors.success; // ممتاز
-    if (dbm >= -65) return AppColors.success; // جيّد
-    if (dbm >= -75) return AppColors.warning; // متوسط
-    return AppColors.error; // ضعيف
-  }
+  Color _rssiColor(int? dbm) => Grade.signal(dbm).fill;
 
   Widget _chainMetric(String label, String value, Color color) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -970,32 +965,13 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     );
   }
 
-  Color _rxColor(double dbm) {
-    if (dbm >= -50) return AppColors.success;
-    if (dbm >= -65) return AppColors.info;
-    if (dbm >= -75) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _rxColor(double dbm) => Grade.rxPower(dbm).fill;
 
-  Color _snrColor(double snr) {
-    if (snr >= 25) return AppColors.success;
-    if (snr >= 15) return AppColors.info;
-    if (snr >= 10) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _snrColor(double snr) => Grade.snr(snr).fill;
 
-  Color _tempColor(double t) {
-    if (t >= 75) return AppColors.error;
-    if (t >= 60) return AppColors.warning;
-    return AppColors.success;
-  }
+  Color _tempColor(double t) => Grade.temperature(t).fill;
 
-  Color _errColor(double? pct) {
-    if (pct == null) return AppColors.textLow;
-    if (pct >= 5) return AppColors.error;
-    if (pct >= 1) return AppColors.warning;
-    return AppColors.success;
-  }
+  Color _errColor(double? pct) => Grade.errorRate(pct).fill;
 
   String _modeLabel(int mode) {
     switch (mode) {

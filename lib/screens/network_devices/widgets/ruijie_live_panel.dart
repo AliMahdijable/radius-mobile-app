@@ -11,6 +11,7 @@ import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
+import '_grade.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Ruijie / Reyee (SNMP v2c فقط).
 ///
@@ -476,12 +477,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
   }
 
   // ── Helpers ──
-  Color _percentColor(double? v) {
-    if (v == null) return AppColors.textLow;
-    if (v < 50) return AppColors.success;
-    if (v < 75) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _percentColor(double? v) => Grade.percentHigherBetter(v).fill;
 
   String _bpsShort(int bps) {
     if (bps <= 0) return '0';

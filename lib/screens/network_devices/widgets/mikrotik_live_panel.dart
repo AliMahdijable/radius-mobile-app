@@ -11,6 +11,7 @@ import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
+import '_grade.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -770,21 +771,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     );
   }
 
-  Color _tempColor(int? t) {
-    if (t == null) return AppColors.textLow;
-    if (t >= 75) return AppColors.error;
-    if (t >= 60) return AppColors.warning;
-    if (t >= 45) return AppColors.info;
-    return AppColors.success;
-  }
+  Color _tempColor(int? t) => Grade.temperature(t).fill;
 
-  Color _voltageColor(double? v) {
-    if (v == null) return AppColors.textLow;
-    // فولتيّة PoE عادية 24V / 48V — انحراف كبير = مشكلة
-    if (v < 20 || v > 60) return AppColors.error;
-    if (v < 22 || v > 55) return AppColors.warning;
-    return AppColors.success;
-  }
+  Color _voltageColor(double? v) => Grade.voltage(v).fill;
 
   Widget _percentCard({
     required IconData icon,
@@ -1442,11 +1431,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     );
   }
 
-  Color _ccqColor(int ccq) {
-    if (ccq >= 80) return AppColors.success;
-    if (ccq >= 50) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _ccqColor(int ccq) => Grade.percentHigherBetter(ccq).fill;
 
   Color _signalColorFor(int dbm) {
     if (dbm >= -60) return AppColors.success;
@@ -1470,14 +1455,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   }
 
   /// اللون حسب سرعة الـport — 1G أخضر، 100M أزرق، 10M أصفر، أقلّ أحمر
-  Color _linkSpeedColor(String raw) {
-    final r = raw.toLowerCase();
-    if (r.contains('g') || r.contains('10000') || r.contains('2500'))
-      return AppColors.success;
-    if (r.contains('1000') || r.contains('100m')) return AppColors.info;
-    if (r.contains('10m')) return AppColors.warning;
-    return AppColors.textMid;
-  }
+  Color _linkSpeedColor(String raw) => Grade.linkSpeedText(raw).fill;
 
   /// اختصار uptime: "3w2d15h4m5s" → "3أ 2ي" (أسبوع/يوم) أو "17س 4د"
   String _formatUptime(String raw) {

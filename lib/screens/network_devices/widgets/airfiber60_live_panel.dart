@@ -11,6 +11,7 @@ import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
+import '_grade.dart';
 
 /// لوحة مراقبة متخصّصة لـUBNT airFiber 60 (GP/LR) — PtP 60 GHz link view.
 /// mca-status عنده مضلّل (signal=-93، wlanTxRate=0). البيانات الحقيقيّة في wstalist.prs_sta.
@@ -1133,12 +1134,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
   }
 
   // ── color/label helpers ─────────────────────────────
-  Color _signalColor(int dbm) {
-    if (dbm >= -60) return AppColors.success;
-    if (dbm >= -70) return AppColors.info;
-    if (dbm >= -80) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _signalColor(int dbm) => Grade.signal(dbm).fill;
 
   String _signalLabel(int dbm) {
     if (dbm >= -60) return 'ممتازة';
@@ -1155,12 +1151,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     return ((dbm + 95) / 55 * 100).clamp(0.0, 100.0);
   }
 
-  Color _snrColor(int snr) {
-    if (snr >= 25) return AppColors.success;
-    if (snr >= 15) return AppColors.info;
-    if (snr >= 10) return AppColors.warning;
-    return AppColors.error;
-  }
+  Color _snrColor(int snr) => Grade.snr(snr).fill;
 
   /// SNR → % — mapping خطّي بين 0 (0%) و 40 (100%).
   double _snrPercent(int snr) {
@@ -1176,17 +1167,9 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     return 'ضعيف';
   }
 
-  Color _tempColor(int t) {
-    if (t >= 75) return AppColors.error;
-    if (t >= 60) return AppColors.warning;
-    return AppColors.success;
-  }
+  Color _tempColor(int t) => Grade.temperature(t).fill;
 
-  Color _percentColor(double p) {
-    if (p >= 85) return AppColors.error;
-    if (p >= 65) return AppColors.warning;
-    return AppColors.success;
-  }
+  Color _percentColor(double p) => Grade.percentHigherBetter(p).fill;
 
   String _formatUptime(int seconds) {
     if (seconds <= 0) return '—';
