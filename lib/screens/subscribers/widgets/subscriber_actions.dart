@@ -74,7 +74,21 @@ class SubscriberActionTiles extends StatelessWidget {
       if (i > 0) children.add(const SizedBox(width: Sp.sm));
       children.add(Expanded(child: _ActionTile(action: actions[i])));
     }
-    return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+    // ⚠️ `IntrinsicHeight` ليس تجميلاً: الصفّ يعيش داخل `ListView`، أي
+    // ارتفاع غير محدود. و`CrossAxisAlignment.stretch` وحده يمرّر
+    // `h=Infinity` للبلاطات فيرمي «BoxConstraints forces an infinite
+    // height» ويترك الـRenderFlex بلا تخطيط — وحينها **يسقط تخطيط الـ
+    // sliver كلّه فيختفي كلّ ما بعد الصفّ** (كارت الاتصال والجهاز وزرّ
+    // التجديد). حادثة 2026-08-29.
+    //
+    // `IntrinsicHeight` يقيس أطول بلاطة ويقيّد الصفّ بها، فيبقى
+    // `stretch` يسوّي ارتفاعات البلاطات بلا لانهاية.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
   }
 }
 

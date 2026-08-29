@@ -989,6 +989,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                       onFilter: _availableManagers.isEmpty
                           ? null
                           : _openManagerFilterSheet,
+                      // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
+                      // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
+                      probing: _probing,
+                      onScanDevices:
+                          _probing ? null : () => _runProbeWave(force: true),
                     ),
             ),
             // Sub-manager (parent) filter — sits right under the
@@ -1061,14 +1066,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    // مطلب 2026-06-11: زر فحص الأجهزة اليدوي — يطلق
-                    // wave على كل المتصلين مع force=true (يبطل الـcache).
-                    // معطّل أثناء probing لكي ما يطلق wave فوق wave.
-                    _ScanAllChip(
-                      busy: _probing,
-                      onTap: _probing ? null : () => _runProbeWave(force: true),
-                    ),
-                    const SizedBox(width: 8),
+                    // 2026-08-29: شريحة «فحص الأجهزة» انتقلت إلى ترويسة
+                    // القائمة بجانب الفرز والتصفية — هذا الشريط للفرز فقط.
                     _DeviceSortChip(
                       metric: 'rx',
                       label: 'RX',
@@ -1271,6 +1270,8 @@ class _ListHeader extends StatelessWidget {
     required this.sortLabel,
     required this.onSort,
     required this.onFilter,
+    required this.probing,
+    required this.onScanDevices,
   });
 
   final TextEditingController controller;
@@ -1284,6 +1285,14 @@ class _ListHeader extends StatelessWidget {
   /// null = لا مدراء فرعيّون في هذا الحساب ⇒ الزرّ يختفي بدل أن يفتح
   /// شيتاً فارغاً.
   final VoidCallback? onFilter;
+
+  /// موجة فحص الأجهزة جارية — الزرّ يعرض دوّارة ويرفض النقر حتى لا
+  /// تُطلق موجة فوق موجة.
+  final bool probing;
+
+  /// null أثناء الفحص فقط. الزرّ يبقى ظاهراً دائماً (بخلاف زرّ التصفية)
+  /// لأنّه لا يعتمد على وجود مدراء فرعيّين.
+  final VoidCallback? onScanDevices;
 
   @override
   Widget build(BuildContext context) {
@@ -1308,6 +1317,14 @@ class _ListHeader extends StatelessWidget {
                 ],
               ),
             ),
+            _HeaderIconButton(
+              icon: Icons.refresh_rounded,
+              active: false,
+              busy: probing,
+              onTap: onScanDevices ?? () {},
+              tooltip: 'subscribers.probe_devices'.tr(),
+            ),
+            const SizedBox(width: Sp.sm),
             _HeaderIconButton(
               icon: Icons.swap_vert_rounded,
               active: sortActive,
@@ -1373,13 +1390,24 @@ class _HeaderIconButton extends StatelessWidget {
     required this.icon,
     required this.active,
     required this.onTap,
+    this.busy = false,
+    this.tooltip,
   });
   final IconData icon;
   final bool active;
   final VoidCallback onTap;
 
+  /// يستبدل الأيقونة بدوّارة ويقفل النقر — زرّ فحص الأجهزة أثناء الموجة.
+  final bool busy;
+  final String? tooltip;
+
   @override
   Widget build(BuildContext context) {
+    final body = _build(context);
+    return tooltip == null ? body : Tooltip(message: tooltip!, child: body);
+  }
+
+  Widget _build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -1387,7 +1415,7 @@ class _HeaderIconButton extends StatelessWidget {
           color: active ? AppColors.brandSoftBg : AppColors.surface,
           borderRadius: BorderRadius.circular(R.icon),
           child: InkWell(
-            onTap: onTap,
+            onTap: busy ? null : onTap,
             borderRadius: BorderRadius.circular(R.icon),
             child: Container(
               width: H.iconBtn,
@@ -1401,11 +1429,20 @@ class _HeaderIconButton extends StatelessWidget {
                       : AppColors.borderSoft,
                 ),
               ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: active ? AppColors.brand : AppColors.textBody,
-              ),
+              child: busy
+                  ? SizedBox(
+                      width: 17,
+                      height: 17,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.brandAccent,
+                      ),
+                    )
+                  : Icon(
+                      icon,
+                      size: 20,
+                      color: active ? AppColors.brand : AppColors.textBody,
+                    ),
             ),
           ),
         ),
@@ -2147,59 +2184,6 @@ class _ClearSortChip extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.error,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Manual full-list device scan trigger. Lives at the head of the
-/// device sort bar. Renders a spinner while a wave is running so
-/// it's obvious why repeat taps don't fire.
-class _ScanAllChip extends StatelessWidget {
-  const _ScanAllChip({required this.busy, required this.onTap});
-  final bool busy;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF7C3AED);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: accent.withValues(alpha: 0.4)),
-          ),
-          child: Row(
-            children: [
-              busy
-                  ? const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: accent,
-                      ),
-                    )
-                  : const Icon(LucideIcons.refreshCw, size: 12, color: accent),
-              const SizedBox(width: 5),
-              Text(
-                'subscribers.probe_devices'.tr(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: accent,
                 ),
               ),
             ],
