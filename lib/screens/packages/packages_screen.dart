@@ -11,6 +11,7 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/util/amount_input.dart';
 
 /// مديول تسعير الباقات. شاشة في-المكان: قائمة الباقات، كل باقة فيها
 /// حقل سعر بيع قابل للتعديل. أسفل الشاشة زر "حفظ" واحد ينفّذ
@@ -716,49 +717,51 @@ class _PackageTile extends StatelessWidget {
                 .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
           ),
         ),
-        TextField(
-          controller: ctrl,
-          onChanged: onChanged,
-          // مطلب 2026-06-11: لو الموظف ما عنده packages.edit_prices،
-          // كل الحقول read-only (مع gating إضافي لزر الحفظ).
-          readOnly: !Perms.has('packages.edit_prices'),
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          style: AppType.label(
-                  color: highlight ? AppColors.brand : AppColors.textHi)
-              .copyWith(fontSize: 14, fontWeight: FontWeight.w800),
-          decoration: InputDecoration(
-            hintText: '0',
-            hintStyle: AppType.input(color: AppColors.textLow),
-            filled: true,
-            fillColor: AppColors.surfaceInput,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(
-                color: highlight
-                    ? AppColors.brandSoftBorder
-                    : AppColors.borderSoft,
-                width: highlight ? 1.5 : 1,
+        AmountShorthandBox(
+            controller: ctrl,
+            child: TextField(
+              controller: ctrl,
+              onChanged: onChanged,
+              // مطلب 2026-06-11: لو الموظف ما عنده packages.edit_prices،
+              // كل الحقول read-only (مع gating إضافي لزر الحفظ).
+              readOnly: !Perms.has('packages.edit_prices'),
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: AppType.label(
+                      color: highlight ? AppColors.brand : AppColors.textHi)
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w800),
+              decoration: InputDecoration(
+                hintText: '0',
+                hintStyle: AppType.input(color: AppColors.textLow),
+                filled: true,
+                fillColor: AppColors.surfaceInput,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  borderSide: BorderSide(
+                    color: highlight
+                        ? AppColors.brandSoftBorder
+                        : AppColors.borderSoft,
+                    width: highlight ? 1.5 : 1,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  borderSide: BorderSide(
+                    color: highlight
+                        ? AppColors.brandSoftBorder
+                        : AppColors.borderSoft,
+                    width: highlight ? 1.5 : 1,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  borderSide: BorderSide(color: AppColors.brand, width: 1.8),
+                ),
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(
-                color: highlight
-                    ? AppColors.brandSoftBorder
-                    : AppColors.borderSoft,
-                width: highlight ? 1.5 : 1,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(color: AppColors.brand, width: 1.8),
-            ),
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          ),
-        ),
+            )),
       ],
     );
   }

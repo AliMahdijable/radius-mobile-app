@@ -8,6 +8,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../reports/widgets/report_export.dart';
+import '../../core/util/amount_input.dart';
 
 /// Unified manager movements timeline — مطابق v1
 /// mobile-app/lib/screens/managers/manager_movements_screen.dart.
@@ -61,16 +62,18 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'المبلغ',
-                helperText:
-                    'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
-                helperMaxLines: 2,
-              ),
-            ),
+            AmountShorthandBox(
+                controller: amountCtrl,
+                child: TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'المبلغ',
+                    helperText:
+                        'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
+                    helperMaxLines: 2,
+                  ),
+                )),
             const SizedBox(height: Sp.sm),
             TextField(
               controller: noteCtrl,

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/manual_wa_prefs.dart';
@@ -416,51 +417,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                       radius: 18,
                       padding: const EdgeInsets.symmetric(
                           horizontal: Sp.lg, vertical: 14),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _partialCtrl,
-                              enabled: !_submitting,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                    RegExp(r'[0-9,]')),
-                              ],
-                              textDirection: ui.TextDirection.ltr,
-                              textAlign: TextAlign.right,
-                              style: AppType.amount(),
-                              decoration: InputDecoration(
-                                isDense: true,
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                                hintText: '0',
-                                hintStyle: AppType.amount(
-                                    color: AppColors.textPlaceholder),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: Sp.sm),
-                          Text(cur,
-                              style: AppType.input(color: AppColors.textLabel)
-                                  .copyWith(fontSize: 13)),
-                          if (_partialAmount > 0) ...[
-                            const SizedBox(width: Sp.sm),
-                            InkWell(
-                              onTap: () {
-                                _suppressFormat = true;
-                                _partialCtrl.clear();
-                                _suppressFormat = false;
-                                setState(() => _partialAmount = 0);
-                              },
-                              borderRadius: BorderRadius.circular(R.pill),
-                              child: Icon(LucideIcons.x,
-                                  size: 16, color: AppColors.textHint),
-                            ),
-                          ],
-                        ],
+                      child: AmountTextField(
+                        controller: _partialCtrl,
+                        enabled: !_submitting,
+                        currency: 'common.currency'.tr(),
+                        onValue: (v) => setState(() => _partialAmount = v),
                       ),
                     ),
                     const SizedBox(height: 9),

@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// Bulk pay-debt sheet — mirrors v1's bulk_renew_sheet per-row pattern
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart. The
@@ -459,34 +460,37 @@ class _PayRowCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           // Amount field
-          TextField(
-            controller: row.controller,
-            enabled: enabled && !row.payAll,
-            keyboardType: TextInputType.number,
-            style: AppType.input(color: AppColors.textHi),
-            decoration: InputDecoration(
-              hintText: 'sheets.paid_amount'.tr(),
-              hintStyle: AppType.input(color: AppColors.textLow),
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              suffixText: 'common.currency'.tr(),
-              suffixIcon:
-                  enabled && !row.payAll && row.controller.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(LucideIcons.x, size: 16),
-                          onPressed: onClear,
-                          visualDensity: VisualDensity.compact,
-                        )
-                      : null,
-            ),
-          ),
+          AmountShorthandBox(
+              controller: row.controller,
+              enabled: enabled && !row.payAll,
+              child: TextField(
+                controller: row.controller,
+                enabled: enabled && !row.payAll,
+                keyboardType: TextInputType.number,
+                style: AppType.input(color: AppColors.textHi),
+                decoration: InputDecoration(
+                  hintText: 'sheets.paid_amount'.tr(),
+                  hintStyle: AppType.input(color: AppColors.textLow),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide(color: AppColors.border),
+                  ),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  suffixText: 'common.currency'.tr(),
+                  suffixIcon:
+                      enabled && !row.payAll && row.controller.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(LucideIcons.x, size: 16),
+                              onPressed: onClear,
+                              visualDensity: VisualDensity.compact,
+                            )
+                          : null,
+                ),
+              )),
           if (chips.isNotEmpty && !row.payAll) ...[
             const SizedBox(height: 6),
             Wrap(

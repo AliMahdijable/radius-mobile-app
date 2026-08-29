@@ -7,6 +7,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// تعديل صرفية قائمة. الـsheet مطابق visually للـadd لكن:
 ///  • Title 'تعديل صرفية'
@@ -191,25 +192,27 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                       const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     _label('المبلغ *'),
-                    TextField(
-                      controller: _amountCtrl,
-                      keyboardType: TextInputType.number,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: InputDecoration(
-                        hintText: 'مثلاً 25,000',
-                        hintStyle: AppType.input(color: AppColors.textLow),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(color: AppColors.border),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 10),
-                        suffixText: 'د.ع',
-                      ),
-                    ),
+                    AmountShorthandBox(
+                        controller: _amountCtrl,
+                        child: TextField(
+                          controller: _amountCtrl,
+                          keyboardType: TextInputType.number,
+                          style: AppType.input(color: AppColors.textHi),
+                          decoration: InputDecoration(
+                            hintText: 'مثلاً 25,000',
+                            hintStyle: AppType.input(color: AppColors.textLow),
+                            filled: true,
+                            fillColor: AppColors.surface,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(R.sm),
+                              borderSide: BorderSide(color: AppColors.border),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 10),
+                            suffixText: 'د.ع',
+                          ),
+                        )),
                     const SizedBox(height: Sp.md),
                     _label('التاريخ'),
                     Material(

@@ -10,6 +10,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/existing_discounts_sheet.dart';
+import '../../core/util/amount_input.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -469,30 +470,32 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextField(
-          controller: _amountCtrl,
-          keyboardType: TextInputType.number,
-          style: AppType.input(color: AppColors.textHi),
-          decoration: InputDecoration(
-            hintText: 'قيمة الخصم (مثلاً 5,000)',
-            hintStyle: AppType.input(color: AppColors.textLow),
-            filled: true,
-            fillColor: AppColors.surface,
-            prefixIcon: const Icon(LucideIcons.percent, size: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(color: AppColors.borderSoft),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(color: AppColors.borderSoft),
-            ),
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            suffixText: 'د.ع',
-          ),
-        ),
+        AmountShorthandBox(
+            controller: _amountCtrl,
+            child: TextField(
+              controller: _amountCtrl,
+              keyboardType: TextInputType.number,
+              style: AppType.input(color: AppColors.textHi),
+              decoration: InputDecoration(
+                hintText: 'قيمة الخصم (مثلاً 5,000)',
+                hintStyle: AppType.input(color: AppColors.textLow),
+                filled: true,
+                fillColor: AppColors.surface,
+                prefixIcon: const Icon(LucideIcons.percent, size: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  borderSide: BorderSide(color: AppColors.borderSoft),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  borderSide: BorderSide(color: AppColors.borderSoft),
+                ),
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                suffixText: 'د.ع',
+              ),
+            )),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,

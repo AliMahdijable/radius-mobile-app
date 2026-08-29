@@ -1,11 +1,13 @@
 import 'dart:ui' as ui;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
@@ -272,55 +274,15 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SheetBox(
-                        focused: _effectiveAmount > 0,
+                        focused: _amount > 0,
                         radius: 18,
                         padding: const EdgeInsets.symmetric(
                             horizontal: Sp.lg, vertical: 14),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _amountCtrl,
-                                enabled: !_payAll,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'[0-9,]')),
-                                ],
-                                textDirection: ui.TextDirection.ltr,
-                                textAlign: TextAlign.right,
-                                style: AppType.amount(),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  border: InputBorder.none,
-                                  contentPadding: EdgeInsets.zero,
-                                  hintText: '0',
-                                  hintStyle: AppType.amount(
-                                      color: AppColors.textPlaceholder),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: Sp.sm),
-                            Text('د.ع',
-                                style: AppType.input(color: AppColors.textLabel)
-                                    .copyWith(fontSize: 13)),
-                            if (_amount > 0 && !_payAll) ...[
-                              const SizedBox(width: Sp.sm),
-                              InkWell(
-                                onTap: () {
-                                  _suppressFormat = true;
-                                  _amountCtrl.clear();
-                                  _suppressFormat = false;
-                                  setState(() => _amount = 0);
-                                },
-                                borderRadius: BorderRadius.circular(R.pill),
-                                child: Icon(LucideIcons.x,
-                                    size: 16, color: AppColors.textHint),
-                              ),
-                            ],
-                          ],
+                        child: AmountTextField(
+                          controller: _amountCtrl,
+                          enabled: !_payAll,
+                          currency: 'common.currency'.tr(),
+                          onValue: (v) => setState(() => _amount = v),
                         ),
                       ),
                       const SizedBox(height: 9),

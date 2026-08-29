@@ -9,6 +9,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// تسديد جزئي/كلي لدين خارجي + عرض الدفعات السابقة. مطابق v1
 /// _PayDebtUnifiedSheet (لمصدر custom debt).
@@ -257,12 +258,14 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                       _statBlock(accent),
                       const SizedBox(height: Sp.md),
                       _label('مبلغ التسديد *'),
-                      TextField(
-                        controller: _amountCtrl,
-                        keyboardType: TextInputType.number,
-                        style: AppType.input(color: AppColors.textHi),
-                        decoration: _dec(suffix: 'د.ع'),
-                      ),
+                      AmountShorthandBox(
+                          controller: _amountCtrl,
+                          child: TextField(
+                            controller: _amountCtrl,
+                            keyboardType: TextInputType.number,
+                            style: AppType.input(color: AppColors.textHi),
+                            decoration: _dec(suffix: 'د.ع'),
+                          )),
                       const SizedBox(height: 6),
                       Row(
                         children: [

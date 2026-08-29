@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// Unified pay-debt sheet — mirrors v1
 /// _PayDebtUnifiedSheet (mobile-app/lib/screens/managers_screen.dart:
@@ -354,19 +355,21 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                           ] else ...[
                             const SizedBox(height: Sp.md),
                             // Amount input
-                            TextField(
-                              controller: _amountCtrl,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: InputDecoration(
-                                labelText: 'المبلغ',
-                                suffixText: 'د.ع',
-                                helperText:
-                                    'الحدّ الأقصى ${formatIQD(_maxForSource)}',
-                              ),
-                            ),
+                            AmountShorthandBox(
+                                controller: _amountCtrl,
+                                child: TextField(
+                                  controller: _amountCtrl,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  decoration: InputDecoration(
+                                    labelText: 'المبلغ',
+                                    suffixText: 'د.ع',
+                                    helperText:
+                                        'الحدّ الأقصى ${formatIQD(_maxForSource)}',
+                                  ),
+                                )),
                             const SizedBox(height: Sp.sm),
                             // Quick chips + pay-full
                             Wrap(

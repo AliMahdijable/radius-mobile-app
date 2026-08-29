@@ -8,6 +8,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// Add admin expense sheet — wired from FAB → 'إضافة سريعة' →
 /// 'إضافة صرفية'. Three fields:
@@ -311,36 +312,38 @@ class _AmountField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            style: AppType.input(color: AppColors.textHi),
-            decoration: InputDecoration(
-              hintText: 'مثلاً 25,000',
-              hintStyle: AppType.input(color: AppColors.textLow),
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.borderSoft),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.borderSoft),
-              ),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              suffixText: 'د.ع',
-              suffixIcon: controller.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      onPressed: onClear,
-                      visualDensity: VisualDensity.compact,
-                    )
-                  : null,
-            ),
-          ),
+          AmountShorthandBox(
+              controller: controller,
+              child: TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: AppType.input(color: AppColors.textHi),
+                decoration: InputDecoration(
+                  hintText: 'مثلاً 25,000',
+                  hintStyle: AppType.input(color: AppColors.textLow),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide(color: AppColors.borderSoft),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide(color: AppColors.borderSoft),
+                  ),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  suffixText: 'د.ع',
+                  suffixIcon: controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(LucideIcons.x, size: 16),
+                          onPressed: onClear,
+                          visualDensity: VisualDensity.compact,
+                        )
+                      : null,
+                ),
+              )),
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,

@@ -9,6 +9,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// إضافة دين خارجي على مدير فرعي. مطابق v1 add-debt sheet
 /// (managers_screen.dart:3007). الـbackend يقوم بإرسال إشعار
@@ -184,12 +185,14 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                       const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     _label('المبلغ *'),
-                    TextField(
-                      controller: _amountCtrl,
-                      keyboardType: TextInputType.number,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: _dec(suffix: 'د.ع'),
-                    ),
+                    AmountShorthandBox(
+                        controller: _amountCtrl,
+                        child: TextField(
+                          controller: _amountCtrl,
+                          keyboardType: TextInputType.number,
+                          style: AppType.input(color: AppColors.textHi),
+                          decoration: _dec(suffix: 'د.ع'),
+                        )),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,

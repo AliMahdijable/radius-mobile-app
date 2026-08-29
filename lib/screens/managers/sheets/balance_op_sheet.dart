@@ -11,6 +11,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// نوع العملية الافتراضي (لو actions sheet مرّر نوعاً محدّداً).
 enum BalanceOpKind { deposit, withdraw, addPoints }
@@ -425,26 +426,28 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                     ],
                     const SizedBox(height: Sp.md),
                     _label('المبلغ *'),
-                    TextField(
-                      controller: _amountCtrl,
-                      keyboardType: TextInputType.number,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: InputDecoration(
-                        hintText: 'مثلاً 50,000',
-                        hintStyle: AppType.input(color: AppColors.textLow),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(color: AppColors.border),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 10),
-                        suffixText:
-                            _op == _BalanceOp.addPoints ? 'نقطة' : 'د.ع',
-                      ),
-                    ),
+                    AmountShorthandBox(
+                        controller: _amountCtrl,
+                        child: TextField(
+                          controller: _amountCtrl,
+                          keyboardType: TextInputType.number,
+                          style: AppType.input(color: AppColors.textHi),
+                          decoration: InputDecoration(
+                            hintText: 'مثلاً 50,000',
+                            hintStyle: AppType.input(color: AppColors.textLow),
+                            filled: true,
+                            fillColor: AppColors.surface,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(R.sm),
+                              borderSide: BorderSide(color: AppColors.border),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 10),
+                            suffixText:
+                                _op == _BalanceOp.addPoints ? 'نقطة' : 'د.ع',
+                          ),
+                        )),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,

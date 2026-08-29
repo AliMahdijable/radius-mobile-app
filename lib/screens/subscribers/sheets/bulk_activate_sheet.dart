@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/amount_input.dart';
 
 /// Bulk activate / renew sheet — direct port of v1's bulk_renew_sheet
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart with
@@ -1136,25 +1137,29 @@ class _PartialTextFieldState extends State<_PartialTextField> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return TextField(
-      controller: widget.controller,
-      enabled: widget.enabled,
-      keyboardType: TextInputType.number,
-      style: AppType.input(color: AppColors.textHi),
-      decoration: InputDecoration(
-        hintText: 'sheets.amount_example_10k'.tr(),
-        hintStyle: AppType.input(color: AppColors.textLow),
-        filled: true,
-        fillColor: AppColors.surface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.sm),
-          borderSide: BorderSide(color: AppColors.border),
-        ),
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        suffixText: 'common.currency'.tr(),
-      ),
-    );
+    return AmountShorthandBox(
+        controller: widget.controller,
+        enabled: widget.enabled,
+        child: TextField(
+          controller: widget.controller,
+          enabled: widget.enabled,
+          keyboardType: TextInputType.number,
+          style: AppType.input(color: AppColors.textHi),
+          decoration: InputDecoration(
+            hintText: 'sheets.amount_example_10k'.tr(),
+            hintStyle: AppType.input(color: AppColors.textLow),
+            filled: true,
+            fillColor: AppColors.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            suffixText: 'common.currency'.tr(),
+          ),
+        ));
   }
 }
 
