@@ -141,7 +141,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: AppColors.onBrand,
                               ),
                             )
                           : const Icon(LucideIcons.save, size: 16),

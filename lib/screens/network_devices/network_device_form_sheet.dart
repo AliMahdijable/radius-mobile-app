@@ -344,7 +344,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
+                                  strokeWidth: 2, color: AppColors.onBrand))
                           : const Icon(LucideIcons.check, size: 18),
                       label: Text(widget.existing == null
                           ? 'إضافة الجهاز'
@@ -447,13 +447,13 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon,
-              size: 14, color: active ? Colors.white : AppColors.textMid),
+              size: 14, color: active ? AppColors.onBrand : AppColors.textMid),
           const SizedBox(width: 6),
           Text(label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: active ? Colors.white : AppColors.textHi,
+                color: active ? AppColors.onBrand : AppColors.textHi,
               )),
         ]),
       ),

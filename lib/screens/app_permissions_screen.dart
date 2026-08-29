@@ -103,7 +103,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
               label: 'settings.title'.tr(),
-              textColor: Colors.white,
+              textColor: AppColors.onBrand,
               onPressed: NotificationService.openSettings,
             ),
           ),

@@ -265,7 +265,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: AppType.button(color: Colors.white)),
+        content: Text(msg, style: AppType.button(color: AppColors.onBrand)),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(Sp.lg),
@@ -408,7 +408,7 @@ class _MicButton extends StatelessWidget {
         ? AppColors.error
         : (enabled ? AppColors.brandSoftBg : AppColors.surfaceInput);
     final fg = listening
-        ? Colors.white
+        ? AppColors.onBrand
         : (enabled ? AppColors.brand : AppColors.textLow);
 
     final btn = Material(

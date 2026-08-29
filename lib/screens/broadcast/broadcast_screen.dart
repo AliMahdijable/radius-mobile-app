@@ -1259,14 +1259,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                        valueColor: AlwaysStoppedAnimation(AppColors.onBrand),
                       ),
                     )
                   : const Icon(LucideIcons.send, size: 14),
               label: Text(
                 _sending ? 'جاري الإرسال...' : 'إرسال',
-                style:
-                    AppType.button(color: Colors.white).copyWith(fontSize: 13),
+                style: AppType.button(color: AppColors.onBrand)
+                    .copyWith(fontSize: 13),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brand,

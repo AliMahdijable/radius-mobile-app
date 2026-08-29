@@ -475,13 +475,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
+                    color: AppColors.onBrand.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
                   child: const Icon(
                     LucideIcons.arrowLeftToLine,
-                    color: Colors.white,
+                    color: AppColors.onBrand,
                     size: 22,
                   ),
                 ),
@@ -496,7 +496,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           fontFamily: 'Cairo',
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                          color: AppColors.onBrand,
                           height: 1.15,
                         ),
                       ),
@@ -509,7 +509,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           fontFamily: 'Cairo',
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: AppColors.onBrand.withValues(alpha: 0.9),
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                         maxLines: 1,
@@ -524,7 +524,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.onBrand,
                     ),
                   )
                 else
@@ -532,13 +532,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
+                      color: AppColors.onBrand.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
                     child: const Icon(
                       LucideIcons.arrowRight,
-                      color: Colors.white,
+                      color: AppColors.onBrand,
                       size: 18,
                     ),
                   ),
@@ -699,7 +699,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 1.5,
-                              color: Colors.white,
+                              color: AppColors.onBrand,
                             ),
                           )
                         : const Icon(LucideIcons.logIn, size: 14),

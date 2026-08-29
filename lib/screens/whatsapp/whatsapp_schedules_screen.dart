@@ -297,7 +297,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(msg,
-              style: AppType.label(color: Colors.white)
+              style: AppType.label(color: AppColors.onBrand)
                   .copyWith(fontWeight: FontWeight.w600)),
           backgroundColor: error ? AppColors.error : AppColors.brand,
           behavior: SnackBarBehavior.floating,
@@ -451,7 +451,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : AppColors.textMid,
+                color: isSelected ? AppColors.onBrand : AppColors.textMid,
               )),
           selected: isSelected,
           onSelected: (_) {
@@ -500,13 +500,13 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.2,
-                  color: Colors.white,
+                  color: AppColors.onBrand,
                 ),
               )
             : Text(
                 'wa_schedules.save'.tr(),
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.onBrand,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -704,7 +704,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : AppColors.textMid,
+            color: selected ? AppColors.onBrand : AppColors.textMid,
           ),
         ),
       ),
@@ -731,7 +731,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppColors.textMid,
+                color: selected ? AppColors.onBrand : AppColors.textMid,
               )),
           selected: selected,
           onSelected: (_) {

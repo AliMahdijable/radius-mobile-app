@@ -170,7 +170,7 @@ class _RevealSheetState extends State<_RevealSheet>
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: AppColors.onBrand,
                       ),
                     ),
                   ),

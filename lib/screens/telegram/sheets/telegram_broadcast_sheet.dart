@@ -312,7 +312,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                                 width: 14,
                                 height: 14,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 1.5, color: Colors.white))
+                                    strokeWidth: 1.5, color: AppColors.onBrand))
                             : const Icon(LucideIcons.send, size: 16),
                         label: const Text('إرسال',
                             style: TextStyle(

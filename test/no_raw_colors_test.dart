@@ -68,29 +68,37 @@ void main() {
     );
   });
 
-  test('لا Colors.white/black خام في الودجتات الجديدة', () {
-    // الطقم المشترك واللوحة الجديدة يجب أن يبقيا نظيفين تماماً —
-    // هما المرجع الذي تُقاس عليه بقيّة الشاشات أثناء الترحيل.
-    const guarded = [
-      'lib/core/widgets/design_sheet.dart',
-      'lib/screens/subscribers/widgets/subscriber_actions.dart',
-      'lib/screens/subscribers/widgets/device_probe_card.dart',
-    ];
-    final bad = RegExp(r'(?<![A-Za-z])Colors\.(white|black)(?![A-Za-z])');
+  test('لا Colors.white/black خام في lib/', () {
+    // `Colors.white` هنا كانت تعني دائماً «نصّ أو أيقونة فوق تعبئة
+    // ملوّنة» — وهذا عقد `AppColors.onBrand`. الفرق ليس لونيّاً اليوم
+    // (كلاهما أبيض) بل تعاقديّ: لو تبدّلت التعبئة غداً إلى
+    // `warningFill` بقي `onBrand` صحيحاً وبقي `Colors.white` صدفة.
+    const allowed = <String, String>{
+      'lib/theme/colors.dart': 'تعريف اللوحة',
+      'lib/screens/subscribers/sheets/qr_login_sheet.dart':
+          'بطاقة QR — الأبيض والحبر شرط قراءة الرمز بالكاميرا',
+      'lib/screens/telegram/sheets/telegram_link_generator_sheet.dart':
+          'بطاقة QR — نفس السبب',
+      'lib/screens/network_devices/widgets/brand_badge.dart':
+          'شعارات المصنّعين — الأبيض جزء من هويّة الشعار',
+    };
+    final bad = RegExp(r'(?<![A-Za-z])Colors\.(white|black)(?![A-Za-z0-9])');
     final offenders = <String>[];
-    for (final p in guarded) {
-      final f = File(p);
-      if (!f.existsSync()) continue;
-      final lines = f.readAsLinesSync();
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final path = entity.path.replaceAll(r'\', '/');
+      if (allowed.containsKey(path)) continue;
+      final lines = entity.readAsLinesSync();
       for (var i = 0; i < lines.length; i++) {
-        if (lines[i].trimLeft().startsWith('//')) continue;
-        if (bad.hasMatch(lines[i])) {
-          offenders.add('$p:${i + 1}  ${lines[i].trim()}');
+        final l = lines[i];
+        if (l.trimLeft().startsWith('//') || l.trimLeft().startsWith('///')) {
+          continue;
         }
+        if (bad.hasMatch(l)) offenders.add('$path:${i + 1}  ${l.trim()}');
       }
     }
     expect(offenders, isEmpty,
-        reason: 'استعمل AppColors.onBrand بدل Colors.white:\n'
+        reason: 'استعمل AppColors.onBrand (أو scrim للطبقة المعتّمة):\n'
             '${offenders.join('\n')}');
   });
 }

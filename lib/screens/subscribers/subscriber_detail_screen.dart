@@ -1658,15 +1658,15 @@ class _CopyChipState extends State<_CopyChip> {
           height: 28,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
+            color: AppColors.onBrand.withValues(alpha: 0.15),
             shape: BoxShape.circle,
             border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3), width: 1),
+                color: AppColors.onBrand.withValues(alpha: 0.3), width: 1),
           ),
           child: Icon(
             _copied ? LucideIcons.check : LucideIcons.copy,
             size: 12,
-            color: Colors.white,
+            color: AppColors.onBrand,
           ),
         ),
       ),
@@ -1713,13 +1713,13 @@ class _PasswordRowState extends State<_PasswordRow> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(LucideIcons.lock,
-            size: 11, color: Colors.white.withValues(alpha: 0.7)),
+            size: 11, color: AppColors.onBrand.withValues(alpha: 0.7)),
         const SizedBox(width: 4),
         Flexible(
           child: Text(
             display,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
+              color: AppColors.onBrand.withValues(alpha: 0.85),
               fontSize: 13,
               fontWeight: FontWeight.w600,
               letterSpacing: _visible ? 0 : 2,
@@ -1763,12 +1763,12 @@ class _MiniHeroIconButton extends StatelessWidget {
           height: 24,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
+            color: AppColors.onBrand.withValues(alpha: 0.15),
             shape: BoxShape.circle,
             border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3), width: 1),
+                color: AppColors.onBrand.withValues(alpha: 0.3), width: 1),
           ),
-          child: Icon(icon, size: 11, color: Colors.white),
+          child: Icon(icon, size: 11, color: AppColors.onBrand),
         ),
       ),
     );

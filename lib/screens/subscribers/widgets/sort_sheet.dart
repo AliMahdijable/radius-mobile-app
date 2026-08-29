@@ -219,7 +219,7 @@ class _FieldChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final color = selected ? Colors.white : AppColors.textMid;
+    final color = selected ? AppColors.onBrand : AppColors.textMid;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(R.pill),

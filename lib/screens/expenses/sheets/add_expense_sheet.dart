@@ -508,7 +508,7 @@ class _SubmitBar extends StatelessWidget {
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.onBrand,
                     ),
                   )
                 : Icon(icon, size: 16),

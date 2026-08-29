@@ -340,7 +340,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                               height: 14,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: AppColors.onBrand,
                               ),
                             )
                           : const Icon(LucideIcons.save, size: 16),

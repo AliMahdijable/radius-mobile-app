@@ -252,14 +252,14 @@ class _MyServicesAppState extends State<MyServicesApp>
       colorScheme: brightness == Brightness.dark
           ? ColorScheme.dark(
               primary: AppColors.brand,
-              onPrimary: Colors.white,
+              onPrimary: AppColors.onBrand,
               surface: AppColors.surface,
               onSurface: AppColors.textHi,
               error: AppColors.error,
             )
           : ColorScheme.light(
               primary: AppColors.brand,
-              onPrimary: Colors.white,
+              onPrimary: AppColors.onBrand,
               surface: AppColors.surface,
               onSurface: AppColors.textHi,
               error: AppColors.error,

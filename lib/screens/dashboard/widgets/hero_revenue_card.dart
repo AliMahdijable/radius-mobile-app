@@ -249,7 +249,7 @@ class _PeriodTabs extends StatelessWidget {
         child: Text(
           label,
           style: AppType.muted(
-            color: selected ? Colors.white : AppColors.textMid,
+            color: selected ? AppColors.onBrand : AppColors.textMid,
           ).copyWith(
             fontSize: 11,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,

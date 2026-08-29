@@ -89,7 +89,7 @@ class _SheetSnackEntry {
                 children: [
                   Icon(
                     isError ? Icons.error_outline : Icons.check_circle_outline,
-                    color: Colors.white,
+                    color: AppColors.onBrand,
                     size: 20,
                   ),
                   const SizedBox(width: 10),
@@ -97,7 +97,7 @@ class _SheetSnackEntry {
                     child: Text(
                       message,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.onBrand,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),

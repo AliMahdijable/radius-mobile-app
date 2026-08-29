@@ -388,7 +388,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: AppColors.onBrand,
                             ),
                           )
                         : const Icon(LucideIcons.percent, size: 16),

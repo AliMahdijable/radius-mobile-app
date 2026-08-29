@@ -297,7 +297,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                               height: 14,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: AppColors.onBrand,
                               ),
                             )
                           : const Icon(LucideIcons.send, size: 16),

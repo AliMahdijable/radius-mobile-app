@@ -503,7 +503,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       child: Text(
                         count > 99 ? '99+' : '$count',
                         style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColors.onBrand,
                             fontSize: 9,
                             fontWeight: FontWeight.w700),
                         textAlign: TextAlign.center,
@@ -555,8 +555,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   child: const SizedBox(
                     width: 36,
                     height: 36,
-                    child:
-                        Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                    child: Icon(LucideIcons.plus,
+                        size: 18, color: AppColors.onBrand),
                   ),
                 ),
               ),
@@ -645,7 +645,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: AppColors.onBrand),
                     ),
                   )
                 : IconButton(
@@ -972,14 +972,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         ),
         child: Row(children: [
           Icon(icon,
-              size: 14, color: active ? Colors.white : AppColors.textMid),
+              size: 14, color: active ? AppColors.onBrand : AppColors.textMid),
           const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : AppColors.textHi,
+              color: active ? AppColors.onBrand : AppColors.textHi,
             ),
           ),
           if (count > 0) ...[
@@ -988,7 +988,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
                 color: active
-                    ? Colors.white.withValues(alpha: 0.25)
+                    ? AppColors.onBrand.withValues(alpha: 0.25)
                     : AppColors.brandSoftBg,
                 borderRadius: BorderRadius.circular(R.sm),
               ),
@@ -997,7 +997,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: active ? Colors.white : AppColors.brand,
+                  color: active ? AppColors.onBrand : AppColors.brand,
                 ),
               ),
             ),
@@ -1044,7 +1044,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: active ? Colors.white : color,
+                color: active ? AppColors.onBrand : color,
                 shape: BoxShape.circle,
               ),
             ),
@@ -1055,7 +1055,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : AppColors.textHi,
+              color: active ? AppColors.onBrand : AppColors.textHi,
             ),
           ),
         ]),

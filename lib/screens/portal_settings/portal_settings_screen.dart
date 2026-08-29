@@ -287,12 +287,12 @@ class _InfoTabState extends State<_InfoTab> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 valueColor:
-                                    AlwaysStoppedAnimation(Colors.white),
+                                    AlwaysStoppedAnimation(AppColors.onBrand),
                               ),
                             )
                           : Text(
                               'portal.save'.tr(),
-                              style: AppType.button(color: Colors.white),
+                              style: AppType.button(color: AppColors.onBrand),
                             ),
                     ),
                   ),
@@ -878,11 +878,11 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 valueColor:
-                                    AlwaysStoppedAnimation(Colors.white),
+                                    AlwaysStoppedAnimation(AppColors.onBrand),
                               ),
                             )
                           : Text('portal.save'.tr(),
-                              style: AppType.button(color: Colors.white)),
+                              style: AppType.button(color: AppColors.onBrand)),
                     ),
                   ),
                 ],

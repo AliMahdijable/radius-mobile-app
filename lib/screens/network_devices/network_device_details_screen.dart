@@ -274,7 +274,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Row(children: [
-          const Icon(LucideIcons.check, color: Colors.white, size: 18),
+          const Icon(LucideIcons.check, color: AppColors.onBrand, size: 18),
           const SizedBox(width: 8),
           Expanded(
               child: Text(
@@ -293,7 +293,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               : e.toString();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Row(children: [
-          const Icon(LucideIcons.circleAlert, color: Colors.white, size: 18),
+          const Icon(LucideIcons.circleAlert,
+              color: AppColors.onBrand, size: 18),
           const SizedBox(width: 8),
           Expanded(child: Text('فشل reboot: $msg')),
         ]),

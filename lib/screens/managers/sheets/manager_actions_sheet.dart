@@ -276,7 +276,7 @@ class _ActionsSheet extends StatelessWidget {
               ],
             ),
             alignment: Alignment.center,
-            child: Icon(action.icon, color: Colors.white, size: 22),
+            child: Icon(action.icon, color: AppColors.onBrand, size: 22),
           ),
           const SizedBox(height: 7),
           Flexible(

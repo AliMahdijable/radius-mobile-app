@@ -410,7 +410,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: AppColors.onBrand))
                   : const Icon(LucideIcons.radar, size: 16),
               label: Text(_scanning ? 'يمسح…' : 'ابدأ'),
             ),
@@ -698,7 +698,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: AppColors.onBrand))
                   : const Icon(LucideIcons.plus, size: 14),
               label: Text(
                   _adding ? 'يُضيف $_added…' : 'أضف ${_selected.length}',

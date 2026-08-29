@@ -282,7 +282,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                               height: 14,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: AppColors.onBrand,
                               ),
                             )
                           : const Icon(LucideIcons.plus, size: 16),

@@ -301,7 +301,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           ),
           child: Text(count,
               style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.onBrand,
                   fontSize: 11,
                   fontWeight: FontWeight.w700)),
         ),

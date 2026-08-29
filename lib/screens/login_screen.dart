@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: AppType.button(color: Colors.white)),
+        content: Text(msg, style: AppType.button(color: AppColors.onBrand)),
         backgroundColor: error ? AppColors.error : AppColors.brand,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
@@ -670,7 +670,7 @@ class _RememberToggle extends StatelessWidget {
                 ),
                 child: value
                     ? const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 14)
+                        color: AppColors.onBrand, size: 14)
                     : null,
               ),
               const SizedBox(width: Sp.sm),
@@ -712,10 +712,10 @@ class _PrimaryButton extends StatelessWidget {
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.2,
-                      color: Colors.white,
+                      color: AppColors.onBrand,
                     ),
                   )
-                : Text(label, style: AppType.button(color: Colors.white)),
+                : Text(label, style: AppType.button(color: AppColors.onBrand)),
           ),
         ),
       ),

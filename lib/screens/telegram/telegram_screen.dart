@@ -803,7 +803,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 1.5, color: Colors.white))
+                          strokeWidth: 1.5, color: AppColors.onBrand))
                   : const Icon(LucideIcons.link, size: 16),
               label: const Text('ربط البوت',
                   style: TextStyle(

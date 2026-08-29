@@ -727,7 +727,7 @@ class _IconChip extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Text('$badge',
-                  style: AppType.muted(color: Colors.white)
+                  style: AppType.muted(color: AppColors.onBrand)
                       .copyWith(fontSize: 10, height: 1)),
             ),
           ),

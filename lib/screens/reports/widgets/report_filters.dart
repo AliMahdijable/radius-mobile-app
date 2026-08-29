@@ -394,7 +394,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                 ),
                                 child: checked
                                     ? const Icon(Icons.check,
-                                        size: 12, color: Colors.white)
+                                        size: 12, color: AppColors.onBrand)
                                     : null,
                               ),
                               const SizedBox(width: 10),

@@ -329,7 +329,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                                 height: 14,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: AppColors.onBrand,
                                 ),
                               )
                             : const Icon(LucideIcons.check, size: 16),

@@ -147,8 +147,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
                   child: const SizedBox(
                     width: 36,
                     height: 36,
-                    child:
-                        Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                    child: Icon(LucideIcons.plus,
+                        size: 18, color: AppColors.onBrand),
                   ),
                 ),
               ),
@@ -416,7 +416,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                            strokeWidth: 2, color: AppColors.onBrand))
                     : Text(isEdit ? 'حفظ التعديلات' : 'إضافة',
                         style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
@@ -446,7 +446,8 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
         child: color == null
             ? Icon(LucideIcons.slash, size: 16, color: AppColors.textMid)
             : (active
-                ? const Icon(LucideIcons.check, size: 16, color: Colors.white)
+                ? const Icon(LucideIcons.check,
+                    size: 16, color: AppColors.onBrand)
                 : null),
       ),
     );
