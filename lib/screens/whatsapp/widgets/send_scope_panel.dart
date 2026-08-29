@@ -126,7 +126,8 @@ class _SendScopePanelState extends State<SendScopePanel> {
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Center(
                 child: SizedBox(
-                  width: 22, height: 22,
+                  width: 22,
+                  height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
@@ -287,9 +288,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
   }) {
     final disabled = onTap == null;
     return Material(
-      color: disabled
-          ? AppColors.surfaceInput.withValues(alpha: 0.5)
-          : AppColors.surfaceInput,
+      color: disabled ? AppColors.surfaceDisabled : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -370,9 +369,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
     required ValueChanged<bool> onToggle,
   }) {
     return Material(
-      color: checked
-          ? AppColors.brand.withValues(alpha: 0.1)
-          : AppColors.surfaceInput,
+      color: checked ? AppColors.brandSoftBg : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -381,9 +378,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             border: Border.all(
-              color: checked
-                  ? AppColors.brand.withValues(alpha: 0.4)
-                  : AppColors.border,
+              color: checked ? AppColors.brandSoftBorder : AppColors.border,
               width: checked ? 1.4 : 1,
             ),
             borderRadius: BorderRadius.circular(R.sm),

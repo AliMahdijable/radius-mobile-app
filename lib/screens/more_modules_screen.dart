@@ -43,14 +43,18 @@ class MoreModulesScreen extends StatelessWidget {
           // لأن أجهزة الشبكة أكثر استعمالاً يومياً للـWISP).
           // تظهر لأي مدير عادي، وللموظّف لو عنده أي صلاحيّة reports.*
           if (Perms.hasAny([
-            'reports.financial', 'reports.activations',
-            'reports.daily_activations', 'reports.expenses',
-            'reports.manager_debts', 'reports.account_statement',
-            'reports.sessions', 'reports.activity_log',
+            'reports.financial',
+            'reports.activations',
+            'reports.daily_activations',
+            'reports.expenses',
+            'reports.manager_debts',
+            'reports.account_statement',
+            'reports.sessions',
+            'reports.activity_log',
           ]))
             _ModuleCard(
               icon: LucideIcons.chartLine,
-              color: const Color(0xFF10B981),
+              color: AppColors.success,
               title: 'nav.reports'.tr(),
               subtitle: 'more.reports_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -60,7 +64,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('reports.expenses'))
             _ModuleCard(
               icon: LucideIcons.receipt,
-              color: const Color(0xFFE08F2D),
+              color: AppColors.warning,
               title: 'more.expenses'.tr(),
               subtitle: 'more.expenses_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -71,7 +75,8 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. منقول
           // كامل من client-v2. محكوم بنفس صلاحيّة إعدادات الواتساب.
-          if (Perms.hasAny(['whatsapp.broadcast', 'whatsapp.send', 'settings.edit']))
+          if (Perms.hasAny(
+              ['whatsapp.broadcast', 'whatsapp.send', 'settings.edit']))
             _ModuleCard(
               icon: LucideIcons.send,
               color: const Color(0xFF229ED9),
@@ -103,7 +108,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.hasAny(['whatsapp.broadcast', 'whatsapp.send']))
             _ModuleCard(
               icon: LucideIcons.messageSquare,
-              color: const Color(0xFF3B82F6),
+              color: AppColors.brandAccent,
               title: 'more.message_logs'.tr(),
               subtitle: 'more.message_logs_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -115,7 +120,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('managers.view'))
             _ModuleCard(
               icon: LucideIcons.userCog,
-              color: const Color(0xFF3B82F6),
+              color: AppColors.brandAccent,
               title: 'more.managers'.tr(),
               subtitle: 'more.managers_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -127,7 +132,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.hasAny(['packages.view', 'packages.edit_prices']))
             _ModuleCard(
               icon: LucideIcons.package,
-              color: const Color(0xFF8B5CF6),
+              color: AppColors.brandAccent,
               title: 'more.packages'.tr(),
               subtitle: 'more.packages_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -139,7 +144,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('discounts.view'))
             _ModuleCard(
               icon: LucideIcons.percent,
-              color: const Color(0xFF14B8A6),
+              color: AppColors.success,
               title: 'more.discounts'.tr(),
               subtitle: 'more.discounts_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -151,7 +156,7 @@ class MoreModulesScreen extends StatelessWidget {
           if (Perms.has('employees.view'))
             _ModuleCard(
               icon: LucideIcons.users,
-              color: const Color(0xFF8B5CF6),
+              color: AppColors.brandAccent,
               title: 'more.employees'.tr(),
               subtitle: 'more.employees_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -183,8 +188,7 @@ class MoreModulesScreen extends StatelessWidget {
           backgroundColor: AppColors.bg,
           body: SafeArea(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                  Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
               children: [
                 Text(
                   'more.title'.tr(),
@@ -288,8 +292,7 @@ class _ModuleCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: AppType.label(color: AppColors.textHi)
-                          .copyWith(
+                      style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                       ),
@@ -303,8 +306,7 @@ class _ModuleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  color: AppColors.textLow, size: 18),
+              Icon(LucideIcons.chevronLeft, color: AppColors.textLow, size: 18),
             ],
           ),
         ),

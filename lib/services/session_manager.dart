@@ -48,8 +48,8 @@ class SessionManager {
   }) async {
     // 1) In-memory API caches — SYNC, instant. Fire before any await
     //    so subsequent screens never see prior admin's list/config data.
-    _guardSync('SubscribersApi.clearAllCaches',
-        () => SubscribersApi.clearAllCaches());
+    _guardSync(
+        'SubscribersApi.clearAllCaches', () => SubscribersApi.clearAllCaches());
     _guardSync('DeviceConfigApi.clearAllCaches',
         () => DeviceConfigApi.clearAllCaches());
     _guardSync('AlertsService.reset', () => AlertsService.reset());
@@ -62,15 +62,15 @@ class SessionManager {
     //    Previously sequential: each waited on the last (~40ms × 4).
     //    Now bounded by the slowest single write, not the sum.
     await Future.wait([
-      _guardAsync('DeviceProbeApi.clearAllCaches',
-          DeviceProbeApi.clearAllCaches()),
+      _guardAsync(
+          'DeviceProbeApi.clearAllCaches', DeviceProbeApi.clearAllCaches()),
       _guardAsync('BadgeService.clear', BadgeService.clear()),
       _guardAsync('InboxService.clear', InboxService.clear()),
       _guardAsync('PermissionsService.clear', PermissionsService.clear()),
       // 2026-08-18: device alerts + dedup map + OS notifications — كانت
       // تبقى للمدير التالي فتظهر تنبيهات أجهزة السابق.
-      _guardAsync('DeviceAlertsService.reset',
-          DeviceAlertsService.instance.reset()),
+      _guardAsync(
+          'DeviceAlertsService.reset', DeviceAlertsService.instance.reset()),
       // 2026-08-28 (Google 2027 audit HIGH): docstring في dashboard_cache
       // ينصّ صراحةً "call on logout" لكن ما استُدعيت من قبل — المدير
       // الجديد كان يرى KPIs المدير السابق حتى تعود شبكته بأرقام جديدة.

@@ -37,8 +37,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final debts =
-        await ManagerDebtsApi.list(debtorAdminId: widget.manager.id);
+    final debts = await ManagerDebtsApi.list(debtorAdminId: widget.manager.id);
     if (!mounted) return;
     setState(() {
       _debts = debts;
@@ -76,8 +75,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('إلغاء')),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('حذف'),
           ),
@@ -100,7 +98,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF0EA5E9);
+    final accent = AppColors.brandAccent;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -109,14 +107,13 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           'ديون ${widget.manager.username}',
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onBrand,
         onPressed: _openAdd,
         icon: const Icon(LucideIcons.plus, size: 16),
         label: const Text('دين جديد'),
@@ -198,8 +195,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
                     Text(
                       '${formatIQD(_remaining)} د.ع',
                       style: AppType.title(color: AppColors.textHi)
-                          .copyWith(
-                              fontSize: 22, letterSpacing: -0.5),
+                          .copyWith(fontSize: 22, letterSpacing: -0.5),
                     ),
                   ],
                 ),
@@ -209,11 +205,15 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
           const SizedBox(height: Sp.md),
           Row(
             children: [
-              Expanded(child: _miniStat('الإجمالي', _totalOwed, AppColors.textHi)),
+              Expanded(
+                  child: _miniStat('الإجمالي', _totalOwed, AppColors.textHi)),
               const SizedBox(width: 8),
-              Expanded(child: _miniStat('المسدّد', _totalPaid, AppColors.brand)),
+              Expanded(
+                  child: _miniStat('المسدّد', _totalPaid, AppColors.brand)),
               const SizedBox(width: 8),
-              Expanded(child: _miniStat('عدد الديون', _debts.length, accent, isCount: true)),
+              Expanded(
+                  child: _miniStat('عدد الديون', _debts.length, accent,
+                      isCount: true)),
             ],
           ),
         ],
@@ -221,14 +221,14 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
     );
   }
 
-  Widget _miniStat(String label, num value, Color color, {bool isCount = false}) {
+  Widget _miniStat(String label, num value, Color color,
+      {bool isCount = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.sm),
-        border:
-            Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,13 +257,12 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
       ),
       child: Column(
         children: [
-          Icon(LucideIcons.receiptText,
-              size: 36, color: AppColors.textLow),
+          Icon(LucideIcons.receiptText, size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
             'لا توجد ديون مفتوحة',
-            style: AppType.muted(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
@@ -301,9 +300,7 @@ class _DebtTile extends StatelessWidget {
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(R.lg),
             border: Border.all(
-              color: closed
-                  ? AppColors.brand.withValues(alpha: 0.3)
-                  : AppColors.border,
+              color: closed ? AppColors.brandSoftBorder : AppColors.border,
             ),
           ),
           child: Column(
@@ -315,21 +312,15 @@ class _DebtTile extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: (closed
-                              ? AppColors.brand
-                              : const Color(0xFF0EA5E9))
+                      color: (closed ? AppColors.brand : AppColors.brandAccent)
                           .withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,
                     child: Icon(
-                      closed
-                          ? LucideIcons.circleCheck
-                          : LucideIcons.receipt,
+                      closed ? LucideIcons.circleCheck : LucideIcons.receipt,
                       size: 16,
-                      color: closed
-                          ? AppColors.brand
-                          : const Color(0xFF0EA5E9),
+                      color: closed ? AppColors.brand : AppColors.brandAccent,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -354,10 +345,9 @@ class _DebtTile extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.brand.withValues(alpha: 0.1),
+                        color: AppColors.brandSoftBg,
                         borderRadius: BorderRadius.circular(R.sm),
-                        border: Border.all(
-                            color: AppColors.brand.withValues(alpha: 0.3)),
+                        border: Border.all(color: AppColors.brandSoftBorder),
                       ),
                       child: Text(
                         'مسدَّد',
@@ -372,8 +362,7 @@ class _DebtTile extends StatelessWidget {
                     Text(
                       'تبقى ${formatIQD(debt.remainingAmount)}',
                       style: AppType.label(color: AppColors.error)
-                          .copyWith(
-                              fontSize: 12, fontWeight: FontWeight.w800),
+                          .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
                     ),
                   const SizedBox(width: 6),
                   InkResponse(
@@ -384,7 +373,7 @@ class _DebtTile extends StatelessWidget {
                       height: 30,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.08),
+                        color: AppColors.dangerSoftBg,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(LucideIcons.trash2,

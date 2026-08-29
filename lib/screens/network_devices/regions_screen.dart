@@ -72,8 +72,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(LucideIcons.triangleAlert,
-            color: AppColors.error, size: 32),
+        icon: Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
         title: const Text('حذف المنطقة'),
         content: Text(
           r.deviceCount > 0
@@ -103,7 +102,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
         content: Text(unassigned > 0
             ? 'حُذفت "${r.name}" — $unassigned جهاز صار بدون منطقة'
             : 'حُذفت المنطقة "${r.name}"'),
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
       ));
       await _load();
@@ -145,8 +144,10 @@ class _RegionsScreenState extends State<RegionsScreen> {
                   onTap: () => _openForm(),
                   customBorder: const CircleBorder(),
                   child: const SizedBox(
-                    width: 36, height: 36,
-                    child: Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                    width: 36,
+                    height: 36,
+                    child:
+                        Icon(LucideIcons.plus, size: 18, color: Colors.white),
                   ),
                 ),
               ),
@@ -161,15 +162,19 @@ class _RegionsScreenState extends State<RegionsScreen> {
                 itemBuilder: (_, __) => const SkeletonRegionCard(),
               )
             : _error != null
-                ? Center(child: Text(_error!, style: TextStyle(color: AppColors.textMid)))
+                ? Center(
+                    child: Text(_error!,
+                        style: TextStyle(color: AppColors.textMid)))
                 : _regions.isEmpty
                     ? _empty()
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 90),
+                          padding: const EdgeInsets.fromLTRB(
+                              Sp.md, Sp.md, Sp.md, 90),
                           itemCount: _regions.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (_, i) => _regionCard(_regions[i]),
                         ),
                       ),
@@ -211,7 +216,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
           child: Row(
             children: [
               Container(
-                width: 40, height: 40,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
@@ -227,7 +233,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     Text(r.name,
                         style: TextStyle(
                             color: AppColors.textHi,
-                            fontSize: 15, fontWeight: FontWeight.w700)),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(
                       r.deviceCount == 0
@@ -245,7 +252,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
                 tooltip: 'تعديل',
               ),
               IconButton(
-                icon: Icon(LucideIcons.trash2, size: 18, color: AppColors.error),
+                icon:
+                    Icon(LucideIcons.trash2, size: 18, color: AppColors.error),
                 onPressed: () => _confirmDelete(r),
                 tooltip: 'حذف',
               ),
@@ -318,8 +326,8 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
     try {
       final r = widget.initial == null
           ? await NetworkDevicesApi.createRegion(name: name, color: _color)
-          : await NetworkDevicesApi.updateRegion(
-              widget.initial!.id, name: name, color: _color);
+          : await NetworkDevicesApi.updateRegion(widget.initial!.id,
+              name: name, color: _color);
       if (!mounted) return;
       Navigator.pop(context, r);
     } catch (e) {
@@ -349,7 +357,8 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
               // مقبض السحب
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: AppColors.border,
@@ -360,7 +369,8 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
               Text(isEdit ? 'تعديل منطقة' : 'إضافة منطقة',
                   style: TextStyle(
                       color: AppColors.textHi,
-                      fontSize: 17, fontWeight: FontWeight.w800)),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
               TextField(
                 controller: _nameCtrl,
@@ -381,10 +391,13 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
               const SizedBox(height: 14),
               Text('اللون (اختياري)',
                   style: TextStyle(
-                      color: AppColors.textMid, fontSize: 12, fontWeight: FontWeight.w600)),
+                      color: AppColors.textMid,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Wrap(
-                spacing: 8, runSpacing: 8,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _colorSwatch(null),
                   for (final c in _presetColors) _colorSwatch(c),
@@ -399,7 +412,8 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
                 ),
                 child: _saving
                     ? const SizedBox(
-                        width: 18, height: 18,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white))
                     : Text(isEdit ? 'حفظ التعديلات' : 'إضافة',
@@ -418,7 +432,8 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
     return GestureDetector(
       onTap: () => setState(() => _color = hex),
       child: Container(
-        width: 34, height: 34,
+        width: 34,
+        height: 34,
         decoration: BoxDecoration(
           color: color ?? AppColors.surfaceInput,
           shape: BoxShape.circle,

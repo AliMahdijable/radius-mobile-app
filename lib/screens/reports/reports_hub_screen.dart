@@ -39,37 +39,40 @@ class ReportsHubScreen extends StatelessWidget {
           if (Perms.has('reports.financial'))
             _ReportCard(
               icon: LucideIcons.wallet,
-              color: const Color(0xFF14B8A6),
+              color: AppColors.success,
               title: 'reports.financial'.tr(),
               subtitle: 'reports.financial_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const FinancialReportScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const FinancialReportScreen()),
               ),
             ),
           if (Perms.has('reports.activations'))
             _ReportCard(
               icon: LucideIcons.zap,
-              color: const Color(0xFF3B82F6),
+              color: AppColors.brandAccent,
               title: 'reports.activations'.tr(),
               subtitle: 'reports.activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ActivationsReportScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const ActivationsReportScreen()),
               ),
             ),
           if (Perms.has('reports.daily_activations'))
             _ReportCard(
               icon: LucideIcons.calendarDays,
-              color: const Color(0xFF8B5CF6),
+              color: AppColors.brandAccent,
               title: 'reports.daily_activations'.tr(),
               subtitle: 'reports.daily_activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const DailyActivationsReportScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const DailyActivationsReportScreen()),
               ),
             ),
           if (Perms.has('reports.expenses'))
             _ReportCard(
               icon: LucideIcons.receipt,
-              color: const Color(0xFFE08F2D),
+              color: AppColors.warning,
               title: 'reports.expenses'.tr(),
               subtitle: 'reports.expenses_hint'.tr(),
               // ExpensesScreen موجودة فعلاً — نُحوّل لها.
@@ -80,7 +83,7 @@ class ReportsHubScreen extends StatelessWidget {
           if (Perms.has('reports.manager_debts'))
             _ReportCard(
               icon: LucideIcons.users,
-              color: const Color(0xFF0EA5E9),
+              color: AppColors.brandAccent,
               title: 'reports.manager_debts'.tr(),
               subtitle: 'reports.manager_debts_hint'.tr(),
               // 2026-07-14: كانت stub بس (رسالة "افتح من مكان ثاني").
@@ -94,7 +97,7 @@ class ReportsHubScreen extends StatelessWidget {
           if (Perms.has('reports.sessions'))
             _ReportCard(
               icon: LucideIcons.activity,
-              color: const Color(0xFFCD8B00),
+              color: AppColors.warning,
               title: 'reports.sessions'.tr(),
               subtitle: 'reports.sessions_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -104,11 +107,12 @@ class ReportsHubScreen extends StatelessWidget {
           if (Perms.has('reports.activity_log'))
             _ReportCard(
               icon: LucideIcons.history,
-              color: const Color(0xFF26A69A),
+              color: AppColors.success,
               title: 'reports.activity_log'.tr(),
               subtitle: 'reports.activity_log_hint'.tr(),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ActivityLogReportScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const ActivityLogReportScreen()),
               ),
             ),
         ];
@@ -121,7 +125,8 @@ class ReportsHubScreen extends StatelessWidget {
             scrolledUnderElevation: 0,
             title: Text(
               'reports.title'.tr(),
-              style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
             ),
             iconTheme: IconThemeData(color: AppColors.textHi),
           ),
@@ -234,8 +239,7 @@ class _ReportCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  color: AppColors.textLow, size: 18),
+              Icon(LucideIcons.chevronLeft, color: AppColors.textLow, size: 18),
             ],
           ),
         ),
@@ -243,4 +247,3 @@ class _ReportCard extends StatelessWidget {
     );
   }
 }
-

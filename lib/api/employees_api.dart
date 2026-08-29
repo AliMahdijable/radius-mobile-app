@@ -20,8 +20,10 @@ class Employee {
   final String? fullName;
   final String? phone;
   final bool isActive;
+
   /// Permission key → enabled bool. Default false when absent.
   final Map<String, bool> permissions;
+
   /// 2026-08-26: لو ≠ null، الموظّف مقيَّد بمدير فرعي محدَّد. يرى
   /// بيانات هذا المدير فقط (subscribers/managers/expenses/...).
   final String? scopeAdminId;
@@ -189,6 +191,7 @@ class CurrentIdentity {
   final String? adminUsername;
   final int? employeeId;
   final String? employeeUsername;
+
   /// Null when the actor is the admin itself (full access).
   final Map<String, bool>? permissions;
 
@@ -217,8 +220,8 @@ class EmployeesApi {
 
   static Future<({List<Employee> rows, String? error})> list() async {
     try {
-      final r = await ApiClient.dio
-          .get<Map<String, dynamic>>('/api/v2/employees');
+      final r =
+          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/employees');
       final body = r.data ?? const {};
       if (body['success'] != true) {
         return (rows: const <Employee>[], error: body['message']?.toString());
@@ -260,8 +263,8 @@ class EmployeesApi {
 
   static Future<CurrentIdentity?> me() async {
     try {
-      final r = await ApiClient.dio
-          .get<Map<String, dynamic>>('/api/v2/employees/me');
+      final r =
+          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/employees/me');
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
       final data = body['data'];
@@ -280,6 +283,7 @@ class EmployeesApi {
     String? phone,
     bool isActive = true,
     required Map<String, bool> permissions,
+
     /// 2026-08-26: يقيّد الموظّف بمدير فرعي (يشوف بياناته فقط).
     /// null = يشاهد بيانات الأب كاملة.
     String? scopeAdminId,
@@ -331,6 +335,7 @@ class EmployeesApi {
     String? password,
     bool? isActive,
     Map<String, bool>? permissions,
+
     /// 2026-08-26: scope الحقل الثلاثيّ:
     ///   - null (parameter): لا تغيير (default)
     ///   - '' (empty string): مسح القيد → يشاهد كل شجرة الأب
@@ -352,7 +357,10 @@ class EmployeesApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('employees (PUT)', e);
       final body = e.response?.data;
@@ -368,8 +376,8 @@ class EmployeesApi {
   /// Backend يفكّ التشفير AES من `employees.password_encrypted`.
   /// الحقل يُملأ عند create/update. موظّف قديم (قبل feature) → 404
   /// مع نصيحة "عدّل كلمة سرّه مرّة".
-  static Future<({String? password, String? message})>
-      fetchPassword(int id) async {
+  static Future<({String? password, String? message})> fetchPassword(
+      int id) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/employees/$id/password',
@@ -395,7 +403,10 @@ class EmployeesApi {
       final r = await ApiClient.dio
           .delete<Map<String, dynamic>>('/api/v2/employees/$id');
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('employees (DELETE)', e);
       final body = e.response?.data;

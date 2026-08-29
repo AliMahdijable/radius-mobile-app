@@ -24,6 +24,7 @@ class PackagesScreen extends StatefulWidget {
 
 class _PackagesScreenState extends State<PackagesScreen> {
   List<Package> _packages = const [];
+
   /// مطلب 2026-06-12: عمودان قابلان للتحرير (مطابق screenshots v1).
   /// `_userPriceEdits` = سعر البيع للمشترك (user_price).
   /// `_priceEdits` = السعر (price) — سعر شراء المدير من الأب.
@@ -110,12 +111,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
       for (final p in pkgs) {
         final initialUser = (p.userPrice ?? 0).toInt();
         final initialPrice = (p.basePrice ?? 0).toInt();
-        _userPriceCtrl
-            .putIfAbsent(p.id, () => TextEditingController())
-            .text = initialUser > 0 ? _fmt(initialUser) : '';
-        _priceCtrl
-            .putIfAbsent(p.id, () => TextEditingController())
-            .text = initialPrice > 0 ? _fmt(initialPrice) : '';
+        _userPriceCtrl.putIfAbsent(p.id, () => TextEditingController()).text =
+            initialUser > 0 ? _fmt(initialUser) : '';
+        _priceCtrl.putIfAbsent(p.id, () => TextEditingController()).text =
+            initialPrice > 0 ? _fmt(initialPrice) : '';
       }
       _loading = false;
     });
@@ -183,7 +182,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok ? 'pkg.prices_saved'.tr() : (r.message ?? 'devices.save_failed'.tr())),
+        content: Text(r.ok
+            ? 'pkg.prices_saved'.tr()
+            : (r.message ?? 'devices.save_failed'.tr())),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -198,7 +199,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF8B5CF6);
+    final accent = AppColors.brandAccent;
     final changedCount = _changedCount();
     // مطلب 2026-06-11: لو الموظف عنده packages.view بدون
     // packages.edit_prices، تظهر القائمة كـread-only وزر الحفظ
@@ -216,8 +217,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
           children: [
             Text(
               'pkg.title'.tr(),
-              style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 16),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
             ),
             Text(
               'pkg.subtitle'.tr(),
@@ -230,50 +231,50 @@ class _PackagesScreenState extends State<PackagesScreen> {
       bottomNavigationBar: !canEdit
           ? null
           : SafeArea(
-        top: false,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          height: _hasChanges ? 80 : 0,
-          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+              top: false,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: _hasChanges ? 80 : 0,
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(LucideIcons.save, size: 16),
+                    label: Text(
+                      _saving
+                          ? 'notifs.saving'.tr()
+                          : 'pkg.save_changes'
+                              .tr(namedArgs: {'n': '$changedCount'}),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: AppColors.onBrand,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(R.md),
                       ),
-                    )
-                  : const Icon(LucideIcons.save, size: 16),
-              label: Text(
-                _saving
-                    ? 'notifs.saving'.tr()
-                    : 'pkg.save_changes'.tr(namedArgs: {'n': '$changedCount'}),
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(R.md),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
           color: accent,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-                Sp.lg, Sp.md, Sp.lg, Sp.huge),
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
               // قسم المدير الفرعي — section بعنوان (مطابق screenshot v1 web)
               _sectionHeader(
@@ -317,8 +318,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         // فتح التحرير لما المدير يختار نفسه — خطأ.
                         isViewingRoot: _selectedManagerId == null ||
                             _selectedManagerId == _myManagerId,
-                        onUserPriceChanged: (v) => _handleEdit(p.id, v,
-                            _userPriceEdits, _userPriceCtrl[p.id]!),
+                        onUserPriceChanged: (v) => _handleEdit(
+                            p.id, v, _userPriceEdits, _userPriceCtrl[p.id]!),
                         onPriceChanged: (v) => _handleEdit(
                             p.id, v, _priceEdits, _priceCtrl[p.id]!),
                       ),
@@ -377,8 +378,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
           const SizedBox(width: 8),
           Text(
             title,
-            style: AppType.title(color: AppColors.textHi).copyWith(
-                fontSize: 14, fontWeight: FontWeight.w800),
+            style: AppType.title(color: AppColors.textHi)
+                .copyWith(fontSize: 14, fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -398,13 +399,12 @@ class _PackagesScreenState extends State<PackagesScreen> {
         children: [
           Row(
             children: [
-              Icon(LucideIcons.bookOpen,
-                  size: 14, color: AppColors.textMid),
+              Icon(LucideIcons.bookOpen, size: 14, color: AppColors.textMid),
               const SizedBox(width: 6),
               Text(
                 'شرح الحقول:',
-                style: AppType.label(color: AppColors.textHi).copyWith(
-                    fontSize: 12, fontWeight: FontWeight.w800),
+                style: AppType.label(color: AppColors.textHi)
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w800),
               ),
             ],
           ),
@@ -459,72 +459,72 @@ class _PackagesScreenState extends State<PackagesScreen> {
             // ونعطي اللون فيه ليتعامل مع الـink طبيعياً.
             builder: (_) => Material(
               color: AppColors.surface,
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
               clipBehavior: Clip.antiAlias,
               child: SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        Sp.lg, Sp.md, Sp.lg, Sp.sm),
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.userCog,
-                            size: 16, color: AppColors.textMid),
-                        const SizedBox(width: 6),
-                        Text(
-                          'اختر تسعير من؟',
-                          style: AppType.title(color: AppColors.textHi)
-                              .copyWith(fontSize: 14),
-                        ),
-                      ],
+                    Padding(
+                      padding:
+                          const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.userCog,
+                              size: 16, color: AppColors.textMid),
+                          const SizedBox(width: 6),
+                          Text(
+                            'اختر تسعير من؟',
+                            style: AppType.title(color: AppColors.textHi)
+                                .copyWith(fontSize: 14),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  ListTile(
-                    leading: Icon(LucideIcons.user, color: accent),
-                    title: Text(_selectedManagerLabel == '…'
-                        ? 'تسعيري الخاص'
-                        : _selectedManagerLabel),
-                    onTap: () => Navigator.of(context).pop(-1),
-                    trailing: _selectedManagerId == null
-                        ? Icon(LucideIcons.check, color: accent)
-                        : null,
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: managers.length,
-                      itemBuilder: (_, i) {
-                        final m = managers[i];
-                        final selected = _selectedManagerId == m.id;
-                        return ListTile(
-                          leading: const Icon(LucideIcons.userCog),
-                          title: Text(m.displayName),
-                          onTap: () => Navigator.of(context).pop(m.id),
-                          trailing: selected
-                              ? Icon(LucideIcons.check, color: accent)
-                              : null,
-                        );
-                      },
+                    ListTile(
+                      leading: Icon(LucideIcons.user, color: accent),
+                      title: Text(_selectedManagerLabel == '…'
+                          ? 'تسعيري الخاص'
+                          : _selectedManagerLabel),
+                      onTap: () => Navigator.of(context).pop(-1),
+                      trailing: _selectedManagerId == null
+                          ? Icon(LucideIcons.check, color: accent)
+                          : null,
                     ),
-                  ),
-                ],
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: managers.length,
+                        itemBuilder: (_, i) {
+                          final m = managers[i];
+                          final selected = _selectedManagerId == m.id;
+                          return ListTile(
+                            leading: const Icon(LucideIcons.userCog),
+                            title: Text(m.displayName),
+                            onTap: () => Navigator.of(context).pop(m.id),
+                            trailing: selected
+                                ? Icon(LucideIcons.check, color: accent)
+                                : null,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           );
           if (picked == null) return;
           setState(() {
@@ -534,13 +534,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
             } else {
               _selectedManagerId = picked;
               _selectedManagerLabel = managers
-                      .firstWhere((m) => m.id == picked,
-                          orElse: () => (
-                                id: picked,
-                                username: '',
-                                displayName: '#$picked'
-                              ))
-                      .displayName;
+                  .firstWhere((m) => m.id == picked,
+                      orElse: () =>
+                          (id: picked, username: '', displayName: '#$picked'))
+                  .displayName;
             }
             _userPriceEdits.clear();
             _priceEdits.clear();
@@ -572,8 +569,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(LucideIcons.chevronDown,
-                  size: 14, color: AppColors.textMid),
+              Icon(LucideIcons.chevronDown, size: 14, color: AppColors.textMid),
             ],
           ),
         ),
@@ -591,13 +587,12 @@ class _PackagesScreenState extends State<PackagesScreen> {
       ),
       child: Column(
         children: [
-          Icon(LucideIcons.packageX,
-              size: 36, color: AppColors.textLow),
+          Icon(LucideIcons.packageX, size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
             'لا توجد باقات متاحة',
-            style: AppType.muted(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
         ],
       ),
@@ -661,12 +656,11 @@ class _PackageTile extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.08),
+                  color: AppColors.brandSoftBg,
                   borderRadius: BorderRadius.circular(R.md),
                 ),
                 alignment: Alignment.center,
-                child: Icon(LucideIcons.wifi,
-                    size: 16, color: AppColors.brand),
+                child: Icon(LucideIcons.wifi, size: 16, color: AppColors.brand),
               ),
             ],
           ),
@@ -680,9 +674,7 @@ class _PackageTile extends StatelessWidget {
                 child: isViewingRoot
                     ? _readOnly(
                         label: 'سعر المدير (مقفل)',
-                        value: priceCtrl.text.isNotEmpty
-                            ? priceCtrl.text
-                            : '—',
+                        value: priceCtrl.text.isNotEmpty ? priceCtrl.text : '—',
                       )
                     : _priceField(
                         label: 'سعر المدير',
@@ -744,8 +736,8 @@ class _PackageTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(R.sm),
               borderSide: BorderSide(
                 color: highlight
-                    ? AppColors.brand.withValues(alpha: 0.4)
-                    : AppColors.border.withValues(alpha: 0.5),
+                    ? AppColors.brandSoftBorder
+                    : AppColors.borderSoft,
                 width: highlight ? 1.5 : 1,
               ),
             ),
@@ -753,19 +745,18 @@ class _PackageTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(R.sm),
               borderSide: BorderSide(
                 color: highlight
-                    ? AppColors.brand.withValues(alpha: 0.4)
-                    : AppColors.border.withValues(alpha: 0.5),
+                    ? AppColors.brandSoftBorder
+                    : AppColors.borderSoft,
                 width: highlight ? 1.5 : 1,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(
-                  color: AppColors.brand, width: 1.8),
+              borderSide: BorderSide(color: AppColors.brand, width: 1.8),
             ),
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           ),
         ),
       ],
@@ -790,8 +781,7 @@ class _PackageTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surfaceInput,
             borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(
-                color: AppColors.border.withValues(alpha: 0.5)),
+            border: Border.all(color: AppColors.borderSoft),
           ),
           child: Text(
             value,

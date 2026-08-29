@@ -433,12 +433,11 @@ class _ActivitiesError extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Column(
         children: [
-          Icon(LucideIcons.triangleAlert,
-              color: AppColors.error, size: 28),
+          Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 28),
           const SizedBox(height: Sp.sm),
           Text('dashboard.recent_fetch_failed'.tr(),
               style: AppType.label(color: AppColors.error)
@@ -633,13 +632,13 @@ class _WAStatusChip extends StatelessWidget {
       c = AppColors.textMid;
       label = 'dashboard.wa_checking'.tr();
     } else if (status?.needsPairing == true) {
-      c = const Color(0xFFE08F2D);
+      c = AppColors.warning;
       label = 'wa.needs_pairing'.tr();
     } else if (status?.sendingRestricted == true) {
       c = AppColors.error;
       label = 'wa.connected_limited'.tr();
     } else if (status?.cappingWarning == true) {
-      c = const Color(0xFFE08F2D);
+      c = AppColors.warning;
       label = 'wa.outreach_warning'.tr();
     } else if (status?.connected == true) {
       c = AppColors.brand;

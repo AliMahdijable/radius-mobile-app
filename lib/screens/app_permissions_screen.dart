@@ -99,7 +99,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
             content: Text(
               'perms.blocked_open_system'.tr(),
             ),
-            backgroundColor: const Color(0xFFE08F2D),
+            backgroundColor: AppColors.warning,
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
               label: 'settings.title'.tr(),
@@ -158,7 +158,8 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         _bioTypes.contains(BiometricType.strong)) {
       return 'perms.bio_fingerprint_available'.tr();
     }
-    if (_bioTypes.contains(BiometricType.iris)) return 'perms.bio_iris_available'.tr();
+    if (_bioTypes.contains(BiometricType.iris))
+      return 'perms.bio_iris_available'.tr();
     return 'perms.bio_generic_available'.tr();
   }
 
@@ -179,15 +180,14 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text('settings.permissions'.tr(),
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                  Sp.lg, Sp.md, Sp.lg, Sp.huge),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
                 _SectionLabel('notifications.title'.tr()),
                 _BioCard(
@@ -232,25 +232,22 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
                   Container(
                     padding: const EdgeInsets.all(Sp.md),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE08F2D).withValues(alpha: 0.08),
+                      color: AppColors.warning.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(R.md),
                       border: Border.all(
-                          color: const Color(0xFFE08F2D)
-                              .withValues(alpha: 0.25)),
+                          color: AppColors.warning.withValues(alpha: 0.25)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(LucideIcons.triangleAlert,
-                            size: 14, color: Color(0xFFE08F2D)),
+                        Icon(LucideIcons.triangleAlert,
+                            size: 14, color: AppColors.warning),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'perms.no_bio_enrolled'.tr(),
-                            style:
-                                AppType.muted(color: AppColors.textHi)
-                                    .copyWith(
-                                        fontSize: 11, height: 1.5),
+                            style: AppType.muted(color: AppColors.textHi)
+                                .copyWith(fontSize: 11, height: 1.5),
                           ),
                         ),
                       ],
@@ -307,8 +304,7 @@ class _PermCard extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: Sp.md),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
@@ -327,8 +323,7 @@ class _PermCard extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Icon(icon,
-                size: 18,
-                color: granted ? AppColors.brand : AppColors.textLow),
+                size: 18, color: granted ? AppColors.brand : AppColors.textLow),
           ),
           const SizedBox(width: Sp.md),
           Expanded(
@@ -353,10 +348,8 @@ class _PermCard extends StatelessWidget {
           OutlinedButton(
             onPressed: busy ? null : onAction,
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
-              foregroundColor:
-                  granted ? AppColors.textMid : AppColors.brand,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              foregroundColor: granted ? AppColors.textMid : AppColors.brand,
               side: BorderSide(
                 color: granted
                     ? AppColors.border
@@ -404,8 +397,7 @@ class _BioCard extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: Sp.md),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
@@ -424,8 +416,7 @@ class _BioCard extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Icon(icon,
-                size: 18,
-                color: enabled ? AppColors.brand : AppColors.textLow),
+                size: 18, color: enabled ? AppColors.brand : AppColors.textLow),
           ),
           const SizedBox(width: Sp.md),
           Expanded(

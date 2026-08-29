@@ -108,7 +108,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// أول تحميل عند فتح الشاشة: قائمة من backend + probe فوري.
   /// الفرق عن _refresh: يظهر spinner كبير في المنتصف (الشاشة فارغة).
   Future<void> _initialLoad() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       // نجلب devices + regions بالتوازي — واحد ما يعطّل الثاني.
       final results = await Future.wait([
@@ -126,14 +129,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       _lastKnownStatus.clear();
       setState(() {
         _all = rows;
-        _regionsById = { for (final r in regions) r.id: r };
+        _regionsById = {for (final r in regions) r.id: r};
         _loading = false;
       });
       // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
       _probeAll();
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = 'فشل التحميل: $e'; _loading = false; });
+      setState(() {
+        _error = 'فشل التحميل: $e';
+        _loading = false;
+      });
     }
   }
 
@@ -157,7 +163,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       if (!mounted) return;
       // Preserve status حسب id — الأجهزة الموجودة تحتفظ بحالتها القديمة
       // مؤقّتاً، الجديدة تدخل بـstatus من backend (unknown غالباً).
-      final oldById = { for (final d in _all) d.id: d };
+      final oldById = {for (final d in _all) d.id: d};
       final merged = <NetworkDevice>[];
       for (final d in fresh) {
         final old = oldById[d.id];
@@ -173,7 +179,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       }
       setState(() {
         _all = merged;
-        _regionsById = { for (final r in regions) r.id: r };
+        _regionsById = {for (final r in regions) r.id: r};
         _error = null;
       });
       await _probeAll();
@@ -216,9 +222,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // كان: N setState = N × rebuild كامل للـCustomScrollView (dropped frames)
       // الآن: 1 setState بعد كل الـFuture.wait
       final pendingTransitions = <_PendingTransition>[];
-      final updates = <int, NetworkDevice>{};   // id → updated device
+      final updates = <int, NetworkDevice>{}; // id → updated device
 
-      await Future.wait(_all.where((d) => _shouldProbeInRound(d.id)).map((d) async {
+      await Future.wait(
+          _all.where((d) => _shouldProbeInRound(d.id)).map((d) async {
         try {
           // TCP probe (أدقّ من ICMP على iOS) — نستعمل apiPort لو موجود
           // (Mikrotik=8728، UBNT=22، Mimosa=161)، وإلا الـport الأساسي.
@@ -231,7 +238,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
           if (oldStatus != newStatus && oldStatus != 'unknown') {
             pendingTransitions.add(_PendingTransition(
-              device: d, oldStatus: oldStatus, newStatus: newStatus,
+              device: d,
+              oldStatus: oldStatus,
+              newStatus: newStatus,
             ));
           }
           _lastKnownStatus[d.id] = newStatus;
@@ -244,7 +253,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
           // fire-and-forget — نُصرّح unawaited لتوضيح النية
           unawaited(NetworkDevicesApi.saveProbeResult(
-            deviceId: d.id, status: newStatus, responseMs: r.responseMs,
+            deviceId: d.id,
+            status: newStatus,
+            responseMs: r.responseMs,
           ).catchError((_) {}));
 
           updates[d.id] = d.copyWith(
@@ -271,16 +282,16 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
       // - "عودة للشبكة": ≥70% من الأجهزة رجعت online في جولة واحدة → suppress
       final totalDevices = _all.length;
-      final offlineTransitions = pendingTransitions
-          .where((t) => t.newStatus == 'offline').length;
-      final onlineTransitions = pendingTransitions
-          .where((t) => t.newStatus == 'online').length;
+      final offlineTransitions =
+          pendingTransitions.where((t) => t.newStatus == 'offline').length;
+      final onlineTransitions =
+          pendingTransitions.where((t) => t.newStatus == 'online').length;
       final threshold = (totalDevices * 0.7).ceil();
 
-      final phoneLeftNetwork = offlineTransitions >= threshold &&
-          offlineTransitions > 1;
-      final phoneRejoinedNetwork = onlineTransitions >= threshold &&
-          onlineTransitions > 1;
+      final phoneLeftNetwork =
+          offlineTransitions >= threshold && offlineTransitions > 1;
+      final phoneRejoinedNetwork =
+          onlineTransitions >= threshold && onlineTransitions > 1;
 
       if (phoneLeftNetwork || phoneRejoinedNetwork) {
         // suppress — تغيير شبكة عند الهاتف، مو أعطال حقيقيّة
@@ -390,7 +401,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       if (_typeFilter != null && d.type != _typeFilter) return false;
       if (_statusFilter != null && d.lastStatus != _statusFilter) return false;
       if (q.isNotEmpty) {
-        final haystack = '${d.name} ${d.ip} ${d.mac ?? ''} ${d.location ?? ''} ${d.model ?? ''}'.toLowerCase();
+        final haystack =
+            '${d.name} ${d.ip} ${d.mac ?? ''} ${d.location ?? ''} ${d.model ?? ''}'
+                .toLowerCase();
         if (!haystack.contains(q)) return false;
       }
       return true;
@@ -428,7 +441,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Color _statusColor(String status) => switch (status) {
-        'online' => const Color(0xFF10B981),
+        'online' => AppColors.success,
         'offline' => AppColors.error,
         _ => AppColors.textLow,
       };
@@ -439,7 +452,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // بدل الـtitle العادي. زرّ الـback (Android) يخرج من selection بدل الخروج من الشاشة.
     if (_selectionMode) {
       return WillPopScope(
-        onWillPop: () async { _exitSelection(); return false; },
+        onWillPop: () async {
+          _exitSelection();
+          return false;
+        },
         child: _buildSelectionScaffold(),
       );
     }
@@ -470,19 +486,25 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 ),
                 if (count > 0)
                   Positioned(
-                    right: 4, top: 6,
+                    right: 4,
+                    top: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: AppColors.error,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.surface, width: 1.5),
+                        border:
+                            Border.all(color: AppColors.surface, width: 1.5),
                       ),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      constraints:
+                          const BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Text(
                         count > 99 ? '99+' : '$count',
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 9, fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -507,9 +529,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           _probing
               ? Container(
                   padding: const EdgeInsets.all(10),
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   child: const SizedBox(
-                      width: 18, height: 18,
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2)),
                 )
               : IconButton(
@@ -528,8 +552,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   onTap: () => _openForm(),
                   customBorder: const CircleBorder(),
                   child: const SizedBox(
-                    width: 36, height: 36,
-                    child: Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                    width: 36,
+                    height: 36,
+                    child:
+                        Icon(LucideIcons.plus, size: 18, color: Colors.white),
                   ),
                 ),
               ),
@@ -539,7 +565,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       body: _loading
           ? const SkeletonDeviceList()
           : _error != null
-              ? Center(child: Text(_error!, style: TextStyle(color: AppColors.textMid)))
+              ? Center(
+                  child:
+                      Text(_error!, style: TextStyle(color: AppColors.textMid)))
               : RefreshIndicator(
                   onRefresh: _refresh,
                   child: CustomScrollView(
@@ -573,7 +601,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                                   Sp.md, 0, Sp.md, 90),
                               sliver: SliverList.separated(
                                 itemCount: _filtered.length,
-                                itemBuilder: (_, i) => _deviceCard(_filtered[i]),
+                                itemBuilder: (_, i) =>
+                                    _deviceCard(_filtered[i]),
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 8),
                               ),
@@ -592,7 +621,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.brand,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onBrand,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(LucideIcons.x, size: 20),
@@ -612,7 +641,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 14),
                     child: SizedBox(
-                      width: 18, height: 18,
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     ),
@@ -731,9 +761,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       snackText = r.deleted == r.requested
           ? 'حُذف ${r.deleted} جهاز بنجاح'
           : 'حُذف ${r.deleted} من ${r.requested} — الباقي غير موجود';
-      snackColor = r.deleted == r.requested
-          ? const Color(0xFF10B981)
-          : AppColors.error;
+      snackColor =
+          r.deleted == r.requested ? AppColors.success : AppColors.error;
     } catch (e) {
       snackText = 'فشل الحذف: ${e.toString().replaceFirst('Exception: ', '')}';
       snackColor = AppColors.error;
@@ -774,7 +803,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           icon: LucideIcons.wifi,
           label: 'متّصل',
           value: '$online',
-          color: const Color(0xFF10B981),
+          color: AppColors.success,
           filterStatus: 'online',
         ),
         const SizedBox(width: 8),
@@ -790,8 +819,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Widget _summaryTile({
-    required IconData icon, required String label,
-    required String value, required Color color,
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
     required String? filterStatus,
   }) {
     final active = _statusFilter == filterStatus;
@@ -804,7 +835,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             HapticFeedback.selectionClick();
             setState(() {
               // نقر ثاني على نفس الحالة النشطة → يلغي الفلتر (يرجع للكل)
-              _statusFilter = active && filterStatus != null ? null : filterStatus;
+              _statusFilter =
+                  active && filterStatus != null ? null : filterStatus;
             });
           },
           child: Container(
@@ -819,7 +851,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             ),
             child: Row(children: [
               Container(
-                width: 30, height: 30,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -827,19 +860,23 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 child: Icon(icon, size: 14, color: color),
               ),
               const SizedBox(width: 8),
-              Expanded(child: Column(
+              Expanded(
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(label,
                       style: TextStyle(
-                          fontSize: 10, color: AppColors.textLow,
+                          fontSize: 10,
+                          color: AppColors.textLow,
                           fontWeight: FontWeight.w600)),
                   Text(value,
                       textDirection: TextDirection.ltr,
                       style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w900,
-                          color: color, height: 1.1)),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                          height: 1.1)),
                 ],
               )),
             ]),
@@ -866,18 +903,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         decoration: InputDecoration(
           hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
           hintStyle: TextStyle(fontSize: 13, color: AppColors.textLow),
-          prefixIcon: Icon(LucideIcons.search, size: 18, color: AppColors.textMid),
-          suffixIcon: _search.isEmpty ? null : IconButton(
-            icon: Icon(LucideIcons.x, size: 16, color: AppColors.textMid),
-            onPressed: () {
-              _searchCtrl.clear();
-              setState(() => _search = '');
-            },
-          ),
+          prefixIcon:
+              Icon(LucideIcons.search, size: 18, color: AppColors.textMid),
+          suffixIcon: _search.isEmpty
+              ? null
+              : IconButton(
+                  icon: Icon(LucideIcons.x, size: 16, color: AppColors.textMid),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _search = '');
+                  },
+                ),
           isDense: true,
           filled: true,
           fillColor: AppColors.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: AppColors.border),
@@ -904,7 +945,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           _typeChip(null, 'الكلّ', _all.length, LucideIcons.layoutGrid),
           const SizedBox(width: 6),
           for (final entry in NetworkDeviceLabels.types.entries) ...[
-            _typeChip(entry.key, entry.value, _countByType(entry.key), _typeIcon(entry.key)),
+            _typeChip(entry.key, entry.value, _countByType(entry.key),
+                _typeIcon(entry.key)),
             const SizedBox(width: 6),
           ],
         ]),
@@ -928,7 +970,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           ),
         ),
         child: Row(children: [
-          Icon(icon, size: 14, color: active ? Colors.white : AppColors.textMid),
+          Icon(icon,
+              size: 14, color: active ? Colors.white : AppColors.textMid),
           const SizedBox(width: 5),
           Text(
             label,
@@ -943,7 +986,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: active ? Colors.white.withValues(alpha: 0.25) : AppColors.brand.withValues(alpha: 0.12),
+                color: active
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : AppColors.brandSoftBg,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -995,7 +1040,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         child: Row(children: [
           if (status != null) ...[
             Container(
-              width: 8, height: 8,
+              width: 8,
+              height: 8,
               decoration: BoxDecoration(
                 color: active ? Colors.white : color,
                 shape: BoxShape.circle,
@@ -1023,15 +1069,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final selected = _selectionMode && _selectedIds.contains(d.id);
     final canManage = Perms.has('devices.manage');
     return Material(
-      color: selected ? AppColors.brand.withValues(alpha: 0.08) : AppColors.surface,
+      color: selected ? AppColors.brandSoftBg : AppColors.surface,
       borderRadius: BorderRadius.circular(12),
       elevation: 0,
       child: InkWell(
         // في selection mode: tap = toggle. عادي: tap = يفتح التفاصيل.
-        onTap: _selectionMode ? () => _toggleSelected(d) : () => _openDetails(d),
+        onTap:
+            _selectionMode ? () => _toggleSelected(d) : () => _openDetails(d),
         // long-press = يدخل selection mode ويضيف هذا الجهاز.
         // مطلوب devices.manage — الـview-only ما يحتاج bulk delete.
-        onLongPress: canManage && !_selectionMode ? () => _enterSelection(d) : null,
+        onLongPress:
+            canManage && !_selectionMode ? () => _enterSelection(d) : null,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
@@ -1057,7 +1105,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 BrandBadge(brand: d.brand, size: 44),
                 // Type icon صغير في الزاوية العلوى (لتمييز router عن switch عن link)
                 Positioned(
-                  top: -3, right: -3,
+                  top: -3,
+                  right: -3,
                   child: Container(
                     padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
@@ -1065,14 +1114,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.border, width: 1),
                     ),
-                    child: TypeIcon(type: d.type, size: 10, color: AppColors.textMid),
+                    child: TypeIcon(
+                        type: d.type, size: 10, color: AppColors.textMid),
                   ),
                 ),
                 // Status dot سفلى يمين
                 Positioned(
-                  bottom: 0, right: 0,
+                  bottom: 0,
+                  right: 0,
                   child: Container(
-                    width: 12, height: 12,
+                    width: 12,
+                    height: 12,
                     decoration: BoxDecoration(
                       color: statusCol,
                       shape: BoxShape.circle,
@@ -1097,7 +1149,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     ),
                     const SizedBox(height: 3),
                     Row(children: [
-                      Icon(LucideIcons.globe, size: 11, color: AppColors.textLow),
+                      Icon(LucideIcons.globe,
+                          size: 11, color: AppColors.textLow),
                       const SizedBox(width: 3),
                       Text(
                         d.ip,
@@ -1108,7 +1161,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceInput,
                           borderRadius: BorderRadius.circular(4),
@@ -1125,9 +1179,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       if (d.protocol != null) ...[
                         const SizedBox(width: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: AppColors.brand.withValues(alpha: 0.1),
+                            color: AppColors.brandSoftBg,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1142,20 +1197,24 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       ],
                     ]),
                     // Region badge — يظهر إن كان الجهاز مسند لمنطقة (2026-08-18)
-                    if (d.regionId != null && _regionsById[d.regionId!] != null) ...[
+                    if (d.regionId != null &&
+                        _regionsById[d.regionId!] != null) ...[
                       const SizedBox(height: 3),
                       Builder(builder: (_) {
                         final region = _regionsById[d.regionId!]!;
-                        final color = _parseRegionColor(region.color) ?? AppColors.brand;
+                        final color =
+                            _parseRegionColor(region.color) ?? AppColors.brand;
                         return Row(children: [
                           Icon(LucideIcons.mapPin, size: 10, color: color),
                           const SizedBox(width: 3),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
                             decoration: BoxDecoration(
                               color: color.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: color.withValues(alpha: 0.3)),
+                              border: Border.all(
+                                  color: color.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               region.name,
@@ -1172,12 +1231,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     if (d.location != null && d.location!.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Row(children: [
-                        Icon(LucideIcons.building2, size: 10, color: AppColors.textLow),
+                        Icon(LucideIcons.building2,
+                            size: 10, color: AppColors.textLow),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
                             d.location!,
-                            style: TextStyle(fontSize: 10, color: AppColors.textLow),
+                            style: TextStyle(
+                                fontSize: 10, color: AppColors.textLow),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1200,7 +1261,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       ),
                     ),
                   const SizedBox(height: 4),
-                  Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+                  Icon(LucideIcons.chevronLeft,
+                      size: 16, color: AppColors.textLow),
                 ],
               ),
             ],
@@ -1238,19 +1300,22 @@ class _EmptyDevices extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 96, height: 96,
+              width: 96,
+              height: 96,
               decoration: BoxDecoration(
-                color: AppColors.brand.withValues(alpha: 0.08),
+                color: AppColors.brandSoftBg,
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                hasActiveFilter ? LucideIcons.filterX : LucideIcons.router,
-                size: 40, color: AppColors.brand),
+                  hasActiveFilter ? LucideIcons.filterX : LucideIcons.router,
+                  size: 40,
+                  color: AppColors.brand),
             ),
             const SizedBox(height: Sp.lg),
             Text(hasActiveFilter ? 'لا نتائج بهذا الفلتر' : 'لا توجد أجهزة',
                 style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
             Text(

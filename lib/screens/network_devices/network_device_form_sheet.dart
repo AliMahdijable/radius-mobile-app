@@ -73,7 +73,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     try {
       final list = await NetworkDevicesApi.listRegions();
       if (!mounted) return;
-      setState(() { _regions = list; _regionsLoaded = true; });
+      setState(() {
+        _regions = list;
+        _regionsLoaded = true;
+      });
     } catch (_) {
       // silent — dropdown يبقى فاضي، المستخدم يضيف يدوياً من شاشة المناطق
       if (mounted) setState(() => _regionsLoaded = true);
@@ -150,7 +153,9 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         'region_id': _regionId,
         'model': _modelCtrl.text.trim().isEmpty ? null : _modelCtrl.text.trim(),
         'mac': _macCtrl.text.trim().isEmpty ? null : _macCtrl.text.trim(),
-        'location': _locationCtrl.text.trim().isEmpty ? null : _locationCtrl.text.trim(),
+        'location': _locationCtrl.text.trim().isEmpty
+            ? null
+            : _locationCtrl.text.trim(),
         'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         'credentials': _buildCredentials(),
       };
@@ -162,11 +167,13 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         NetworkDevicesApi.invalidateCredentialsCache(widget.existing!.id);
       }
       if (!mounted) return;
-      showSheetSnack(context, widget.existing == null ? 'تم إضافة الجهاز' : 'تم الحفظ');
+      showSheetSnack(
+          context, widget.existing == null ? 'تم إضافة الجهاز' : 'تم الحفظ');
       Navigator.of(context).pop(saved);
     } catch (e) {
       if (!mounted) return;
-      showSheetSnack(context, e.toString().replaceFirst('Exception: ', ''), isError: true);
+      showSheetSnack(context, e.toString().replaceFirst('Exception: ', ''),
+          isError: true);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -177,7 +184,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       _protocol = v;
       if (v != null) {
         // المنفذ يعتمد على البراند + البروتوكول (Mikrotik≠UBNT للـapi)
-        _apiPortCtrl.text = NetworkDeviceLabels.portForBrandProtocol(_brand, v).toString();
+        _apiPortCtrl.text =
+            NetworkDeviceLabels.portForBrandProtocol(_brand, v).toString();
       }
     });
   }
@@ -233,22 +241,30 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   _textField(_nameCtrl, 'اسم الجهاز *',
                       hint: 'مثلاً: راوتر الطابق الثاني',
                       icon: LucideIcons.tag,
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'مطلوب' : null),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: _dropdown('النوع *', _type,
-                        NetworkDeviceLabels.types.entries.toList(),
-                        (v) => setState(() => _type = v))),
+                    Expanded(
+                        child: _dropdown(
+                            'النوع *',
+                            _type,
+                            NetworkDeviceLabels.types.entries.toList(),
+                            (v) => setState(() => _type = v))),
                     const SizedBox(width: 10),
-                    Expanded(child: _dropdown('البراند *', _brand,
-                        NetworkDeviceLabels.brands.entries.toList(),
-                        _onBrandChanged)),
+                    Expanded(
+                        child: _dropdown(
+                            'البراند *',
+                            _brand,
+                            NetworkDeviceLabels.brands.entries.toList(),
+                            _onBrandChanged)),
                   ]),
                   const SizedBox(height: 10),
                   // 2026-08-18: dropdown مخصّص لأجهزة UBNT — يحدّد الموديل
                   // بشكل حاسم فيحدّد أي Live Panel نعرض (AF60 vs classic).
                   // الأنواع الأخرى تبقى بحقل نصّي حرّ كما كانت.
-                  if (_brand == 'ubnt') _ubntModelPicker()
+                  if (_brand == 'ubnt')
+                    _ubntModelPicker()
                   else
                     _textField(_modelCtrl, 'الموديل',
                         hint: 'مثلاً: RB4011، PBE-5AC، A5c',
@@ -269,18 +285,18 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                       // 2026-08-25: numberWithOptions(decimal:true) يُظهر نقطة
                       // على iOS numeric keypad — TextInputType.number لا يُظهرها
                       // (يظهر فقط 0-9 كأنّه رقم تلفون).
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: false),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'مطلوب';
-                        if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(v.trim())) {
-                          return 'IP غير صالح';
-                        }
-                        return null;
-                      }),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true, signed: false), validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'مطلوب';
+                    if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$')
+                        .hasMatch(v.trim())) {
+                      return 'IP غير صالح';
+                    }
+                    return null;
+                  }),
                   const SizedBox(height: 10),
                   _textField(_macCtrl, 'MAC (اختياري)',
-                      hint: 'AA:BB:CC:DD:EE:FF',
-                      icon: LucideIcons.fingerprint),
+                      hint: 'AA:BB:CC:DD:EE:FF', icon: LucideIcons.fingerprint),
 
                   const SizedBox(height: Sp.xl),
                   _sectionTitle('بروتوكول الإدارة (اختياري — للمرحلة القادمة)'),
@@ -288,16 +304,21 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF06B6D4).withValues(alpha: 0.08),
+                      color: AppColors.info.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF06B6D4).withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppColors.info.withValues(alpha: 0.3)),
                     ),
                     child: Row(children: [
-                      Icon(LucideIcons.info, size: 14, color: const Color(0xFF06B6D4)),
+                      Icon(LucideIcons.info, size: 14, color: AppColors.info),
                       const SizedBox(width: 6),
-                      Expanded(child: Text(
+                      Expanded(
+                          child: Text(
                         'الفحص (ICMP ping) يعمل تلقائيّاً بدون credentials. هذا القسم فقط لإدارة الجهاز في المرحلة القادمة (interfaces / traffic / reboot).',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMid,
+                            height: 1.4),
                       )),
                     ]),
                   ),
@@ -318,14 +339,20 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                     child: ElevatedButton.icon(
                       onPressed: _submitting ? null : _submit,
                       icon: _submitting
-                          ? const SizedBox(width: 18, height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
                           : const Icon(LucideIcons.check, size: 18),
-                      label: Text(widget.existing == null ? 'إضافة الجهاز' : 'حفظ التعديلات'),
+                      label: Text(widget.existing == null
+                          ? 'إضافة الجهاز'
+                          : 'حفظ التعديلات'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.brand,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        foregroundColor: AppColors.onBrand,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ),
@@ -341,7 +368,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
 
   Widget _dragHandle() => Container(
         margin: const EdgeInsets.only(top: 8),
-        width: 40, height: 4,
+        width: 40,
+        height: 4,
         decoration: BoxDecoration(
           color: AppColors.textLow.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(2),
@@ -356,28 +384,42 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(width: 8),
           Text(
             widget.existing == null ? 'إضافة جهاز جديد' : 'تعديل الجهاز',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textHi),
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textHi),
           ),
           const Spacer(),
           if (_loadingCreds)
             SizedBox(
-              width: 16, height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand),
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.brand),
             ),
         ]),
       );
 
   Widget _sectionTitle(String text) => Row(children: [
-        Container(width: 3, height: 14, decoration: BoxDecoration(
-          color: AppColors.brand, borderRadius: BorderRadius.circular(2),
-        )),
+        Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              color: AppColors.brand,
+              borderRadius: BorderRadius.circular(2),
+            )),
         const SizedBox(width: 8),
-        Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+        Text(text,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textHi)),
       ]);
 
   Widget _protocolSelector() {
     return Wrap(
-      spacing: 8, runSpacing: 8,
+      spacing: 8,
+      runSpacing: 8,
       children: [
         _protoOption(null, 'ICMP فقط (افتراضي)', LucideIcons.zap),
         _protoOption('api', 'API', LucideIcons.globe),
@@ -403,12 +445,15 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           ),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 14, color: active ? Colors.white : AppColors.textMid),
+          Icon(icon,
+              size: 14, color: active ? Colors.white : AppColors.textMid),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600,
-            color: active ? Colors.white : AppColors.textHi,
-          )),
+          Text(label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.textHi,
+              )),
         ]),
       ),
     );
@@ -428,7 +473,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(width: 6),
           Text(
             'بيانات الاتصال (${NetworkDeviceLabels.protocolLabel(_protocol!)})',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textHi),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textHi),
           ),
         ]),
         const SizedBox(height: 10),
@@ -440,8 +488,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(height: 4),
           Text(
             switch (_brand) {
-              'mikrotik' => '💡 Mikrotik API الافتراضي 8728 — فعّله بـ/ip service enable api',
-              'ubnt' => '💡 UBNT يستعمل SSH (port 22) — يعمل على airOS 5/6/7/8 كلها. نفس user/pass للـweb.',
+              'mikrotik' =>
+                '💡 Mikrotik API الافتراضي 8728 — فعّله بـ/ip service enable api',
+              'ubnt' =>
+                '💡 UBNT يستعمل SSH (port 22) — يعمل على airOS 5/6/7/8 كلها. نفس user/pass للـweb.',
               'mimosa' => '💡 Mimosa يستعمل HTTPS 443 — أدخل admin credentials',
               _ => '💡 تأكّد من تفعيل API service على الجهاز',
             },
@@ -455,15 +505,20 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   }
 
   List<Widget> _userPassFields() => [
-        _textField(_userCtrl, 'اسم المستخدم (اختياري لبعض UBNT)', hint: 'admin أو ubnt', icon: LucideIcons.user),
+        _textField(_userCtrl, 'اسم المستخدم (اختياري لبعض UBNT)',
+            hint: 'admin أو ubnt', icon: LucideIcons.user),
         const SizedBox(height: 10),
         TextFormField(
           controller: _passCtrl,
           obscureText: _obscurePassword,
-          decoration: _inputDecoration('كلمة المرور', icon: LucideIcons.lock).copyWith(
+          decoration:
+              _inputDecoration('كلمة المرور', icon: LucideIcons.lock).copyWith(
             suffixIcon: IconButton(
-              icon: Icon(_obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff, size: 18),
-              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              icon: Icon(
+                  _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
+                  size: 18),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
             ),
           ),
         ),
@@ -471,7 +526,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
 
   List<Widget> _snmpFields() => [
         Row(children: [
-          Text('SNMP version:', style: TextStyle(fontSize: 12, color: AppColors.textMid)),
+          Text('SNMP version:',
+              style: TextStyle(fontSize: 12, color: AppColors.textMid)),
           const SizedBox(width: 8),
           ChoiceChip(
             label: const Text('v2c', style: TextStyle(fontSize: 11)),
@@ -486,7 +542,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           ),
         ]),
         const SizedBox(height: 10),
-        _textField(_communityCtrl, 'Community string', hint: 'public', icon: LucideIcons.key),
+        _textField(_communityCtrl, 'Community string',
+            hint: 'public', icon: LucideIcons.key),
       ];
 
   Widget _textField(
@@ -509,11 +566,13 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     );
   }
 
-  InputDecoration _inputDecoration(String label, {String? hint, IconData? icon}) {
+  InputDecoration _inputDecoration(String label,
+      {String? hint, IconData? icon}) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      prefixIcon: icon != null ? Icon(icon, size: 18, color: AppColors.textLow) : null,
+      prefixIcon:
+          icon != null ? Icon(icon, size: 18, color: AppColors.textLow) : null,
       isDense: true,
       filled: true,
       fillColor: AppColors.surfaceInput,
@@ -543,8 +602,12 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       value: value,
       isExpanded: true,
       decoration: _inputDecoration(label),
-      items: items.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-      onChanged: (v) { if (v != null) onChanged(v); },
+      items: items
+          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+          .toList(),
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
     );
   }
 
@@ -588,7 +651,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             for (final p in presets)
               DropdownMenuItem<String?>(
                 value: p.key.isEmpty ? null : p.key,
-                child: Text(p.value, style: const TextStyle(fontSize: 13),
+                child: Text(p.value,
+                    style: const TextStyle(fontSize: 13),
                     overflow: TextOverflow.ellipsis),
               ),
           ],
@@ -599,8 +663,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         // حقل نصّي حرّ للـmodels غير المدرجة
         const SizedBox(height: 8),
         _textField(_modelCtrl, 'أو اكتب الموديل يدوياً',
-            hint: 'مثلاً: PBE-5AC-500، NBE-5AC-Gen2',
-            icon: LucideIcons.info),
+            hint: 'مثلاً: PBE-5AC-500، NBE-5AC-Gen2', icon: LucideIcons.info),
       ],
     );
   }
@@ -620,18 +683,19 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.brand.withValues(alpha: 0.06),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: AppColors.brand.withValues(alpha: 0.4),
+              color: AppColors.brandSoftBorder,
               style: BorderStyle.solid,
             ),
           ),
           child: Row(children: [
             Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: AppColors.brand.withValues(alpha: 0.15),
+                color: AppColors.brandSoftBg,
                 shape: BoxShape.circle,
               ),
               child: Icon(LucideIcons.mapPinPlus,
@@ -649,13 +713,11 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                           color: AppColors.textHi)),
                   const SizedBox(height: 2),
                   Text('اضغط لإنشاء منطقة (مثل: كرخ / رصافة / ...)',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.textMid)),
+                      style: TextStyle(fontSize: 11, color: AppColors.textMid)),
                 ],
               ),
             ),
-            Icon(LucideIcons.chevronLeft,
-                size: 16, color: AppColors.brand),
+            Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.brand),
           ]),
         ),
       );
@@ -697,13 +759,13 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           Icon(
             _regionsLoaded ? LucideIcons.triangleAlert : LucideIcons.loader,
             size: 14,
-            color: _regionsLoaded ? const Color(0xFFEA580C) : AppColors.textLow,
+            color: _regionsLoaded ? AppColors.warning : AppColors.textLow,
           ),
           const SizedBox(width: 6),
           Text(
             _regionsLoaded ? 'منطقة محذوفة' : 'قيد التحميل...',
             style: TextStyle(
-              color: _regionsLoaded ? const Color(0xFFEA580C) : AppColors.textLow,
+              color: _regionsLoaded ? AppColors.warning : AppColors.textLow,
               fontSize: 13,
             ),
           ),
@@ -726,7 +788,8 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             alignment: AlignmentDirectional.centerStart,
             child: TextButton.icon(
               onPressed: _openRegionsAndReload,
-              icon: Icon(LucideIcons.settings2, size: 14, color: AppColors.brand),
+              icon:
+                  Icon(LucideIcons.settings2, size: 14, color: AppColors.brand),
               label: Text('إدارة المناطق',
                   style: TextStyle(color: AppColors.brand, fontSize: 12)),
               style: TextButton.styleFrom(

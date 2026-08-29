@@ -10,6 +10,7 @@ class Subscriber {
   final String? phone;
   final String? mobile;
   final String? expiration;
+
   /// 2026-07-16: آخر اتصال — من SAS4 `last_online` field. backend يمرّرها
   /// في /api/v2/subscribers (server.js:9006). فارغة = SAS4 ما زوّدها.
   /// تُعرَض في subscriber_detail_screen للمشتركين غير المتّصلين.
@@ -21,6 +22,7 @@ class Subscriber {
   final String? profileName;
   final int? profileId;
   final String? parentUsername;
+
   /// SAS4-stored password — used to pre-fill the edit sheet so the
   /// admin can reveal/copy the current password before deciding to
   /// change it. null when the backend response didn't include it.
@@ -31,12 +33,14 @@ class Subscriber {
   final int? sessionTime;
   final int? downloadBytes;
   final int? uploadBytes;
+
   /// Device vendor / OUI string from SAS4 (e.g., 'Huawei', 'Mikrotik')
   /// — comes through /api/v2/online-users as `device`. Shown on the
   /// online row of the subscriber card so admins can see what hardware
   /// is connected at a glance.
   final String? deviceVendor;
   final double? discount;
+
   /// Sale price (user_price) for this subscriber's package. Filled by
   /// `enrichWithPackages` from the catalogue map — the with-phones
   /// endpoint doesn't carry it. null = unknown / no price loaded.
@@ -110,7 +114,8 @@ class Subscriber {
     return n.isEmpty ? username : n;
   }
 
-  String get displayPhone => (phone?.isNotEmpty ?? false) ? phone! : (mobile ?? '');
+  String get displayPhone =>
+      (phone?.isNotEmpty ?? false) ? phone! : (mobile ?? '');
 
   /// Signed amount from notes (negative = debt, positive = credit).
   double get balanceAmount {
@@ -232,8 +237,8 @@ class Subscriber {
           j['name']?.toString() ??
           j['package_name']?.toString(),
       profileId: toInt(pdId ?? j['profile_id'] ?? j['profileId']),
-      parentUsername: j['parent_username']?.toString() ??
-          j['parentUsername']?.toString(),
+      parentUsername:
+          j['parent_username']?.toString() ?? j['parentUsername']?.toString(),
       password: j['password']?.toString(),
       isEnabled: toBool(j['enabled'] ?? j['isEnabled'], dflt: true),
       // Mirror v1's exact online-flag read (subscribers_provider.dart:455-458):
@@ -261,12 +266,12 @@ class Subscriber {
           toDouble(j['price']),
       // 2026-07-13: daily_traffic_details يمرّه backend كـdaily_traffic.
       // شكل السجل: { traffic: N, upload: N, download: N } من SAS4.
-      dailyTrafficTotal:
-          toInt((j['daily_traffic'] is Map ? j['daily_traffic']['traffic'] : null)),
-      dailyUpload:
-          toInt((j['daily_traffic'] is Map ? j['daily_traffic']['upload'] : null)),
-      dailyDownload:
-          toInt((j['daily_traffic'] is Map ? j['daily_traffic']['download'] : null)),
+      dailyTrafficTotal: toInt(
+          (j['daily_traffic'] is Map ? j['daily_traffic']['traffic'] : null)),
+      dailyUpload: toInt(
+          (j['daily_traffic'] is Map ? j['daily_traffic']['upload'] : null)),
+      dailyDownload: toInt(
+          (j['daily_traffic'] is Map ? j['daily_traffic']['download'] : null)),
       latitude: toDouble(j['latitude']),
       longitude: toDouble(j['longitude']),
       addressRaw: j['address_raw']?.toString(),
@@ -283,8 +288,9 @@ class Subscriber {
     if (profileId == null) return this;
     final found = packagesById[profileId.toString()];
     if (found == null) return this;
-    final newName =
-        (profileName == null || profileName!.isEmpty) ? found.name : profileName;
+    final newName = (profileName == null || profileName!.isEmpty)
+        ? found.name
+        : profileName;
     final newPrice = price ?? found.price;
     if (newName == profileName && newPrice == price) return this;
     return Subscriber(
@@ -366,7 +372,8 @@ class Subscriber {
 
   /// 2026-08-26: نُسخة مع موقع GPS مُحدَّث — بعد PATCH ناجح، نُطبّقها
   /// محلياً حتى الكارت + شاشة التفاصيل تتحدّث بدون انتظار refetch.
-  Subscriber copyWithLocation({double? latitude, double? longitude, String? addressRaw}) {
+  Subscriber copyWithLocation(
+      {double? latitude, double? longitude, String? addressRaw}) {
     return Subscriber(
       idx: idx,
       username: username,

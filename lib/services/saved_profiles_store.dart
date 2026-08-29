@@ -158,8 +158,7 @@ class SavedProfilesStore {
   /// احذف حساب واحد (long-press على الـchip).
   static Future<void> remove(String username) async {
     final current = await list();
-    final filtered =
-        current.where((p) => p.username != username).toList();
+    final filtered = current.where((p) => p.username != username).toList();
     if (filtered.length == current.length) return;
     await _storage.write(
       key: _kList,

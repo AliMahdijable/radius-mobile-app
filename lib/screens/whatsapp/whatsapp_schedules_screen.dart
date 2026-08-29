@@ -153,9 +153,10 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       await _silentReload();
       if (!mounted) return;
     }
-    _showSnack(r.ok
-        ? 'wa_schedules.saved'.tr()
-        : (r.message ?? 'wa_schedules.save_failed'.tr()),
+    _showSnack(
+        r.ok
+            ? 'wa_schedules.saved'.tr()
+            : (r.message ?? 'wa_schedules.save_failed'.tr()),
         error: !r.ok);
   }
 
@@ -182,9 +183,10 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       await _silentReload();
       if (!mounted) return;
     }
-    _showSnack(r.ok
-        ? 'wa_schedules.saved'.tr()
-        : (r.message ?? 'wa_schedules.save_failed'.tr()),
+    _showSnack(
+        r.ok
+            ? 'wa_schedules.saved'.tr()
+            : (r.message ?? 'wa_schedules.save_failed'.tr()),
         error: !r.ok);
   }
 
@@ -222,8 +224,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         _showSnack('wa_schedules.enabled'.tr());
       } else {
         setState(() => _expiryEnabled = false);
-        _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(),
-            error: true);
+        _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(), error: true);
       }
       return;
     }
@@ -265,8 +266,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         _showSnack('wa_schedules.enabled'.tr());
       } else {
         setState(() => _debtEnabled = false);
-        _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(),
-            error: true);
+        _showSnack(r.message ?? 'wa_schedules.toggle_failed'.tr(), error: true);
       }
       return;
     }
@@ -416,8 +416,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         ),
         child: Row(
           children: [
-            Icon(LucideIcons.clock,
-                size: 18, color: AppColors.textMid),
+            Icon(LucideIcons.clock, size: 18, color: AppColors.textMid),
             const SizedBox(width: 10),
             Text('wa_schedules.execution_time'.tr(),
                 style: AppType.label(color: AppColors.textMid)
@@ -452,8 +451,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color:
-                    isSelected ? Colors.white : AppColors.textMid,
+                color: isSelected ? Colors.white : AppColors.textMid,
               )),
           selected: isSelected,
           onSelected: (_) {
@@ -468,7 +466,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           },
           backgroundColor: AppColors.surfaceInput,
           selectedColor: color,
-          checkmarkColor: Colors.white,
+          checkmarkColor: AppColors.onBrand,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
@@ -555,8 +553,8 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               hintText: '3',
               filled: true,
               fillColor: AppColors.surfaceInput,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(color: AppColors.border),
@@ -599,7 +597,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
 
   // ─── Debt Reminder Card ────────────────────────────────
   Widget _debtCard() {
-    const color = Color(0xFFE08F2D); // amber — تمييز عن expiry
+    final color = AppColors.warning; // amber — تمييز عن expiry
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -733,8 +731,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color:
-                    selected ? Colors.white : AppColors.textMid,
+                color: selected ? Colors.white : AppColors.textMid,
               )),
           selected: selected,
           onSelected: (_) {
@@ -752,7 +749,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           },
           backgroundColor: AppColors.surfaceInput,
           selectedColor: color,
-          checkmarkColor: Colors.white,
+          checkmarkColor: AppColors.onBrand,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
@@ -858,9 +855,8 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? color.withValues(alpha: 0.14)
-              : AppColors.surfaceInput,
+          color:
+              selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected ? color : AppColors.border,
@@ -870,8 +866,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                size: 13, color: selected ? color : AppColors.textMid),
+            Icon(icon, size: 13, color: selected ? color : AppColors.textMid),
             const SizedBox(width: 4),
             Flexible(
               child: Text(label,

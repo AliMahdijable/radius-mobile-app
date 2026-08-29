@@ -110,7 +110,8 @@ class Manager {
       // for older endpoints (/manager/{id}/debt returns `total`).
       // SAS4 reports debt as a negative magnitude; mirror v1's
       // .abs() so all callers can treat it as a positive size.
-      totalDebt: _toDouble(j['total_debt'] ?? j['debt'] ?? j['total'] ?? 0).abs(),
+      totalDebt:
+          _toDouble(j['total_debt'] ?? j['debt'] ?? j['total'] ?? 0).abs(),
       debtForMe: _toDouble(j['debt_for_me']).abs(),
       // v1 manager_model:74 — reward_points lives in many places
       // depending on the endpoint. Mirror the full fallback list.
@@ -206,8 +207,9 @@ class ManagerDebtInfo {
   final double debtForMe;
 
   factory ManagerDebtInfo.fromJson(Map<String, dynamic> j) {
-    final data =
-        j['data'] is Map<String, dynamic> ? j['data'] as Map<String, dynamic> : j;
+    final data = j['data'] is Map<String, dynamic>
+        ? j['data'] as Map<String, dynamic>
+        : j;
     // مطلب 2026-06-11: SAS4 يرجّع الدين كرقم سالب (debt = -1.6M
     // معناها مدين بـ1.6M). v1 يأخذ `.abs()` في _enrichManagers
     // فنبقي على نفس الاتفاقية: الدين هنا دائماً magnitude موجب،
@@ -260,8 +262,8 @@ class ManagersApi {
   ///
   /// - null: تعذّر (لم يسجّل دخول / خطأ صلاحيّة / شبكة). الـUI يعرض
   ///   رسالة السيرفر لو موجودة.
-  static Future<({String? password, String? message})>
-      fetchPassword(int id) async {
+  static Future<({String? password, String? message})> fetchPassword(
+      int id) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/managers/$id/password',
@@ -333,8 +335,8 @@ class ManagersApi {
   /// list-derived values to the inputs.
   static Future<Manager?> details(int id) async {
     try {
-      final r = await ApiClient.dio
-          .get<Map<String, dynamic>>('/api/v2/managers/$id');
+      final r =
+          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/managers/$id');
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
       final data = body['data'];
@@ -400,7 +402,8 @@ class ManagersApi {
   /// current admin doesn't have permission to view managers.
   static Future<List<ManagerLite>?> lite() async {
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/managers');
+      final r =
+          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/managers');
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
       final list = (body['data'] as List?) ?? const [];
@@ -509,7 +512,10 @@ class ManagersApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/managers (PUT)', e);
       final body = e.response?.data;
@@ -530,7 +536,10 @@ class ManagersApi {
         '/api/v2/managers/$id',
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/managers (DELETE)', e);
       final body = e.response?.data;
@@ -566,7 +575,10 @@ class ManagersApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/managers/$id/deposit', e);
       final body = e.response?.data;
@@ -593,7 +605,10 @@ class ManagersApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/managers/$id/withdraw', e);
       final body = e.response?.data;
@@ -625,7 +640,10 @@ class ManagersApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/managers/$id/sas-pay-debt', e);
       final body = e.response?.data;
@@ -653,7 +671,10 @@ class ManagersApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/managers/$id/add-points', e);
       final body = e.response?.data;
@@ -702,7 +723,10 @@ class ManagersApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('fcm/send-manager-balance-update', e);
       final body = e.response?.data;

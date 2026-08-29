@@ -26,26 +26,32 @@ class LoginSuccess extends LoginResult {
   });
 
   final String token;
+
   /// للموظف: توكن SAS4 الأب (parent admin) من الـlogin response. للأدمن
   /// العادي: null (نستعمل token نفسه).
   final String? sas4Token;
   final String adminId;
   final String adminUsername;
   final String displayName;
+
   /// ISO8601 string of when the token expires. Stored as-is in
   /// AuthStorage so the interceptor can do proactive refresh.
   final String? expiresAt;
   final bool requires2fa;
+
   /// True when the SAS4 user permissions resolve to super-admin.
   final bool isSuperAdmin;
+
   /// True when the user can create sub-managers — درجة الـ
   /// 'prm_managers_create' SAS4. Drives the parent picker visibility
   /// on the add/edit subscriber sheets (مطابق v1 canAccessManagers).
   final bool canAccessManagers;
+
   /// True when the user can create/manage packages — درجة الـ
   /// 'prm_profiles_create' SAS4. Combined with canAccessManagers to
   /// gate the expiration date picker (canEditExpiration = either).
   final bool canAccessPackages;
+
   /// True عند login موظف (user.role='employee' في الـbackend response).
   /// يُحفظ في AuthStorage عشان AuthApi.refreshToken() ترفض التجديد
   /// للموظف — الـempToken لا يقدر يتجدد عبر /api/auth/refresh-token
@@ -83,11 +89,9 @@ class AuthApi {
       }
 
       final user = body['user'] as Map<String, dynamic>? ?? body;
-      final token = (body['token'] ??
-              body['accessToken'] ??
-              user['token'] ??
-              '')
-          .toString();
+      final token =
+          (body['token'] ?? body['accessToken'] ?? user['token'] ?? '')
+              .toString();
       if (token.isEmpty) {
         return const LoginFailure('لم يصل رمز الجلسة من السيرفر.');
       }
@@ -136,7 +140,8 @@ class AuthApi {
       } else {
         // admin عادي: List من رموز SAS4 (المسار الأصلي — بلا تغيير)
         final perms = (user['permissions'] ?? body['permissions']) as List?;
-        final permSet = perms?.map((e) => e.toString()).toSet() ?? const <String>{};
+        final permSet =
+            perms?.map((e) => e.toString()).toSet() ?? const <String>{};
         canAccessManagers = permSet.contains('prm_managers_create');
         canAccessPackages = permSet.contains('prm_profiles_create');
       }
@@ -154,16 +159,14 @@ class AuthApi {
             ? empFull
             : (empUser.isNotEmpty ? empUser : 'موظف');
       } else {
-        displayName = (user['display_name'] ??
-                user['username'] ??
-                'مستخدم')
-            .toString();
+        displayName =
+            (user['display_name'] ?? user['username'] ?? 'مستخدم').toString();
       }
       // 2026-07-12 fix: sas4Token يجي في response للموظف — توكن الأب
       // للاستدعاءات المباشرة على SAS4. للأدمن العادي، الـtoken هو نفسه
       // (سنُخزّنه كـsas4Token لتوحيد قراءات SAS4).
-      final sas4Token = body['sas4Token']?.toString() ??
-          body['sas4_token']?.toString();
+      final sas4Token =
+          body['sas4Token']?.toString() ?? body['sas4_token']?.toString();
       return LoginSuccess(
         token: token,
         adminId: (user['admin_id'] ?? user['id'] ?? '').toString(),
@@ -241,7 +244,8 @@ class AuthApi {
         await AuthStorage.saveSas4Token(newToken);
       }
       if (!kReleaseMode) {
-        debugPrint('🟢 refresh-token: ${isEmp ? "sas4Token only (employee)" : "token+sas4Token"} saved, expires=$expiresAt');
+        debugPrint(
+            '🟢 refresh-token: ${isEmp ? "sas4Token only (employee)" : "token+sas4Token"} saved, expires=$expiresAt');
       }
       return (token: newToken, expiresAt: expiresAt);
     } catch (e) {

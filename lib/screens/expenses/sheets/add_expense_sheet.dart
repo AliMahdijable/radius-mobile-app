@@ -100,8 +100,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     }
     setState(() => _submitting = true);
     String two(int n) => n.toString().padLeft(2, '0');
-    final dateStr =
-        '${_date.year}-${two(_date.month)}-${two(_date.day)}';
+    final dateStr = '${_date.year}-${two(_date.month)}-${two(_date.day)}';
     final result = await ExpensesApi.create(
       amount: _amount,
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
@@ -109,19 +108,18 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    showSheetSnack(context, result.ok
-            ? 'تم تسجيل الصرفية'
-            : (result.message ?? 'تعذّر التسجيل'), isError: (result.ok) ? false : true);
+    showSheetSnack(context,
+        result.ok ? 'تم تسجيل الصرفية' : (result.message ?? 'تعذّر التسجيل'),
+        isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF8B5CF6);
+    final accent = AppColors.brandAccent;
     String two(int n) => n.toString().padLeft(2, '0');
-    final dateLabel =
-        '${_date.year}/${two(_date.month)}/${two(_date.day)}';
+    final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.5,
@@ -131,8 +129,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           child: Column(
             children: [
@@ -142,15 +139,13 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                 title: 'إضافة صرفية',
                 subtitle: 'تسجيل مصروف جديد',
                 color: accent,
-                onClose: _submitting
-                    ? null
-                    : () => Navigator.of(context).pop(),
+                onClose: _submitting ? null : () => Navigator.of(context).pop(),
               ),
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     _Lbl('المبلغ *'),
                     _AmountField(
@@ -178,8 +173,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                                 final picked = await showDatePicker(
                                   context: context,
                                   initialDate: _date,
-                                  firstDate: DateTime(
-                                      _date.year - 1, 1, 1),
+                                  firstDate: DateTime(_date.year - 1, 1, 1),
                                   lastDate: DateTime.now(),
                                   helpText: 'اختر تاريخ الصرفية',
                                   cancelText: 'إلغاء',
@@ -195,8 +189,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                               horizontal: 10, vertical: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(R.sm),
-                            border: Border.all(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                            border: Border.all(color: AppColors.borderSoft),
                           ),
                           child: Row(
                             children: [
@@ -206,8 +199,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                               Expanded(
                                 child: Text(
                                   dateLabel,
-                                  style: AppType.input(
-                                      color: AppColors.textHi),
+                                  style: AppType.input(color: AppColors.textHi),
                                 ),
                               ),
                               Icon(LucideIcons.chevronDown,
@@ -225,27 +217,24 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                       style: AppType.input(color: AppColors.textHi),
                       decoration: InputDecoration(
                         hintText: 'وصف الصرفية…',
-                        hintStyle:
-                            AppType.input(color: AppColors.textLow),
+                        hintStyle: AppType.input(color: AppColors.textLow),
                         prefixIcon: Padding(
-                          padding: EdgeInsets.only(
-                              left: 8, right: 4, bottom: 16),
+                          padding:
+                              EdgeInsets.only(left: 8, right: 4, bottom: 16),
                           child: Icon(LucideIcons.fileText,
                               size: 16, color: AppColors.textMid),
                         ),
-                        prefixIconConstraints: const BoxConstraints(
-                            minWidth: 28, minHeight: 28),
+                        prefixIconConstraints:
+                            const BoxConstraints(minWidth: 28, minHeight: 28),
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                          borderSide: BorderSide(color: AppColors.borderSoft),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                          borderSide: BorderSide(color: AppColors.borderSoft),
                         ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
@@ -333,13 +322,11 @@ class _AmountField extends StatelessWidget {
               fillColor: AppColors.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(
-                    color: AppColors.border.withValues(alpha: 0.5)),
+                borderSide: BorderSide(color: AppColors.borderSoft),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(
-                    color: AppColors.border.withValues(alpha: 0.5)),
+                borderSide: BorderSide(color: AppColors.borderSoft),
               ),
               isDense: true,
               contentPadding:
@@ -367,8 +354,8 @@ class _AmountField extends StatelessWidget {
                   },
                   borderRadius: BorderRadius.circular(R.pill),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(R.pill),
@@ -454,9 +441,7 @@ class _SheetHeader extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(subtitle,
                     style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        height: 1.2),
+                        fontSize: 11, fontWeight: FontWeight.w500, height: 1.2),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ],
@@ -524,8 +509,8 @@ class _SubmitBar extends StatelessWidget {
                   )
                 : Icon(icon, size: 16),
             label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
           ),
         ),
       ),

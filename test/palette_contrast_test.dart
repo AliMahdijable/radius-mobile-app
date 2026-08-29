@@ -31,7 +31,9 @@ import 'package:rad_mysvcs/theme/colors.dart';
 double _lum(Color c) {
   double ch(double v) {
     v = v / 255.0;
-    return v <= 0.04045 ? v / 12.92 : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+    return v <= 0.04045
+        ? v / 12.92
+        : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
   }
 
   return 0.2126 * ch((c.r * 255).roundToDouble()) +
@@ -58,43 +60,173 @@ Color flatten(Color fg, Color bg) {
   );
 }
 
-typedef Pair = ({String name, Color Function() fg, Color Function() bg, double min});
+typedef Pair = ({
+  String name,
+  Color Function() fg,
+  Color Function() bg,
+  double min
+});
 
 void main() {
   // أزواج تُقاس في الوضعين. الـgetters تُقرأ بعد ضبط الوضع لا قبله.
   final pairs = <Pair>[
     // ── نصوص على سطح الكارت ──
-    (name: 'textHi على surface', fg: () => AppColors.textHi, bg: () => AppColors.surface, min: 4.5),
-    (name: 'textBody على surface', fg: () => AppColors.textBody, bg: () => AppColors.surface, min: 4.5),
-    (name: 'textMid على surface', fg: () => AppColors.textMid, bg: () => AppColors.surface, min: 4.5),
+    (
+      name: 'textHi على surface',
+      fg: () => AppColors.textHi,
+      bg: () => AppColors.surface,
+      min: 4.5
+    ),
+    (
+      name: 'textBody على surface',
+      fg: () => AppColors.textBody,
+      bg: () => AppColors.surface,
+      min: 4.5
+    ),
+    (
+      name: 'textMid على surface',
+      fg: () => AppColors.textMid,
+      bg: () => AppColors.surface,
+      min: 4.5
+    ),
     // الرتب الدنيا تُقاس على bg — أسوأ سطح فاتح، لا على الأبيض.
-    (name: 'textLabel على bg', fg: () => AppColors.textLabel, bg: () => AppColors.bg, min: 3.0),
-    (name: 'textLow على bg', fg: () => AppColors.textLow, bg: () => AppColors.bg, min: 3.0),
-    (name: 'textHint على bg', fg: () => AppColors.textHint, bg: () => AppColors.bg, min: 3.0),
-    (name: 'textLabel على surfaceSheet', fg: () => AppColors.textLabel, bg: () => AppColors.surfaceSheet, min: 3.0),
+    (
+      name: 'textLabel على bg',
+      fg: () => AppColors.textLabel,
+      bg: () => AppColors.bg,
+      min: 3.0
+    ),
+    (
+      name: 'textLow على bg',
+      fg: () => AppColors.textLow,
+      bg: () => AppColors.bg,
+      min: 3.0
+    ),
+    (
+      name: 'textHint على bg',
+      fg: () => AppColors.textHint,
+      bg: () => AppColors.bg,
+      min: 3.0
+    ),
+    (
+      name: 'textLabel على surfaceSheet',
+      fg: () => AppColors.textLabel,
+      bg: () => AppColors.surfaceSheet,
+      min: 3.0
+    ),
     // ── نصوص على خلفيّة الشاشة ──
-    (name: 'textHi على bg', fg: () => AppColors.textHi, bg: () => AppColors.bg, min: 4.5),
-    (name: 'textBody على bg', fg: () => AppColors.textBody, bg: () => AppColors.bg, min: 4.5),
-    (name: 'textMid على bg', fg: () => AppColors.textMid, bg: () => AppColors.bg, min: 4.5),
+    (
+      name: 'textHi على bg',
+      fg: () => AppColors.textHi,
+      bg: () => AppColors.bg,
+      min: 4.5
+    ),
+    (
+      name: 'textBody على bg',
+      fg: () => AppColors.textBody,
+      bg: () => AppColors.bg,
+      min: 4.5
+    ),
+    (
+      name: 'textMid على bg',
+      fg: () => AppColors.textMid,
+      bg: () => AppColors.bg,
+      min: 4.5
+    ),
     // ── نصوص على السطح الغاطس (بلاطات القياس) ──
-    (name: 'textHi على surfaceSunken', fg: () => AppColors.textHi, bg: () => AppColors.surfaceSunken, min: 4.5),
-    (name: 'textBody على surfaceSunken', fg: () => AppColors.textBody, bg: () => AppColors.surfaceSunken, min: 4.5),
-    (name: 'textMid على surfaceSunken', fg: () => AppColors.textMid, bg: () => AppColors.surfaceSunken, min: 4.5),
-    (name: 'textLabel على surfaceSunken', fg: () => AppColors.textLabel, bg: () => AppColors.surfaceSunken, min: 3.0),
-    (name: 'textLow على surfaceSunken', fg: () => AppColors.textLow, bg: () => AppColors.surfaceSunken, min: 3.0),
+    (
+      name: 'textHi على surfaceSunken',
+      fg: () => AppColors.textHi,
+      bg: () => AppColors.surfaceSunken,
+      min: 4.5
+    ),
+    (
+      name: 'textBody على surfaceSunken',
+      fg: () => AppColors.textBody,
+      bg: () => AppColors.surfaceSunken,
+      min: 4.5
+    ),
+    (
+      name: 'textMid على surfaceSunken',
+      fg: () => AppColors.textMid,
+      bg: () => AppColors.surfaceSunken,
+      min: 4.5
+    ),
+    (
+      name: 'textLabel على surfaceSunken',
+      fg: () => AppColors.textLabel,
+      bg: () => AppColors.surfaceSunken,
+      min: 3.0
+    ),
+    (
+      name: 'textLow على surfaceSunken',
+      fg: () => AppColors.textLow,
+      bg: () => AppColors.surfaceSunken,
+      min: 3.0
+    ),
     // ── تعبئات الأزرار: الأبيض فوقها ──
-    (name: 'onBrand على brand', fg: () => AppColors.onBrand, bg: () => AppColors.brand, min: 4.5),
-    (name: 'onBrand على errorFill', fg: () => AppColors.onBrand, bg: () => AppColors.errorFill, min: 4.5),
-    (name: 'onBrand على warningFill', fg: () => AppColors.onBrand, bg: () => AppColors.warningFill, min: 4.5),
-    (name: 'onBrand على successFill', fg: () => AppColors.onBrand, bg: () => AppColors.successFill, min: 4.5),
+    (
+      name: 'onBrand على brand',
+      fg: () => AppColors.onBrand,
+      bg: () => AppColors.brand,
+      min: 4.5
+    ),
+    (
+      name: 'onBrand على errorFill',
+      fg: () => AppColors.onBrand,
+      bg: () => AppColors.errorFill,
+      min: 4.5
+    ),
+    (
+      name: 'onBrand على warningFill',
+      fg: () => AppColors.onBrand,
+      bg: () => AppColors.warningFill,
+      min: 4.5
+    ),
+    (
+      name: 'onBrand على successFill',
+      fg: () => AppColors.onBrand,
+      bg: () => AppColors.successFill,
+      min: 4.5
+    ),
     // ── التعبئة نفسها مقابل السطح خلفها (مكوّن غير نصّي) ──
-    (name: 'brand مقابل surface', fg: () => AppColors.brand, bg: () => AppColors.surface, min: 3.0),
-    (name: 'brandAccent مقابل surface', fg: () => AppColors.brandAccent, bg: () => AppColors.surface, min: 3.0),
-    (name: 'error مقابل surface', fg: () => AppColors.error, bg: () => AppColors.surface, min: 3.0),
+    (
+      name: 'brand مقابل surface',
+      fg: () => AppColors.brand,
+      bg: () => AppColors.surface,
+      min: 3.0
+    ),
+    (
+      name: 'brandAccent مقابل surface',
+      fg: () => AppColors.brandAccent,
+      bg: () => AppColors.surface,
+      min: 3.0
+    ),
+    (
+      name: 'error مقابل surface',
+      fg: () => AppColors.error,
+      bg: () => AppColors.surface,
+      min: 3.0
+    ),
     // ── نصّ العائلة الدلاليّة فوق خلفيّتها الخفيفة ──
-    (name: 'brandOnSoft على brandSoftBg', fg: () => AppColors.brandOnSoft, bg: () => AppColors.brandSoftBg, min: 4.5),
-    (name: 'warningOnSoft على warningSoftBg', fg: () => AppColors.warningOnSoft, bg: () => AppColors.warningSoftBg, min: 4.5),
-    (name: 'dangerOnSoft على dangerSoftBg', fg: () => AppColors.dangerOnSoft, bg: () => AppColors.dangerSoftBg, min: 4.5),
+    (
+      name: 'brandOnSoft على brandSoftBg',
+      fg: () => AppColors.brandOnSoft,
+      bg: () => AppColors.brandSoftBg,
+      min: 4.5
+    ),
+    (
+      name: 'warningOnSoft على warningSoftBg',
+      fg: () => AppColors.warningOnSoft,
+      bg: () => AppColors.warningSoftBg,
+      min: 4.5
+    ),
+    (
+      name: 'dangerOnSoft على dangerSoftBg',
+      fg: () => AppColors.dangerOnSoft,
+      bg: () => AppColors.dangerSoftBg,
+      min: 4.5
+    ),
   ];
 
   for (final dark in [false, true]) {

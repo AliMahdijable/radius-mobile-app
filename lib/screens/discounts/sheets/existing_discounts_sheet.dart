@@ -102,8 +102,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
     }
   }
 
-  String? _fullNameFor(String username) =>
-      _fullNames[username.toLowerCase()];
+  String? _fullNameFor(String username) => _fullNames[username.toLowerCase()];
 
   List<Discount> get _filtered {
     if (_query.isEmpty) return _rows;
@@ -132,13 +131,13 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('حذف الخصم',
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         content: Text(
           'إزالة خصم ${formatIQD(d.discountAmount)} د.ع للمشترك '
           '${d.subscriberUsername}؟',
-          style: AppType.subtitle(color: AppColors.textMid)
-              .copyWith(height: 1.5),
+          style:
+              AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.5),
         ),
         actions: [
           TextButton(
@@ -156,7 +155,8 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
     if (ok != true || !mounted) return;
     final r = await DiscountsApi.delete(d.id);
     if (!mounted) return;
-    showSheetSnack(context, r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف'), isError: (r.ok) ? false : true);
+    showSheetSnack(context, r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف'),
+        isError: (r.ok) ? false : true);
     if (r.ok) {
       _changed = true;
       _load();
@@ -166,7 +166,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF14B8A6);
+    final accent = AppColors.success;
     final filtered = _filtered;
     return PopScope(
       canPop: true,
@@ -182,8 +182,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
           return Container(
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(R.xl)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
             ),
             child: Column(
               children: [
@@ -199,8 +198,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                   ),
                 ),
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
                   child: Row(
                     children: [
                       Container(
@@ -209,8 +207,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                           color: accent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(R.md),
                         ),
-                        child: const Icon(LucideIcons.list,
-                            size: 16, color: accent),
+                        child: Icon(LucideIcons.list, size: 16, color: accent),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -231,8 +228,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () =>
-                            Navigator.of(context).pop(_changed),
+                        onPressed: () => Navigator.of(context).pop(_changed),
                         icon: const Icon(LucideIcons.x, size: 16),
                         color: AppColors.textMid,
                       ),
@@ -240,17 +236,15 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
                   child: Container(
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(R.pill),
-                      border: Border.all(
-                          color: AppColors.border.withValues(alpha: 0.5)),
+                      border: Border.all(color: AppColors.borderSoft),
                     ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: Sp.md),
+                    padding: const EdgeInsets.symmetric(horizontal: Sp.md),
                     child: Row(
                       children: [
                         Icon(LucideIcons.search,
@@ -262,8 +256,8 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                             style: AppType.input(color: AppColors.textHi),
                             decoration: InputDecoration(
                               hintText: 'بحث في الخصومات…',
-                              hintStyle: AppType.input(
-                                  color: AppColors.textLow),
+                              hintStyle:
+                                  AppType.input(color: AppColors.textLow),
                               border: InputBorder.none,
                               isCollapsed: true,
                               contentPadding:
@@ -292,8 +286,8 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                                       _query.isEmpty
                                           ? 'لا توجد خصومات مطبّقة بعد'
                                           : 'لا توجد نتائج لـ "$_query"',
-                                      style: AppType.muted().copyWith(
-                                          fontSize: 12),
+                                      style: AppType.muted()
+                                          .copyWith(fontSize: 12),
                                     ),
                                   ],
                                 ),
@@ -311,8 +305,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                                 fullName: _fullNameFor(
                                     filtered[i].subscriberUsername),
                                 onEdit: () => _openEdit(filtered[i]),
-                                onDelete: () =>
-                                    _confirmDelete(filtered[i]),
+                                onDelete: () => _confirmDelete(filtered[i]),
                               ),
                             ),
                 ),
@@ -333,6 +326,7 @@ class _Tile extends StatelessWidget {
     required this.onDelete,
   });
   final Discount discount;
+
   /// الاسم العربي الكامل للمشترك إن وُجد. لو null أو فارغ نخفي
   /// السطر ولا نظهر username مرّتين.
   final String? fullName;
@@ -351,8 +345,8 @@ class _Tile extends StatelessWidget {
       child: InkWell(
         onTap: onEdit,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: Sp.md),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.border),
             borderRadius: BorderRadius.circular(R.md),
@@ -363,12 +357,12 @@ class _Tile extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF14B8A6).withValues(alpha: 0.14),
+                  color: AppColors.success.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(R.md),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(LucideIcons.percent,
-                    color: Color(0xFF14B8A6), size: 16),
+                child: Icon(LucideIcons.percent,
+                    color: AppColors.success, size: 16),
               ),
               const SizedBox(width: Sp.md),
               Expanded(
@@ -405,11 +399,9 @@ class _Tile extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           discount.packageName!,
-                          style: AppType.label(
-                                  color: const Color(0xFF14B8A6))
+                          style: AppType.label(color: AppColors.success)
                               .copyWith(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700),
+                                  fontSize: 10.5, fontWeight: FontWeight.w700),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -419,22 +411,21 @@ class _Tile extends StatelessWidget {
               ),
               Text(
                 '-${formatIQD(discount.discountAmount)}',
-                style: const TextStyle(
-                  color: Color(0xFFE08F2D),
+                style: TextStyle(
+                  color: AppColors.warning,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(width: 6),
               IconButton(
-                icon: Icon(LucideIcons.trash2,
-                    color: AppColors.error, size: 16),
+                icon:
+                    Icon(LucideIcons.trash2, color: AppColors.error, size: 16),
                 onPressed: onDelete,
                 tooltip: 'حذف',
                 splashRadius: 18,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                    minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
             ],
           ),

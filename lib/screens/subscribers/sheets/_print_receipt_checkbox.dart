@@ -21,7 +21,7 @@ class PrintReceiptCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: value ? AppColors.brand.withOpacity(0.08) : AppColors.surface,
+      color: value ? AppColors.brandSoftBg : AppColors.surface,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -31,8 +31,7 @@ class PrintReceiptCheckbox extends StatelessWidget {
               const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
           decoration: BoxDecoration(
             border: Border.all(
-              color:
-                  value ? AppColors.brand.withOpacity(0.35) : AppColors.border,
+              color: value ? AppColors.brandSoftBorder : AppColors.border,
               width: value ? 1.2 : 1,
             ),
             borderRadius: BorderRadius.circular(R.sm),

@@ -21,7 +21,7 @@ Future<void> showTelegramLinkGeneratorSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _GeneratorSheet(adminId: adminId, onDone: onDone),
   );
 }
@@ -44,6 +44,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
   bool _generating = false;
   bool _sending = false;
   String? _err;
+
   /// 2026-08-26: عرض QR — للمشتركين اللي بلا واتساب، الأدمن يعرض
   /// الـQR على شاشته، المشترك يمسحه بجواله.
   bool _showQr = false;
@@ -107,8 +108,8 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
   Future<void> _sendViaWa() async {
     if (_selected == null) return;
     setState(() => _sending = true);
-    final res = await TelegramApi.sendLinkViaWa(
-        widget.adminId, _selected!.idx!);
+    final res =
+        await TelegramApi.sendLinkViaWa(widget.adminId, _selected!.idx!);
     if (!mounted) return;
     setState(() => _sending = false);
     if (res.ok) {
@@ -153,8 +154,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
         builder: (_, scrollCtrl) => Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
             children: [
@@ -278,8 +278,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                         ? _searchResults(scrollCtrl)
                         : _generatedView(),
               ),
-              if (_selected != null && _generatedLink != null)
-                _actionBar(),
+              if (_selected != null && _generatedLink != null) _actionBar(),
             ],
           ),
         ),
@@ -307,9 +306,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       return Center(
         child: Text('لا نتائج',
             style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12,
-                color: AppColors.textLow)),
+                fontFamily: 'Cairo', fontSize: 12, color: AppColors.textLow)),
       );
     }
     return ListView.builder(
@@ -322,12 +319,10 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
           child: InkWell(
             onTap: () => _pick(s),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom:
-                      BorderSide(color: AppColors.border, width: 0.5),
+                  bottom: BorderSide(color: AppColors.border, width: 0.5),
                 ),
               ),
               child: Row(
@@ -382,8 +377,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.circleAlert,
-                size: 40, color: AppColors.error),
+            Icon(LucideIcons.circleAlert, size: 40, color: AppColors.error),
             const SizedBox(height: 10),
             Text(_err!,
                 style: TextStyle(
@@ -468,8 +462,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _showQr
-                              ? const Color(0xFF229ED9)
-                                  .withValues(alpha: 0.14)
+                              ? const Color(0xFF229ED9).withValues(alpha: 0.14)
                               : AppColors.surface,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
@@ -585,8 +578,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 height: 46,
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    await copyToClipboard(
-                        context, _generatedLink!,
+                    await copyToClipboard(context, _generatedLink!,
                         label: 'رابط الربط');
                   },
                   icon: const Icon(LucideIcons.copy, size: 16),
@@ -599,8 +591,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF229ED9),
                     side: BorderSide(
-                        color: const Color(0xFF229ED9)
-                            .withValues(alpha: 0.5),
+                        color: const Color(0xFF229ED9).withValues(alpha: 0.5),
                         width: 1),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),

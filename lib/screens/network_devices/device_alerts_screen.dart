@@ -54,9 +54,10 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 80, height: 80,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
-              color: AppColors.brand.withValues(alpha: 0.08),
+              color: AppColors.brandSoftBg,
               shape: BoxShape.circle,
             ),
             child: Icon(LucideIcons.bellOff, size: 32, color: AppColors.brand),
@@ -64,7 +65,8 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
           const SizedBox(height: Sp.md),
           Text('لا توجد تنبيهات',
               style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
                   color: AppColors.textHi)),
           const SizedBox(height: 4),
           Text('التنبيهات تظهر هنا لو جهاز فصل أو عاد للاتصال',
@@ -86,7 +88,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
 
   Widget _alertRow(DeviceAlert a) {
     final isOffline = a.kind == DeviceAlertKind.offline;
-    final color = isOffline ? AppColors.error : const Color(0xFF10B981);
+    final color = isOffline ? AppColors.error : AppColors.success;
     final icon = isOffline ? LucideIcons.wifiOff : LucideIcons.wifi;
     final label = isOffline ? 'فصل عن الشبكة' : 'عاد للاتصال';
     return Dismissible(
@@ -95,7 +97,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.12),
+          color: AppColors.dangerSoftBg,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(LucideIcons.trash2, color: AppColors.error),
@@ -103,7 +105,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
       direction: DismissDirection.endToStart,
       onDismissed: (_) async {
         await DeviceAlertsService.instance.dismiss(a.id);
-        if (mounted) setState(() {});  // إعادة بناء بعد الحذف
+        if (mounted) setState(() {}); // إعادة بناء بعد الحذف
       },
       child: Container(
         padding: const EdgeInsets.all(Sp.md),
@@ -114,7 +116,8 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
         ),
         child: Row(children: [
           Container(
-            width: 36, height: 36,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
@@ -123,12 +126,14 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(
                   child: Text(a.deviceName,
                       style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.textHi),
                       overflow: TextOverflow.ellipsis),
                 ),

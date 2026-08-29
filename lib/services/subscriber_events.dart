@@ -26,8 +26,8 @@ class SubscriberEvents {
   /// backend instead of serving stale rows.
   static void notifyChange() {
     SubscribersApi.refreshAll(); // fire-and-forget — its own future
-                                 // resolves whenever the next listener
-                                 // calls loadAll().
+    // resolves whenever the next listener
+    // calls loadAll().
     dataChanged.value = dataChanged.value + 1;
   }
 }

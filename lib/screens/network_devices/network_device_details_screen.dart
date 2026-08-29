@@ -34,7 +34,8 @@ class NetworkDeviceDetailsScreen extends StatefulWidget {
   const NetworkDeviceDetailsScreen({super.key, required this.device});
 
   @override
-  State<NetworkDeviceDetailsScreen> createState() => _NetworkDeviceDetailsScreenState();
+  State<NetworkDeviceDetailsScreen> createState() =>
+      _NetworkDeviceDetailsScreenState();
 }
 
 class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
@@ -42,9 +43,9 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   late NetworkDevice _d;
   bool _probing = false;
   bool _changed = false;
-  bool _rebooting = false;   // spinner على زرّ reboot
+  bool _rebooting = false; // spinner على زرّ reboot
   double? _lastPacketLoss;
-  DeviceRegion? _region;     // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
+  DeviceRegion? _region; // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
   /// runtime override — لو UbntLivePanel اكتشف الجهاز فعلاً airFiber 60
   /// (رغم أن model حقلها ما فيه AF-60)، نبدّل تلقائياً للـAirFiber60LivePanel.
@@ -91,7 +92,10 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       if (!mounted) return;
       DeviceRegion? found;
       for (final x in list) {
-        if (x.id == _d.regionId) { found = x; break; }
+        if (x.id == _d.regionId) {
+          found = x;
+          break;
+        }
       }
       if (found != null) setState(() => _region = found);
     } catch (_) {}
@@ -125,7 +129,10 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           lastResponseMs: r.responseMs,
         );
         _lastPacketLoss = r.packetLoss;
-        _history.add(_PingSample(at: DateTime.now(), ms: r.responseMs, online: r.status == 'online'));
+        _history.add(_PingSample(
+            at: DateTime.now(),
+            ms: r.responseMs,
+            online: r.status == 'online'));
         if (_history.length > 10) _history.removeAt(0);
         _probing = false;
         _changed = true;
@@ -149,7 +156,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => NetworkDeviceFormSheet(existing: _d),
     );
-    if (updated != null) setState(() { _d = updated; _changed = true; });
+    if (updated != null)
+      setState(() {
+        _d = updated;
+        _changed = true;
+      });
   }
 
   Future<void> _delete() async {
@@ -158,7 +169,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       builder: (_) => AlertDialog(
         icon: Icon(LucideIcons.trash2, color: AppColors.error, size: 32),
         title: const Text('حذف الجهاز'),
-        content: Text('سيُحذف "${_d.name}" نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.'),
+        content: Text(
+            'سيُحذف "${_d.name}" نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -185,7 +197,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   }
 
   Color get _statusColor => switch (_d.lastStatus) {
-        'online' => const Color(0xFF10B981),
+        'online' => AppColors.success,
         'offline' => AppColors.error,
         _ => AppColors.textLow,
       };
@@ -208,7 +220,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(LucideIcons.power, color: const Color(0xFFEA580C), size: 32),
+        icon: Icon(LucideIcons.power, color: AppColors.warning, size: 32),
         title: const Text('إعادة تشغيل الجهاز'),
         content: Text(
           'سيُعاد تشغيل "${_d.name}" الآن.\n'
@@ -221,7 +233,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
             icon: const Icon(LucideIcons.power, size: 16),
             label: const Text('إعادة تشغيل'),
           ),
@@ -263,9 +275,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         content: Row(children: [
           const Icon(LucideIcons.check, color: Colors.white, size: 18),
           const SizedBox(width: 8),
-          Expanded(child: Text('تمّ إرسال reboot لـ${_d.name} — الجهاز يعيد التشغيل الآن')),
+          Expanded(
+              child: Text(
+                  'تمّ إرسال reboot لـ${_d.name} — الجهاز يعيد التشغيل الآن')),
         ]),
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: AppColors.success,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
       ));
@@ -317,15 +331,22 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           if (_canReboot())
             IconButton(
               icon: _rebooting
-                  ? const SizedBox(width: 18, height: 18,
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(LucideIcons.power, size: 18, color: const Color(0xFFEA580C)),
+                  : Icon(LucideIcons.power, size: 18, color: AppColors.warning),
               tooltip: 'إعادة تشغيل الجهاز',
               onPressed: _rebooting ? null : _confirmAndReboot,
             ),
           if (Perms.has('devices.manage')) ...[
-            IconButton(icon: const Icon(LucideIcons.pencil, size: 18), onPressed: _edit),
-            IconButton(icon: Icon(LucideIcons.trash2, size: 18, color: AppColors.error), onPressed: _delete),
+            IconButton(
+                icon: const Icon(LucideIcons.pencil, size: 18),
+                onPressed: _edit),
+            IconButton(
+                icon:
+                    Icon(LucideIcons.trash2, size: 18, color: AppColors.error),
+                onPressed: _delete),
           ],
         ],
       ),
@@ -376,7 +397,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               else
                 _ruijieHint(),
             ],
-          ] else if ({'mikrotik','ubnt','mimosa','ruijie'}.contains(_d.brand)) ...[
+          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie'}
+              .contains(_d.brand)) ...[
             const SizedBox(height: Sp.md),
             _noMonitorPermHint(),
           ],
@@ -403,7 +425,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.brand.withValues(alpha: 0.08),
+            AppColors.brandSoftBg,
             AppColors.brand.withValues(alpha: 0.02),
           ],
         ),
@@ -427,7 +449,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16 + 6 * t),
                           border: Border.all(
-                            color: _statusColor.withValues(alpha: (1 - t) * 0.5),
+                            color:
+                                _statusColor.withValues(alpha: (1 - t) * 0.5),
                             width: 2,
                           ),
                         ),
@@ -438,7 +461,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               ),
             // Type icon (router/switch/link/sector) في زاوية علوى — يوضّح النوع
             Positioned(
-              top: -4, right: -4,
+              top: -4,
+              right: -4,
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -446,18 +470,22 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.border, width: 1.5),
                 ),
-                child: TypeIcon(type: _d.type, size: 12, color: AppColors.textHi),
+                child:
+                    TypeIcon(type: _d.type, size: 12, color: AppColors.textHi),
               ),
             ),
           ]),
           const SizedBox(width: Sp.md),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 _pulseDot(online),
                 const SizedBox(width: 6),
                 Text(
-                  online ? 'متّصل' : (_d.lastStatus == 'offline' ? 'غير متّصل' : 'لم يُفحص'),
+                  online
+                      ? 'متّصل'
+                      : (_d.lastStatus == 'offline' ? 'غير متّصل' : 'لم يُفحص'),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -477,8 +505,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       style: TextStyle(fontSize: 11, color: AppColors.textLow)),
                   Flexible(
                     child: Text(_d.model!,
-                        style: TextStyle(fontSize: 12,
-                            color: AppColors.textMid),
+                        style:
+                            TextStyle(fontSize: 12, color: AppColors.textMid),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ],
@@ -491,23 +519,27 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 Text(_d.ip,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600, color: AppColors.textHi,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textHi,
                     )),
               ]),
               // Region (لو مُسند لواحدة) — 2026-08-18
               if (_region != null) ...[
                 const SizedBox(height: 4),
                 Builder(builder: (_) {
-                  final color = _parseRegionColorHex(_region!.color) ?? AppColors.brand;
+                  final color =
+                      _parseRegionColorHex(_region!.color) ?? AppColors.brand;
                   return Row(children: [
                     Icon(LucideIcons.mapPin, size: 12, color: color),
                     const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: color.withValues(alpha: 0.35)),
+                        border:
+                            Border.all(color: color.withValues(alpha: 0.35)),
                       ),
                       child: Text(_region!.name,
                           style: TextStyle(
@@ -522,11 +554,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               if (_d.location != null && _d.location!.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Row(children: [
-                  Icon(LucideIcons.building2, size: 12, color: AppColors.textLow),
+                  Icon(LucideIcons.building2,
+                      size: 12, color: AppColors.textLow),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(_d.location!,
-                        style: TextStyle(fontSize: 11, color: AppColors.textMid),
+                        style:
+                            TextStyle(fontSize: 11, color: AppColors.textMid),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ]),
@@ -536,22 +570,27 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 const SizedBox(height: 6),
                 Row(children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.brand.withValues(alpha: 0.12),
+                      color: AppColors.brandSoftBg,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(_protocolIcon(_d.protocol!), size: 10, color: AppColors.brand),
+                      Icon(_protocolIcon(_d.protocol!),
+                          size: 10, color: AppColors.brand),
                       const SizedBox(width: 3),
                       Text(
                         '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}${_d.apiPort != null ? ":${_d.apiPort}" : ""}',
-                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
                             color: AppColors.brand),
                       ),
                       if (_d.hasCredentials) ...[
                         const SizedBox(width: 4),
-                        Icon(LucideIcons.keyRound, size: 9, color: const Color(0xFF10B981)),
+                        Icon(LucideIcons.keyRound,
+                            size: 9, color: AppColors.success),
                       ],
                     ]),
                   ),
@@ -571,7 +610,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   height: 1,
                 ),
               ),
-              Text('ms', style: TextStyle(fontSize: 9, color: AppColors.textMid)),
+              Text('ms',
+                  style: TextStyle(fontSize: 9, color: AppColors.textMid)),
               const SizedBox(height: 6),
             ],
             // زر ICMP مدمج — icon فقط
@@ -581,19 +621,22 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.12),
+                  color: AppColors.brandSoftBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: _probing
                     ? SizedBox(
-                        width: 12, height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.brand))
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 1.5, color: AppColors.brand))
                     : Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(LucideIcons.zap, size: 11, color: AppColors.brand),
                         const SizedBox(width: 3),
                         Text('ping',
                             style: TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.brand,
                             )),
                       ]),
@@ -608,7 +651,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   Widget _pulseDot(bool online) {
     if (!online) {
       return Container(
-        width: 8, height: 8,
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle),
       );
     }
@@ -618,15 +662,18 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         final t = _pulseCtrl.value;
         return Stack(alignment: Alignment.center, children: [
           Container(
-            width: 8 + 6 * t, height: 8 + 6 * t,
+            width: 8 + 6 * t,
+            height: 8 + 6 * t,
             decoration: BoxDecoration(
               color: _statusColor.withValues(alpha: (1 - t) * 0.4),
               shape: BoxShape.circle,
             ),
           ),
           Container(
-            width: 8, height: 8,
-            decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle),
+            width: 8,
+            height: 8,
+            decoration:
+                BoxDecoration(color: _statusColor, shape: BoxShape.circle),
           ),
         ]);
       },
@@ -637,13 +684,17 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   // Stats row — 3 stat cards (ping avg / packet loss / آخر فحص)
   // ══════════════════════════════════════════════════════════════
   Widget _statsRow() {
-    final times = _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
-    final avg = times.isEmpty ? null : (times.reduce((a, b) => a + b) / times.length).round();
+    final times =
+        _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
+    final avg = times.isEmpty
+        ? null
+        : (times.reduce((a, b) => a + b) / times.length).round();
     final min = times.isEmpty ? null : times.reduce(math.min);
     final max = times.isEmpty ? null : times.reduce(math.max);
 
     return Row(children: [
-      Expanded(child: _statCard(
+      Expanded(
+          child: _statCard(
         icon: LucideIcons.zap,
         label: 'المتوسّط',
         value: avg == null ? '—' : '$avg',
@@ -651,20 +702,24 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         color: AppColors.brand,
       )),
       const SizedBox(width: 8),
-      Expanded(child: _statCard(
+      Expanded(
+          child: _statCard(
         icon: LucideIcons.chartLine,
         label: 'الأدنى/الأقصى',
         value: (min == null || max == null) ? '—' : '$min/$max',
         unit: '',
-        color: const Color(0xFF06B6D4),
+        color: AppColors.info,
       )),
       const SizedBox(width: 8),
-      Expanded(child: _statCard(
+      Expanded(
+          child: _statCard(
         icon: LucideIcons.packageX,
         label: 'فقدان الحزم',
         value: _lastPacketLoss == null ? '—' : '${_lastPacketLoss!.toInt()}',
         unit: _lastPacketLoss == null ? '' : '%',
-        color: _lastPacketLoss != null && _lastPacketLoss! > 0 ? AppColors.error : const Color(0xFF10B981),
+        color: _lastPacketLoss != null && _lastPacketLoss! > 0
+            ? AppColors.error
+            : AppColors.success,
       )),
     ]);
   }
@@ -690,13 +745,18 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           Expanded(
             child: Text(
               label,
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.textMid),
+              style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMid),
               overflow: TextOverflow.ellipsis,
             ),
           ),
         ]),
         const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
               value,
@@ -709,14 +769,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             ),
             if (unit.isNotEmpty) ...[
               const SizedBox(width: 3),
-              Text(unit, style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+              Text(unit,
+                  style: TextStyle(fontSize: 10, color: AppColors.textLow)),
             ],
           ],
         ),
       ]),
     );
   }
-
 
   // ══════════════════════════════════════════════════════════════
   // Notes card
@@ -733,16 +793,20 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         Row(children: [
           Icon(LucideIcons.stickyNote, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('ملاحظات', style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi,
-          )),
+          Text('ملاحظات',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textHi,
+              )),
         ]),
         const SizedBox(height: 8),
-        Text(_d.notes!, style: TextStyle(fontSize: 12, color: AppColors.textMid, height: 1.6)),
+        Text(_d.notes!,
+            style:
+                TextStyle(fontSize: 12, color: AppColors.textMid, height: 1.6)),
       ]),
     );
   }
-
 }
 
 /// airFiber 60 يُكتشف من model أو name — المستخدم يكتب أي variation:
@@ -757,12 +821,15 @@ bool _isAirFiber60(NetworkDevice d) {
   if (combined.trim().isEmpty) return false;
   // Explicit 60 GHz mentions
   if (combined.contains('60ghz') || combined.contains('60 ghz')) return true;
-  if (combined.contains('airfiber 60') || combined.contains('airfiber60')) return true;
+  if (combined.contains('airfiber 60') || combined.contains('airfiber60'))
+    return true;
   // AF-60 variants — لكن ليس AF-60-XG (5GHz backhaul)
-  final af60Match = RegExp(r'af[\s-]?60[\s-]?(lr|xr|gp|lite)?\b').firstMatch(combined);
+  final af60Match =
+      RegExp(r'af[\s-]?60[\s-]?(lr|xr|gp|lite)?\b').firstMatch(combined);
   if (af60Match != null) {
     // إذا كان جزء من "af-60-xg" → false
-    if (combined.contains('af-60-xg') || combined.contains('af60-xg') ||
+    if (combined.contains('af-60-xg') ||
+        combined.contains('af60-xg') ||
         combined.contains('af 60 xg')) return false;
     return true;
   }
@@ -778,30 +845,40 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
     final needsCreds = _d.protocol == 'api' && !_d.hasCredentials;
     final msg = needsApi
         ? 'اختر بروتوكول API + أدخل user/password للـUBNT لعرض signal + throughput + stations'
-        : (needsCreds ? 'أدخل user/password لعرض المراقبة الحيّة (default: ubnt/ubnt)' : '');
+        : (needsCreds
+            ? 'أدخل user/password لعرض المراقبة الحيّة (default: ubnt/ubnt)'
+            : '');
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF0559C9).withValues(alpha: 0.06),
+        color: AppColors.brandAccent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF0559C9).withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.brandAccent.withValues(alpha: 0.3)),
       ),
       child: Row(children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF0559C9).withValues(alpha: 0.12),
+            color: AppColors.brandAccent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(LucideIcons.radioTower, color: const Color(0xFF0559C9), size: 20),
+          child: Icon(LucideIcons.radioTower,
+              color: AppColors.brandAccent, size: 20),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة UBNT airOS متوفّرة',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
             const SizedBox(height: 4),
-            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+            Text(msg,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textMid, height: 1.4)),
           ]),
         ),
         IconButton(
@@ -824,7 +901,8 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
       ),
       child: Row(children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: AppColors.textLow.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
@@ -833,13 +911,17 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('المراقبة الحيّة مقفلة',
                 style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
             const SizedBox(height: 4),
             Text('تحتاج صلاحيّة "مراقبة Live" — راجع المدير.',
-                style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textMid, height: 1.4)),
           ]),
         ),
       ]),
@@ -853,30 +935,39 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
     final needsCreds = _d.protocol == 'api' && !_d.hasCredentials;
     final msg = needsApi
         ? 'اختر بروتوكول API + أدخل user/password للراوتر لتفعيل المراقبة الحيّة (CPU/RAM/interfaces)'
-        : (needsCreds ? 'أدخل user/password للراوتر لتفعيل المراقبة الحيّة' : '');
+        : (needsCreds
+            ? 'أدخل user/password للراوتر لتفعيل المراقبة الحيّة'
+            : '');
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF06B6D4).withValues(alpha: 0.06),
+        color: AppColors.info.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF06B6D4).withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
       ),
       child: Row(children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF06B6D4).withValues(alpha: 0.12),
+            color: AppColors.info.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(LucideIcons.zap, color: const Color(0xFF06B6D4), size: 20),
+          child: Icon(LucideIcons.zap, color: AppColors.info, size: 20),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة حيّة متوفّرة لـMikrotik',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
             const SizedBox(height: 4),
-            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+            Text(msg,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textMid, height: 1.4)),
           ]),
         ),
         IconButton(
@@ -895,37 +986,47 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
     final needsCreds = _d.protocol == 'snmp' && !_d.hasCredentials;
     final msg = needsSnmp
         ? 'اختر بروتوكول SNMP + أدخل الـcommunity string (في حقل كلمة المرور) لعرض signal + throughput + margin.\n'
-          'Mimosa يعطّل SSH/Telnet بشكل نهائي — SNMP هو الخيار الوحيد.'
-        : (needsCreds ? 'أدخل SNMP community string (default: public). '
-          'فعّل SNMP من web UI للجهاز: Preferences → Management → SNMP.' : '');
+            'Mimosa يعطّل SSH/Telnet بشكل نهائي — SNMP هو الخيار الوحيد.'
+        : (needsCreds
+            ? 'أدخل SNMP community string (default: public). '
+                'فعّل SNMP من web UI للجهاز: Preferences → Management → SNMP.'
+            : '');
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: const Color(0xFFEA580C).withValues(alpha: 0.06),
+        color: AppColors.warning.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEA580C).withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
       ),
       child: Row(children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFFEA580C).withValues(alpha: 0.12),
+            color: AppColors.warning.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Center(
+          child: Center(
             child: Text('M',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
-                    color: Color(0xFFEA580C))),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.warning)),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة Mimosa عبر SNMP',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
-            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+            Text(msg,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textMid, height: 1.4)),
           ]),
         ),
         IconButton(
@@ -943,36 +1044,48 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
     final needsCreds = _d.protocol == 'snmp' && !_d.hasCredentials;
     final msg = needsSnmp
         ? 'اختر بروتوكول SNMP + أدخل الـcommunity string (في حقل كلمة المرور).\n'
-          'Ruijie/Reyee: فعّل SNMP من web UI (Advanced → Basics → SNMP) وأنشئ Read Community.'
-        : (needsCreds ? 'أدخل SNMP community string. '
-          'أنشئه من Reyee web UI: Advanced → Basics → SNMP → أضف Community مع صلاحية Read.' : '');
+            'Ruijie/Reyee: فعّل SNMP من web UI (Advanced → Basics → SNMP) وأنشئ Read Community.'
+        : (needsCreds
+            ? 'أدخل SNMP community string. '
+                'أنشئه من Reyee web UI: Advanced → Basics → SNMP → أضف Community مع صلاحية Read.'
+            : '');
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF5B4CDB).withValues(alpha: 0.06),
+        color: AppColors.brandAccent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF5B4CDB).withValues(alpha: 0.25)),
+        border:
+            Border.all(color: AppColors.brandAccent.withValues(alpha: 0.25)),
       ),
       child: Row(children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF5B4CDB).withValues(alpha: 0.12),
+            color: AppColors.brandAccent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Center(
+          child: Center(
             child: Text('R',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
-                    color: Color(0xFF5B4CDB))),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.brandAccent)),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة Ruijie / Reyee عبر SNMP',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
             const SizedBox(height: 4),
-            Text(msg, style: TextStyle(fontSize: 11, color: AppColors.textMid, height: 1.4)),
+            Text(msg,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textMid, height: 1.4)),
           ]),
         ),
         IconButton(

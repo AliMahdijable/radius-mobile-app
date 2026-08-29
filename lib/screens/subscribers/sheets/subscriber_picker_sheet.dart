@@ -329,11 +329,10 @@ class _Row extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
-                                color: AppColors.error.withValues(alpha: 0.1),
+                                color: AppColors.dangerSoftBg,
                                 borderRadius: BorderRadius.circular(R.pill),
                                 border: Border.all(
-                                  color:
-                                      AppColors.error.withValues(alpha: 0.25),
+                                  color: AppColors.dangerSoftBorder,
                                 ),
                               ),
                               child: Text(
@@ -361,14 +360,14 @@ class _Row extends StatelessWidget {
   }
 
   static Color _statusColor(Subscriber s) {
-    if (s.isDisabled) return const Color(0xFF94A3B8);
+    if (s.isDisabled) return AppColors.textLabel;
     if (s.isOnline) {
-      if (s.isExpired) return const Color(0xFF8B5CF6);
-      if (s.isNearExpiry) return const Color(0xFFF59E0B);
-      return const Color(0xFF2563EB);
+      if (s.isExpired) return AppColors.brandAccent;
+      if (s.isNearExpiry) return AppColors.warning;
+      return AppColors.brandAccent;
     }
     if (s.isExpired) return AppColors.error;
-    if (s.isNearExpiry) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
+    if (s.isNearExpiry) return AppColors.warning;
+    return AppColors.success;
   }
 }

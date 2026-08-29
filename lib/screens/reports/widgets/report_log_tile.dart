@@ -30,6 +30,7 @@ class ReportLogTile extends StatelessWidget {
   final String? adminUsername;
   final String? employeeFullName;
   final String? employeeUsername;
+
   /// اسم المشترك بالعربي (firstname+lastname) — يُعرض بارزاً فوق الوصف
   /// مع username تحته. الـbackend يرجّعهم كـuser_firstname/user_lastname في
   /// finance/activities enrichment.
@@ -158,9 +159,7 @@ class ReportLogTile extends StatelessWidget {
                 ],
                 const SizedBox(height: 3),
                 Text(
-                  description.isNotEmpty
-                      ? description
-                      : (targetName ?? '—'),
+                  description.isNotEmpty ? description : (targetName ?? '—'),
                   style: AppType.muted(color: AppColors.textMid)
                       .copyWith(fontSize: 11.5, height: 1.3),
                   maxLines: 2,
@@ -169,8 +168,7 @@ class ReportLogTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Icon(LucideIcons.clock,
-                        size: 10, color: AppColors.textLow),
+                    Icon(LucideIcons.clock, size: 10, color: AppColors.textLow),
                     const SizedBox(width: 3),
                     Text(
                       _formatDate(createdAt),
@@ -234,7 +232,7 @@ class _ActionMeta {
 ///   • أخضر (0xFF14B8A6) = موجب (تفعيل نقدي، تمديد نقدي، تسديد دين)
 ///   • أحمر (AppColors.error) = سالب (تفعيل غير نقدي، إضافة دين، صرفية)
 /// المستخدم صرّح 2026-07-10 بالقاعدة.
-const Color _kPositive = Color(0xFF14B8A6);
+final Color _kPositive = AppColors.success;
 
 /// نقدي أم غير نقدي حسب وصف الحركة.
 /// وصف مثال: "تفعيل المشترك | ... | نقدي" أو "... | غير نقدي".
@@ -251,16 +249,16 @@ _ActionMeta _actionMeta(String at, String desc) {
             debit: true);
       }
       if (_isCash(desc)) {
-        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+        return _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
       }
-      return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+      return _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
     case 'SUBSCRIBER_EXTEND':
       // نفس منطق التفعيل — نقدي أخضر، غير نقدي أحمر.
       if (_isNonCash(desc)) {
         return _ActionMeta('تمديد', LucideIcons.repeat, AppColors.error,
             debit: true);
       }
-      return const _ActionMeta('تمديد', LucideIcons.repeat, _kPositive);
+      return _ActionMeta('تمديد', LucideIcons.repeat, _kPositive);
     case 'SUBSCRIBER_ADD':
       // لو الوصف تفعيل نتعامل معه مثل SUBSCRIBER_ACTIVATE.
       if (desc.contains('تفعيل')) {
@@ -268,10 +266,9 @@ _ActionMeta _actionMeta(String at, String desc) {
           return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
               debit: true);
         }
-        return const _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
+        return _ActionMeta('تفعيل', LucideIcons.zap, _kPositive);
       }
-      return const _ActionMeta(
-          'إضافة مشترك', LucideIcons.userPlus, _kPositive);
+      return _ActionMeta('إضافة مشترك', LucideIcons.userPlus, _kPositive);
     case 'SUBSCRIBER_EDIT':
       // 2026-08-26: تعديل موقع GPS يستعمل نفس النوع لكن الأيقونة
       // والتسمية تعكس العملية الفعليّة من الوصف.
@@ -280,24 +277,21 @@ _ActionMeta _actionMeta(String at, String desc) {
         return _ActionMeta(
           isClear ? 'حذف موقع' : 'إضافة موقع',
           LucideIcons.mapPin,
-          const Color(0xFF14B8A6),
+          AppColors.success,
         );
       }
-      return const _ActionMeta(
-          'تعديل مشترك', LucideIcons.pencil, Color(0xFF3B82F6));
+      return _ActionMeta(
+          'تعديل مشترك', LucideIcons.pencil, AppColors.brandAccent);
     case 'SUBSCRIBER_DELETE':
       return _ActionMeta('حذف مشترك', LucideIcons.trash2, AppColors.error,
           debit: false);
     case 'SUBSCRIBER_ENABLE':
-      return const _ActionMeta(
-          'تشغيل', LucideIcons.circleCheck, Color(0xFF14B8A6));
+      return _ActionMeta('تشغيل', LucideIcons.circleCheck, AppColors.success);
     case 'SUBSCRIBER_DISABLE':
-      return const _ActionMeta(
-          'تعطيل', LucideIcons.ban, Color(0xFFE08F2D));
+      return _ActionMeta('تعطيل', LucideIcons.ban, AppColors.warning);
     case 'SUBSCRIBER_DISCONNECT':
       // فصل جلسة المشترك من الشبكة — مو مالي، فحيادي رمادي.
-      return const _ActionMeta(
-          'فصل المستخدم', LucideIcons.power, Color(0xFF90A4AE));
+      return _ActionMeta('فصل المستخدم', LucideIcons.power, AppColors.textMid);
     case 'BALANCE_ADD':
       // إضافة دين = سالب أحمر (مبلغ يزيد على المشترك، خسارة للمدير).
       return _ActionMeta('إضافة دين', LucideIcons.plus, AppColors.error,
@@ -305,14 +299,11 @@ _ActionMeta _actionMeta(String at, String desc) {
     case 'BALANCE_DEDUCT':
       // BALANCE_DEDUCT + description "تسديد دين …" = تسديد دين فعلياً
       // (مطابق web _shared.tsx:520-522). لون موجب أخضر.
-      return const _ActionMeta(
-          'تسديد دين', LucideIcons.banknote, _kPositive);
+      return _ActionMeta('تسديد دين', LucideIcons.banknote, _kPositive);
     case 'DEBT_PAY':
-      return const _ActionMeta(
-          'تسديد دين', LucideIcons.banknote, _kPositive);
+      return _ActionMeta('تسديد دين', LucideIcons.banknote, _kPositive);
     case 'PAYMENT_ADD':
-      return const _ActionMeta(
-          'دفعة', LucideIcons.banknote, Color(0xFF14B8A6));
+      return _ActionMeta('دفعة', LucideIcons.banknote, AppColors.success);
     case 'EXPENSE_ADD':
     case 'ADMIN_EXPENSE':
       // ADMIN_EXPENSE من backend /api/reports/finance (صف صناعي).
@@ -320,36 +311,32 @@ _ActionMeta _actionMeta(String at, String desc) {
       return _ActionMeta('صرفية', LucideIcons.receipt, AppColors.error,
           debit: true);
     case 'EXPENSE_EDIT':
-      return _ActionMeta(
-          'تعديل صرفية', LucideIcons.receipt, AppColors.error);
+      return _ActionMeta('تعديل صرفية', LucideIcons.receipt, AppColors.error);
     case 'EXPENSE_DELETE':
-      return _ActionMeta(
-          'حذف صرفية', LucideIcons.receipt, AppColors.error);
+      return _ActionMeta('حذف صرفية', LucideIcons.receipt, AppColors.error);
     case 'MANAGER_ADD':
-      return const _ActionMeta(
-          'إضافة مدير', LucideIcons.userPlus, Color(0xFF8B5CF6));
+      return _ActionMeta(
+          'إضافة مدير', LucideIcons.userPlus, AppColors.brandAccent);
     case 'MANAGER_EDIT':
-      return const _ActionMeta(
-          'تعديل مدير', LucideIcons.pencil, Color(0xFF8B5CF6));
+      return _ActionMeta(
+          'تعديل مدير', LucideIcons.pencil, AppColors.brandAccent);
     case 'MANAGER_DELETE':
       return _ActionMeta('حذف مدير', LucideIcons.trash2, AppColors.error);
     case 'ADMIN_ADD':
-      return const _ActionMeta(
-          'إضافة موظف', LucideIcons.userPlus, Color(0xFF8B5CF6));
+      return _ActionMeta(
+          'إضافة موظف', LucideIcons.userPlus, AppColors.brandAccent);
     case 'ADMIN_EDIT':
-      return const _ActionMeta(
-          'تعديل موظف', LucideIcons.pencil, Color(0xFF8B5CF6));
+      return _ActionMeta(
+          'تعديل موظف', LucideIcons.pencil, AppColors.brandAccent);
     case 'ADMIN_DELETE':
       return _ActionMeta('حذف موظف', LucideIcons.trash2, AppColors.error);
     case 'PACKAGE_EDIT':
-      return const _ActionMeta(
-          'تعديل باقة', LucideIcons.package, Color(0xFF8B5CF6));
+      return _ActionMeta(
+          'تعديل باقة', LucideIcons.package, AppColors.brandAccent);
     case 'DISCOUNT_SET':
-      return const _ActionMeta(
-          'تطبيق خصم', LucideIcons.tag, Color(0xFF14B8A6));
+      return _ActionMeta('تطبيق خصم', LucideIcons.tag, AppColors.success);
     case 'DISCOUNT_REMOVE':
-      return const _ActionMeta(
-          'إزالة خصم', LucideIcons.tag, Color(0xFFE08F2D));
+      return _ActionMeta('إزالة خصم', LucideIcons.tag, AppColors.warning);
     case 'WHATSAPP_SEND_MESSAGE':
       return const _ActionMeta(
           'إرسال واتساب', LucideIcons.messageCircle, Color(0xFF25D366));
@@ -357,31 +344,30 @@ _ActionMeta _actionMeta(String at, String desc) {
       return const _ActionMeta(
           'اتصال واتساب', LucideIcons.smartphone, Color(0xFF25D366));
     case 'WHATSAPP_DISCONNECT':
-      return const _ActionMeta(
-          'فصل واتساب', LucideIcons.smartphone, Color(0xFFE08F2D));
+      return _ActionMeta(
+          'فصل واتساب', LucideIcons.smartphone, AppColors.warning);
     case 'WHATSAPP_TEMPLATE_SAVE':
       return const _ActionMeta(
           'حفظ قالب WA', LucideIcons.fileText, Color(0xFF25D366));
     case 'WHATSAPP_TEMPLATE_DELETE':
-      return const _ActionMeta(
-          'حذف قالب WA', LucideIcons.fileText, Color(0xFFE08F2D));
+      return _ActionMeta(
+          'حذف قالب WA', LucideIcons.fileText, AppColors.warning);
     case 'PRINT_RECEIPT':
-      return const _ActionMeta(
-          'طباعة وصل', LucideIcons.printer, Color(0xFF3B82F6));
+      return _ActionMeta(
+          'طباعة وصل', LucideIcons.printer, AppColors.brandAccent);
     case 'PRINT_TEMPLATE_SAVE':
-      return const _ActionMeta(
-          'حفظ قالب طباعة', LucideIcons.fileText, Color(0xFF3B82F6));
+      return _ActionMeta(
+          'حفظ قالب طباعة', LucideIcons.fileText, AppColors.brandAccent);
     case 'LOGIN':
-      return const _ActionMeta(
-          'تسجيل دخول', LucideIcons.circleCheck, Color(0xFF26A69A));
+      return _ActionMeta(
+          'تسجيل دخول', LucideIcons.circleCheck, AppColors.success);
     case 'LOGOUT':
-      return const _ActionMeta(
-          'تسجيل خروج', LucideIcons.power, Color(0xFFCD8B00));
+      return _ActionMeta('تسجيل خروج', LucideIcons.power, AppColors.warning);
     case 'LOGIN_FAILED':
       return _ActionMeta('فشل دخول', LucideIcons.alertCircle, AppColors.error);
     case 'EXPIRY_NOTIFICATION':
-      return const _ActionMeta(
-          'إشعار انتهاء', LucideIcons.bellRing, Color(0xFFE08F2D));
+      return _ActionMeta(
+          'إشعار انتهاء', LucideIcons.bellRing, AppColors.warning);
     case 'SYSTEM_ERROR':
       return _ActionMeta('خطأ', LucideIcons.alertTriangle, AppColors.error);
     default:

@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_actions.dart';
 
 void main() {
-  testWidgets('انحدار 2026-08-29: صفّ البلاطات لا يرمي داخل ListView وما بعده يُرسم', (tester) async {
+  testWidgets(
+      'انحدار 2026-08-29: صفّ البلاطات لا يرمي داخل ListView وما بعده يُرسم',
+      (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: ListView(
@@ -15,7 +17,10 @@ void main() {
               SubAction(icon: Icons.more_horiz, label: 'المزيد', onTap: () {}),
             ]),
             const SizedBox(height: 12),
-            Container(height: 80, color: Colors.red, child: const Text('كارت بعد البلاطات')),
+            Container(
+                height: 80,
+                color: Colors.red,
+                child: const Text('كارت بعد البلاطات')),
           ],
         ),
       ),

@@ -149,8 +149,7 @@ class _BannerCardState extends State<_BannerCard>
                             color: meta.color.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(R.sm),
                           ),
-                          child: Icon(meta.icon,
-                              size: 16, color: meta.color),
+                          child: Icon(meta.icon, size: 16, color: meta.color),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -205,17 +204,15 @@ class _BannerCardState extends State<_BannerCard>
   static _M _metaFor(NotificationKind k) {
     switch (k) {
       case NotificationKind.nearExpiryDigest:
-        return _M(LucideIcons.alarmClock,
-            const Color(0xFFE08F2D), 'اقتراب انتهاء اشتراكات');
+        return _M(LucideIcons.alarmClock, AppColors.warning,
+            'اقتراب انتهاء اشتراكات');
       case NotificationKind.expiredTodayDigest:
-        return _M(LucideIcons.circleAlert, AppColors.error,
-            'اشتراكات منتهية اليوم');
-      case NotificationKind.managerDebt:
         return _M(
-            LucideIcons.creditCard, AppColors.error, 'دين مدير فرعي');
+            LucideIcons.circleAlert, AppColors.error, 'اشتراكات منتهية اليوم');
+      case NotificationKind.managerDebt:
+        return _M(LucideIcons.creditCard, AppColors.error, 'دين مدير فرعي');
       case NotificationKind.managerBalance:
-        return _M(LucideIcons.banknote, const Color(0xFF14B8A6),
-            'تحديث رصيد مدير');
+        return _M(LucideIcons.banknote, AppColors.success, 'تحديث رصيد مدير');
       case NotificationKind.other:
         return _M(LucideIcons.bell, AppColors.brand, 'إشعار');
     }

@@ -17,27 +17,43 @@ import '../../../theme/typography.dart';
 /// 2026-07-13: `labelKey` بدل `label` — النص يُترجم عند العرض عبر
 /// `.tr()` (easy_localization) حتى يتبدّل مع اللغة.
 enum ManagerAction {
-  edit('managers.action_edit', LucideIcons.pencil, Color(0xFF3B82F6)),
-  deposit('managers.action_deposit', LucideIcons.plus, Color(0xFF14B8A6)),
-  withdraw('managers.action_withdraw', LucideIcons.circleMinus, Color(0xFFE08F2D)),
-  payDebt('managers.action_pay_debt', LucideIcons.banknote, Color(0xFF0EA5E9)),
-  addPoints('managers.action_add_points', LucideIcons.star, Color(0xFF8B5CF6)),
-  otherDebts('managers.action_other_debts', LucideIcons.receipt, Color(0xFF0EA5E9)),
-  movements('managers.action_movements', LucideIcons.activity, Color(0xFF14B8A6)),
-  sendInfo('managers.action_send_info', LucideIcons.smartphone, Color(0xFF25D366)),
+  edit('managers.action_edit', LucideIcons.pencil),
+  deposit('managers.action_deposit', LucideIcons.plus),
+  withdraw('managers.action_withdraw', LucideIcons.circleMinus),
+  payDebt('managers.action_pay_debt', LucideIcons.banknote),
+  addPoints('managers.action_add_points', LucideIcons.star),
+  otherDebts('managers.action_other_debts', LucideIcons.receipt),
+  movements('managers.action_movements', LucideIcons.activity),
+  sendInfo('managers.action_send_info', LucideIcons.smartphone),
   // 2026-08-26: إظهار كلمة السرّ الحاليّة (طلب المستخدم).
   // مصدرها whatsapp_sessions.admin_password_encrypted — الأدمن الفرعي
   // يجب يسجّل دخول مرّة أولاً حتى تُخزَّن.
-  showPassword('managers.action_show_password', LucideIcons.keyRound, Color(0xFF7C3AED)),
+  showPassword('managers.action_show_password', LucideIcons.keyRound),
   // 2026-08-26: نسخ اسم المستخدم — مفيد للـcross-reference بين النظام
   // والأنظمة الأخرى (تذاكر دعم، سجلّات، إلخ).
-  copyUsername('managers.action_copy_username', LucideIcons.copy, Color(0xFF3B82F6)),
-  delete('managers.action_delete', LucideIcons.trash2, Color(0xFFDC2626));
+  copyUsername('managers.action_copy_username', LucideIcons.copy),
+  delete('managers.action_delete', LucideIcons.trash2);
 
-  const ManagerAction(this.labelKey, this.icon, this.color);
+  const ManagerAction(this.labelKey, this.icon);
   final String labelKey;
   final IconData icon;
-  final Color color;
+
+  /// ⚠️ اللون **getter لا حقل `const`**. الحقل الثابت كان يحمل
+  /// `AppColors.brandAccent` وأمثاله، وهي أرقام لا تعرف الوضع الليلي —
+  /// وenum بحقل const لا يمكنه استدعاء getter مثل `AppColors.brandAccent`.
+  /// نقلُه إلى getter هو ما يجعل هذه القائمة تتبدّل مع الوضع.
+  ///
+  /// التوزيع دلاليّ لا لونيّ: المال الداخل نجاح، والخارج تحذير،
+  /// والحذف خطر، وأخضر واتساب يبقى خاماً لأنّه تعريف قناة.
+  Color get color => switch (this) {
+        ManagerAction.deposit || ManagerAction.payDebt => AppColors.success,
+        ManagerAction.withdraw || ManagerAction.addPoints => AppColors.warning,
+        ManagerAction.otherDebts => AppColors.info,
+        ManagerAction.sendInfo => const Color(0xFF25D366), // أخضر واتساب
+        ManagerAction.copyUsername => AppColors.textMid,
+        ManagerAction.delete => AppColors.error,
+        _ => AppColors.brandAccent,
+      };
 
   String get label => labelKey.tr();
 }
@@ -61,6 +77,7 @@ Future<ManagerAction?> showManagerActionsSheet(
 class _ActionsSheet extends StatelessWidget {
   const _ActionsSheet({required this.manager, this.customDebt = 0});
   final Manager manager;
+
   /// دين تطبيقي (manager_debts) — يُدمج مع دين SAS4 لقرار "تسديد دين".
   /// 2026-08-26: bug-fix — مدير عليه دين تطبيقي فقط كان يفقد الزر.
   final double customDebt;
@@ -80,8 +97,7 @@ class _ActionsSheet extends StatelessWidget {
     final actions = <ManagerAction>[
       if (Perms.has('managers.edit')) ManagerAction.edit,
       if (Perms.has('managers.deposit')) ManagerAction.deposit,
-      if (hasBalance && Perms.has('managers.withdraw'))
-        ManagerAction.withdraw,
+      if (hasBalance && Perms.has('managers.withdraw')) ManagerAction.withdraw,
       if (hasDebt && Perms.has('managers.deposit')) ManagerAction.payDebt,
       if (Perms.has('managers.add_points')) ManagerAction.addPoints,
       if (Perms.has('reports.manager_debts')) ManagerAction.otherDebts,
@@ -123,13 +139,12 @@ class _ActionsSheet extends StatelessWidget {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6)
-                          .withValues(alpha: 0.12),
+                      color: AppColors.brandAccent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(LucideIcons.shield,
-                        size: 18, color: Color(0xFF3B82F6)),
+                    child: Icon(LucideIcons.shield,
+                        size: 18, color: AppColors.brandAccent),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -167,15 +182,15 @@ class _ActionsSheet extends StatelessWidget {
                   if (hasDebt)
                     _summaryChip(
                       LucideIcons.alertTriangle,
-                      'managers.chip_debt'.tr(
-                          namedArgs: {'amount': formatIQD(totalDebt)}),
-                      const Color(0xFFE08F2D),
+                      'managers.chip_debt'
+                          .tr(namedArgs: {'amount': formatIQD(totalDebt)}),
+                      AppColors.warning,
                     ),
                   _summaryChip(
                     LucideIcons.users,
                     'managers.chip_subs'
                         .tr(namedArgs: {'n': '${manager.usersCount ?? 0}'}),
-                    const Color(0xFF3B82F6),
+                    AppColors.brandAccent,
                   ),
                 ],
               ),
@@ -186,8 +201,7 @@ class _ActionsSheet extends StatelessWidget {
             // _OpCard) — دائرة ملوّنة 52dp + أيقونة بيضاء + ظل ناعم
             // بلون الدائرة + label تحت الزر بلون النص العادي.
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  Sp.lg, 0, Sp.lg, Sp.md),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
               child: GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),

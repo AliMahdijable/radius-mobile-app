@@ -99,8 +99,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
 
   /// الدين الإجمالي على مدير = SAS + الديون الخارجية. يُستعمل في
   /// الـchip + لتمريرها لـpay-debt sheet.
-  double _totalDebtFor(Manager m) =>
-      m.debt + (_customDebtByManager[m.id] ?? 0);
+  double _totalDebtFor(Manager m) => m.debt + (_customDebtByManager[m.id] ?? 0);
 
   List<Manager> get _filtered {
     Iterable<Manager> it = _rows;
@@ -127,6 +126,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
           return (a.usersCount ?? 0).compareTo(b.usersCount ?? 0);
       }
     }
+
     list.sort(_sortAsc ? cmp : (a, b) => -cmp(a, b));
     return list;
   }
@@ -196,8 +196,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       case ManagerAction.showPassword:
         await _showManagerPassword(m);
       case ManagerAction.copyUsername:
-        await copyToClipboard(context, m.username,
-            label: 'اسم المدير');
+        await copyToClipboard(context, m.username, label: 'اسم المدير');
       case ManagerAction.delete:
         await _confirmDelete(m);
     }
@@ -223,7 +222,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       title: m.username,
       subtitle: 'كلمة سرّ المدير الفرعي',
       password: res.password!,
-      accentColor: const Color(0xFF7C3AED),
+      accentColor: AppColors.brandAccent,
     );
   }
 
@@ -231,9 +230,8 @@ class _ManagersScreenState extends State<ManagersScreen> {
     if (!mounted) return null;
     return ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      duration: persistent
-          ? const Duration(seconds: 10)
-          : const Duration(seconds: 3),
+      duration:
+          persistent ? const Duration(seconds: 10) : const Duration(seconds: 3),
       behavior: SnackBarBehavior.floating,
     ));
   }
@@ -244,7 +242,9 @@ class _ManagersScreenState extends State<ManagersScreen> {
       builder: (_) => AlertDialog(
         title: Text('mgr.delete_title'.tr()),
         content: Text(
-          'mgr.delete_body'.tr(namedArgs: {'name': m.fullName.isNotEmpty ? m.fullName : m.username}),
+          'mgr.delete_body'.tr(namedArgs: {
+            'name': m.fullName.isNotEmpty ? m.fullName : m.username
+          }),
         ),
         actions: [
           TextButton(
@@ -252,8 +252,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.delete'.tr()),
           ),
@@ -268,8 +267,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
         content: Text(result.ok
             ? 'exp.deleted'.tr()
             : (result.message ?? 'subscribers.delete_failed'.tr())),
-        backgroundColor:
-            result.ok ? AppColors.brand : AppColors.error,
+        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -282,7 +280,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF3B82F6);
+    final accent = AppColors.brandAccent;
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -292,15 +290,14 @@ class _ManagersScreenState extends State<ManagersScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           'mgr.title'.tr(),
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: Perms.has('managers.add')
           ? FloatingActionButton.extended(
               backgroundColor: accent,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onBrand,
               onPressed: _openAdd,
               icon: const Icon(LucideIcons.userPlus, size: 16),
               label: Text('mgr.new'.tr()),
@@ -415,8 +412,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Row(
         children: [
-          Icon(LucideIcons.search,
-              color: AppColors.textMid, size: 18),
+          Icon(LucideIcons.search, color: AppColors.textMid, size: 18),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: TextField(
@@ -427,8 +423,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                 hintStyle: AppType.input(color: AppColors.textLow),
                 border: InputBorder.none,
                 isCollapsed: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: Sp.md),
+                contentPadding: const EdgeInsets.symmetric(vertical: Sp.md),
               ),
             ),
           ),
@@ -479,23 +474,19 @@ class _ManagersScreenState extends State<ManagersScreen> {
         },
         borderRadius: BorderRadius.circular(R.md),
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: active
-                ? accent.withValues(alpha: 0.1)
-                : AppColors.surfaceInput,
+            color:
+                active ? accent.withValues(alpha: 0.1) : AppColors.surfaceInput,
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-                color: active
-                    ? accent.withValues(alpha: 0.4)
-                    : AppColors.border),
+                color:
+                    active ? accent.withValues(alpha: 0.4) : AppColors.border),
           ),
           child: Row(
             children: [
               Icon(s.icon,
-                  size: 12,
-                  color: active ? accent : AppColors.textMid),
+                  size: 12, color: active ? accent : AppColors.textMid),
               const SizedBox(width: 4),
               Text(
                 s.label,
@@ -508,9 +499,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               if (active) ...[
                 const SizedBox(width: 3),
                 Icon(
-                  _sortAsc
-                      ? LucideIcons.arrowUp
-                      : LucideIcons.arrowDown,
+                  _sortAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown,
                   size: 10,
                   color: accent,
                 ),
@@ -532,15 +521,14 @@ class _ManagersScreenState extends State<ManagersScreen> {
       ),
       child: Column(
         children: [
-          Icon(LucideIcons.userX,
-              size: 36, color: AppColors.textLow),
+          Icon(LucideIcons.userX, size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
             _query.isEmpty
                 ? 'mgr.empty_none'.tr()
                 : 'subscribers.no_search_results'.tr(namedArgs: {'q': _query}),
-            style: AppType.muted(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
         ],
       ),
@@ -555,6 +543,7 @@ class _ManagerTile extends StatelessWidget {
     this.extraDebt = 0,
   });
   final Manager manager;
+
   /// مطلب 2026-06-12: نقر الـtile يفتح actions sheet ضامناً 9 عمليات
   /// مطابقة v1 (تعديل / شحن / سحب / تسديد / نقاط / ديون أخرى / حركات
   /// / إرسال معلومات / حذف). الـtile نفسه ما عاد فيه أزرار.
@@ -598,9 +587,8 @@ class _ManagerTile extends StatelessWidget {
                     width: 3,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: manager.isActive
-                          ? AppColors.brand
-                          : AppColors.error,
+                      color:
+                          manager.isActive ? AppColors.brand : AppColors.error,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -610,13 +598,12 @@ class _ManagerTile extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6)
-                          .withValues(alpha: 0.12),
+                      color: AppColors.brandAccent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(18),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(LucideIcons.shield,
-                        size: 16, color: Color(0xFF3B82F6)),
+                    child: Icon(LucideIcons.shield,
+                        size: 16, color: AppColors.brandAccent),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -644,8 +631,8 @@ class _ManagerTile extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 5, vertical: 1),
                                 decoration: BoxDecoration(
-                                  color: AppColors.error
-                                      .withValues(alpha: 0.15),
+                                  color:
+                                      AppColors.error.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -689,28 +676,29 @@ class _ManagerTile extends StatelessWidget {
                       icon: manager.isActive
                           ? LucideIcons.circleCheck
                           : LucideIcons.circleX,
-                      label: manager.isActive ? 'mgr.active'.tr() : 'subscribers.status_disabled'.tr(),
-                      color: manager.isActive
-                          ? AppColors.brand
-                          : AppColors.error,
+                      label: manager.isActive
+                          ? 'mgr.active'.tr()
+                          : 'subscribers.status_disabled'.tr(),
+                      color:
+                          manager.isActive ? AppColors.brand : AppColors.error,
                     ),
                     if ((manager.aclName ?? '').isNotEmpty)
                       _badge(
                         icon: LucideIcons.shieldCheck,
                         label: manager.aclName!,
-                        color: const Color(0xFF3B82F6),
+                        color: AppColors.brandAccent,
                       ),
                     if ((manager.mobile ?? '').isNotEmpty)
                       _badge(
                         icon: LucideIcons.phone,
                         label: manager.mobile!,
-                        color: const Color(0xFF14B8A6),
+                        color: AppColors.success,
                       ),
                     if ((manager.company ?? '').isNotEmpty)
                       _badge(
                         icon: LucideIcons.briefcase,
                         label: manager.company!,
-                        color: const Color(0xFFE08F2D),
+                        color: AppColors.warning,
                       ),
                   ],
                 ),
@@ -725,36 +713,34 @@ class _ManagerTile extends StatelessWidget {
                     icon: LucideIcons.wallet,
                     label: 'dashboard.balance'.tr(),
                     value: '${formatIQD(balance)} د.ع',
-                    color: balance > 0
-                        ? AppColors.brand
-                        : AppColors.textMid,
+                    color: balance > 0 ? AppColors.brand : AppColors.textMid,
                   ),
                   _statChip(
                     icon: LucideIcons.users,
                     label: 'nav.subscribers'.tr(),
                     value: '${manager.usersCount ?? 0}',
-                    color: const Color(0xFF3B82F6),
+                    color: AppColors.brandAccent,
                   ),
                   if (points > 0)
                     _statChip(
                       icon: LucideIcons.star,
                       label: 'sheets.points'.tr(),
                       value: '${points.toInt()}',
-                      color: const Color(0xFF8B5CF6),
+                      color: AppColors.brandAccent,
                     ),
                   if (sasDebt > 0)
                     _statChip(
                       icon: LucideIcons.alertTriangle,
                       label: 'mgr.sas_debt'.tr(),
                       value: '${formatIQD(sasDebt)} د.ع',
-                      color: const Color(0xFFE08F2D),
+                      color: AppColors.warning,
                     ),
                   if (otherDebt > 0)
                     _statChip(
                       icon: LucideIcons.receipt,
                       label: 'mgr.other_debts'.tr(),
                       value: '${formatIQD(otherDebt)} د.ع',
-                      color: const Color(0xFF8B5CF6),
+                      color: AppColors.brandAccent,
                     ),
                 ],
               ),

@@ -124,8 +124,7 @@ class AuthStorage {
   }
 
   static Future<String?> readToken() => _storage.read(key: _kToken);
-  static Future<String?> readTokenExpiry() =>
-      _storage.read(key: _kTokenExpiry);
+  static Future<String?> readTokenExpiry() => _storage.read(key: _kTokenExpiry);
   static Future<String?> readAdminId() => _storage.read(key: _kAdminId);
   static Future<String?> readAdminUsername() =>
       _storage.read(key: _kAdminUsername);

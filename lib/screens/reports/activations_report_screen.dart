@@ -63,8 +63,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     final r = await ReportsApi.activities(
       from: _range.from,
       to: _range.to,
-      userIds:
-          _filters.actionManagerId == null ? _scopeIds : null,
+      userIds: _filters.actionManagerId == null ? _scopeIds : null,
       actionManagerId: _filters.actionManagerId,
       userManager: _filters.userManager,
       employeeId: _filters.employeeId,
@@ -134,8 +133,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   Widget build(BuildContext context) {
     Theme.of(context);
     final visible = _visibleRows;
-    final totalPages =
-        (visible.length / _pageSize).ceil().clamp(1, 99999);
+    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
     final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
     final pageRows = visible.isEmpty
@@ -146,117 +144,118 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       permission: 'reports.activations',
       title: 'reports.activations'.tr(),
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'reports.activations'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'reports.activations'.tr(),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: AppColors.brand,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-            children: [
-              DateRangeChipBar(
-                value: _range,
-                onChanged: (r) {
-                  setState(() => _range = r);
-                  _load();
-                },
-              ),
-              const SizedBox(height: Sp.sm),
-              ReportFiltersPanel(
-                value: _filters,
-                actionTypeOptions: kActivationsActionTypes,
-                onChanged: (v) {
-                  setState(() {
-                    _filters = v;
-                    _page = 0;
-                  });
-                  _load();
-                },
-              ),
-              const SizedBox(height: Sp.md),
-              _summary(),
-              const SizedBox(height: Sp.md),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Sp.huge),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                _errorBlock()
-              else if (_rows.isEmpty)
-                _emptyBlock()
-              else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: ReportStatsBar(
-                        totalItems: visible.length,
-                        pageStart: pageStart,
-                        pageEnd: pageEnd,
-                        pageSize: _pageSize,
-                        onPageSizeChange: (s) => setState(() {
-                          _pageSize = s;
-                          _page = 0;
-                        }),
-                      ),
-                    ),
-                    ReportExportBar(
-                      title: 'reports.activations'.tr(),
-                      subtitle:
-                          '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                      fileNameBase: 'activations',
-                      columns: [
-                        'reports.col_subscriber'.tr(),
-                        'reports.col_username'.tr(),
-                        'reports.col_amount'.tr(),
-                        'reports.col_date'.tr(),
-                        'reports.col_description'.tr(),
-                        'reports.col_type'.tr(),
-                        'reports.col_executor'.tr(),
-                      ],
-                      columnWeights: _pdfWeights,
-                      rows: _exportRows,
-                    ),
-                  ],
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            color: AppColors.brand,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+              children: [
+                DateRangeChipBar(
+                  value: _range,
+                  onChanged: (r) {
+                    setState(() => _range = r);
+                    _load();
+                  },
                 ),
                 const SizedBox(height: Sp.sm),
-                for (final r in pageRows) ...[
-                  ReportLogTile(
-                    actionType: r.actionType,
-                    description: r.actionDescription ?? '',
-                    amount: r.amount,
-                    adminUsername: r.adminUsername,
-                    employeeFullName: r.actingEmployeeFullName,
-                    subscriberFullName: r.userFullName,
-                    subscriberUsername: r.userUsername,
-                    targetName: r.targetName ?? r.userUsername,
-                    createdAt: r.createdAt,
+                ReportFiltersPanel(
+                  value: _filters,
+                  actionTypeOptions: kActivationsActionTypes,
+                  onChanged: (v) {
+                    setState(() {
+                      _filters = v;
+                      _page = 0;
+                    });
+                    _load();
+                  },
+                ),
+                const SizedBox(height: Sp.md),
+                _summary(),
+                const SizedBox(height: Sp.md),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Sp.huge),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  _errorBlock()
+                else if (_rows.isEmpty)
+                  _emptyBlock()
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ReportStatsBar(
+                          totalItems: visible.length,
+                          pageStart: pageStart,
+                          pageEnd: pageEnd,
+                          pageSize: _pageSize,
+                          onPageSizeChange: (s) => setState(() {
+                            _pageSize = s;
+                            _page = 0;
+                          }),
+                        ),
+                      ),
+                      ReportExportBar(
+                        title: 'reports.activations'.tr(),
+                        subtitle:
+                            '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                        fileNameBase: 'activations',
+                        columns: [
+                          'reports.col_subscriber'.tr(),
+                          'reports.col_username'.tr(),
+                          'reports.col_amount'.tr(),
+                          'reports.col_date'.tr(),
+                          'reports.col_description'.tr(),
+                          'reports.col_type'.tr(),
+                          'reports.col_executor'.tr(),
+                        ],
+                        columnWeights: _pdfWeights,
+                        rows: _exportRows,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: Sp.sm),
+                  for (final r in pageRows) ...[
+                    ReportLogTile(
+                      actionType: r.actionType,
+                      description: r.actionDescription ?? '',
+                      amount: r.amount,
+                      adminUsername: r.adminUsername,
+                      employeeFullName: r.actingEmployeeFullName,
+                      subscriberFullName: r.userFullName,
+                      subscriberUsername: r.userUsername,
+                      targetName: r.targetName ?? r.userUsername,
+                      createdAt: r.createdAt,
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  if (totalPages > 1)
+                    ReportPager(
+                      page: _page,
+                      totalPages: totalPages,
+                      onPrev: () => setState(() => _page--),
+                      onNext: () => setState(() => _page++),
+                    ),
                 ],
-                if (totalPages > 1)
-                  ReportPager(
-                    page: _page,
-                    totalPages: totalPages,
-                    onPrev: () => setState(() => _page--),
-                    onNext: () => setState(() => _page++),
-                  ),
               ],
-            ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -275,7 +274,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               icon: LucideIcons.zap,
               label: 'reports.total'.tr(),
               value: '${_visibleRows.length}',
-              color: const Color(0xFF14B8A6),
+              color: AppColors.success,
             ),
           ),
           Container(width: 1, height: 32, color: AppColors.border),
@@ -284,7 +283,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               icon: LucideIcons.userCheck,
               label: 'reports.activations_count'.tr(),
               value: '$_activateCount',
-              color: const Color(0xFF14B8A6),
+              color: AppColors.success,
             ),
           ),
           Container(width: 1, height: 32, color: AppColors.border),
@@ -293,7 +292,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
               icon: LucideIcons.repeat,
               label: 'reports.extensions_count'.tr(),
               value: '$_extendCount',
-              color: const Color(0xFF26A69A),
+              color: AppColors.success,
             ),
           ),
           Container(width: 1, height: 32, color: AppColors.border),
@@ -328,9 +327,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
-        Text(label,
-            style: AppType.muted().copyWith(fontSize: 10),
-            maxLines: 1),
+        Text(label, style: AppType.muted().copyWith(fontSize: 10), maxLines: 1),
       ],
     );
   }
@@ -356,8 +353,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             children: [
               Icon(LucideIcons.triangleAlert, size: 32, color: AppColors.error),
               const SizedBox(height: 8),
-              Text(_error!,
-                  style: AppType.subtitle(color: AppColors.textMid)),
+              Text(_error!, style: AppType.subtitle(color: AppColors.textMid)),
               const SizedBox(height: Sp.md),
               ElevatedButton.icon(
                 onPressed: _load,
@@ -374,5 +370,4 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
-
 }

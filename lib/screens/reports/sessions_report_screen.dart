@@ -85,7 +85,9 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
             _humanBytes(s.bytesOut),
             s.startedAt ?? '',
             s.endedAt ?? '',
-            s.isOnline ? 'subscribers.status_online'.tr() : 'subscribers.status_expired'.tr(),
+            s.isOnline
+                ? 'subscribers.status_online'.tr()
+                : 'subscribers.status_expired'.tr(),
           ])
       .toList();
 
@@ -93,8 +95,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final visible = _visibleRows;
-    final totalPages =
-        (visible.length / _pageSize).ceil().clamp(1, 99999);
+    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
     final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
     final pageRows = visible.isEmpty
@@ -105,227 +106,225 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
       permission: 'reports.sessions',
       title: 'reports.sessions'.tr(),
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'reports.sessions'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'reports.sessions'.tr(),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-              child: Column(
-                children: [
-                  SegmentedButton<bool>(
-                    segments: [
-                      ButtonSegment(
-                        value: true,
-                        label: Text('reports.online_now'.tr()),
-                        icon: const Icon(LucideIcons.wifi, size: 14),
-                      ),
-                      ButtonSegment(
-                        value: false,
-                        label: Text('common.all'.tr()),
-                        icon: const Icon(LucideIcons.history, size: 14),
-                      ),
-                    ],
-                    selected: {_onlineOnly},
-                    showSelectedIcon: false,
-                    onSelectionChanged: (s) {
-                      HapticFeedback.selectionClick();
-                      setState(() => _onlineOnly = s.first);
-                      _load();
-                    },
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  // شريط بحث + منتقي حقل (username / ip / mac).
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onSubmitted: (v) {
-                            _searchValue = v.trim();
-                            _load();
-                          },
-                          decoration: InputDecoration(
-                            hintText: _searchField == 'username'
-                                ? 'reports.search_by_username'.tr()
-                                : _searchField == 'ip'
-                                    ? 'reports.search_by_ip'.tr()
-                                    : 'reports.search_by_mac'.tr(),
-                            hintStyle: AppType.input(color: AppColors.textLow),
-                            prefixIcon: Icon(LucideIcons.search,
-                                size: 18, color: AppColors.textMid),
-                            suffixIcon: _searchValue.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: Icon(LucideIcons.x,
-                                        size: 16,
-                                        color: AppColors.textMid),
-                                    onPressed: () {
-                                      _searchCtrl.clear();
-                                      _searchValue = '';
-                                      _load();
-                                    },
-                                  ),
-                            filled: true,
-                            fillColor: AppColors.surfaceInput,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(R.sm),
-                              borderSide:
-                                  BorderSide(color: AppColors.border),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(R.sm),
-                              borderSide:
-                                  BorderSide(color: AppColors.border),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                child: Column(
+                  children: [
+                    SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment(
+                          value: true,
+                          label: Text('reports.online_now'.tr()),
+                          icon: const Icon(LucideIcons.wifi, size: 14),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: Text('common.all'.tr()),
+                          icon: const Icon(LucideIcons.history, size: 14),
+                        ),
+                      ],
+                      selected: {_onlineOnly},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (s) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _onlineOnly = s.first);
+                        _load();
+                      },
+                    ),
+                    const SizedBox(height: Sp.sm),
+                    // شريط بحث + منتقي حقل (username / ip / mac).
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _searchCtrl,
+                            onSubmitted: (v) {
+                              _searchValue = v.trim();
+                              _load();
+                            },
+                            decoration: InputDecoration(
+                              hintText: _searchField == 'username'
+                                  ? 'reports.search_by_username'.tr()
+                                  : _searchField == 'ip'
+                                      ? 'reports.search_by_ip'.tr()
+                                      : 'reports.search_by_mac'.tr(),
+                              hintStyle:
+                                  AppType.input(color: AppColors.textLow),
+                              prefixIcon: Icon(LucideIcons.search,
+                                  size: 18, color: AppColors.textMid),
+                              suffixIcon: _searchValue.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      icon: Icon(LucideIcons.x,
+                                          size: 16, color: AppColors.textMid),
+                                      onPressed: () {
+                                        _searchCtrl.clear();
+                                        _searchValue = '';
+                                        _load();
+                                      },
+                                    ),
+                              filled: true,
+                              fillColor: AppColors.surfaceInput,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(R.sm),
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(R.sm),
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      _SearchFieldPicker(
-                        current: _searchField,
-                        onChange: (v) {
-                          setState(() {
-                            _searchField = v;
-                            _searchCtrl.clear();
-                            _searchValue = '';
-                          });
-                          _load();
-                        },
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 6),
+                        _SearchFieldPicker(
+                          current: _searchField,
+                          onChange: (v) {
+                            setState(() {
+                              _searchField = v;
+                              _searchCtrl.clear();
+                              _searchValue = '';
+                            });
+                            _load();
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
-              child: Column(
-                children: [
-                  // فلتر مدير المستخدم فقط (لا actionManager/employee/actionTypes
-                  // لأن مصدر الجلسات هو SAS4 UserSessions، ليس activity_logs).
-                  ReportFiltersPanel(
-                    value: _filters,
-                    includeActionTypes: false,
-                    includeActionManager: false,
-                    includeEmployee: false,
-                    onChanged: (v) {
-                      setState(() {
-                        _filters = v;
-                        _page = 0;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  Row(
-                    children: [
-                      Icon(LucideIcons.activity,
-                          size: 14, color: AppColors.textMid),
-                      const SizedBox(width: 6),
-                      Text(
-                        _loading
-                            ? '...'
-                            : '${visible.length} ${_onlineOnly ? 'reports.online_users'.tr() : 'reports.session_singular'.tr()}',
-                        style: AppType.muted().copyWith(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                child: Column(
+                  children: [
+                    // فلتر مدير المستخدم فقط (لا actionManager/employee/actionTypes
+                    // لأن مصدر الجلسات هو SAS4 UserSessions، ليس activity_logs).
+                    ReportFiltersPanel(
+                      value: _filters,
+                      includeActionTypes: false,
+                      includeActionManager: false,
+                      includeEmployee: false,
+                      onChanged: (v) {
+                        setState(() {
+                          _filters = v;
+                          _page = 0;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: Sp.sm),
+                    Row(
+                      children: [
+                        Icon(LucideIcons.activity,
+                            size: 14, color: AppColors.textMid),
+                        const SizedBox(width: 6),
+                        Text(
+                          _loading
+                              ? '...'
+                              : '${visible.length} ${_onlineOnly ? 'reports.online_users'.tr() : 'reports.session_singular'.tr()}',
+                          style: AppType.muted().copyWith(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _load,
-                color: AppColors.brand,
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _error != null
-                        ? _errorState()
-                        : _rows.isEmpty
-                            ? _emptyState()
-                            : ListView(
-                                padding: const EdgeInsets.fromLTRB(
-                                    Sp.lg, 0, Sp.lg, Sp.huge),
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ReportStatsBar(
-                                          totalItems: visible.length,
-                                          pageStart: pageStart,
-                                          pageEnd: pageEnd,
-                                          pageSize: _pageSize,
-                                          onPageSizeChange: (s) =>
-                                              setState(() {
-                                            _pageSize = s;
-                                            _page = 0;
-                                          }),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _load,
+                  color: AppColors.brand,
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error != null
+                          ? _errorState()
+                          : _rows.isEmpty
+                              ? _emptyState()
+                              : ListView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      Sp.lg, 0, Sp.lg, Sp.huge),
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ReportStatsBar(
+                                            totalItems: visible.length,
+                                            pageStart: pageStart,
+                                            pageEnd: pageEnd,
+                                            pageSize: _pageSize,
+                                            onPageSizeChange: (s) =>
+                                                setState(() {
+                                              _pageSize = s;
+                                              _page = 0;
+                                            }),
+                                          ),
                                         ),
-                                      ),
-                                      ReportExportBar(
-                                        title: _onlineOnly
-                                            ? 'reports.online_sessions'.tr()
-                                            : 'reports.all_sessions'.tr(),
-                                        subtitle:
-                                            '${'reports.row_count'.tr()}: ${visible.length}',
-                                        fileNameBase: _onlineOnly
-                                            ? 'sessions_online'
-                                            : 'sessions_all',
-                                        columns: [
-                                          'reports.col_username'.tr(),
-                                          'IP',
-                                          'MAC',
-                                          'reports.col_manager'.tr(),
-                                          'subscribers.label_download'.tr(),
-                                          'subscribers.label_upload'.tr(),
-                                          'reports.col_start'.tr(),
-                                          'reports.col_end'.tr(),
-                                          'subscribers.status'.tr(),
-                                        ],
-                                        rows: _exportRows,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: Sp.sm),
-                                  for (final s in pageRows) ...[
-                                    _sessionTile(s),
-                                    const SizedBox(height: 6),
-                                  ],
-                                  if (totalPages > 1)
-                                    ReportPager(
-                                      page: _page,
-                                      totalPages: totalPages,
-                                      onPrev: () => setState(() => _page--),
-                                      onNext: () => setState(() => _page++),
+                                        ReportExportBar(
+                                          title: _onlineOnly
+                                              ? 'reports.online_sessions'.tr()
+                                              : 'reports.all_sessions'.tr(),
+                                          subtitle:
+                                              '${'reports.row_count'.tr()}: ${visible.length}',
+                                          fileNameBase: _onlineOnly
+                                              ? 'sessions_online'
+                                              : 'sessions_all',
+                                          columns: [
+                                            'reports.col_username'.tr(),
+                                            'IP',
+                                            'MAC',
+                                            'reports.col_manager'.tr(),
+                                            'subscribers.label_download'.tr(),
+                                            'subscribers.label_upload'.tr(),
+                                            'reports.col_start'.tr(),
+                                            'reports.col_end'.tr(),
+                                            'subscribers.status'.tr(),
+                                          ],
+                                          rows: _exportRows,
+                                        ),
+                                      ],
                                     ),
-                                ],
-                              ),
+                                    const SizedBox(height: Sp.sm),
+                                    for (final s in pageRows) ...[
+                                      _sessionTile(s),
+                                      const SizedBox(height: 6),
+                                    ],
+                                    if (totalPages > 1)
+                                      ReportPager(
+                                        page: _page,
+                                        totalPages: totalPages,
+                                        onPrev: () => setState(() => _page--),
+                                        onNext: () => setState(() => _page++),
+                                      ),
+                                  ],
+                                ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
   Widget _sessionTile(SessionRow s) {
     final online = s.isOnline;
-    final dot = online ? const Color(0xFF14B8A6) : AppColors.textLow;
+    final dot = online ? AppColors.success : AppColors.textLow;
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
@@ -405,16 +404,15 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                           size: 10, color: AppColors.brand),
                       const SizedBox(width: 3),
                       Text(_humanBytes(s.bytesIn),
-                          style: AppType.muted().copyWith(
-                              fontSize: 10, color: AppColors.brand)),
+                          style: AppType.muted()
+                              .copyWith(fontSize: 10, color: AppColors.brand)),
                       const SizedBox(width: 10),
                       Icon(LucideIcons.arrowUp,
-                          size: 10, color: const Color(0xFFE08F2D)),
+                          size: 10, color: AppColors.warning),
                       const SizedBox(width: 3),
                       Text(_humanBytes(s.bytesOut),
                           style: AppType.muted().copyWith(
-                              fontSize: 10,
-                              color: const Color(0xFFE08F2D))),
+                              fontSize: 10, color: AppColors.warning)),
                     ],
                   ),
                 ],
@@ -443,7 +441,10 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
               children: [
                 Icon(LucideIcons.wifiOff, size: 36, color: AppColors.textLow),
                 const SizedBox(height: 10),
-                Text(_onlineOnly ? 'reports.no_online'.tr() : 'reports.no_sessions'.tr(),
+                Text(
+                    _onlineOnly
+                        ? 'reports.no_online'.tr()
+                        : 'reports.no_sessions'.tr(),
                     style: AppType.label(color: AppColors.textMid)),
               ],
             ),
@@ -528,12 +529,10 @@ class _SearchFieldPicker extends StatelessWidget {
               color: AppColors.textMid,
             ),
             const SizedBox(width: 4),
-            Icon(LucideIcons.chevronDown,
-                size: 12, color: AppColors.textLow),
+            Icon(LucideIcons.chevronDown, size: 12, color: AppColors.textLow),
           ],
         ),
       ),
     );
   }
 }
-

@@ -42,6 +42,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   String? _error;
   List<_AccountRow> _rows = const [];
   String? _currentUsername;
+
   /// حساب "الأصلي" — يظهر لو الأدمن الرئيسي انتقل لحساب فرعي.
   /// null لو ما فيه انتقال جارٍ (الأدمن دخل مباشرة).
   ({String username, String password, String displayName})? _original;
@@ -126,8 +127,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
@@ -156,10 +156,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
       //    لكن العمل يكمل عادي.
       if (_currentUsername != null && _original == null) {
         final saved = await SavedProfilesStore.list();
-        final me = saved.where((p) => p.username == _currentUsername).firstOrNull;
+        final me =
+            saved.where((p) => p.username == _currentUsername).firstOrNull;
         if (me != null) {
           try {
-            final plain = await SavedProfilesStore.decrypt(me.encryptedPassword);
+            final plain =
+                await SavedProfilesStore.decrypt(me.encryptedPassword);
             final displayName =
                 await AuthStorage.readDisplayName() ?? _currentUsername!;
             await SavedProfilesStore.setOriginal(
@@ -167,7 +169,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               plainPassword: plain,
               displayName: displayName,
             );
-          } catch (_) { /* best-effort */ }
+          } catch (_) {/* best-effort */}
         }
       }
       // 3) اسجّل دخول بالحساب الجديد
@@ -345,8 +347,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     color: AppColors.brand,
                     child: ListView(
                       padding: EdgeInsets.only(
-                          bottom:
-                              MediaQuery.paddingOf(context).bottom + 32),
+                          bottom: MediaQuery.paddingOf(context).bottom + 32),
                       children: [
                         _compactHeader(),
                         // 2026-08-26: بطاقة "العودة للحساب الأصلي" —
@@ -400,8 +401,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Icon(LucideIcons.repeat2,
-                size: 18, color: AppColors.brand),
+            child: Icon(LucideIcons.repeat2, size: 18, color: AppColors.brand),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -440,7 +440,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   /// 2026-08-26: bar بارز للعودة للحساب الأصلي. لون brand بارز حتى
   /// المدير يشوفه فوراً — دخل بلا قصد لحساب فرعي والحل بضغطة واحدة.
-  Widget _originalTile(({String username, String password, String displayName}) orig) {
+  Widget _originalTile(
+      ({String username, String password, String displayName}) orig) {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
       decoration: BoxDecoration(
@@ -571,9 +572,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 width: 3,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: row.isActive
-                      ? AppColors.brand
-                      : AppColors.textLow,
+                  color: row.isActive ? AppColors.brand : AppColors.textLow,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -582,12 +581,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
+                  color: AppColors.brandAccent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(LucideIcons.shield,
-                    size: 16, color: Color(0xFF3B82F6)),
+                child: Icon(LucideIcons.shield,
+                    size: 16, color: AppColors.brandAccent),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -606,7 +605,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               fontWeight: FontWeight.w800,
                               color: AppColors.textHi,
                               height: 1.15,
-                              fontFeatures: const [FontFeature.tabularFigures()],
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -618,7 +619,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: AppColors.brand.withValues(alpha: 0.15),
+                              color: AppColors.brandSoftBg,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -638,7 +639,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: AppColors.error.withValues(alpha: 0.15),
+                              color: AppColors.dangerSoftBg,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -675,8 +676,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
               const SizedBox(width: 8),
               if (isCurrent)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 7),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   child: Text(
                     'الحالي',
                     style: TextStyle(

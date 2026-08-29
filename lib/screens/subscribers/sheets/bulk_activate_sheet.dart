@@ -62,7 +62,7 @@ extension _PayMethodX on _PayMethod {
   Color get color => switch (this) {
         _PayMethod.debt => AppColors.error,
         _PayMethod.cash => AppColors.brand,
-        _PayMethod.partial => const Color(0xFF8B5CF6),
+        _PayMethod.partial => AppColors.brandAccent,
       };
 
   /// Maps to the backend's expected enum on POST
@@ -516,7 +516,7 @@ class _SummaryStrip extends StatelessWidget {
           _SummaryChip(
               label: 'sheets.pay_partial'.tr(),
               count: summary.partial,
-              color: const Color(0xFF8B5CF6)),
+              color: AppColors.brandAccent),
           const Spacer(),
           if (summary.cashTotal > 0)
             Text(
@@ -833,8 +833,8 @@ class _RenewRowCard extends StatelessWidget {
 
   static Color _statusBorderColor(_RenewRow r) {
     if (r.ok == true) return AppColors.brand.withValues(alpha: 0.5);
-    if (r.ok == false) return AppColors.error.withValues(alpha: 0.5);
-    if (r.ready) return AppColors.brand.withValues(alpha: 0.35);
+    if (r.ok == false) return AppColors.dangerSoftBorder;
+    if (r.ready) return AppColors.brandSoftBorder;
     return AppColors.border;
   }
 }
@@ -851,7 +851,7 @@ class _FailedRowCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.error.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(
         children: [
@@ -898,10 +898,10 @@ class _PriceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFE08F2D).withValues(alpha: 0.1),
+        color: AppColors.warning.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(R.pill),
         border: Border.all(
-          color: const Color(0xFFE08F2D).withValues(alpha: 0.3),
+          color: AppColors.warning.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -919,7 +919,7 @@ class _PriceChip extends StatelessWidget {
           ],
           Text(
             '${formatIQD(row.effectivePrice.round())} د.ع',
-            style: AppType.muted(color: const Color(0xFFE08F2D)).copyWith(
+            style: AppType.muted(color: AppColors.warning).copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
@@ -1002,7 +1002,7 @@ class _PartialField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF8B5CF6);
+    final accent = AppColors.brandAccent;
     final price = row.effectivePrice.round();
     final chips = const [5000, 10000, 15000, 25000, 35000, 50000]
         .where((c) => c < price)
@@ -1078,8 +1078,7 @@ class _PartialField extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(LucideIcons.info,
-                    size: 11, color: Color(0xFF14B8A6)),
+                Icon(LucideIcons.info, size: 11, color: AppColors.success),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -1087,8 +1086,7 @@ class _PartialField extends StatelessWidget {
                       'amt':
                           '${formatIQD((row.partialAmount - price).round())} ${'common.currency'.tr()}'
                     }),
-                    style:
-                        AppType.muted(color: const Color(0xFF14B8A6)).copyWith(
+                    style: AppType.muted(color: AppColors.success).copyWith(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),

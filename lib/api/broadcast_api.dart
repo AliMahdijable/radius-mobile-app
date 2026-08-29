@@ -92,9 +92,8 @@ class MessageLog {
       createdAt: (j['created_at'] ?? '').toString(),
       recipientPhone: j['recipient_phone']?.toString(),
       recipientUsername: j['recipient_username']?.toString(),
-      recipientName: arabicName.isNotEmpty
-          ? arabicName
-          : j['recipient_name']?.toString(),
+      recipientName:
+          arabicName.isNotEmpty ? arabicName : j['recipient_name']?.toString(),
       errorMessage: j['error_message']?.toString(),
       messageType: j['message_type']?.toString(),
       messagePreview: j['message_preview']?.toString(),
@@ -206,7 +205,11 @@ class BroadcastApi {
         );
       }
       final queued = data['queued'] ?? data['totalQueued'] ?? data['count'];
-      return (ok: true, queued: queued == null ? null : _toInt(queued), message: null);
+      return (
+        ok: true,
+        queued: queued == null ? null : _toInt(queued),
+        message: null
+      );
     } on DioException catch (e) {
       _log('broadcast', e);
       final m = e.response?.data is Map
@@ -311,8 +314,7 @@ class BroadcastApi {
       if (list is List) {
         for (final m in list) {
           if (m is Map) {
-            final parsed =
-                MessageLog.fromJson(Map<String, dynamic>.from(m));
+            final parsed = MessageLog.fromJson(Map<String, dynamic>.from(m));
             if (parsed != null) messages.add(parsed);
           }
         }

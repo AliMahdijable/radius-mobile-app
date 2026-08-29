@@ -121,7 +121,8 @@ class _ExpandableSectionState extends State<ExpandableSection>
                 ? Column(children: [
                     const _DottedDivider(),
                     Padding(
-                      padding: widget.contentPadding ?? const EdgeInsets.all(Sp.md),
+                      padding:
+                          widget.contentPadding ?? const EdgeInsets.all(Sp.md),
                       child: widget.content,
                     ),
                   ])

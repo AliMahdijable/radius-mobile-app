@@ -47,8 +47,10 @@ class FinanceKPIs {
   final int activationsCount;
   final int extendCount;
 
-  static num _n(dynamic v) => v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
-  static int _i(dynamic v) => v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
+  static num _n(dynamic v) =>
+      v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
+  static int _i(dynamic v) =>
+      v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
 
   /// إيراد نقدي حقيقي = activate_cash + payments + debt_pay + balance_deduct.
   /// **مطابق Financial.tsx** — كان mobile يفتقد `paymentsSum` (PAYMENT_ADD)
@@ -62,8 +64,7 @@ class FinanceKPIs {
   /// الصافي = الإيراد - المصاريف - إضافة الدين اليدوي (2026-07-10).
   /// إضافة الدين اليدوي هي مبالغ منحها المدير للمشترك بلا استلام نقد
   /// (subsidy فعلي)، فتُطرَح من الصافي مثل المصاريف.
-  num get netCash =>
-      totalCashRevenue - expensesSum - balanceAddSum;
+  num get netCash => totalCashRevenue - expensesSum - balanceAddSum;
 
   static FinanceKPIs fromJson(Map<String, dynamic> j) {
     return FinanceKPIs(
@@ -106,6 +107,7 @@ class FinanceLog {
   final String? actingEmployeeFullName;
   final String? actingEmployeeUsername;
   final String? userUsername;
+
   /// الاسم الأول (عربي) للمشترك — backend يحقنه في enrichment
   /// (fetchUserDirectory في FinanceReportController.js).
   final String? userFirstname;
@@ -177,6 +179,7 @@ class ActivityRow {
   final String? adminUsername;
   final String? actingEmployeeFullName;
   final String? userUsername;
+
   /// backend يُغني `/api/activities` بـuser_firstname/lastname
   /// (server.js:7526–7557). يمكن نُقدّمها بارزة في UI و export.
   final String? userFirstname;
@@ -289,13 +292,11 @@ class SessionRow {
     if (id == null && (username == null || username.isEmpty)) return null;
     final finalId = id ?? '$username|$mac'.hashCode.abs();
     final st = j['session_time'];
-    final sessionTime = st is num
-        ? st
-        : (st != null ? num.tryParse(st.toString()) : null);
+    final sessionTime =
+        st is num ? st : (st != null ? num.tryParse(st.toString()) : null);
     // online-users ما فيه endedAt — نضبطها = null، والـisOnline يعتمد
     // على المصدر (لو مافيه radacctid عادة يعني /online-users).
-    final endedAt =
-        j['ended_at']?.toString() ?? j['acctstoptime']?.toString();
+    final endedAt = j['ended_at']?.toString() ?? j['acctstoptime']?.toString();
     final isOnlineOverride = id == null && endedAt == null ? true : null;
     return SessionRow(
       id: finalId,
@@ -310,8 +311,7 @@ class SessionRow {
           j['bytes_in'] ?? j['download_bytes'] ?? j['acctinputoctets']),
       bytesOut: FinanceKPIs._n(
           j['bytes_out'] ?? j['upload_bytes'] ?? j['acctoutputoctets']),
-      startedAt:
-          j['started_at']?.toString() ?? j['acctstarttime']?.toString(),
+      startedAt: j['started_at']?.toString() ?? j['acctstarttime']?.toString(),
       endedAt: endedAt,
       sessionTime: sessionTime,
       isOnlineOverride: isOnlineOverride,
@@ -471,7 +471,8 @@ class ReportsApi {
         return (ok: false, data: null, error: body['message']?.toString());
       }
       final data = body['data'];
-      if (data is! Map) return (ok: false, data: null, error: 'تنسيق غير متوقع');
+      if (data is! Map)
+        return (ok: false, data: null, error: 'تنسيق غير متوقع');
       final kpisRaw = data['kpis'];
       final logsRaw = data['recentLogs'];
       final kpis = kpisRaw is Map
@@ -544,7 +545,8 @@ class ReportsApi {
         );
       }
       final list = body['data'];
-      if (list is! List) return (ok: true, rows: const <ActivityRow>[], error: null);
+      if (list is! List)
+        return (ok: true, rows: const <ActivityRow>[], error: null);
       return (
         ok: true,
         rows: list
@@ -612,15 +614,15 @@ class ReportsApi {
       for (final row in list) {
         if (row is! Map) continue;
         final at = (row['action_type']?.toString() ?? '').toUpperCase().trim();
-        final desc = (row['action_description']?.toString() ?? '').toLowerCase();
+        final desc =
+            (row['action_description']?.toString() ?? '').toLowerCase();
         final isActivate = at == 'SUBSCRIBER_ACTIVATE' ||
             (at == 'SUBSCRIBER_ADD' && desc.contains('تفعيل'));
         if (!isActivate) continue;
         final ts = row['created_at']?.toString();
         if (ts == null || ts.length < 10) continue;
         final day = ts.substring(0, 10); // YYYY-MM-DD
-        final isCash =
-            desc.contains('نقدي') && !desc.contains('غير نقدي');
+        final isCash = desc.contains('نقدي') && !desc.contains('غير نقدي');
         num amount = 0;
         // نجرّب استخراج المبلغ من action_data (JSON string) → ثم من الوصف.
         final dataRaw = row['action_data'];
@@ -709,8 +711,7 @@ class ReportsApi {
         if (ip != null && ip.isNotEmpty) 'ip': ip,
         if (mac != null && mac.isNotEmpty) 'mac': mac,
       };
-      final endpoint =
-          onlineOnly ? '/api/v2/online-users' : '/api/v2/sessions';
+      final endpoint = onlineOnly ? '/api/v2/online-users' : '/api/v2/sessions';
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         endpoint,
         queryParameters: qp,
@@ -724,7 +725,8 @@ class ReportsApi {
         );
       }
       final list = body['data'];
-      if (list is! List) return (ok: true, rows: const <SessionRow>[], error: null);
+      if (list is! List)
+        return (ok: true, rows: const <SessionRow>[], error: null);
       return (
         ok: true,
         rows: list

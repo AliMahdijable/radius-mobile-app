@@ -83,9 +83,8 @@ class ManagerMovement {
       reversesId: j['reverses_id'] != null ? _toInt(j['reverses_id']) : null,
       eventAt: _baghdadTime(j['event_at']),
       debtId: j['debt_id'] != null ? _toInt(j['debt_id']) : null,
-      relatedDebtId: j['related_debt_id'] != null
-          ? _toInt(j['related_debt_id'])
-          : null,
+      relatedDebtId:
+          j['related_debt_id'] != null ? _toInt(j['related_debt_id']) : null,
     );
   }
 
@@ -168,7 +167,10 @@ class ManagerMovementsApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('manager-movements/$id PATCH', e);
       final body = e.response?.data;
@@ -188,7 +190,10 @@ class ManagerMovementsApi {
         '/api/admin/manager-movements/$id',
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } catch (e) {
       _log('manager-movements/$id DELETE', e);
       return (ok: false, message: 'تعذّر الحذف');

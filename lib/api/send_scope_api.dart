@@ -22,6 +22,7 @@ class SendScope {
 
   final bool sendToAll;
   final List<String> managedUsernames;
+
   /// كل المدراء الفرعيين المتاحين (من SAS4 tree أو subscribers fallback).
   final List<String> subManagers;
   final String? adminUsername;

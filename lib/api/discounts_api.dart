@@ -130,7 +130,10 @@ class DiscountsApi {
         data: {'discount_amount': discountAmount},
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('discounts (PUT)', e);
       final body = e.response?.data;
@@ -145,7 +148,8 @@ class DiscountsApi {
   /// POST /api/v2/discounts/bulk-apply — apply ONE amount to MANY
   /// subscribers. Backend upserts: returns count of new + updated +
   /// failed usernames so the UI can show a precise snackbar.
-  static Future<({bool ok, int applied, int updated, int failed, String? message})>
+  static Future<
+          ({bool ok, int applied, int updated, int failed, String? message})>
       bulkApply({
     required List<String> usernames,
     required num discountAmount,
@@ -202,7 +206,10 @@ class DiscountsApi {
         '/api/discounts/$id',
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('discounts (DELETE)', e);
       final body = e.response?.data;
@@ -224,9 +231,8 @@ class DiscountsApi {
       );
       final body = r.data ?? const {};
       final rawDel = body['deleted'];
-      final del = rawDel is int
-          ? rawDel
-          : int.tryParse(rawDel?.toString() ?? '') ?? 0;
+      final del =
+          rawDel is int ? rawDel : int.tryParse(rawDel?.toString() ?? '') ?? 0;
       return (
         ok: body['success'] == true,
         message: body['message']?.toString(),

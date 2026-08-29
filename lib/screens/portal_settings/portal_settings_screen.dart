@@ -286,7 +286,8 @@ class _InfoTabState extends State<_InfoTab> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation(Colors.white),
                               ),
                             )
                           : Text(
@@ -314,8 +315,8 @@ class _PreviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.brand.withOpacity(0.06),
-        border: Border.all(color: AppColors.brand.withOpacity(0.2)),
+        color: AppColors.brandSoftBg,
+        border: Border.all(color: AppColors.brandSoftBorder),
         borderRadius: BorderRadius.circular(R.md),
       ),
       child: Row(
@@ -325,7 +326,7 @@ class _PreviewCard extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: AppColors.surface,
-              border: Border.all(color: AppColors.brand.withOpacity(0.2)),
+              border: Border.all(color: AppColors.brandSoftBorder),
               borderRadius: BorderRadius.circular(R.sm),
             ),
             clipBehavior: Clip.antiAlias,
@@ -334,8 +335,8 @@ class _PreviewCard extends StatelessWidget {
                 : Image.network(
                     logoUrl,
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) =>
-                        Icon(LucideIcons.image, size: 20, color: AppColors.textMid),
+                    errorBuilder: (_, __, ___) => Icon(LucideIcons.image,
+                        size: 20, color: AppColors.textMid),
                   ),
           ),
           const SizedBox(width: Sp.md),
@@ -344,7 +345,9 @@ class _PreviewCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  displayName.isEmpty ? 'portal.preview_empty'.tr() : displayName,
+                  displayName.isEmpty
+                      ? 'portal.preview_empty'.tr()
+                      : displayName,
                   style: AppType.title(color: AppColors.textHi)
                       .copyWith(fontSize: 14),
                   maxLines: 1,
@@ -418,14 +421,16 @@ class _PackagesTabState extends State<_PackagesTab> {
               x.profileId == p.profileId ? x.copyWith(isHidden: next) : x)
           .toList();
     });
-    final ok = await PortalSettingsApi.updatePackage(p.profileId, isHidden: next);
+    final ok =
+        await PortalSettingsApi.updatePackage(p.profileId, isHidden: next);
     if (!mounted) return;
     if (!ok) {
       // rollback
       setState(() {
         _packages = _packages
-            .map((x) =>
-                x.profileId == p.profileId ? x.copyWith(isHidden: p.isHidden) : x)
+            .map((x) => x.profileId == p.profileId
+                ? x.copyWith(isHidden: p.isHidden)
+                : x)
             .toList();
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -519,7 +524,7 @@ class _PackageRow extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.brand.withOpacity(0.08),
+                  color: AppColors.brandSoftBg,
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -553,7 +558,7 @@ class _PackageRow extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: Sp.sm, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.error.withOpacity(0.1),
+                              color: AppColors.dangerSoftBg,
                               borderRadius: BorderRadius.circular(R.pill),
                             ),
                             child: Text(
@@ -607,8 +612,7 @@ class _PackageRow extends StatelessWidget {
                     : 'portal.hide_from_subs'.tr(),
                 onPressed: onToggleHidden,
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 18, color: AppColors.textMid),
+              Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textMid),
             ],
           ),
         ),
@@ -692,7 +696,8 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('portal.reset_title'.tr(),
-            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         content: Text('portal.reset_body'.tr(),
             style: AppType.subtitle(color: AppColors.textMid)),
         actions: [
@@ -806,8 +811,8 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                           ),
                           IconButton(
                             icon: const Icon(LucideIcons.minus, size: 16),
-                            onPressed: () =>
-                                setState(() => _order = (_order - 10).clamp(0, 999)),
+                            onPressed: () => setState(
+                                () => _order = (_order - 10).clamp(0, 999)),
                           ),
                           Container(
                             width: 48,
@@ -817,8 +822,8 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                           ),
                           IconButton(
                             icon: const Icon(LucideIcons.plus, size: 16),
-                            onPressed: () =>
-                                setState(() => _order = (_order + 10).clamp(0, 999)),
+                            onPressed: () => setState(
+                                () => _order = (_order + 10).clamp(0, 999)),
                           ),
                         ],
                       ),
@@ -848,7 +853,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                       label: Text('portal.reset'.tr(),
                           style: TextStyle(color: AppColors.error)),
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: AppColors.error.withOpacity(0.4)),
+                        side: BorderSide(color: AppColors.dangerSoftBorder),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
@@ -860,7 +865,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                       onPressed: _saving ? null : _save,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.brand,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(R.md)),
@@ -871,7 +876,8 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation(Colors.white),
                               ),
                             )
                           : Text('portal.save'.tr(),
@@ -928,7 +934,8 @@ Widget _labeledField({
         style: AppType.subtitle(color: AppColors.textHi),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: AppType.subtitle(color: AppColors.textMid.withOpacity(0.5)),
+          hintStyle:
+              AppType.subtitle(color: AppColors.textMid.withOpacity(0.5)),
           filled: true,
           fillColor: AppColors.surfaceInput,
           border: OutlineInputBorder(

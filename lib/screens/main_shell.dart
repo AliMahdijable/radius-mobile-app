@@ -85,14 +85,14 @@ class _MainShellState extends State<MainShell> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.block, color: Color(0xFFDC2626), size: 40),
+        icon: Icon(Icons.block, color: AppColors.errorFill, size: 40),
         title: const Text('تم إيقاف حسابك', textAlign: TextAlign.center),
         content: Text(msg,
             textAlign: TextAlign.center, style: const TextStyle(height: 1.5)),
         actions: [
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
+              backgroundColor: AppColors.errorFill,
               minimumSize: const Size(double.infinity, 40),
             ),
             onPressed: () {
@@ -500,7 +500,7 @@ class _QuickAddSheet extends StatelessWidget {
           if (Perms.has('subscribers.add'))
             _QuickItem(
               icon: Icons.person_add_rounded,
-              color: const Color(0xFF3B82F6),
+              color: AppColors.brandAccent,
               title: 'dashboard.add_subscriber'.tr(),
               subtitle: 'dashboard.add_subscriber_hint'.tr(),
               onTap: () => showAddSubscriberSheet(rootContext),
@@ -524,7 +524,7 @@ class _QuickAddSheet extends StatelessWidget {
           if (Perms.has('subscribers.pay_debt'))
             _QuickItem(
               icon: Icons.payments_rounded,
-              color: const Color(0xFF14B8A6),
+              color: AppColors.success,
               title: 'dashboard.pay_debt'.tr(),
               subtitle: 'dashboard.pay_debt_hint'.tr(),
               onTap: () async {
@@ -541,7 +541,7 @@ class _QuickAddSheet extends StatelessWidget {
           if (Perms.has('subscribers.add_debt'))
             _QuickItem(
               icon: Icons.account_balance_wallet_rounded,
-              color: const Color(0xFFE08F2D),
+              color: AppColors.warning,
               title: 'dashboard.add_debt'.tr(),
               subtitle: 'dashboard.add_debt_hint'.tr(),
               onTap: () async {
@@ -557,7 +557,7 @@ class _QuickAddSheet extends StatelessWidget {
           if (Perms.has('reports.expenses'))
             _QuickItem(
               icon: Icons.receipt_long_rounded,
-              color: const Color(0xFF8B5CF6),
+              color: AppColors.brandAccent,
               title: 'dashboard.add_expense'.tr(),
               subtitle: 'dashboard.add_expense_hint'.tr(),
               onTap: () => showAddExpenseSheet(rootContext),

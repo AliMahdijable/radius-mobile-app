@@ -98,8 +98,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
     }
     setState(() => _submitting = true);
     String two(int n) => n.toString().padLeft(2, '0');
-    final dateStr =
-        '${_date.year}-${two(_date.month)}-${two(_date.day)}';
+    final dateStr = '${_date.year}-${two(_date.month)}-${two(_date.day)}';
     final result = await ExpensesApi.update(
       id: widget.row.id,
       amount: _amount,
@@ -108,16 +107,16 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    showSheetSnack(context, result.ok
-            ? 'تم التعديل'
-            : (result.message ?? 'تعذّر التعديل'), isError: (result.ok) ? false : true);
+    showSheetSnack(
+        context, result.ok ? 'تم التعديل' : (result.message ?? 'تعذّر التعديل'),
+        isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF8B5CF6);
+    final accent = AppColors.brandAccent;
     String two(int n) => n.toString().padLeft(2, '0');
     final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';
     return DraggableScrollableSheet(
@@ -129,8 +128,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           child: Column(
             children: [
@@ -155,8 +153,8 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                         color: accent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.md),
                       ),
-                      child: const Icon(LucideIcons.fileEdit,
-                          size: 16, color: accent),
+                      child:
+                          Icon(LucideIcons.fileEdit, size: 16, color: accent),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -189,8 +187,8 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     _label('المبلغ *'),
                     TextField(
@@ -199,8 +197,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                       style: AppType.input(color: AppColors.textHi),
                       decoration: InputDecoration(
                         hintText: 'مثلاً 25,000',
-                        hintStyle:
-                            AppType.input(color: AppColors.textLow),
+                        hintStyle: AppType.input(color: AppColors.textLow),
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
@@ -226,8 +223,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                                 final picked = await showDatePicker(
                                   context: context,
                                   initialDate: _date,
-                                  firstDate:
-                                      DateTime(_date.year - 2, 1, 1),
+                                  firstDate: DateTime(_date.year - 2, 1, 1),
                                   lastDate: DateTime.now(),
                                   helpText: 'اختر تاريخ الصرفية',
                                   cancelText: 'إلغاء',
@@ -243,8 +239,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                               horizontal: 10, vertical: 12),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(R.sm),
-                            border:
-                                Border.all(color: AppColors.border),
+                            border: Border.all(color: AppColors.border),
                           ),
                           child: Row(
                             children: [
@@ -254,8 +249,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                               Expanded(
                                 child: Text(
                                   dateLabel,
-                                  style: AppType.input(
-                                      color: AppColors.textHi),
+                                  style: AppType.input(color: AppColors.textHi),
                                 ),
                               ),
                               Icon(LucideIcons.chevronDown,
@@ -273,8 +267,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                       style: AppType.input(color: AppColors.textHi),
                       decoration: InputDecoration(
                         hintText: 'وصف الصرفية…',
-                        hintStyle:
-                            AppType.input(color: AppColors.textLow),
+                        hintStyle: AppType.input(color: AppColors.textLow),
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
@@ -292,13 +285,11 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, 0, Sp.lg, Sp.md),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed:
-                          _submitting || _amount <= 0 ? null : _submit,
+                      onPressed: _submitting || _amount <= 0 ? null : _submit,
                       icon: _submitting
                           ? const SizedBox(
                               width: 14,
@@ -320,7 +311,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),

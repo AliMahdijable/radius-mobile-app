@@ -310,7 +310,7 @@ class _AddSheetState extends State<_AddSheet> {
               color: AppColors.brand.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(
-                color: AppColors.brand.withValues(alpha: 0.15),
+                color: AppColors.brandSoftBg,
               ),
             ),
             child: Row(
@@ -493,8 +493,7 @@ class _PackagePicker extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         '${e.value.price!.round()} د.ع',
-                        style: AppType.muted(color: const Color(0xFFE08F2D))
-                            .copyWith(
+                        style: AppType.muted(color: AppColors.warning).copyWith(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),

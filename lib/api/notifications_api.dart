@@ -105,8 +105,8 @@ class NotificationsApi {
   }
 
   /// PUT /api/admin/notification-prefs — يحفظ المفاتيح المعدّلة.
-  static Future<({bool ok, String? message, NotificationPrefs? prefs})>
-      save(NotificationPrefs p) async {
+  static Future<({bool ok, String? message, NotificationPrefs? prefs})> save(
+      NotificationPrefs p) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
         '/api/admin/notification-prefs',
@@ -124,8 +124,8 @@ class NotificationsApi {
       NotificationPrefs? returned;
       final returnedRaw = body['prefs'];
       if (returnedRaw is Map) {
-        returned = NotificationPrefs.fromJson(
-            Map<String, dynamic>.from(returnedRaw));
+        returned =
+            NotificationPrefs.fromJson(Map<String, dynamic>.from(returnedRaw));
       }
       return (
         ok: ok,

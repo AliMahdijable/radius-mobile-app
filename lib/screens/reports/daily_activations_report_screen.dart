@@ -73,8 +73,7 @@ class _DailyActivationsReportScreenState
     final r = await ReportsApi.dailyActivations(
       from: _range.from,
       to: _range.to,
-      userIds:
-          _filters.actionManagerId == null ? _scopeIds : null,
+      userIds: _filters.actionManagerId == null ? _scopeIds : null,
       actionManagerId: _filters.actionManagerId,
       userManager: _filters.userManager,
       employeeId: _filters.employeeId,
@@ -108,8 +107,7 @@ class _DailyActivationsReportScreenState
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final visible = _visibleRows;
-    final totalPages =
-        (visible.length / _pageSize).ceil().clamp(1, 99999);
+    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
     final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
     final pageRows = visible.isEmpty
@@ -119,101 +117,102 @@ class _DailyActivationsReportScreenState
       permission: 'reports.daily_activations',
       title: 'reports.daily_activations'.tr(),
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'reports.daily_activations'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'reports.daily_activations'.tr(),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: AppColors.brand,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-            children: [
-              // شريط "اليوم" ثابت — تنبيه بصري بأن الصفحة scope=today.
-              _todayBadge(),
-              const SizedBox(height: Sp.sm),
-              ReportFiltersPanel(
-                value: _filters,
-                // بلا actionTypes — الشاشة scope=تفعيلات-اليوم-أصلاً.
-                includeActionTypes: false,
-                onChanged: (v) {
-                  setState(() {
-                    _filters = v;
-                    _page = 0;
-                  });
-                  _load();
-                },
-              ),
-              const SizedBox(height: Sp.md),
-              _summary(),
-              const SizedBox(height: Sp.md),
-              _typeChips(),
-              const SizedBox(height: Sp.sm),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Sp.huge),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                _errorBlock()
-              else if (_rows.isEmpty)
-                _emptyBlock()
-              else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: ReportStatsBar(
-                        totalItems: visible.length,
-                        pageStart: pageStart,
-                        pageEnd: pageEnd,
-                        pageSize: _pageSize,
-                        onPageSizeChange: (s) => setState(() {
-                          _pageSize = s;
-                          _page = 0;
-                        }),
-                      ),
-                    ),
-                    ReportExportBar(
-                      title: 'reports.daily_activations'.tr(),
-                      subtitle:
-                          '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                      fileNameBase: 'daily_activations',
-                      columns: [
-                        'reports.col_day'.tr(),
-                        'sheets.pay_cash'.tr(),
-                        'actions.activate_non_cash'.tr(),
-                        'dashboard.revenue'.tr(),
-                      ],
-                      rows: _exportRows,
-                    ),
-                  ],
-                ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            color: AppColors.brand,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+              children: [
+                // شريط "اليوم" ثابت — تنبيه بصري بأن الصفحة scope=today.
+                _todayBadge(),
                 const SizedBox(height: Sp.sm),
-                for (final r in pageRows) ...[
-                  _dayRow(r),
-                  const SizedBox(height: 6),
-                ],
-                if (totalPages > 1)
-                  ReportPager(
-                    page: _page,
-                    totalPages: totalPages,
-                    onPrev: () => setState(() => _page--),
-                    onNext: () => setState(() => _page++),
+                ReportFiltersPanel(
+                  value: _filters,
+                  // بلا actionTypes — الشاشة scope=تفعيلات-اليوم-أصلاً.
+                  includeActionTypes: false,
+                  onChanged: (v) {
+                    setState(() {
+                      _filters = v;
+                      _page = 0;
+                    });
+                    _load();
+                  },
+                ),
+                const SizedBox(height: Sp.md),
+                _summary(),
+                const SizedBox(height: Sp.md),
+                _typeChips(),
+                const SizedBox(height: Sp.sm),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Sp.huge),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  _errorBlock()
+                else if (_rows.isEmpty)
+                  _emptyBlock()
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ReportStatsBar(
+                          totalItems: visible.length,
+                          pageStart: pageStart,
+                          pageEnd: pageEnd,
+                          pageSize: _pageSize,
+                          onPageSizeChange: (s) => setState(() {
+                            _pageSize = s;
+                            _page = 0;
+                          }),
+                        ),
+                      ),
+                      ReportExportBar(
+                        title: 'reports.daily_activations'.tr(),
+                        subtitle:
+                            '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                        fileNameBase: 'daily_activations',
+                        columns: [
+                          'reports.col_day'.tr(),
+                          'sheets.pay_cash'.tr(),
+                          'actions.activate_non_cash'.tr(),
+                          'dashboard.revenue'.tr(),
+                        ],
+                        rows: _exportRows,
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: Sp.sm),
+                  for (final r in pageRows) ...[
+                    _dayRow(r),
+                    const SizedBox(height: 6),
+                  ],
+                  if (totalPages > 1)
+                    ReportPager(
+                      page: _page,
+                      totalPages: totalPages,
+                      onPrev: () => setState(() => _page--),
+                      onNext: () => setState(() => _page++),
+                    ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -232,7 +231,7 @@ class _DailyActivationsReportScreenState
               icon: LucideIcons.zap,
               label: 'reports.total_activations'.tr(),
               value: '$_totalCount',
-              color: const Color(0xFF14B8A6),
+              color: AppColors.success,
             ),
           ),
           Container(width: 1, height: 32, color: AppColors.border),
@@ -267,9 +266,7 @@ class _DailyActivationsReportScreenState
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
-        Text(label,
-            style: AppType.muted().copyWith(fontSize: 10),
-            maxLines: 1),
+        Text(label, style: AppType.muted().copyWith(fontSize: 10), maxLines: 1),
       ],
     );
   }
@@ -285,10 +282,9 @@ class _DailyActivationsReportScreenState
       child: Row(
         children: [
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.brand.withValues(alpha: 0.12),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Text(
@@ -307,25 +303,24 @@ class _DailyActivationsReportScreenState
               children: [
                 Row(
                   children: [
-                    Icon(LucideIcons.zap,
-                        size: 12, color: const Color(0xFF14B8A6)),
+                    Icon(LucideIcons.zap, size: 12, color: AppColors.success),
                     const SizedBox(width: 4),
                     Text('${r.count} نقدي',
-                        style: AppType.label(color: AppColors.textHi)
-                            .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+                        style: AppType.label(color: AppColors.textHi).copyWith(
+                            fontSize: 11, fontWeight: FontWeight.w700)),
                     const SizedBox(width: 10),
                     Icon(LucideIcons.creditCard,
-                        size: 12, color: const Color(0xFFE08F2D)),
+                        size: 12, color: AppColors.warning),
                     const SizedBox(width: 4),
                     Text('${r.nonCashCount} غير نقدي',
-                        style: AppType.label(color: AppColors.textHi)
-                            .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+                        style: AppType.label(color: AppColors.textHi).copyWith(
+                            fontSize: 11, fontWeight: FontWeight.w700)),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text('إيراد: ${formatIQD(r.cashSum)} د.ع',
-                    style: AppType.muted().copyWith(
-                        fontSize: 11, color: AppColors.brand)),
+                    style: AppType.muted()
+                        .copyWith(fontSize: 11, color: AppColors.brand)),
               ],
             ),
           ),
@@ -351,8 +346,7 @@ class _DailyActivationsReportScreenState
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(LucideIcons.calendarCheck,
-              size: 14, color: AppColors.brand),
+          Icon(LucideIcons.calendarCheck, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('اليوم — ${_fmtToday()}',
               style: AppType.label(color: AppColors.textHi)
@@ -375,8 +369,8 @@ class _DailyActivationsReportScreenState
     final nonCashOnly = _rows.where((r) => r.nonCashCount > 0).length;
     final noRev = _rows.where((r) => r.count == 0).length;
     final chips = [
-      ('all', 'الكل', all, const Color(0xFF14B8A6)),
-      ('cash_only', 'أيام نقدي', cashOnly, const Color(0xFF14B8A6)),
+      ('all', 'الكل', all, AppColors.success),
+      ('cash_only', 'أيام نقدي', cashOnly, AppColors.success),
       ('non_cash_only', 'أيام غير نقدي', nonCashOnly, AppColors.error),
       ('no_revenue', 'بلا إيراد', noRev, AppColors.textLow),
     ];
@@ -398,9 +392,8 @@ class _DailyActivationsReportScreenState
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: selected
-                    ? c.$4.withValues(alpha: 0.18)
-                    : AppColors.surface,
+                color:
+                    selected ? c.$4.withValues(alpha: 0.18) : AppColors.surface,
                 borderRadius: BorderRadius.circular(R.sm),
                 border: Border.all(
                   color: selected
@@ -422,8 +415,8 @@ class _DailyActivationsReportScreenState
                   ),
                   const SizedBox(width: 5),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: (selected ? c.$4 : AppColors.textLow)
                           .withValues(alpha: 0.15),
@@ -452,8 +445,7 @@ class _DailyActivationsReportScreenState
         child: Center(
           child: Column(
             children: [
-              Icon(LucideIcons.calendar,
-                  size: 36, color: AppColors.textLow),
+              Icon(LucideIcons.calendar, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
               Text('لا توجد تفعيلات في هذه الفترة',
                   style: AppType.label(color: AppColors.textMid)),
@@ -467,11 +459,9 @@ class _DailyActivationsReportScreenState
         child: Center(
           child: Column(
             children: [
-              Icon(LucideIcons.triangleAlert,
-                  size: 32, color: AppColors.error),
+              Icon(LucideIcons.triangleAlert, size: 32, color: AppColors.error),
               const SizedBox(height: 8),
-              Text(_error!,
-                  style: AppType.subtitle(color: AppColors.textMid)),
+              Text(_error!, style: AppType.subtitle(color: AppColors.textMid)),
               const SizedBox(height: Sp.md),
               ElevatedButton.icon(
                 onPressed: _load,

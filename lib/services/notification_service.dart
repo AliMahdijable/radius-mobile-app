@@ -83,8 +83,7 @@ class NotificationService {
   static Future<bool> isAuthorized() async {
     if (_firebaseAvailable) {
       try {
-        final s =
-            await FirebaseMessaging.instance.getNotificationSettings();
+        final s = await FirebaseMessaging.instance.getNotificationSettings();
         return s.authorizationStatus == AuthorizationStatus.authorized ||
             s.authorizationStatus == AuthorizationStatus.provisional;
       } catch (_) {/* fall through */}

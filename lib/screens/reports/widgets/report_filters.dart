@@ -75,6 +75,7 @@ class ReportFilters {
 class ReportActionTypeOption {
   const ReportActionTypeOption({required this.key, required this.label});
   final String key;
+
   /// النص المخزّن هنا هو translation key بشكل 'actions.<name>'. يمرّ
   /// عبر displayLabel لاسترجاع النص المُترجم.
   final String label;
@@ -108,7 +109,8 @@ const List<ReportActionTypeOption> kAccountStatementActionTypes = [
   ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'actions.activate'),
   ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend'),
   ReportActionTypeOption(key: 'DEBT_PAY', label: 'actions.debt_pay'),
-  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
+  ReportActionTypeOption(
+      key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
   ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
 ];
 
@@ -116,7 +118,8 @@ const List<ReportActionTypeOption> kAllActionTypes = [
   ReportActionTypeOption(key: 'SUBSCRIBER_ACTIVATE', label: 'actions.activate'),
   ReportActionTypeOption(key: 'SUBSCRIBER_EXTEND', label: 'actions.extend'),
   ReportActionTypeOption(key: 'DEBT_PAY', label: 'actions.debt_pay'),
-  ReportActionTypeOption(key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
+  ReportActionTypeOption(
+      key: 'BALANCE_DEDUCT', label: 'actions.balance_deduct'),
   ReportActionTypeOption(key: 'BALANCE_ADD', label: 'actions.debt_add'),
   ReportActionTypeOption(key: 'ADMIN_EXPENSE', label: 'actions.expense'),
   ReportActionTypeOption(key: 'EXPENSE_ADD', label: 'actions.expense_manual'),
@@ -128,7 +131,8 @@ const List<ReportActionTypeOption> kAllActionTypes = [
   ReportActionTypeOption(key: 'MANAGER_DELETE', label: 'actions.mgr_delete'),
   ReportActionTypeOption(key: 'PACKAGE_EDIT', label: 'actions.pkg_edit'),
   ReportActionTypeOption(key: 'DISCOUNT_SET', label: 'actions.discount_set'),
-  ReportActionTypeOption(key: 'DISCOUNT_REMOVE', label: 'actions.discount_remove'),
+  ReportActionTypeOption(
+      key: 'DISCOUNT_REMOVE', label: 'actions.discount_remove'),
 ];
 
 /// لوحة فلاتر أفقية inline — دائماً ظاهرة على أعلى الشاشة (مطابق web).
@@ -194,8 +198,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
     if (!mounted) return;
     setState(() {
       _managers = (results[0] as List<ManagerLite>?) ?? const [];
-      _employees =
-          (results[1] as ({List<Employee> rows, String? error})).rows;
+      _employees = (results[1] as ({List<Employee> rows, String? error})).rows;
       _currentAdminId = results[2] as String?;
       _loading = false;
     });
@@ -221,18 +224,15 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
               children: [
                 Row(
                   children: [
-                    Icon(LucideIcons.filter,
-                        size: 14, color: AppColors.brand),
+                    Icon(LucideIcons.filter, size: 14, color: AppColors.brand),
                     const SizedBox(width: 6),
                     Text('filters.title'.tr(),
-                        style: AppType.label(color: AppColors.textHi)
-                            .copyWith(
-                                fontSize: 12, fontWeight: FontWeight.w800)),
+                        style: AppType.label(color: AppColors.textHi).copyWith(
+                            fontSize: 12, fontWeight: FontWeight.w800)),
                     const Spacer(),
                     if (!widget.value.isEmpty)
                       InkWell(
-                        onTap: () =>
-                            widget.onChanged(const ReportFilters()),
+                        onTap: () => widget.onChanged(const ReportFilters()),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
                           child: Row(
@@ -300,8 +300,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       onTap: () async {
         final picked = await _openActionTypesDialog(context, selected);
         if (picked != null) {
-          widget.onChanged(widget.value.copyWith(
-              actionTypes: picked.isEmpty ? null : picked));
+          widget.onChanged(widget.value
+              .copyWith(actionTypes: picked.isEmpty ? null : picked));
         }
       },
       active: selected.isNotEmpty,
@@ -317,8 +317,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       builder: (dctx) {
         return StatefulBuilder(builder: (dctx, setLocal) {
           return Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-                horizontal: 24, vertical: 60),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(R.lg),
             ),
@@ -336,8 +336,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                       Text('filters.action_types_title'.tr(),
                           style: AppType.title(color: AppColors.textHi)
                               .copyWith(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800)),
+                                  fontSize: 14, fontWeight: FontWeight.w800)),
                       const Spacer(),
                       if (set.isNotEmpty)
                         TextButton(
@@ -425,8 +424,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                         child: TextButton(
                           onPressed: () => Navigator.pop(dctx),
                           style: TextButton.styleFrom(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                           child: Text('common.cancel'.tr(),
                               style: TextStyle(
@@ -438,20 +436,17 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                       Expanded(
                         flex: 2,
                         child: FilledButton(
-                          onPressed: () =>
-                              Navigator.pop(dctx, set.toList()),
+                          onPressed: () => Navigator.pop(dctx, set.toList()),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.brand,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                           child: Text(
                               set.isEmpty
                                   ? 'common.apply'.tr()
                                   : '${'common.apply'.tr()} (${set.length})',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13)),
+                                  fontWeight: FontWeight.w800, fontSize: 13)),
                         ),
                       ),
                     ],
@@ -484,8 +479,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       active: selected != null,
       onTap: () => _showManagerMenu(
         byId: true,
-        onPick: (v) => widget.onChanged(
-            widget.value.copyWith(actionManagerId: v as String?)),
+        onPick: (v) => widget
+            .onChanged(widget.value.copyWith(actionManagerId: v as String?)),
         current: selected,
       ),
     );
@@ -529,7 +524,9 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       context: context,
       builder: (dctx) {
         return SimpleDialog(
-          title: Text(byId ? 'filters.pick_action_manager'.tr() : 'filters.pick_user_manager'.tr()),
+          title: Text(byId
+              ? 'filters.pick_action_manager'.tr()
+              : 'filters.pick_user_manager'.tr()),
           children: [
             _dialogTile(dctx, 'common.all'.tr(), current == null, () {
               onPick(null);
@@ -541,9 +538,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                 byId && _currentAdminId == m.id.toString()
                     ? '${m.displayName} (${'common.me'.tr()})'
                     : m.displayName,
-                byId
-                    ? current == m.id.toString()
-                    : current == m.username,
+                byId ? current == m.id.toString() : current == m.username,
                 () {
                   onPick(byId ? m.id.toString() : m.username);
                   Navigator.pop(dctx);
@@ -601,8 +596,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
               title: Text('filters.pick_employee'.tr()),
               children: [
                 _dialogTile(dctx, 'common.all'.tr(), selected == null, () {
-                  widget.onChanged(
-                      widget.value.copyWith(employeeId: null));
+                  widget.onChanged(widget.value.copyWith(employeeId: null));
                   Navigator.pop(dctx);
                 }),
                 for (final e in employees)
@@ -611,8 +605,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                     e.fullName ?? e.username,
                     selected == e.id,
                     () {
-                      widget.onChanged(
-                          widget.value.copyWith(employeeId: e.id));
+                      widget.onChanged(widget.value.copyWith(employeeId: e.id));
                       Navigator.pop(dctx);
                     },
                   ),
@@ -638,14 +631,10 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: active
-              ? AppColors.brand.withValues(alpha: 0.10)
-              : AppColors.surfaceInput,
+          color: active ? AppColors.brandSoftBg : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
-            color: active
-                ? AppColors.brand.withValues(alpha: 0.45)
-                : AppColors.border,
+            color: active ? AppColors.brandSoftBorder : AppColors.border,
           ),
         ),
         child: Row(
@@ -662,8 +651,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                 ),
               ),
             ),
-            Icon(LucideIcons.chevronDown,
-                size: 13, color: AppColors.textLow),
+            Icon(LucideIcons.chevronDown, size: 13, color: AppColors.textLow),
           ],
         ),
       ),

@@ -40,8 +40,8 @@ class ReportPermissionGate extends StatelessWidget {
             scrolledUnderElevation: 0,
             title: Text(
               title,
-              style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 16),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
             ),
             iconTheme: IconThemeData(color: AppColors.textHi),
           ),
@@ -70,15 +70,16 @@ class ReportPermissionGate extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'reports.no_permission_hint'.tr(namedArgs: {'perm': permission}),
+                      'reports.no_permission_hint'
+                          .tr(namedArgs: {'perm': permission}),
                       textAlign: TextAlign.center,
-                      style: AppType.muted().copyWith(fontSize: 12, height: 1.6),
+                      style:
+                          AppType.muted().copyWith(fontSize: 12, height: 1.6),
                     ),
                     const SizedBox(height: Sp.lg),
                     ElevatedButton.icon(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon:
-                          const Icon(LucideIcons.chevronRight, size: 16),
+                      icon: const Icon(LucideIcons.chevronRight, size: 16),
                       label: Text('common.back'.tr()),
                     ),
                   ],

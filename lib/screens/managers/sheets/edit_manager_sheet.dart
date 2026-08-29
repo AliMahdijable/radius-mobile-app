@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '_manager_form.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../theme/colors.dart';
 
 /// تعديل مدير قائم. كلمة السر اختيارية (تترك فاضية = لا تغيير).
 Future<bool?> showEditManagerSheet(BuildContext context, Manager m) {
@@ -27,7 +28,7 @@ class _EditManagerSheet extends StatelessWidget {
       title: 'تعديل مدير',
       subtitle: manager.username,
       icon: LucideIcons.userCog,
-      accent: const Color(0xFF3B82F6),
+      accent: AppColors.brandAccent,
       submitLabel: 'حفظ',
       requirePassword: false,
       initial: ManagerFormInitial(

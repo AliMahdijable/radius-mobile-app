@@ -33,14 +33,21 @@ Future<bool?> showBalanceOpSheet(
 }
 
 enum _BalanceOp {
-  deposit('شحن', Color(0xFF14B8A6), LucideIcons.arrowUpToLine),
-  withdraw('سحب', Color(0xFFE08F2D), LucideIcons.arrowDownToLine),
-  addPoints('نقاط', Color(0xFF8B5CF6), LucideIcons.star);
+  deposit('شحن', LucideIcons.arrowUpToLine),
+  withdraw('سحب', LucideIcons.arrowDownToLine),
+  addPoints('نقاط', LucideIcons.star);
 
-  const _BalanceOp(this.label, this.color, this.icon);
+  const _BalanceOp(this.label, this.icon);
   final String label;
-  final Color color;
   final IconData icon;
+
+  /// getter لا حقل const — نفس سبب `ManagerAction.color`: حقل الـenum
+  /// الثابت لا يقبل توكناً يعرف الوضع الليلي.
+  Color get color => switch (this) {
+        _BalanceOp.deposit => AppColors.success,
+        _BalanceOp.withdraw => AppColors.warning,
+        _BalanceOp.addPoints => AppColors.brandAccent,
+      };
 
   static _BalanceOp fromKind(BalanceOpKind? k) {
     switch (k) {
@@ -72,6 +79,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   int _amount = 0;
   bool _submitting = false;
   bool _suppressFormat = false;
+
   /// مطلب 2026-06-12: عند الشحن، إذا فعّل المدير "آجل" يصير الإيداع
   /// كـدين على المدير الفرعي بدل شحن نقدي. مطابق v1 isLoan.
   bool _isLoan = false;
@@ -226,7 +234,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       rootMessenger?.showSnackBar(
         SnackBar(
           content: Text(failures.join(' · ')),
-          backgroundColor: const Color(0xFFE08F2D),
+          backgroundColor: AppColors.warning,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -248,8 +256,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
@@ -275,8 +282,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                         color: _op.color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.md),
                       ),
-                      child:
-                          Icon(_op.icon, size: 16, color: _op.color),
+                      child: Icon(_op.icon, size: 16, color: _op.color),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -310,8 +316,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -323,8 +329,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                           ],
                         ),
                         borderRadius: BorderRadius.circular(R.md),
-                        border: Border.all(
-                            color: _op.color.withValues(alpha: 0.3)),
+                        border:
+                            Border.all(color: _op.color.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -333,15 +339,13 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                           const SizedBox(width: 8),
                           Text(
                             'الرصيد الحالي ',
-                            style:
-                                AppType.muted().copyWith(fontSize: 12),
+                            style: AppType.muted().copyWith(fontSize: 12),
                           ),
                           Text(
                             '${formatIQD(widget.manager.balance ?? 0)} د.ع',
                             style: AppType.label(color: AppColors.textHi)
                                 .copyWith(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800),
+                                    fontSize: 14, fontWeight: FontWeight.w800),
                           ),
                         ],
                       ),
@@ -367,16 +371,13 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: _isLoan
-                              ? const Color(0xFFE08F2D)
-                                  .withValues(alpha: 0.08)
+                              ? AppColors.warning.withValues(alpha: 0.08)
                               : AppColors.surfaceInput,
                           borderRadius: BorderRadius.circular(R.sm),
                           border: Border.all(
                               color: _isLoan
-                                  ? const Color(0xFFE08F2D)
-                                      .withValues(alpha: 0.4)
-                                  : AppColors.border
-                                      .withValues(alpha: 0.5)),
+                                  ? AppColors.warning.withValues(alpha: 0.4)
+                                  : AppColors.border.withValues(alpha: 0.5)),
                         ),
                         child: Row(
                           children: [
@@ -386,22 +387,21 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                                   : LucideIcons.banknote,
                               size: 14,
                               color: _isLoan
-                                  ? const Color(0xFFE08F2D)
+                                  ? AppColors.warning
                                   : AppColors.textMid,
                             ),
                             const SizedBox(width: 7),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     _isLoan ? 'إيداع آجل' : 'شحن نقدي',
-                                    style: AppType.label(
-                                            color: AppColors.textHi)
-                                        .copyWith(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800),
+                                    style:
+                                        AppType.label(color: AppColors.textHi)
+                                            .copyWith(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800),
                                   ),
                                   Text(
                                     _isLoan
@@ -416,9 +416,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                             ),
                             Switch.adaptive(
                               value: _isLoan,
-                              activeColor: const Color(0xFFE08F2D),
-                              onChanged: (v) =>
-                                  setState(() => _isLoan = v),
+                              activeColor: AppColors.warning,
+                              onChanged: (v) => setState(() => _isLoan = v),
                             ),
                           ],
                         ),
@@ -432,8 +431,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                       style: AppType.input(color: AppColors.textHi),
                       decoration: InputDecoration(
                         hintText: 'مثلاً 50,000',
-                        hintStyle:
-                            AppType.input(color: AppColors.textLow),
+                        hintStyle: AppType.input(color: AppColors.textLow),
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
@@ -478,8 +476,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                       style: AppType.input(color: AppColors.textHi),
                       decoration: InputDecoration(
                         hintText: 'سبب العملية…',
-                        hintStyle:
-                            AppType.input(color: AppColors.textLow),
+                        hintStyle: AppType.input(color: AppColors.textLow),
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
@@ -497,14 +494,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, 0, Sp.lg, Sp.md),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: (_amount > 0 && !_submitting)
-                          ? _submit
-                          : null,
+                      onPressed: (_amount > 0 && !_submitting) ? _submit : null,
                       icon: _submitting
                           ? const SizedBox(
                               width: 14,
@@ -526,7 +520,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _op.color,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),
@@ -549,8 +543,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       decoration: BoxDecoration(
         color: AppColors.surfaceInput,
         borderRadius: BorderRadius.circular(R.sm),
-        border:
-            Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         children: [
@@ -585,16 +578,14 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             controlAffinity: ListTileControlAffinity.leading,
             value: _sendPush,
             onChanged: (v) => setState(() => _sendPush = v ?? false),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(LucideIcons.bell,
-                    size: 14, color: Color(0xFF3B82F6)),
+                Icon(LucideIcons.bell, size: 14, color: AppColors.brandAccent),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'إشعار داخل تطبيق المدير',
-                    style: TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -608,8 +599,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 4, right: 2),
         child: Text(t,
-            style: AppType.muted(color: AppColors.textMid).copyWith(
-                fontSize: 11, fontWeight: FontWeight.w700)),
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
       );
 
   Widget _opChip(_BalanceOp op) {
@@ -622,9 +613,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: selected
-                ? op.color.withValues(alpha: 0.15)
-                : AppColors.surface,
+            color:
+                selected ? op.color.withValues(alpha: 0.15) : AppColors.surface,
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
               color: selected ? op.color : AppColors.border,
@@ -635,8 +625,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(op.icon,
-                  size: 13,
-                  color: selected ? op.color : AppColors.textMid),
+                  size: 13, color: selected ? op.color : AppColors.textMid),
               const SizedBox(width: 5),
               Text(
                 op.label,
@@ -662,8 +651,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           final f = _fmt(next);
           _suppressFormat = true;
           _amountCtrl.value = TextEditingValue(
-              text: f,
-              selection: TextSelection.collapsed(offset: f.length));
+              text: f, selection: TextSelection.collapsed(offset: f.length));
           _suppressFormat = false;
           setState(() => _amount = next);
         },
@@ -673,8 +661,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           decoration: BoxDecoration(
             color: _op.color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(R.sm),
-            border:
-                Border.all(color: _op.color.withValues(alpha: 0.25)),
+            border: Border.all(color: _op.color.withValues(alpha: 0.25)),
           ),
           child: Text(
             '+${_fmt(v)}',

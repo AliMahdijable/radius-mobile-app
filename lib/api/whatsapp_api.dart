@@ -429,9 +429,8 @@ class WhatsAppApi {
             : (active is num ? active != 0 : active?.toString() == '1');
         final content = (row['message_content'] ?? '').toString();
         final chRaw = row['default_channel']?.toString() ?? 'auto';
-        final ch = ['auto', 'whatsapp', 'telegram'].contains(chRaw)
-            ? chRaw
-            : 'auto';
+        final ch =
+            ['auto', 'whatsapp', 'telegram'].contains(chRaw) ? chRaw : 'auto';
         out.add(WhatsTemplate(
           templateType: type,
           isActive: isActive,
@@ -694,6 +693,7 @@ class WhatsAppApi {
     required String templateName,
     required String messageContent,
     required bool isActive,
+
     /// 2026-08-26: قناة افتراضيّة للقالب — 'auto' / 'whatsapp' / 'telegram'.
     String defaultChannel = 'auto',
   }) async {
@@ -1093,7 +1093,9 @@ class WhatsAppApi {
         ok: ok,
         channel: 'whatsapp',
         reason: ok ? null : 'manual_wa_failed',
-        message: ok ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة' : 'تعذّر فتح واتساب',
+        message: ok
+            ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة'
+            : 'تعذّر فتح واتساب',
       );
     }
     return sendMessage(

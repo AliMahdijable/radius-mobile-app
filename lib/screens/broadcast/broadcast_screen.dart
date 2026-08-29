@@ -26,6 +26,7 @@ class BroadcastScreen extends StatefulWidget {
 }
 
 enum _Filter { all, debtors, expired, expiring }
+
 enum _Scope { all, specific }
 
 class _BroadcastScreenState extends State<BroadcastScreen> {
@@ -45,6 +46,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   /// null = لم يُحمَّل بعد. فارغة = المدير ما عنده مدراء فرعيون —
   /// فلتر المدير يُخفى.
   List<String>? _subManagers;
+
   /// selectedSubManagers = null أو فارغة → "الكل" (بدون فلترة).
   /// خلاف ذلك = فقط مشتركو هؤلاء المدراء.
   final Set<String> _managerFilter = <String>{};
@@ -96,8 +98,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   // ─── فلاتر ─────────────────────────────────────
 
   List<Subscriber> get _withPhone => _subs
-      .where((s) =>
-          (s.phone?.length ?? 0) >= 10 || (s.mobile?.length ?? 0) >= 10)
+      .where(
+          (s) => (s.phone?.length ?? 0) >= 10 || (s.mobile?.length ?? 0) >= 10)
       .toList();
 
   /// المشتركون بعد فلتر الفئة (all/debtors/expired/expiring).
@@ -231,12 +233,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     final txt = _msg.text;
     final start = sel.start < 0 ? txt.length : sel.start;
     final end = sel.end < 0 ? txt.length : sel.end;
-    final next =
-        txt.substring(0, start) + token + (start == txt.length ? '' : txt.substring(end));
+    final next = txt.substring(0, start) +
+        token +
+        (start == txt.length ? '' : txt.substring(end));
     final needsSpace = start > 0 && !txt.substring(0, start).endsWith(' ');
     final withSpace = needsSpace ? ' $token' : token;
-    final finalText =
-        txt.substring(0, start) + withSpace + txt.substring(end);
+    final finalText = txt.substring(0, start) + withSpace + txt.substring(end);
     _msg.value = TextEditingValue(
       text: finalText,
       selection: TextSelection.collapsed(offset: start + withSpace.length),
@@ -327,7 +329,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       'إعادة الفاشلة',
       'إعادة محاولة الرسائل الفاشلة من آخر 24 ساعة؟',
       confirmLabel: 'إعادة',
-      confirmColor: const Color(0xFFE08F2D),
+      confirmColor: AppColors.warning,
     );
     if (confirm != true) return;
     setState(() => _retrying = true);
@@ -335,7 +337,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     if (!mounted) return;
     setState(() => _retrying = false);
     _snack(
-      r.ok ? (r.message ?? 'تمّت إعادة المحاولة') : (r.message ?? 'فشلت إعادة المحاولة'),
+      r.ok
+          ? (r.message ?? 'تمّت إعادة المحاولة')
+          : (r.message ?? 'فشلت إعادة المحاولة'),
       isError: !r.ok,
     );
   }
@@ -364,8 +368,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         title: Text(title,
             style:
                 AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        content: Text(message,
-            style: AppType.subtitle(color: AppColors.textMid)),
+        content:
+            Text(message, style: AppType.subtitle(color: AppColors.textMid)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -373,8 +377,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(confirmLabel,
-                style: TextStyle(color: confirmColor)),
+            child: Text(confirmLabel, style: TextStyle(color: confirmColor)),
           ),
         ],
       ),
@@ -527,9 +530,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         height: 40,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? color.withValues(alpha: 0.14)
-              : AppColors.surfaceInput,
+          color:
+              selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
             color: selected ? color : AppColors.border,
@@ -579,42 +581,36 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             children: [
               _filterChip(_Filter.all, 'كل المشتركين', LucideIcons.users,
                   counts[_Filter.all] ?? 0, AppColors.brand),
-              _filterChip(
-                  _Filter.debtors,
-                  'المدينون',
-                  LucideIcons.wallet,
-                  counts[_Filter.debtors] ?? 0,
-                  const Color(0xFFE11D48)),
-              _filterChip(_Filter.expired, 'منتهي الصلاحية',
-                  LucideIcons.clock, counts[_Filter.expired] ?? 0, AppColors.error),
+              _filterChip(_Filter.debtors, 'المدينون', LucideIcons.wallet,
+                  counts[_Filter.debtors] ?? 0, AppColors.error),
+              _filterChip(_Filter.expired, 'منتهي الصلاحية', LucideIcons.clock,
+                  counts[_Filter.expired] ?? 0, AppColors.error),
               _filterChip(
                   _Filter.expiring,
                   'قرب الانتهاء (3 أيام)',
                   LucideIcons.triangleAlert,
                   counts[_Filter.expiring] ?? 0,
-                  const Color(0xFFE08F2D)),
+                  AppColors.warning),
             ],
           ),
           if (_candidates.isEmpty) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFE08F2D).withValues(alpha: 0.08),
+                color: AppColors.warning.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(R.sm),
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.triangleAlert,
-                      size: 12, color: Color(0xFFE08F2D)),
+                  Icon(LucideIcons.triangleAlert,
+                      size: 12, color: AppColors.warning),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'لا يوجد مشتركون يطابقون الفئة (يحتاجون أرقام هواتف صالحة)',
-                      style: AppType.muted().copyWith(
-                          fontSize: 10.5,
-                          color: const Color(0xFFE08F2D)),
+                      style: AppType.muted()
+                          .copyWith(fontSize: 10.5, color: AppColors.warning),
                     ),
                   ),
                 ],
@@ -626,7 +622,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     );
   }
 
-  Widget _filterChip(_Filter f, String label, IconData icon, int count, Color color) {
+  Widget _filterChip(
+      _Filter f, String label, IconData icon, int count, Color color) {
     final active = _filter == f;
     return Material(
       color: active ? color.withValues(alpha: 0.1) : AppColors.surface,
@@ -635,8 +632,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       child: InkWell(
         onTap: () => _selectFilter(f),
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             border: Border.all(
               color: active ? color.withValues(alpha: 0.4) : AppColors.border,
@@ -651,12 +647,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(icon, size: 14, color: active ? color : AppColors.textMid),
+                  Icon(icon,
+                      size: 14, color: active ? color : AppColors.textMid),
                   Text(
                     count.toString(),
-                    style: AppType.title(
-                            color: active ? color : AppColors.textHi)
-                        .copyWith(fontSize: 13),
+                    style:
+                        AppType.title(color: active ? color : AppColors.textHi)
+                            .copyWith(fontSize: 13),
                   ),
                 ],
               ),
@@ -664,8 +661,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               Text(
                 label,
                 style: AppType.muted().copyWith(
-                    fontSize: 10.5,
-                    color: active ? color : AppColors.textMid),
+                    fontSize: 10.5, color: active ? color : AppColors.textMid),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -746,9 +742,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     required ValueChanged<bool> onToggle,
   }) {
     return Material(
-      color: checked
-          ? AppColors.brand.withValues(alpha: 0.1)
-          : AppColors.surfaceInput,
+      color: checked ? AppColors.brandSoftBg : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -757,9 +751,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             border: Border.all(
-              color: checked
-                  ? AppColors.brand.withValues(alpha: 0.4)
-                  : AppColors.border,
+              color: checked ? AppColors.brandSoftBorder : AppColors.border,
               width: checked ? 1.4 : 1,
             ),
             borderRadius: BorderRadius.circular(R.sm),
@@ -823,9 +815,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       required String subtitle}) {
     final active = _scope == s;
     return Material(
-      color: active
-          ? AppColors.brand.withValues(alpha: 0.1)
-          : AppColors.surface,
+      color: active ? AppColors.brandSoftBg : AppColors.surface,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -834,9 +824,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             border: Border.all(
-              color: active
-                  ? AppColors.brand.withValues(alpha: 0.4)
-                  : AppColors.border,
+              color: active ? AppColors.brandSoftBorder : AppColors.border,
               width: active ? 1.4 : 1,
             ),
             borderRadius: BorderRadius.circular(R.sm),
@@ -889,8 +877,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         ),
         label: Text(
           allSelected ? 'إلغاء الكل' : 'تحديد الكل',
-          style: AppType.button(color: AppColors.brand)
-              .copyWith(fontSize: 11),
+          style: AppType.button(color: AppColors.brand).copyWith(fontSize: 11),
         ),
         style: TextButton.styleFrom(
           minimumSize: const Size(0, 30),
@@ -906,8 +893,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             decoration: InputDecoration(
               hintText: 'ابحث بالاسم أو الهاتف…',
               hintStyle: AppType.muted().copyWith(fontSize: 12),
-              prefixIcon: Icon(LucideIcons.search,
-                  size: 14, color: AppColors.textMid),
+              prefixIcon:
+                  Icon(LucideIcons.search, size: 14, color: AppColors.textMid),
               filled: true,
               fillColor: AppColors.surfaceInput,
               contentPadding:
@@ -925,8 +912,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 borderSide: BorderSide(color: AppColors.brand),
               ),
             ),
-            style: AppType.input(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            style:
+                AppType.input(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 8),
           if (visible.isEmpty)
@@ -967,7 +954,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       onTap: () => _toggleSelect(s.username),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        color: isSel ? AppColors.brand.withValues(alpha: 0.06) : null,
+        color: isSel ? AppColors.brandSoftBg : null,
         child: Row(
           children: [
             Icon(
@@ -1041,7 +1028,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               itemBuilder: (_, i) {
                 final v = BroadcastVariables.all[i];
                 return Material(
-                  color: AppColors.brand.withValues(alpha: 0.08),
+                  color: AppColors.brandSoftBg,
                   borderRadius: BorderRadius.circular(R.pill),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
@@ -1140,13 +1127,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           icon: Icon(LucideIcons.image, size: 16, color: AppColors.brand),
           label: Text(
             'إرفاق صورة (اختياري)',
-            style: AppType.button(color: AppColors.brand)
-                .copyWith(fontSize: 12),
+            style:
+                AppType.button(color: AppColors.brand).copyWith(fontSize: 12),
           ),
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: AppColors.brand.withValues(alpha: 0.35)),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            side: BorderSide(color: AppColors.brandSoftBorder),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(R.sm)),
           ),
@@ -1200,8 +1186,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ),
           IconButton(
             tooltip: 'حذف الصورة',
-            icon: Icon(LucideIcons.x,
-                size: 18, color: AppColors.textMid),
+            icon: Icon(LucideIcons.x, size: 18, color: AppColors.textMid),
             onPressed: _sending ? null : _removeImage,
           ),
         ],
@@ -1214,8 +1199,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       padding: const EdgeInsets.fromLTRB(Sp.lg, 10, Sp.lg, 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        border: Border(
-            top: BorderSide(color: AppColors.border, width: 1)),
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -1228,9 +1212,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _scope == _Scope.all
-                        ? 'إرسال للكل'
-                        : 'إرسال للمحدّدين',
+                    _scope == _Scope.all ? 'إرسال للكل' : 'إرسال للمحدّدين',
                     style: AppType.muted().copyWith(fontSize: 10),
                   ),
                   Text(
@@ -1244,11 +1226,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             // logs
             IconButton(
               tooltip: 'حالة الإرسال',
-              icon: Icon(LucideIcons.history,
-                  size: 18, color: AppColors.brand),
+              icon: Icon(LucideIcons.history, size: 18, color: AppColors.brand),
               onPressed: _openLogs,
               style: IconButton.styleFrom(
-                backgroundColor: AppColors.brand.withValues(alpha: 0.08),
+                backgroundColor: AppColors.brandSoftBg,
               ),
             ),
             const SizedBox(width: 6),
@@ -1262,11 +1243,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(LucideIcons.rotateCw,
-                      size: 18, color: const Color(0xFFE08F2D)),
+                      size: 18, color: AppColors.warning),
               onPressed: _retrying ? null : _retryFailed,
               style: IconButton.styleFrom(
-                backgroundColor:
-                    const Color(0xFFE08F2D).withValues(alpha: 0.08),
+                backgroundColor: AppColors.warning.withValues(alpha: 0.08),
               ),
             ),
             const SizedBox(width: 6),
@@ -1279,21 +1259,19 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation(Colors.white),
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
                       ),
                     )
                   : const Icon(LucideIcons.send, size: 14),
               label: Text(
                 _sending ? 'جاري الإرسال...' : 'إرسال',
-                style: AppType.button(color: Colors.white)
-                    .copyWith(fontSize: 13),
+                style:
+                    AppType.button(color: Colors.white).copyWith(fontSize: 13),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brand,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor:
-                    AppColors.brand.withValues(alpha: 0.4),
+                foregroundColor: AppColors.onBrand,
+                disabledBackgroundColor: AppColors.brandSoftBorder,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 shape: RoundedRectangleBorder(

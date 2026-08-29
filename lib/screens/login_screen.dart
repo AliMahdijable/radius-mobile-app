@@ -322,7 +322,8 @@ class _ProfileChipsState extends State<_ProfileChips> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('حذف الحساب المحفوظ'),
-        content: Text('حذف "${p.displayName.isEmpty ? p.username : p.displayName}" من قائمة الحسابات المحفوظة؟'),
+        content: Text(
+            'حذف "${p.displayName.isEmpty ? p.username : p.displayName}" من قائمة الحسابات المحفوظة؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -370,7 +371,8 @@ class _ProfileChipsState extends State<_ProfileChips> {
                 separatorBuilder: (_, __) => const SizedBox(width: Sp.sm),
                 itemBuilder: (_, i) {
                   final p = items[i];
-                  final label = p.displayName.isEmpty ? p.username : p.displayName;
+                  final label =
+                      p.displayName.isEmpty ? p.username : p.displayName;
                   return GestureDetector(
                     onLongPress: () => _confirmRemove(p),
                     child: InkWell(
@@ -383,10 +385,10 @@ class _ProfileChipsState extends State<_ProfileChips> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: AppColors.brand.withValues(alpha: 0.10),
+                          color: AppColors.brandSoftBg,
                           borderRadius: BorderRadius.circular(22),
                           border: Border.all(
-                            color: AppColors.brand.withValues(alpha: 0.35),
+                            color: AppColors.brandSoftBorder,
                             width: 1,
                           ),
                         ),
@@ -442,7 +444,7 @@ class _Logo extends StatelessWidget {
           borderRadius: BorderRadius.circular(R.lg),
           boxShadow: [
             BoxShadow(
-              color: AppColors.brand.withValues(alpha: 0.12),
+              color: AppColors.brandSoftBg,
               blurRadius: 32,
               offset: const Offset(0, 16),
             ),
@@ -745,8 +747,7 @@ class _BiometricButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.fingerprint_rounded,
-                  color: AppColors.brand, size: 22),
+              Icon(Icons.fingerprint_rounded, color: AppColors.brand, size: 22),
               const SizedBox(width: Sp.sm),
               Text(
                 'login.biometric_prompt'.tr(),

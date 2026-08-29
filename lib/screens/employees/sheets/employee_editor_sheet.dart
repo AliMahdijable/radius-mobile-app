@@ -22,8 +22,7 @@ Future<bool?> showEmployeeEditorSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) =>
-        _EmployeeEditorSheet(catalog: catalog, employee: employee),
+    builder: (_) => _EmployeeEditorSheet(catalog: catalog, employee: employee),
   );
 }
 
@@ -46,9 +45,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   late bool _isActive;
   late Map<String, bool> _perms;
   bool _saving = false;
+
   /// 2026-08-26: scope — يقيّد الموظّف بمدير فرعي محدَّد.
   /// null = يشاهد بيانات الأب كاملة (الافتراضي).
   String? _scopeAdminId;
+
   /// قائمة المدراء الفرعيّين للـdropdown — تُحمَّل في initState.
   List<({int id, String username, String firstname, String lastname})>?
       _managers;
@@ -82,12 +83,13 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         if (mounted && list != null) {
           setState(() => _managers = list);
         }
-      } catch (_) { /* fallback: hide dropdown */ }
+      } catch (_) {/* fallback: hide dropdown */}
     }();
     // مسح الـerror banner تلقائياً لما المستخدم يبدأ يصحّح أي حقل.
     void clearOnEdit() {
       if (_error != null) setState(() => _error = null);
     }
+
     _userCtrl.addListener(clearOnEdit);
     _passCtrl.addListener(clearOnEdit);
     _fullNameCtrl.addListener(clearOnEdit);
@@ -167,9 +169,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         fullName: _fullNameCtrl.text.trim().isEmpty
             ? null
             : _fullNameCtrl.text.trim(),
-        phone: _phoneCtrl.text.trim().isEmpty
-            ? null
-            : _phoneCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         isActive: _isActive,
         permissions: _perms,
         scopeAdminId: _scopeAdminId,
@@ -206,8 +206,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           child: Column(
             children: [
@@ -223,21 +222,19 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                 ),
               ),
               Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6)
-                            .withValues(alpha: 0.12),
+                        color: AppColors.brandAccent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.md),
                       ),
                       child: Icon(
                         _isEdit ? LucideIcons.userCog : LucideIcons.userPlus,
                         size: 16,
-                        color: const Color(0xFF8B5CF6),
+                        color: AppColors.brandAccent,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -260,9 +257,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
               ),
               TabBar(
                 controller: _tab,
-                labelColor: const Color(0xFF8B5CF6),
+                labelColor: AppColors.brandAccent,
                 unselectedLabelColor: AppColors.textMid,
-                indicatorColor: const Color(0xFF8B5CF6),
+                indicatorColor: AppColors.brandAccent,
                 tabs: [
                   const Tab(text: 'المعلومات'),
                   Tab(text: 'الصلاحيات ($activeCount)'),
@@ -274,15 +271,13 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
               if (_error != null)
                 Container(
                   width: double.infinity,
-                  margin:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+                  margin: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
                   padding: const EdgeInsets.symmetric(
                       horizontal: Sp.md, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.08),
+                    color: AppColors.dangerSoftBg,
                     borderRadius: BorderRadius.circular(R.md),
-                    border: Border.all(
-                        color: AppColors.error.withValues(alpha: 0.3)),
+                    border: Border.all(color: AppColors.dangerSoftBorder),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,16 +320,15 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
                   child: SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: FilledButton.icon(
                       onPressed: _saving ? null : _save,
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppColors.brandAccent,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),
@@ -370,9 +364,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       children: [
         _field(
           ctrl: _userCtrl,
-          hint: _isEdit
-              ? _userCtrl.text
-              : 'اسم المستخدم — يستعمله الموظف للدخول',
+          hint:
+              _isEdit ? _userCtrl.text : 'اسم المستخدم — يستعمله الموظف للدخول',
           icon: LucideIcons.atSign,
           enabled: !_isEdit, // username غير قابل للتعديل بعد الإنشاء
         ),
@@ -468,8 +461,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         const SizedBox(height: Sp.lg),
         // الصلاحيات بحسب الفئة
         for (final entry in byCat.entries) ...[
-          _categoryHeader(
-              cats[entry.key]?.label ?? entry.key, entry.value),
+          _categoryHeader(cats[entry.key]?.label ?? entry.key, entry.value),
           for (final p in entry.value) _permRow(p),
           const SizedBox(height: Sp.md),
         ],
@@ -478,9 +470,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   }
 
   Widget _categoryHeader(String label, List<PermissionDef> perms) {
-    final activeInCat = perms
-        .where((p) => _perms[p.key] == true)
-        .length;
+    final activeInCat = perms.where((p) => _perms[p.key] == true).length;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4, top: 4),
       child: Row(
@@ -494,8 +484,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           ),
           const SizedBox(width: 6),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
               color: AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(R.pill),
@@ -517,8 +506,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     final value = _perms[p.key] == true;
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 4),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.sm),
@@ -564,11 +552,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       return _fieldContainer(
         child: Row(
           children: [
-            Icon(LucideIcons.userCheck,
-                size: 16, color: AppColors.textMid),
+            Icon(LucideIcons.userCheck, size: 16, color: AppColors.textMid),
             const SizedBox(width: 10),
             const SizedBox(
-              width: 12, height: 12,
+              width: 12,
+              height: 12,
               child: CircularProgressIndicator(strokeWidth: 1.5),
             ),
             const SizedBox(width: 8),
@@ -590,8 +578,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         _fieldContainer(
           child: Row(
             children: [
-              Icon(LucideIcons.userCheck,
-                  size: 16, color: AppColors.textMid),
+              Icon(LucideIcons.userCheck, size: 16, color: AppColors.textMid),
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonHideUnderline(
@@ -658,9 +645,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
               fontFamily: 'Cairo',
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
-              color: selected == null
-                  ? AppColors.textLow
-                  : const Color(0xFF7C3AED),
+              color:
+                  selected == null ? AppColors.textLow : AppColors.brandAccent,
             ),
           ),
         ),
@@ -684,11 +670,10 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     );
   }
 
-  String _managerLabel(({int id, String username, String firstname, String lastname}) m) {
-    final full = [m.firstname, m.lastname]
-        .where((s) => s.isNotEmpty)
-        .join(' ')
-        .trim();
+  String _managerLabel(
+      ({int id, String username, String firstname, String lastname}) m) {
+    final full =
+        [m.firstname, m.lastname].where((s) => s.isNotEmpty).join(' ').trim();
     if (full.isNotEmpty && full != m.username) return '$full · ${m.username}';
     return m.username;
   }
@@ -722,13 +707,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide: BorderSide(
-              color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide: BorderSide(
-              color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
       ),
     );
@@ -744,29 +727,28 @@ class _PresetChip extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
+      color: AppColors.brandAccent.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(
-                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+            border:
+                Border.all(color: AppColors.brandAccent.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.sparkles,
-                  size: 11, color: Color(0xFF8B5CF6)),
+              Icon(LucideIcons.sparkles,
+                  size: 11, color: AppColors.brandAccent),
               const SizedBox(width: 4),
               Text(
                 preset.label,
-                style: const TextStyle(
-                  color: Color(0xFF8B5CF6),
+                style: TextStyle(
+                  color: AppColors.brandAccent,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                 ),
@@ -801,8 +783,7 @@ class _ActionChip extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(color: color.withValues(alpha: 0.3)),

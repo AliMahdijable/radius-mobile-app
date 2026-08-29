@@ -268,7 +268,8 @@ class SubAdminRef {
     final id = _toInt(j['id']);
     final username = (j['username'] ?? '').toString();
     if (id == 0 || username.isEmpty) return null;
-    return SubAdminRef(id: id, username: username, phone: j['phone']?.toString());
+    return SubAdminRef(
+        id: id, username: username, phone: j['phone']?.toString());
   }
 }
 
@@ -380,8 +381,7 @@ class ManagerDebtsApi {
       if (list is! List) return const [];
       return list
           .whereType<Map>()
-          .map((m) =>
-              ManagerDebtPayment.fromJson(Map<String, dynamic>.from(m)))
+          .map((m) => ManagerDebtPayment.fromJson(Map<String, dynamic>.from(m)))
           .whereType<ManagerDebtPayment>()
           .toList();
     } catch (e) {
@@ -443,7 +443,10 @@ class ManagerDebtsApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } catch (e) {
       _log('manager-debts/$id PATCH', e);
       return (ok: false, message: 'تعذّر التعديل');
@@ -457,7 +460,10 @@ class ManagerDebtsApi {
         '/api/admin/manager-debts/$debtId',
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } catch (e) {
       _log('manager-debts/$debtId DELETE', e);
       return (ok: false, message: 'تعذّر الحذف');
@@ -488,9 +494,8 @@ class ManagerDebtsApi {
         return AddPaymentResult(
           ok: false,
           errorMessage: body['message']?.toString() ?? 'تعذّر التسديد',
-          remaining: body['remaining'] != null
-              ? _toDouble(body['remaining'])
-              : null,
+          remaining:
+              body['remaining'] != null ? _toDouble(body['remaining']) : null,
         );
       }
       return AddPaymentResult(
@@ -502,9 +507,7 @@ class ManagerDebtsApi {
     } on DioException catch (e) {
       _log('manager-debts/$debtId/payments POST', e);
       final body = e.response?.data;
-      final msg = body is Map
-          ? body['message']?.toString()
-          : 'تعذّر التسديد';
+      final msg = body is Map ? body['message']?.toString() : 'تعذّر التسديد';
       final remaining = body is Map && body['remaining'] != null
           ? _toDouble(body['remaining'])
           : null;
@@ -520,13 +523,17 @@ class ManagerDebtsApi {
   }
 
   /// DELETE /api/admin/manager-debts/payments/:paymentId
-  static Future<({bool ok, String? message})> deletePayment(int paymentId) async {
+  static Future<({bool ok, String? message})> deletePayment(
+      int paymentId) async {
     try {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(
         '/api/admin/manager-debts/payments/$paymentId',
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } catch (e) {
       _log('manager-debts/payments/$paymentId DELETE', e);
       return (ok: false, message: 'تعذّر الحذف');
@@ -546,7 +553,10 @@ class ManagerDebtsApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } catch (e) {
       _log('manager-debts/$debtId/whatsapp', e);
       return (ok: false, message: 'تعذّر الإرسال');

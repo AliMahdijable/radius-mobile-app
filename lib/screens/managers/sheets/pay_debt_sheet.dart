@@ -269,7 +269,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF0EA5E9); // sky blue — pay-debt
+    final accent = AppColors.brandAccent; // sky blue — pay-debt
     final hasSas = _sasDebt > 0;
     final hasCustom = _customRemaining > 0;
     final showSegmented = hasSas && hasCustom;
@@ -404,14 +404,16 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                             const SizedBox(height: Sp.md),
                             _PayPreview(
                               amount: _amount.toDouble(),
-                              previousDebt:
-                                  _source == _PaySource.sas ? _sasDebt : _customRemaining,
+                              previousDebt: _source == _PaySource.sas
+                                  ? _sasDebt
+                                  : _customRemaining,
                             ),
                             const SizedBox(height: Sp.md),
                             _NotifyToggles(
                               sendWhatsApp: _sendWhatsApp,
                               sendPush: _sendPush,
-                              waEnabled: widget.manager.mobile.trim().isNotEmpty,
+                              waEnabled:
+                                  widget.manager.mobile.trim().isNotEmpty,
                               onWa: (v) => setState(() => _sendWhatsApp = v),
                               onPush: (v) => setState(() => _sendPush = v),
                             ),
@@ -530,23 +532,20 @@ class _SourceBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final accent = const Color(0xFF0EA5E9);
+    final accent = AppColors.brandAccent;
     final color = !enabled
         ? AppColors.textLow
         : selected
             ? accent
             : AppColors.textMid;
     return Material(
-      color: selected
-          ? accent.withValues(alpha: 0.10)
-          : AppColors.surfaceInput,
+      color: selected ? accent.withValues(alpha: 0.10) : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.md),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: enabled ? onTap : null,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
           decoration: BoxDecoration(
             border: Border.all(
               color: selected ? accent : Colors.transparent,
@@ -591,11 +590,10 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final accent = const Color(0xFF0EA5E9);
+    final accent = AppColors.brandAccent;
     return Material(
-      color: emphasized
-          ? accent.withValues(alpha: 0.10)
-          : AppColors.surfaceInput,
+      color:
+          emphasized ? accent.withValues(alpha: 0.10) : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -630,8 +628,7 @@ class _PayPreview extends StatelessWidget {
         color: AppColors.surfaceInput,
         borderRadius: BorderRadius.circular(R.md),
       ),
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: Sp.sm),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
       child: Row(
         children: [
           Expanded(
@@ -644,7 +641,7 @@ class _PayPreview extends StatelessWidget {
           Text(
             '${formatIQD(after)} د.ع',
             style: TextStyle(
-              color: after == 0 ? const Color(0xFF14B8A6) : AppColors.textHi,
+              color: after == 0 ? AppColors.success : AppColors.textHi,
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -677,8 +674,7 @@ class _NotifyToggles extends StatelessWidget {
         color: AppColors.surfaceInput,
         borderRadius: BorderRadius.circular(R.md),
       ),
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 4),
       child: Column(
         children: [
           SwitchListTile(
@@ -749,7 +745,7 @@ class _SubmitBar extends StatelessWidget {
             onPressed: enabled ? onPressed : null,
             style: FilledButton.styleFrom(
               backgroundColor: color,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onBrand,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(R.md),
               ),
@@ -765,8 +761,8 @@ class _SubmitBar extends StatelessWidget {
                   )
                 : Icon(icon, size: 16),
             label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
           ),
         ),
       ),

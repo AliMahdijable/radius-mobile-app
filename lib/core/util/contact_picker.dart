@@ -54,7 +54,8 @@ class ContactPicker {
         }
         return (phone: _clean(full.phones.first.number), error: null);
       } on PlatformException catch (e) {
-        if (kDebugMode) debugPrint('ContactPicker.pick: ${e.code} ${e.message}');
+        if (kDebugMode)
+          debugPrint('ContactPicker.pick: ${e.code} ${e.message}');
         // على Android بدون visibility declaration الحدث يرجع FailedResult
         // — نجرّب fallback لو الإذن معطى.
       } catch (e) {

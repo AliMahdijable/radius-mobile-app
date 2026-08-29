@@ -109,7 +109,8 @@ class ReceiptService {
         format: format,
         title: title,
         documentName: documentName,
-        companyName: companyName?.trim().isNotEmpty == true ? companyName : null,
+        companyName:
+            companyName?.trim().isNotEmpty == true ? companyName : null,
       );
     } catch (e) {
       if (kDebugMode) debugPrint('[ReceiptService] error: $e');
@@ -204,9 +205,8 @@ class ReceiptService {
   }
 
   static int _daysInMonth(int year, int month) {
-    final beginNext = (month == 12)
-        ? DateTime(year + 1, 1, 1)
-        : DateTime(year, month + 1, 1);
+    final beginNext =
+        (month == 12) ? DateTime(year + 1, 1, 1) : DateTime(year, month + 1, 1);
     return beginNext.subtract(const Duration(days: 1)).day;
   }
 }

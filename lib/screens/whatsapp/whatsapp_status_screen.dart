@@ -351,8 +351,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE08F2D)),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.next'.tr()),
           ),
@@ -488,7 +487,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     if (s.needsPairing && !s.connected) {
       final rawStatus = (s.sessionStatus ?? '').trim();
       notices.add(_safetyNotice(
-        color: const Color(0xFFE08F2D),
+        color: AppColors.warning,
         icon: LucideIcons.qrCode,
         title: 'wa.needs_pairing_title'.tr(),
         body: rawStatus.isEmpty
@@ -535,7 +534,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               .toDouble()
           : null;
       notices.add(_safetyNotice(
-        color: capped ? AppColors.error : const Color(0xFFE08F2D),
+        color: capped ? AppColors.error : AppColors.warning,
         icon: LucideIcons.triangleAlert,
         title:
             capped ? 'wa.capping_title'.tr() : 'wa.capping_warning_title'.tr(),
@@ -636,7 +635,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     final color = connected && !restricted
         ? accent
         : (connected || stabilizing || needsPairing
-            ? const Color(0xFFE08F2D)
+            ? AppColors.warning
             : AppColors.error);
     final label = needsPairing && !connected
         ? 'wa.needs_pairing'.tr()
@@ -740,8 +739,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
       }
     } else {
       body = SelectableText(qr,
-          style: AppType.input(color: AppColors.textHi)
-              .copyWith(fontSize: 9));
+          style: AppType.input(color: AppColors.textHi).copyWith(fontSize: 9));
     }
     return Container(
       padding: const EdgeInsets.all(Sp.md),
@@ -818,8 +816,8 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               controller: _pairPhoneCtl,
               keyboardType: TextInputType.phone,
               textDirection: ui.TextDirection.ltr,
-              style: AppType.input(color: AppColors.textHi)
-                  .copyWith(fontSize: 14),
+              style:
+                  AppType.input(color: AppColors.textHi).copyWith(fontSize: 14),
               decoration: InputDecoration(
                 isDense: true,
                 hintText: '9647701234567',
@@ -1016,7 +1014,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
           child: _btn(
             icon: LucideIcons.refreshCw,
             label: 'wa.full_reset_btn'.tr(),
-            color: const Color(0xFFE08F2D),
+            color: AppColors.warning,
             onTap: _busy ? null : _softReset,
           ),
         ),
@@ -1108,7 +1106,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
             onChanged: (v) =>
                 _updateFeatures(f.copyWith(notificationsEnabled: v)),
           ),
-          Divider(color: AppColors.border.withValues(alpha: 0.5), height: 16),
+          Divider(color: AppColors.borderSoft, height: 16),
           _toggle(
             label: 'wa.welcome_msg'.tr(),
             value: f.welcomeMessage,
@@ -1173,16 +1171,14 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
   }
 
   Widget _manualModeCard(Color accent) {
-    const purple = Color(0xFF7C3AED);
+    final purple = AppColors.brandAccent;
     return ValueListenableBuilder<bool>(
       valueListenable: ManualWaPrefs.enabled,
       builder: (context, isManual, _) {
         return Material(
           // 2026-08-26: خلفيّة بنفسجيّة خفيفة عندما مفعّل — يبرز بصريّاً
           // لأنه مسار "protected" مختلف عن الافتراضيّ.
-          color: isManual
-              ? purple.withValues(alpha: 0.06)
-              : AppColors.surface,
+          color: isManual ? purple.withValues(alpha: 0.06) : AppColors.surface,
           borderRadius: BorderRadius.circular(R.lg),
           clipBehavior: Clip.antiAlias,
           child: Container(
@@ -1202,13 +1198,14 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 Row(
                   children: [
                     Container(
-                      width: 40, height: 40,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: purple.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(11),
                       ),
                       alignment: Alignment.center,
-                      child: const Icon(LucideIcons.shieldCheck,
+                      child: Icon(LucideIcons.shieldCheck,
                           color: purple, size: 20),
                     ),
                     const SizedBox(width: 12),
@@ -1228,7 +1225,9 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isManual ? 'مفعّل — يفتح واتسابك' : 'مطفأ — الإرسال تلقائي',
+                            isManual
+                                ? 'مفعّل — يفتح واتسابك'
+                                : 'مطفأ — الإرسال تلقائي',
                             style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 11,

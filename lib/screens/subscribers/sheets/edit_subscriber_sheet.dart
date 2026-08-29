@@ -585,8 +585,7 @@ class _PackagePicker extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         '${e.value.price!.round()} د.ع',
-                        style: AppType.muted(color: const Color(0xFFE08F2D))
-                            .copyWith(
+                        style: AppType.muted(color: AppColors.warning).copyWith(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),

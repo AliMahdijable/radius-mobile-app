@@ -31,6 +31,7 @@ class StatsGrid extends StatelessWidget {
 
   final WalletResult? wallet;
   final DebtorsResult? debtors;
+
   /// Tapping the debt card opens the subscribers screen with the
   /// debtors filter pre-applied. No equivalent for the wallet card —
   /// it isn't a list view target.
@@ -84,14 +85,13 @@ class _BalancePointsCard extends StatelessWidget {
                 const SizedBox(height: 7),
                 Row(
                   children: [
-                    const Icon(LucideIcons.star,
-                        color: Color(0xFFCD8B00), size: 12),
+                    Icon(LucideIcons.star, color: AppColors.warning, size: 12),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
                         '${formatIQD(wallet!.points.round())} ${'dashboard.points_singular'.tr()}',
-                        style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
+                        style: AppType.muted(color: AppColors.textMid).copyWith(
+                            fontSize: 11, fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -109,7 +109,8 @@ class _DebtCard extends StatelessWidget {
   final DebtorsResult? debtors;
   final VoidCallback? onTap;
 
-  static const _accent = Color(0xFFEA580C); // warm orange
+  // getter لا حقل static: التوكن يعرف الوضع الليلي والحقل الثابت لا.
+  static Color get _accent => AppColors.warning;
 
   @override
   Widget build(BuildContext context) {
@@ -132,8 +133,7 @@ class _DebtCard extends StatelessWidget {
                 const SizedBox(height: 7),
                 Row(
                   children: [
-                    Icon(LucideIcons.users,
-                        color: AppColors.textMid, size: 12),
+                    Icon(LucideIcons.users, color: AppColors.textMid, size: 12),
                     const SizedBox(width: 4),
                     Text(
                       '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',

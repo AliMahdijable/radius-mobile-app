@@ -24,7 +24,7 @@ class DashboardCache {
 
   static const _kSas4 = 'dash.cache.sas4';
   static const _kWallet = 'dash.cache.wallet';
-  static const _kRevenue = 'dash.cache.revenue';   // day-scope only
+  static const _kRevenue = 'dash.cache.revenue'; // day-scope only
 
   /// Read + save operations use SharedPreferences.getInstance() which is
   /// async on first call but cached on subsequent — so all reads after
@@ -41,7 +41,9 @@ class DashboardCache {
     if (raw == null) return null;
     try {
       return Sas4Stats.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> saveWallet(WalletResult w) async {
@@ -55,7 +57,9 @@ class DashboardCache {
     if (raw == null) return null;
     try {
       return WalletResult.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> saveRevenue(RevenueResult r) async {
@@ -69,7 +73,9 @@ class DashboardCache {
     if (raw == null) return null;
     try {
       return RevenueResult.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Wipes all cached KPIs — call on logout so the next login doesn't

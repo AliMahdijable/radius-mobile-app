@@ -180,9 +180,7 @@ class _DirBtn extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: Sp.md),
         decoration: BoxDecoration(
-          color: selected
-              ? AppColors.brand.withValues(alpha: 0.1)
-              : AppColors.surfaceInput,
+          color: selected ? AppColors.brandSoftBg : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(R.md),
           border: Border.all(
             color: selected ? AppColors.brand : AppColors.border,

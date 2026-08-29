@@ -104,8 +104,7 @@ class FcmService {
       // نأخّر بـmicrotask حتى الـUI يبني نفسه ويسجّل الـcallback.
       Future.microtask(() async {
         try {
-          final initial =
-              await FirebaseMessaging.instance.getInitialMessage();
+          final initial = await FirebaseMessaging.instance.getInitialMessage();
           if (initial != null) {
             await _handleOpenedApp(initial);
           }
@@ -210,7 +209,8 @@ class FcmService {
   }
 
   static String _shortDeviceInfo() {
-    final os = Platform.isIOS ? 'iOS' : (Platform.isAndroid ? 'Android' : 'other');
+    final os =
+        Platform.isIOS ? 'iOS' : (Platform.isAndroid ? 'Android' : 'other');
     return '$os v2';
   }
 

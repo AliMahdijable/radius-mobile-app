@@ -60,8 +60,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     setState(() => _saving = true);
     final ok = await AdminDeviceDefaultsApi.save(
       AdminDeviceDefaults(
-        ontUsername:
-            _ontUser.text.trim().isEmpty ? null : _ontUser.text.trim(),
+        ontUsername: _ontUser.text.trim().isEmpty ? null : _ontUser.text.trim(),
         ontPassword: _ontPass.text.isEmpty ? null : _ontPass.text,
         ubntUsername:
             _ubntUser.text.trim().isEmpty ? null : _ubntUser.text.trim(),
@@ -106,27 +105,25 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                padding:
+                    const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                 children: [
                   _intro(),
                   const SizedBox(height: Sp.lg),
                   _section(
                     icon: LucideIcons.cable,
                     title: 'Huawei ONT',
-                    subtitle:
-                        'devices.ont_default_hint'.tr(),
+                    subtitle: 'devices.ont_default_hint'.tr(),
                     userController: _ontUser,
                     passController: _ontPass,
                     obscure: _ontObscure,
-                    onToggle: () =>
-                        setState(() => _ontObscure = !_ontObscure),
+                    onToggle: () => setState(() => _ontObscure = !_ontObscure),
                   ),
                   const SizedBox(height: Sp.md),
                   _section(
                     icon: LucideIcons.wifi,
                     title: 'Ubiquiti (UBNT)',
-                    subtitle:
-                        'devices.ubnt_default_hint'.tr(),
+                    subtitle: 'devices.ubnt_default_hint'.tr(),
                     userController: _ubntUser,
                     passController: _ubntPass,
                     obscure: _ubntObscure,
@@ -151,7 +148,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                       label: Text('devices.save_creds'.tr()),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.brand,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         textStyle: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -168,15 +165,15 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   Widget _intro() => Container(
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(
-          color: const Color(0xFF7C3AED).withValues(alpha: 0.06),
+          color: AppColors.brandAccent.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(R.lg),
-          border: Border.all(
-              color: const Color(0xFF7C3AED).withValues(alpha: 0.2)),
+          border:
+              Border.all(color: AppColors.brandAccent.withValues(alpha: 0.2)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(LucideIcons.info, size: 16, color: Color(0xFF7C3AED)),
+            Icon(LucideIcons.info, size: 16, color: AppColors.brandAccent),
             const SizedBox(width: Sp.sm),
             Expanded(
               child: Text(
@@ -212,7 +209,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: AppColors.brand.withValues(alpha: 0.1),
+                    color: AppColors.brandSoftBg,
                     borderRadius: BorderRadius.circular(R.md),
                   ),
                   child: Icon(icon, size: 14, color: AppColors.brand),
@@ -274,13 +271,11 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
         suffixIcon: suffix,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.md),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.md),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.md),

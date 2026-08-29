@@ -7,13 +7,13 @@ class NetworkDevice {
   final String adminId;
   final int? regionId;
   final String name;
-  final String type;      // router|switch|ap|link|sector|camera|other
-  final String brand;     // mikrotik|ubnt|mimosa|cisco|roji|other
+  final String type; // router|switch|ap|link|sector|camera|other
+  final String brand; // mikrotik|ubnt|mimosa|cisco|roji|other
   final String? model;
   final String ip;
   final int port;
   final int? apiPort;
-  final String? protocol;  // api|ssh|telnet|snmp
+  final String? protocol; // api|ssh|telnet|snmp
   final String? mac;
   final String? location;
   final String? notes;
@@ -65,7 +65,8 @@ class NetworkDevice {
     String? brand,
     String? model,
     int? regionId,
-  }) => NetworkDevice(
+  }) =>
+      NetworkDevice(
         id: id,
         adminId: adminId,
         regionId: regionId ?? this.regionId,
@@ -99,7 +100,9 @@ class NetworkDevice {
         brand: (j['brand'] ?? 'other').toString(),
         model: normalizeDigits(j['model']?.toString()),
         ip: (j['ip'] ?? '').toString(),
-        port: (j['port'] is int) ? j['port'] as int : int.tryParse('${j['port']}') ?? 80,
+        port: (j['port'] is int)
+            ? j['port'] as int
+            : int.tryParse('${j['port']}') ?? 80,
         apiPort: j['api_port'] as int?,
         protocol: j['protocol']?.toString(),
         mac: j['mac']?.toString(),
@@ -111,7 +114,8 @@ class NetworkDevice {
             : null,
         lastStatus: (j['last_status'] ?? 'unknown').toString(),
         lastResponseMs: j['last_response_ms'] as int?,
-        createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now(),
+        createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
+            DateTime.now(),
       );
 }
 
@@ -158,7 +162,7 @@ class NetworkDeviceLabels {
   /// - Mikrotik = 8728 (binary)
   /// - UBNT / Mimosa = 443 (HTTPS)
   static const protocolPorts = <String, int>{
-    'api': 8728,       // Mikrotik default
+    'api': 8728, // Mikrotik default
     'ssh': 22,
     'telnet': 23,
     'snmp': 161,
@@ -173,7 +177,7 @@ class NetworkDeviceLabels {
     if (protocol == 'api') {
       return switch (brand) {
         'mikrotik' => 8728,
-        'ubnt' => 22,       // SSH لأنه يعمل على كل airOS 5/6/7/8 بدون issues
+        'ubnt' => 22, // SSH لأنه يعمل على كل airOS 5/6/7/8 بدون issues
         'mimosa' => 443,
         _ => 80,
       };

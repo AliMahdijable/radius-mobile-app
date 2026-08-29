@@ -76,7 +76,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           final ip = a.address;
           // نتجاهل link-local (169.254.*) والـcellular typically 10.x
           if (ip.startsWith('169.254.')) continue;
-          if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+          if (ip.startsWith('192.168.') ||
+              ip.startsWith('10.') ||
+              ip.startsWith('172.')) {
             final parts = ip.split('.');
             if (parts.length == 4) {
               final base = '${parts[0]}.${parts[1]}.${parts[2]}';
@@ -99,33 +101,38 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     s = s.replaceAll(RegExp(r'\.$'), '');
 
     // صيغة range: a.b.c.d-e (مثال 10.70.241.5-100)
-    final rangeMatch = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})-(\d{1,3})$').firstMatch(s);
+    final rangeMatch =
+        RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})-(\d{1,3})$')
+            .firstMatch(s);
     if (rangeMatch != null) {
       final o1 = int.parse(rangeMatch.group(1)!);
       final o2 = int.parse(rangeMatch.group(2)!);
       final o3 = int.parse(rangeMatch.group(3)!);
       final start = int.parse(rangeMatch.group(4)!);
       final end = int.parse(rangeMatch.group(5)!);
-      if (![o1,o2,o3].every((n) => n>=0 && n<=255)) return null;
-      if (start<1 || start>254 || end<1 || end>254 || start>end) return null;
+      if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
+      if (start < 1 || start > 254 || end < 1 || end > 254 || start > end)
+        return null;
       return (base: '$o1.$o2.$o3', start: start, end: end);
     }
     // صيغة 4 octets: a.b.c.d → نتجاهل الرابع، scan كامل
-    final fourMatch = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$').firstMatch(s);
+    final fourMatch =
+        RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$').firstMatch(s);
     if (fourMatch != null) {
       final o1 = int.parse(fourMatch.group(1)!);
       final o2 = int.parse(fourMatch.group(2)!);
       final o3 = int.parse(fourMatch.group(3)!);
-      if (![o1,o2,o3].every((n) => n>=0 && n<=255)) return null;
+      if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
       return (base: '$o1.$o2.$o3', start: 1, end: 254);
     }
     // صيغة 3 octets: a.b.c → scan كامل .1-.254
-    final threeMatch = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(s);
+    final threeMatch =
+        RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(s);
     if (threeMatch != null) {
       final o1 = int.parse(threeMatch.group(1)!);
       final o2 = int.parse(threeMatch.group(2)!);
       final o3 = int.parse(threeMatch.group(3)!);
-      if (![o1,o2,o3].every((n) => n>=0 && n<=255)) return null;
+      if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
       return (base: '$o1.$o2.$o3', start: 1, end: 254);
     }
     return null;
@@ -135,7 +142,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     final parsed = _parseRange(_baseCtrl.text);
     if (parsed == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
+        content: Text(
+            'صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 4),
@@ -157,7 +165,11 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         startOctet: parsed.start,
         endOctet: parsed.end,
         onProgress: (done, total) {
-          if (mounted) setState(() { _done = done; _total = total; });
+          if (mounted)
+            setState(() {
+              _done = done;
+              _total = total;
+            });
         },
         onFound: (r) {
           if (mounted) {
@@ -200,14 +212,17 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          icon: Icon(LucideIcons.triangleAlert, color: const Color(0xFFEA580C), size: 32),
+          icon: Icon(LucideIcons.triangleAlert,
+              color: AppColors.warning, size: 32),
           title: Text('إضافة $count جهاز'),
           content: Text(
             'ستُضاف $count جهاز دفعة واحدة. هل أنت متأكّد؟',
             style: const TextStyle(fontSize: 14),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء')),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
@@ -230,12 +245,16 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       builder: (_) => _BulkAddOptionsSheet(
         count: count,
         regions: _regions,
-        initialPrefix: _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim(),
+        initialPrefix:
+            _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim(),
       ),
     );
     if (opts == null || !mounted) return;
 
-    setState(() { _adding = true; _added = 0; });
+    setState(() {
+      _adding = true;
+      _added = 0;
+    });
     HapticFeedback.mediumImpact();
 
     // 2026-08-18: بنِ payload كامل واستدع bulk-create endpoint (طلب واحد
@@ -250,8 +269,10 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           creds['version'] = 'v2c';
         }
       } else {
-        if (opts.user != null && opts.user!.isNotEmpty) creds['user'] = opts.user!;
-        if (opts.pass != null && opts.pass!.isNotEmpty) creds['pass'] = opts.pass!;
+        if (opts.user != null && opts.user!.isNotEmpty)
+          creds['user'] = opts.user!;
+        if (opts.pass != null && opts.pass!.isNotEmpty)
+          creds['pass'] = opts.pass!;
       }
       payload.add({
         'name': '${opts.prefix} $lastOctet',
@@ -277,7 +298,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       _added = created.length;
       _mutated += created.length;
       snackText = 'أُضيف ${created.length} جهاز بنجاح';
-      snackColor = const Color(0xFF10B981);
+      snackColor = AppColors.success;
     } catch (e) {
       snackText = 'فشل: ${e.toString().replaceFirst('Exception: ', '')}';
       snackColor = AppColors.error;
@@ -298,10 +319,10 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   String _typeFromBrand(String brand) {
     return switch (brand) {
       'mikrotik' => 'router',
-      'ubnt'     => 'link',
-      'mimosa'   => 'link',
-      'ruijie'   => 'ap',
-      _          => 'other',
+      'ubnt' => 'link',
+      'mimosa' => 'link',
+      'ruijie' => 'ap',
+      _ => 'other',
     };
   }
 
@@ -360,7 +381,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               decoration: InputDecoration(
                 labelText: 'الشبكة أو النطاق',
                 hintText: '10.70.241.0/24',
-                prefixIcon: Icon(LucideIcons.network, size: 18, color: AppColors.textMid),
+                prefixIcon: Icon(LucideIcons.network,
+                    size: 18, color: AppColors.textMid),
                 filled: true,
                 fillColor: AppColors.surfaceInput,
                 border: OutlineInputBorder(
@@ -368,7 +390,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   borderSide: BorderSide.none,
                 ),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
             ),
           ),
@@ -383,8 +406,10 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               ),
               icon: _scanning
                   ? const SizedBox(
-                      width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(LucideIcons.radar, size: 16),
               label: Text(_scanning ? 'يمسح…' : 'ابدأ'),
             ),
@@ -395,7 +420,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           padding: const EdgeInsets.only(top: 4, right: 4, left: 4),
           child: Text(
             'الصيغ المدعومة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100',
-            style: TextStyle(color: AppColors.textLow, fontSize: 10, height: 1.4),
+            style:
+                TextStyle(color: AppColors.textLow, fontSize: 10, height: 1.4),
             textDirection: TextDirection.rtl,
           ),
         ),
@@ -407,7 +433,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           decoration: InputDecoration(
             labelText: 'بادئة الاسم عند الإضافة',
             hintText: 'مثال: "جهاز" → جهاز 5، جهاز 10…',
-            prefixIcon: Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
+            prefixIcon:
+                Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
             filled: true,
             fillColor: AppColors.surfaceInput,
             border: OutlineInputBorder(
@@ -415,7 +442,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               borderSide: BorderSide.none,
             ),
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
         ),
       ]),
@@ -433,7 +461,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               style: TextStyle(color: AppColors.textMid, fontSize: 11)),
           Text('${_found.length} جهاز',
               style: TextStyle(
-                  color: AppColors.brand, fontSize: 11, fontWeight: FontWeight.w700)),
+                  color: AppColors.brand,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 4),
         ClipRRect(
@@ -455,7 +485,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         Icon(LucideIcons.radar, size: 56, color: AppColors.textLow),
         const SizedBox(height: 12),
         Text(
-          _scanning ? 'جاري الفحص… تظهر النتائج مباشرةً' : 'اضغط "ابدأ" لفحص الشبكة',
+          _scanning
+              ? 'جاري الفحص… تظهر النتائج مباشرةً'
+              : 'اضغط "ابدأ" لفحص الشبكة',
           style: TextStyle(color: AppColors.textMid, fontSize: 13),
         ),
       ]),
@@ -469,20 +501,20 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     // أجهزة مضافة مسبقاً: تظهر باهتة + badge + لا تُختار + لا onTap
     return Material(
       color: alreadyExists
-          ? AppColors.surfaceInput.withValues(alpha: 0.4)
-          : (selected
-              ? AppColors.brand.withValues(alpha: 0.06)
-              : AppColors.surface),
+          ? AppColors.surfaceDisabled
+          : (selected ? AppColors.brandSoftBg : AppColors.surface),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: alreadyExists ? null : () => setState(() {
-          if (selected) {
-            _selected.remove(r.ip);
-          } else {
-            _selected.add(r.ip);
-          }
-        }),
+        onTap: alreadyExists
+            ? null
+            : () => setState(() {
+                  if (selected) {
+                    _selected.remove(r.ip);
+                  } else {
+                    _selected.add(r.ip);
+                  }
+                }),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
@@ -500,8 +532,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               if (alreadyExists)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Icon(LucideIcons.circleCheck, size: 18,
-                      color: const Color(0xFF10B981)),
+                  child: Icon(LucideIcons.circleCheck,
+                      size: 18, color: AppColors.success),
                 )
               else
                 Checkbox(
@@ -509,11 +541,16 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   activeColor: AppColors.brand,
                   visualDensity: VisualDensity.compact,
                   onChanged: (v) => setState(() {
-                    if (v == true) { _selected.add(r.ip); } else { _selected.remove(r.ip); }
+                    if (v == true) {
+                      _selected.add(r.ip);
+                    } else {
+                      _selected.remove(r.ip);
+                    }
                   }),
                 ),
               Container(
-                width: 32, height: 32,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: _brandColor(r.guessBrand).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
@@ -530,31 +567,35 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                       Text(r.ip,
                           style: TextStyle(
                               color: AppColors.textHi,
-                              fontSize: 14, fontWeight: FontWeight.w700)),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700)),
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceInput,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text('${r.responseMs}ms',
-                            style: TextStyle(color: AppColors.textLow, fontSize: 10)),
+                            style: TextStyle(
+                                color: AppColors.textLow, fontSize: 10)),
                       ),
                       if (alreadyExists) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                            color: AppColors.success.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                              color: AppColors.success.withValues(alpha: 0.4),
                             ),
                           ),
-                          child: const Text('مضاف مسبقاً',
+                          child: Text('مضاف مسبقاً',
                               style: TextStyle(
-                                color: Color(0xFF10B981),
+                                color: AppColors.success,
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
                               )),
@@ -563,7 +604,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                     ]),
                     const SizedBox(height: 2),
                     Text('$label · port ${r.openPort} · ${r.guessProtocol}',
-                        style: TextStyle(color: AppColors.textMid, fontSize: 11)),
+                        style:
+                            TextStyle(color: AppColors.textMid, fontSize: 11)),
                   ],
                 ),
               ),
@@ -575,24 +617,25 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   }
 
   Color _brandColor(String b) => switch (b) {
-        'mikrotik' => const Color(0xFF2563EB),
-        'ubnt'     => const Color(0xFF0891B2),
-        'mimosa'   => const Color(0xFF7C3AED),
-        'ruijie'   => const Color(0xFF5B4CDB),
-        _          => AppColors.textMid,
+        'mikrotik' => AppColors.brandAccent,
+        'ubnt' => AppColors.info,
+        'mimosa' => AppColors.brandAccent,
+        'ruijie' => AppColors.brandAccent,
+        _ => AppColors.textMid,
       };
 
   IconData _brandIcon(String b) => switch (b) {
         'mikrotik' => LucideIcons.router,
-        'ubnt'     => LucideIcons.satellite,
-        'mimosa'   => LucideIcons.radioTower,
-        'ruijie'   => LucideIcons.wifi,
-        _          => LucideIcons.circuitBoard,
+        'ubnt' => LucideIcons.satellite,
+        'mimosa' => LucideIcons.radioTower,
+        'ruijie' => LucideIcons.wifi,
+        _ => LucideIcons.circuitBoard,
       };
 
   Widget _bottomBar() {
     // كم جهاز يمكن اختياره (ما عدا المضاف مسبقاً)
-    final selectable = _found.where((r) => !widget.existingIps.contains(r.ip)).length;
+    final selectable =
+        _found.where((r) => !widget.existingIps.contains(r.ip)).length;
     final allSelected = _selected.length == selectable && selectable > 0;
     return Material(
       elevation: 8,
@@ -604,22 +647,26 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
             // زرّ "تحديد الكل / إلغاء التحديد" — يظهر لو فيه جهاز واحد+
             if (selectable > 0)
               TextButton.icon(
-                onPressed: _adding ? null : () {
-                  HapticFeedback.selectionClick();
-                  setState(() {
-                    if (allSelected) {
-                      _selected.clear();
-                    } else {
-                      for (final r in _found) {
-                        if (!widget.existingIps.contains(r.ip)) {
-                          _selected.add(r.ip);
-                        }
-                      }
-                    }
-                  });
-                },
-                icon: Icon(allSelected ? LucideIcons.square : LucideIcons.checkSquare,
-                    size: 16, color: AppColors.brand),
+                onPressed: _adding
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          if (allSelected) {
+                            _selected.clear();
+                          } else {
+                            for (final r in _found) {
+                              if (!widget.existingIps.contains(r.ip)) {
+                                _selected.add(r.ip);
+                              }
+                            }
+                          }
+                        });
+                      },
+                icon: Icon(
+                    allSelected ? LucideIcons.square : LucideIcons.checkSquare,
+                    size: 16,
+                    color: AppColors.brand),
                 label: Text(allSelected ? 'إلغاء' : 'تحديد الكل',
                     style: TextStyle(color: AppColors.brand, fontSize: 12)),
                 style: TextButton.styleFrom(
@@ -633,23 +680,27 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               child: Text(
                 'محدَّد: ${_selected.length}',
                 style: TextStyle(
-                    color: AppColors.textHi, fontWeight: FontWeight.w700, fontSize: 13),
+                    color: AppColors.textHi,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13),
               ),
             ),
             FilledButton.icon(
               onPressed: (_adding || _selected.isEmpty) ? null : _addSelected,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.brand,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
               icon: _adding
                   ? const SizedBox(
-                      width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(LucideIcons.plus, size: 14),
-              label: Text(_adding
-                  ? 'يُضيف $_added…'
-                  : 'أضف ${_selected.length}',
+              label: Text(
+                  _adding ? 'يُضيف $_added…' : 'أضف ${_selected.length}',
                   style: const TextStyle(fontSize: 13)),
             ),
           ]),
@@ -666,9 +717,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
 
 /// نتيجة الـsheet — options تُطبَّق على كل الأجهزة المُحدَّدة.
 class _BulkAddOptions {
-  final String prefix;    // بادئة الاسم (default "جهاز")
-  final int? regionId;    // null = بدون منطقة
-  final String? user;     // للـapi/ssh
+  final String prefix; // بادئة الاسم (default "جهاز")
+  final int? regionId; // null = بدون منطقة
+  final String? user; // للـapi/ssh
   final String? pass;
   final String? community; // للـsnmp
   const _BulkAddOptions({
@@ -722,14 +773,19 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
   }
 
   void _submit() {
-    final prefix = _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim();
-    Navigator.pop(context, _BulkAddOptions(
-      prefix: prefix,
-      regionId: _regionId,
-      user: _userCtrl.text.trim().isEmpty ? null : _userCtrl.text.trim(),
-      pass: _passCtrl.text.isEmpty ? null : _passCtrl.text,
-      community: _communityCtrl.text.trim().isEmpty ? null : _communityCtrl.text.trim(),
-    ));
+    final prefix =
+        _prefixCtrl.text.trim().isEmpty ? 'جهاز' : _prefixCtrl.text.trim();
+    Navigator.pop(
+        context,
+        _BulkAddOptions(
+          prefix: prefix,
+          regionId: _regionId,
+          user: _userCtrl.text.trim().isEmpty ? null : _userCtrl.text.trim(),
+          pass: _passCtrl.text.isEmpty ? null : _passCtrl.text,
+          community: _communityCtrl.text.trim().isEmpty
+              ? null
+              : _communityCtrl.text.trim(),
+        ));
   }
 
   @override
@@ -746,7 +802,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
             children: [
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: AppColors.border,
@@ -760,7 +817,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                 Text('إضافة ${widget.count} جهاز',
                     style: TextStyle(
                         color: AppColors.textHi,
-                        fontSize: 17, fontWeight: FontWeight.w800)),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800)),
               ]),
               const SizedBox(height: 4),
               Text('كل الحقول اختياريّة — اتركها فارغة وسيُملأ تلقائياً',
@@ -775,7 +833,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                 decoration: InputDecoration(
                   labelText: 'بادئة الاسم',
                   hintText: 'مثال: "جهاز" → جهاز 5، جهاز 88',
-                  prefixIcon: Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
+                  prefixIcon:
+                      Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
                   filled: true,
                   fillColor: AppColors.surfaceInput,
                   border: OutlineInputBorder(
@@ -783,7 +842,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     borderSide: BorderSide.none,
                   ),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ),
               const SizedBox(height: 10),
@@ -794,7 +854,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'المنطقة',
-                  prefixIcon: Icon(LucideIcons.mapPin, size: 16, color: AppColors.textMid),
+                  prefixIcon: Icon(LucideIcons.mapPin,
+                      size: 16, color: AppColors.textMid),
                   filled: true,
                   fillColor: AppColors.surfaceInput,
                   border: OutlineInputBorder(
@@ -802,7 +863,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     borderSide: BorderSide.none,
                   ),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
                 items: [
                   DropdownMenuItem<int?>(
@@ -814,13 +876,18 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     DropdownMenuItem<int?>(
                       value: r.id,
                       child: Row(children: [
-                        Icon(LucideIcons.mapPin, size: 12,
-                            color: _parseRegionColor(r.color) ?? AppColors.brand),
+                        Icon(LucideIcons.mapPin,
+                            size: 12,
+                            color:
+                                _parseRegionColor(r.color) ?? AppColors.brand),
                         const SizedBox(width: 6),
-                        Expanded(child: Text(r.name, overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                            child:
+                                Text(r.name, overflow: TextOverflow.ellipsis)),
                         if (r.deviceCount > 0)
                           Text(' (${r.deviceCount})',
-                              style: TextStyle(color: AppColors.textLow, fontSize: 11)),
+                              style: TextStyle(
+                                  color: AppColors.textLow, fontSize: 11)),
                       ]),
                     ),
                 ],
@@ -835,22 +902,30 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(children: [
                     Icon(
-                      _showAdvanced ? LucideIcons.chevronDown : LucideIcons.chevronLeft,
-                      size: 16, color: AppColors.brand),
+                        _showAdvanced
+                            ? LucideIcons.chevronDown
+                            : LucideIcons.chevronLeft,
+                        size: 16,
+                        color: AppColors.brand),
                     const SizedBox(width: 4),
                     Text('بيانات الدخول المشتركة (اختياريّة)',
                         style: TextStyle(
-                            color: AppColors.brand, fontSize: 12, fontWeight: FontWeight.w700)),
+                            color: AppColors.brand,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
                   ]),
                 ),
               ),
               if (_showAdvanced) ...[
                 const SizedBox(height: 6),
-                Text('تُطبَّق على كل الأجهزة — Mikrotik/UBNT (user+pass) و Mimosa (community)',
-                    style: TextStyle(color: AppColors.textLow, fontSize: 10, height: 1.4)),
+                Text(
+                    'تُطبَّق على كل الأجهزة — Mikrotik/UBNT (user+pass) و Mimosa (community)',
+                    style: TextStyle(
+                        color: AppColors.textLow, fontSize: 10, height: 1.4)),
                 const SizedBox(height: 8),
                 Row(children: [
-                  Expanded(child: TextField(
+                  Expanded(
+                      child: TextField(
                     controller: _userCtrl,
                     textDirection: TextDirection.ltr,
                     decoration: InputDecoration(
@@ -866,7 +941,8 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     ),
                   )),
                   const SizedBox(width: 8),
-                  Expanded(child: TextField(
+                  Expanded(
+                      child: TextField(
                     controller: _passCtrl,
                     obscureText: _obscurePass,
                     textDirection: TextDirection.ltr,
@@ -880,8 +956,11 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                       ),
                       isDense: true,
                       suffixIcon: IconButton(
-                        icon: Icon(_obscurePass ? LucideIcons.eye : LucideIcons.eyeOff, size: 16),
-                        onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                        icon: Icon(
+                            _obscurePass ? LucideIcons.eye : LucideIcons.eyeOff,
+                            size: 16),
+                        onPressed: () =>
+                            setState(() => _obscurePass = !_obscurePass),
                       ),
                     ),
                   )),

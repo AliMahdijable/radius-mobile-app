@@ -23,7 +23,7 @@ class MikrotikApi {
   ///   t=2s: wireless + clients (complete)
   static Future<MikrotikStats> fetchStats({
     required String ip,
-    required int port,          // 8728 (api) أو 8729 (api-ssl)
+    required int port, // 8728 (api) أو 8729 (api-ssl)
     required String user,
     required String pass,
     Duration timeout = const Duration(seconds: 6),
@@ -83,7 +83,8 @@ class MikrotikApi {
           // كل row يحمل اسم الـinterface؛ لو ما موجود نستعمل الترتيب.
           for (int i = 0; i < monResult.length; i++) {
             final r = monResult[i];
-            final key = r['name'] ?? (i < etherNames.length ? etherNames[i] : '');
+            final key =
+                r['name'] ?? (i < etherNames.length ? etherNames[i] : '');
             if (key.isNotEmpty) ethMonitorByName[key] = r;
           }
         } catch (_) {
@@ -103,7 +104,8 @@ class MikrotikApi {
       }
 
       if (resourceRows.isEmpty) {
-        throw MikrotikBinaryException('لم يرجع الراوتر معلومات system/resource');
+        throw MikrotikBinaryException(
+            'لم يرجع الراوتر معلومات system/resource');
       }
       final resource = resourceRows.first;
 
@@ -130,17 +132,21 @@ class MikrotikApi {
 
         if (name.contains('temp')) {
           // كل الحرارات → extraTemps، الأولى (أو cpu) → healthTemp
-          final v = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
+          final v =
+              double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
           if (v != null) {
             extraTemps.add(MikrotikHealthItem(
-              name: name, valueStr: valueStr, intValue: v.round(),
+              name: name,
+              valueStr: valueStr,
+              intValue: v.round(),
             ));
             if (healthTemp == null || name.contains('cpu')) {
               healthTemp = v.round();
             }
           }
         } else if (name.contains('voltage') || name == 'v') {
-          final v = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
+          final v =
+              double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
           if (v != null) healthVoltage = v;
         } else if (name.startsWith('fan') && name.contains('speed')) {
           // fan1-speed, fan2-speed, ...
@@ -172,12 +178,16 @@ class MikrotikApi {
               ?.replaceAll(RegExp(r'[^\d-]'), ''),
         );
         for (final vKey in const [
-          'voltage', 'input-voltage', 'board-voltage',
-          'psu-voltage', 'psu1-voltage', 'power-supply-1-voltage',
+          'voltage',
+          'input-voltage',
+          'board-voltage',
+          'psu-voltage',
+          'psu1-voltage',
+          'power-supply-1-voltage',
         ]) {
           if (healthVoltage == null && r[vKey] != null) {
-            healthVoltage = double.tryParse(
-                r[vKey]!.replaceAll(RegExp(r'[^\d.-]'), ''));
+            healthVoltage =
+                double.tryParse(r[vKey]!.replaceAll(RegExp(r'[^\d.-]'), ''));
             if (healthVoltage != null) break;
           }
         }
@@ -209,13 +219,15 @@ class MikrotikApi {
           return MikrotikInterface.fromApiMap(row, monitor: monitor);
         }).toList(),
         pppActiveCount: pppRows.length,
-        wirelessInterfaces: const [],   // Tier 2 يملؤها
+        wirelessInterfaces: const [], // Tier 2 يملؤها
         wirelessClients: const [],
       );
 
       // ⚡ يُطلق callback الآن — UI يعرض CPU/RAM/interfaces فوراً
       if (onPartialReady != null) {
-        try { onPartialReady(tier1); } catch (_) {}
+        try {
+          onPartialReady(tier1);
+        } catch (_) {}
       }
 
       // ═══════ TIER 2 (تفاصيل — wireless + enrichment) ═══════
@@ -230,7 +242,7 @@ class MikrotikApi {
       try {
         final rows = await client.query(['/interface/wireless/print']);
         wirelessRows.addAll(rows);
-      } catch (_) { /* عادي على CCR + LHG 60G */ }
+      } catch (_) {/* عادي على CCR + LHG 60G */}
       try {
         final rows = await client.query(['/interface/w60g/print']);
         // sanitize: نطابق بنية wireless (ssid/mode/frequency)
@@ -241,13 +253,14 @@ class MikrotikApi {
             'mode': (w['mode'] ?? 'bridge').toString(),
             'band': '60ghz',
             'frequency': w['frequency'] ?? '',
-            'channel-width': w['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '2160',
+            'channel-width':
+                w['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '2160',
             'tx-power': w['tx-power'] ?? '',
             'disabled': w['disabled'] ?? 'false',
             'running': w['running'] ?? 'false',
           });
         }
-      } catch (_) { /* عادي على الأجهزة الي لا تدعم 60GHz */ }
+      } catch (_) {/* عادي على الأجهزة الي لا تدعم 60GHz */}
       try {
         final rows = await client.query(['/interface/wifi/print']);
         for (final w in rows) {
@@ -257,13 +270,14 @@ class MikrotikApi {
             'mode': (w['mode'] ?? 'ap').toString(),
             'band': (w['band'] ?? '').toString(),
             'frequency': w['frequency'] ?? '',
-            'channel-width': w['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '',
+            'channel-width':
+                w['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '',
             'tx-power': w['tx-power'] ?? '',
             'disabled': w['disabled'] ?? 'false',
             'running': w['running'] ?? 'false',
           });
         }
-      } catch (_) { /* عادي على RouterOS 6 */ }
+      } catch (_) {/* عادي على RouterOS 6 */}
       // Clients — نختار المسار الصحيح بناءً على نوع الـwireless interfaces
       // المكتشفة أعلاه، بدل تجربة الـ6 مسارات متسلسلة (كانت تسبّب global
       // timeout: 6s × 5 مسارات فاشلة = 30s → الـfetch الخارجي يفشل → لا
@@ -288,10 +302,11 @@ class MikrotikApi {
       // Debug logging مفعّل دائماً لـreg-table لأن هذي الاستعلامات
       // تفشل بصمت أحياناً على RouterOS 6.4x. Log يُطبع فقط في debug build.
       try {
-        final regs = await client.query([pickedPath], debugLog: true)
-            .timeout(const Duration(seconds: 12));
+        final regs = await client.query([pickedPath],
+            debugLog: true).timeout(const Duration(seconds: 12));
         wirelessClients.addAll(regs);
-        if (kDebugMode) debugPrint('🟢 [mikrotik] $pickedPath → ${regs.length} clients');
+        if (kDebugMode)
+          debugPrint('🟢 [mikrotik] $pickedPath → ${regs.length} clients');
       } on TimeoutException {
         failureMsg = 'timeout';
       } catch (e) {
@@ -299,13 +314,17 @@ class MikrotikApi {
         if (msg.contains('no such command') || msg.contains('no such item')) {
           // Package غير مثبّت → جرّب wifi (RouterOS 7)
           try {
-            final regs = await client.query(['/interface/wifi/registration-table/print'], debugLog: true)
-                .timeout(const Duration(seconds: 8));
+            final regs = await client.query(
+                ['/interface/wifi/registration-table/print'],
+                debugLog: true).timeout(const Duration(seconds: 8));
             wirelessClients.addAll(regs);
-            if (kDebugMode) debugPrint('🟢 [mikrotik] wifi reg-table → ${regs.length} clients');
+            if (kDebugMode)
+              debugPrint(
+                  '🟢 [mikrotik] wifi reg-table → ${regs.length} clients');
           } catch (e2) {
             final m2 = e2.toString();
-            if (!m2.contains('no such command') && !m2.contains('no such item')) {
+            if (!m2.contains('no such command') &&
+                !m2.contains('no such item')) {
               failureMsg = m2.length > 80 ? m2.substring(0, 80) : m2;
             }
           }
@@ -316,7 +335,9 @@ class MikrotikApi {
       // 2026-08-20: صيغة multi-word — بعض RouterOS 6.4x تعامل الأمر كسلسلة
       // كلمات (`/interface`, `wireless`, `registration-table`, `print`) بدل
       // path واحد بـslashes. غير معياريّ لكن يعمل على بعض firmware.
-      if (wirelessClients.isEmpty && failureMsg == null && wirelessRows.isNotEmpty) {
+      if (wirelessClients.isEmpty &&
+          failureMsg == null &&
+          wirelessRows.isNotEmpty) {
         try {
           if (kDebugMode) debugPrint('🔁 [mikrotik] جرّب multi-word format');
           final regs = await client.query(
@@ -325,7 +346,9 @@ class MikrotikApi {
           ).timeout(const Duration(seconds: 8));
           if (regs.isNotEmpty) {
             wirelessClients.addAll(regs);
-            if (kDebugMode) debugPrint('🟢 [mikrotik] multi-word worked → ${regs.length} clients');
+            if (kDebugMode)
+              debugPrint(
+                  '🟢 [mikrotik] multi-word worked → ${regs.length} clients');
           }
         } catch (_) {}
       }
@@ -334,43 +357,56 @@ class MikrotikApi {
       // (user admin/full، الأمر ينجح بلا !trap لكن سطر واحد !done فقط).
       // الحلّ الوحيد المضمون: SSH fallback — نفس interface الي يستعمله Winbox
       // terminal، بلا الـAPI quirks.
-      if (wirelessClients.isEmpty && failureMsg == null && wirelessRows.isNotEmpty) {
-        if (kDebugMode) debugPrint('🔁 [mikrotik] Binary API رجع 0 — جرّب SSH fallback');
+      if (wirelessClients.isEmpty &&
+          failureMsg == null &&
+          wirelessRows.isNotEmpty) {
+        if (kDebugMode)
+          debugPrint('🔁 [mikrotik] Binary API رجع 0 — جرّب SSH fallback');
         try {
           final sshClients = await _fetchClientsViaSsh(ip, user, pass);
           if (sshClients.isNotEmpty) {
             wirelessClients.addAll(sshClients);
-            if (kDebugMode) debugPrint('🟢 [mikrotik] SSH fallback → ${sshClients.length} clients');
+            if (kDebugMode)
+              debugPrint(
+                  '🟢 [mikrotik] SSH fallback → ${sshClients.length} clients');
           } else {
-            if (kDebugMode) debugPrint('ℹ️ [mikrotik] SSH fallback رجع 0 كذلك — الـAP فعلاً بلا عملاء');
+            if (kDebugMode)
+              debugPrint(
+                  'ℹ️ [mikrotik] SSH fallback رجع 0 كذلك — الـAP فعلاً بلا عملاء');
           }
         } catch (e) {
           if (kDebugMode) {
             final es = e.toString();
-            debugPrint('⚠️ [mikrotik] SSH fallback فشل: ${es.length > 80 ? es.substring(0, 80) : es}');
+            debugPrint(
+                '⚠️ [mikrotik] SSH fallback فشل: ${es.length > 80 ? es.substring(0, 80) : es}');
           }
         }
       }
       // CAPsMAN: نضيفه فقط لو الجهاز يبدو manager (اسم "capsman" في
       // interfaces، أو مسار /caps-man موجود مع wireless section null).
       // بدون هذا: كل جهاز عادي يهدر 6s على /caps-man غير الموجود.
-      final looksLikeCapsMan = interfaceRows.any((i) =>
-        (i['name'] ?? '').toLowerCase().contains('capsman'));
+      final looksLikeCapsMan = interfaceRows
+          .any((i) => (i['name'] ?? '').toLowerCase().contains('capsman'));
       if (looksLikeCapsMan) {
         try {
-          final regs = await client.query(['/caps-man/registration-table/print'])
-              .timeout(const Duration(seconds: 8));
+          final regs = await client
+              .query(['/caps-man/registration-table/print']).timeout(
+                  const Duration(seconds: 8));
           wirelessClients.addAll(regs);
-          if (kDebugMode) debugPrint('🟢 [mikrotik] caps-man reg-table → ${regs.length} clients');
+          if (kDebugMode)
+            debugPrint(
+                '🟢 [mikrotik] caps-man reg-table → ${regs.length} clients');
         } catch (_) {}
       }
       if (wirelessClients.isEmpty && wirelessRows.isNotEmpty && kDebugMode) {
         if (failureMsg == 'timeout') {
-          debugPrint('⚠️ [mikrotik] reg-table timeout — الجهاز بطيء أو overload. زد timeout عبر MikrotikApi.fetchStats(timeout: ...).');
+          debugPrint(
+              '⚠️ [mikrotik] reg-table timeout — الجهاز بطيء أو overload. زد timeout عبر MikrotikApi.fetchStats(timeout: ...).');
         } else if (failureMsg != null) {
           debugPrint('⚠️ [mikrotik] reg-table فشل: $failureMsg');
         } else {
-          debugPrint('ℹ️ [mikrotik] reg-table رجع فارغ عبر $pickedPath — الـAP بلا عملاء متصلين حالياً.');
+          debugPrint(
+              'ℹ️ [mikrotik] reg-table رجع فارغ عبر $pickedPath — الـAP بلا عملاء متصلين حالياً.');
         }
       }
 
@@ -388,7 +424,8 @@ class MikrotikApi {
         }
       } catch (_) {}
       try {
-        final acl = await client.query(['/interface/wireless/access-list/print']);
+        final acl =
+            await client.query(['/interface/wireless/access-list/print']);
         for (final a in acl) {
           final mac = (a['mac-address'] ?? '').toUpperCase();
           final comment = _nonEmpty(a['comment']);
@@ -421,7 +458,8 @@ class MikrotikApi {
 
       // ═══ Tier 2 كامل — يُرجع النسخة النهائيّة ═══
       return tier1.copyWith(
-        wirelessInterfaces: wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
+        wirelessInterfaces:
+            wirelessRows.map(MikrotikWireless.fromApiMap).toList(),
         wirelessClients: wirelessClients.map((c) {
           final macUpper = (c['mac-address'] ?? '').toUpperCase();
           final dhcp = dhcpMap[macUpper];
@@ -468,17 +506,21 @@ class MikrotikApi {
       } catch (e) {
         // Socket closure = الراوتر بدأ يُعيد التشغيل (متوقّع)
         final msg = e.toString();
-        if (msg.contains('closed') || msg.contains('timeout') ||
-            msg.contains('reset') || msg.contains('reboot')) {
-          return;  // ← نجاح: الأمر وصل والراوتر بدأ
+        if (msg.contains('closed') ||
+            msg.contains('timeout') ||
+            msg.contains('reset') ||
+            msg.contains('reboot')) {
+          return; // ← نجاح: الأمر وصل والراوتر بدأ
         }
-        rethrow;  // خطأ حقيقي (auth، socket refuse)
+        rethrow; // خطأ حقيقي (auth، socket refuse)
       }
     } catch (e) {
       if (e is MikrotikException) rethrow;
       throw MikrotikException(_translateSocketError(e));
     } finally {
-      try { await client.close(); } catch (_) {}
+      try {
+        await client.close();
+      } catch (_) {}
     }
   }
 
@@ -519,12 +561,15 @@ class MikrotikApi {
   /// (بدل الاعتماد على `terse` الذي على 6.49.x لا يُخرج signal/rate/ccq
   /// تلقائياً — فقط mac-address و interface).
   static Future<List<Map<String, String>>> _fetchClientsViaSsh(
-    String ip, String user, String pass,
+    String ip,
+    String user,
+    String pass,
   ) async {
     SSHClient? client;
     SSHSocket? socket;
     try {
-      socket = await SSHSocket.connect(ip, 22, timeout: const Duration(seconds: 6));
+      socket =
+          await SSHSocket.connect(ip, 22, timeout: const Duration(seconds: 6));
       client = SSHClient(
         socket,
         username: user,
@@ -537,21 +582,21 @@ class MikrotikApi {
       // يفصل الحقول والـSTART يفصل السجلّات. تجنّبنا newline بين حقول (لأنّه
       // SSH terminal يضيف \r\n قد يخرّب parse). الحقول مضمونة exist عبر :toarray.
       const script = ':local out ""; '
-        ':foreach id in=[/interface wireless registration-table find] do={ '
+          ':foreach id in=[/interface wireless registration-table find] do={ '
           ':local r [/interface wireless registration-table get \$id]; '
           ':set out (\$out . "START|mac=" . (\$r->"mac-address") . '
-            '"|iface=" . (\$r->"interface") . '
-            '"|name=" . (\$r->"radio-name") . '
-            '"|sig=" . (\$r->"signal-strength") . '
-            '"|txsig=" . (\$r->"tx-signal-strength") . '
-            '"|snr=" . (\$r->"signal-to-noise") . '
-            '"|txccq=" . (\$r->"tx-ccq") . '
-            '"|rxccq=" . (\$r->"rx-ccq") . '
-            '"|txr=" . (\$r->"tx-rate") . '
-            '"|rxr=" . (\$r->"rx-rate") . '
-            '"|up=" . (\$r->"uptime") . '
-            '"|comment=" . (\$r->"comment") . "\\r\\n") '
-        '}; :put \$out';
+          '"|iface=" . (\$r->"interface") . '
+          '"|name=" . (\$r->"radio-name") . '
+          '"|sig=" . (\$r->"signal-strength") . '
+          '"|txsig=" . (\$r->"tx-signal-strength") . '
+          '"|snr=" . (\$r->"signal-to-noise") . '
+          '"|txccq=" . (\$r->"tx-ccq") . '
+          '"|rxccq=" . (\$r->"rx-ccq") . '
+          '"|txr=" . (\$r->"tx-rate") . '
+          '"|rxr=" . (\$r->"rx-rate") . '
+          '"|up=" . (\$r->"uptime") . '
+          '"|comment=" . (\$r->"comment") . "\\r\\n") '
+          '}; :put \$out';
       final out = utf8.decode(
         await client.run(script).timeout(const Duration(seconds: 10)),
         allowMalformed: true,
@@ -563,7 +608,9 @@ class MikrotikApi {
       return _parseSshScript(out);
     } finally {
       client?.close();
-      try { socket?.close(); } catch (_) {}
+      try {
+        socket?.close();
+      } catch (_) {}
     }
   }
 
@@ -587,18 +634,42 @@ class MikrotikApi {
         if (val.isEmpty) continue;
         // Map قصر → API standard
         switch (key) {
-          case 'mac': map['mac-address'] = val; break;
-          case 'iface': map['interface'] = val; break;
-          case 'name': map['radio-name'] = val; break;
-          case 'sig': map['signal-strength'] = val; break;
-          case 'txsig': map['tx-signal-strength'] = val; break;
-          case 'snr': map['signal-to-noise'] = val; break;
-          case 'txccq': map['tx-ccq'] = val; break;
-          case 'rxccq': map['rx-ccq'] = val; break;
-          case 'txr': map['tx-rate'] = val; break;
-          case 'rxr': map['rx-rate'] = val; break;
-          case 'up': map['uptime'] = val; break;
-          case 'comment': map['comment'] = val; break;
+          case 'mac':
+            map['mac-address'] = val;
+            break;
+          case 'iface':
+            map['interface'] = val;
+            break;
+          case 'name':
+            map['radio-name'] = val;
+            break;
+          case 'sig':
+            map['signal-strength'] = val;
+            break;
+          case 'txsig':
+            map['tx-signal-strength'] = val;
+            break;
+          case 'snr':
+            map['signal-to-noise'] = val;
+            break;
+          case 'txccq':
+            map['tx-ccq'] = val;
+            break;
+          case 'rxccq':
+            map['rx-ccq'] = val;
+            break;
+          case 'txr':
+            map['tx-rate'] = val;
+            break;
+          case 'rxr':
+            map['rx-rate'] = val;
+            break;
+          case 'up':
+            map['uptime'] = val;
+            break;
+          case 'comment':
+            map['comment'] = val;
+            break;
         }
       }
       if (map.containsKey('mac-address')) {
@@ -614,10 +685,10 @@ typedef MikrotikException = MikrotikBinaryException;
 
 /// حالة مروحة أو PSU
 class MikrotikHealthItem {
-  final String name;      // 'fan1', 'psu1', 'sfp'
+  final String name; // 'fan1', 'psu1', 'sfp'
   final String? valueStr; // '4185 RPM' أو 'ok' أو '38 C'
-  final int? intValue;    // RPM أو Temp (لو رقمي)
-  final bool? isOk;       // true=ok، false=fail (لـPSU state)
+  final int? intValue; // RPM أو Temp (لو رقمي)
+  final bool? isOk; // true=ok، false=fail (لـPSU state)
   const MikrotikHealthItem({
     required this.name,
     this.valueStr,
@@ -637,11 +708,12 @@ class MikrotikStats {
   final String architectureName;
   final int cpuCount;
   final int cpuFrequencyMhz;
-  final int? temperature;         // °C من /system/health (CPU-preferred)
-  final double? voltage;          // V (CCR1009 نعم، CCR2116 لا)
-  final List<MikrotikHealthItem> fans;        // fan1-speed, fan2-speed, ...
-  final List<MikrotikHealthItem> psus;        // psu1-state, psu2-state
-  final List<MikrotikHealthItem> extraTemps;  // sfp-temperature، switch-temperature، board-temperature
+  final int? temperature; // °C من /system/health (CPU-preferred)
+  final double? voltage; // V (CCR1009 نعم، CCR2116 لا)
+  final List<MikrotikHealthItem> fans; // fan1-speed, fan2-speed, ...
+  final List<MikrotikHealthItem> psus; // psu1-state, psu2-state
+  final List<MikrotikHealthItem>
+      extraTemps; // sfp-temperature، switch-temperature، board-temperature
   final List<MikrotikInterface> interfaces;
   final int pppActiveCount;
   final List<MikrotikWireless> wirelessInterfaces;
@@ -675,7 +747,8 @@ class MikrotikStats {
   /// نستعمل هذا لعرض قسم "العملاء" حتى لو الحالة صفر (بدل ما نخفيه كلياً).
   bool get isAccessPoint => wirelessInterfaces.any((w) => w.isAp);
 
-  int get upInterfacesCount => interfaces.where((i) => i.running && !i.disabled).length;
+  int get upInterfacesCount =>
+      interfaces.where((i) => i.running && !i.disabled).length;
 
   /// نسخة بحقول محدَّثة — يستعملها progressive rendering.
   /// Tier 1 يبني MikrotikStats مع system data فقط (interfaces=[]، wireless=[]).
@@ -685,7 +758,8 @@ class MikrotikStats {
     int? pppActiveCount,
     List<MikrotikWireless>? wirelessInterfaces,
     List<MikrotikWirelessClient>? wirelessClients,
-  }) => MikrotikStats(
+  }) =>
+      MikrotikStats(
         cpuLoad: cpuLoad,
         memUsedPercent: memUsedPercent,
         memTotalBytes: memTotalBytes,
@@ -706,19 +780,20 @@ class MikrotikStats {
         wirelessInterfaces: wirelessInterfaces ?? this.wirelessInterfaces,
         wirelessClients: wirelessClients ?? this.wirelessClients,
       );
-  int get downInterfacesCount => interfaces.where((i) => !i.running && !i.disabled).length;
+  int get downInterfacesCount =>
+      interfaces.where((i) => !i.running && !i.disabled).length;
   int get memUsedBytes => memTotalBytes - memFreeBytes;
 }
 
 /// معلومات wireless interface (link / sector / AP)
 class MikrotikWireless {
-  final String name;              // wlan1, wlan2, ...
+  final String name; // wlan1, wlan2, ...
   final String ssid;
-  final String mode;              // ap-bridge, station, station-bridge, wds-slave, ...
-  final String band;              // 5ghz-a, 5ghz-n, 2ghz-b/g/n, ...
-  final int frequency;            // MHz
-  final int channelWidth;         // MHz
-  final int txPower;              // dBm
+  final String mode; // ap-bridge, station, station-bridge, wds-slave, ...
+  final String band; // 5ghz-a, 5ghz-n, 2ghz-b/g/n, ...
+  final int frequency; // MHz
+  final int channelWidth; // MHz
+  final int txPower; // dBm
   final bool disabled;
   final bool running;
 
@@ -745,7 +820,8 @@ class MikrotikWireless {
       mode: j['mode'] ?? '',
       band: j['band'] ?? '',
       frequency: _iOrZero(j['frequency']),
-      channelWidth: _iOrZero(j['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '')),
+      channelWidth:
+          _iOrZero(j['channel-width']?.replaceAll(RegExp(r'[^0-9]'), '')),
       txPower: _iOrZero(j['tx-power']),
       disabled: asBool(j['disabled']),
       running: asBool(j['running']),
@@ -756,18 +832,19 @@ class MikrotikWireless {
 /// عميل wireless متصل (من registration-table + DHCP lease enrichment)
 class MikrotikWirelessClient {
   final String mac;
-  final String iface;             // wlan1, wlan2 — أي wireless انضمّ عليه
-  final int signalStrength;       // dBm — RX (كيف نستقبل من العميل)
-  final int txSignalStrength;     // dBm — TX (كيف العميل يستقبل منّا). 0 = غير متوفّر
-  final int signalToNoise;        // dB (SNR)
-  final int txCcq;                // Client Connection Quality % (0-100)
-  final int rxCcq;                // %
-  final int txRate;               // Mbps
-  final int rxRate;               // Mbps
-  final int uptime;               // seconds
-  final String? comment;          // من registration-table comment
-  final String? hostname;         // من DHCP host-name أو lease comment
-  final String? ip;                // من DHCP active-address
+  final String iface; // wlan1, wlan2 — أي wireless انضمّ عليه
+  final int signalStrength; // dBm — RX (كيف نستقبل من العميل)
+  final int
+      txSignalStrength; // dBm — TX (كيف العميل يستقبل منّا). 0 = غير متوفّر
+  final int signalToNoise; // dB (SNR)
+  final int txCcq; // Client Connection Quality % (0-100)
+  final int rxCcq; // %
+  final int txRate; // Mbps
+  final int rxRate; // Mbps
+  final int uptime; // seconds
+  final String? comment; // من registration-table comment
+  final String? hostname; // من DHCP host-name أو lease comment
+  final String? ip; // من DHCP active-address
 
   const MikrotikWirelessClient({
     required this.mac,
@@ -863,7 +940,8 @@ int _iOrZero(dynamic v) {
   return int.tryParse(v.toString()) ?? 0;
 }
 
-String? _nonEmpty(String? s) => (s == null || s.trim().isEmpty) ? null : s.trim();
+String? _nonEmpty(String? s) =>
+    (s == null || s.trim().isEmpty) ? null : s.trim();
 
 class MikrotikInterface {
   final String name;
@@ -873,8 +951,10 @@ class MikrotikInterface {
   final int? mtu;
   final int? rxBytes;
   final int? txBytes;
+
   /// سرعة الـport الفعليّة من ethernet/monitor (مثل "1Gbps", "100Mbps")
   final String? linkSpeed;
+
   /// full-duplex من ethernet/monitor
   final bool fullDuplex;
 
@@ -901,6 +981,7 @@ class MikrotikInterface {
       if (v == null) return null;
       return int.tryParse(v);
     }
+
     return MikrotikInterface(
       name: j['name'] ?? '',
       type: j['type'] ?? '',

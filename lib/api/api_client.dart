@@ -94,9 +94,7 @@ class _AuthInterceptor extends Interceptor {
     // 403 مع {blocked:true} → المدير محظور من super-admin. نمسح الجلسة
     // ونبعث إشارة للـUI ليطرده لـLoginScreen مع عرض السبب. نضع
     // blockedMessage قبل أن نطلق الإشارة عشان الـMainShell يقرأها.
-    if (response.statusCode == 403 &&
-        data is Map &&
-        data['blocked'] == true) {
+    if (response.statusCode == 403 && data is Map && data['blocked'] == true) {
       final msg = data['message']?.toString();
       blockedMessage = (msg != null && msg.isNotEmpty)
           ? msg

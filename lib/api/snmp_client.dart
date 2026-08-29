@@ -59,8 +59,8 @@ class SnmpV2c {
       pduType: _pduGetBulkRequest,
       requestId: requestId,
       oids: [baseOid],
-      errorStatus: nonRepeaters,       // في GETBULK: non-repeaters
-      errorIndex: maxRepetitions,      // في GETBULK: max-repetitions
+      errorStatus: nonRepeaters, // في GETBULK: non-repeaters
+      errorIndex: maxRepetitions, // في GETBULK: max-repetitions
     );
     final response = await _send(packet);
     return _parseResponse(response, expectedRequestId: requestId);
@@ -186,7 +186,8 @@ class SnmpV2c {
 
     // Message: version=1 (v2c), community, pdu
     final msg = <int>[
-      ..._tlv(_tagInteger, _encodeInt(1)),                             // v2c = version 1 (0-indexed: v1=0, v2c=1)
+      ..._tlv(_tagInteger,
+          _encodeInt(1)), // v2c = version 1 (0-indexed: v1=0, v2c=1)
       ..._tlv(_tagOctetString, community.codeUnits),
       ...pduBytes,
     ];
@@ -226,7 +227,8 @@ class SnmpV2c {
       // (Mimosa OIDs don't need negative request IDs, but keep it correct)
       // ~n + 1 in variable-length representation. Simple hack for typical
       // range — we don't use negative in this file.
-      throw UnimplementedError('negative int not supported in this minimal encoder');
+      throw UnimplementedError(
+          'negative int not supported in this minimal encoder');
     }
     return bytes;
   }
@@ -234,7 +236,8 @@ class SnmpV2c {
   /// OID → bytes (base-128 encoding). First byte = 40*a + b.
   List<int> _encodeOid(String oid) {
     final parts = oid.split('.').map(int.parse).toList();
-    if (parts.length < 2) throw ArgumentError('OID must have ≥2 components: $oid');
+    if (parts.length < 2)
+      throw ArgumentError('OID must have ≥2 components: $oid');
     final bytes = <int>[parts[0] * 40 + parts[1]];
     for (int i = 2; i < parts.length; i++) {
       bytes.addAll(_encodeBase128(parts[i]));
@@ -290,7 +293,8 @@ class SnmpV2c {
     r.pos += ridLen;
     if (expectedRequestId != null && rid != expectedRequestId) {
       if (kDebugMode) {
-        debugPrint('⚠️ SNMP request-id mismatch: expected=$expectedRequestId got=$rid');
+        debugPrint(
+            '⚠️ SNMP request-id mismatch: expected=$expectedRequestId got=$rid');
       }
     }
 
@@ -306,7 +310,8 @@ class SnmpV2c {
     r.pos += eiLen;
 
     if (errStatus != 0) {
-      throw SnmpException('SNMP error-status=$errStatus (${_errorText(errStatus)})');
+      throw SnmpException(
+          'SNMP error-status=$errStatus (${_errorText(errStatus)})');
     }
 
     // varbinds SEQUENCE
@@ -338,7 +343,7 @@ class SnmpV2c {
         rawBytes: valueBytes,
       ));
 
-      r.pos = vbEnd2;  // safety
+      r.pos = vbEnd2; // safety
     }
 
     return result;
@@ -378,11 +383,16 @@ class SnmpV2c {
 
   static String _errorText(int status) {
     switch (status) {
-      case 1: return 'tooBig — الحزمة كبيرة جدّاً';
-      case 2: return 'noSuchName — OID غير موجود';
-      case 3: return 'badValue';
-      case 5: return 'genErr — خطأ عام';
-      default: return 'unknown';
+      case 1:
+        return 'tooBig — الحزمة كبيرة جدّاً';
+      case 2:
+        return 'noSuchName — OID غير موجود';
+      case 3:
+        return 'badValue';
+      case 5:
+        return 'genErr — خطأ عام';
+      default:
+        return 'unknown';
     }
   }
 }
@@ -401,11 +411,11 @@ class Varbind {
   /// القيمة كنص — يعمل مع OctetString + OID + IpAddress.
   String get asString {
     switch (rawTag) {
-      case 0x04:                                // OCTET STRING
+      case 0x04: // OCTET STRING
         return String.fromCharCodes(rawBytes);
-      case 0x06:                                // OID
+      case 0x06: // OID
         return SnmpV2c._decodeOid(rawBytes);
-      case 0x40:                                // IpAddress (4 bytes)
+      case 0x40: // IpAddress (4 bytes)
         if (rawBytes.length == 4) {
           return '${rawBytes[0]}.${rawBytes[1]}.${rawBytes[2]}.${rawBytes[3]}';
         }
@@ -418,12 +428,12 @@ class Varbind {
   /// القيمة كعدد صحيح — يعمل مع INTEGER / Counter32 / Gauge32 / TimeTicks / Counter64.
   int get asInt {
     switch (rawTag) {
-      case 0x02:                                // INTEGER (signed)
+      case 0x02: // INTEGER (signed)
         return SnmpV2c._readIntBytes(rawBytes, 0, rawBytes.length);
-      case 0x41:                                // Counter32
-      case 0x42:                                // Gauge32 / Unsigned32
-      case 0x43:                                // TimeTicks
-      case 0x46:                                // Counter64
+      case 0x41: // Counter32
+      case 0x42: // Gauge32 / Unsigned32
+      case 0x43: // TimeTicks
+      case 0x46: // Counter64
         int v = 0;
         for (final b in rawBytes) {
           v = (v << 8) | b;
@@ -445,9 +455,7 @@ class Varbind {
 
   /// hex dump للـdebug
   String get asHex {
-    return rawBytes
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join(' ');
+    return rawBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
   }
 
   /// end-of-mib-view (SNMPv2 exception) — tag = 0x82

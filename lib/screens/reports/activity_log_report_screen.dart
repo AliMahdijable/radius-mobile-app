@@ -87,8 +87,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
         from: _range.from,
         to: _range.to,
         search: _search.isEmpty ? null : _search,
-        userIds:
-            _filters.actionManagerId == null ? _scopeIds : null,
+        userIds: _filters.actionManagerId == null ? _scopeIds : null,
         actionManagerId: _filters.actionManagerId,
         userManager: _filters.userManager,
         employeeId: _filters.employeeId,
@@ -164,8 +163,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
   Widget build(BuildContext context) {
     Theme.of(context);
     final visible = _visibleRows;
-    final totalPages =
-        (visible.length / _pageSize).ceil().clamp(1, 99999);
+    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
     final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
     final pageRows = visible.isEmpty
@@ -176,152 +174,153 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
       permission: 'reports.activity_log',
       title: 'reports.activity_log'.tr(),
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'reports.activity_log'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'reports.activity_log'.tr(),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-              child: Column(
-                children: [
-                  DateRangeChipBar(
-                    value: _range,
-                    onChanged: (r) {
-                      setState(() => _range = r);
-                      _load();
-                    },
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  TextField(
-                    controller: _searchCtrl,
-                    onSubmitted: (v) {
-                      _search = v.trim();
-                      _load();
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'reports.search_hint'.tr(),
-                      hintStyle: AppType.input(color: AppColors.textLow),
-                      prefixIcon: Icon(LucideIcons.search,
-                          size: 18, color: AppColors.textMid),
-                      filled: true,
-                      fillColor: AppColors.surfaceInput,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(R.sm),
-                        borderSide: BorderSide(color: AppColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(R.sm),
-                        borderSide: BorderSide(color: AppColors.border),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                child: Column(
+                  children: [
+                    DateRangeChipBar(
+                      value: _range,
+                      onChanged: (r) {
+                        setState(() => _range = r);
+                        _load();
+                      },
+                    ),
+                    const SizedBox(height: Sp.sm),
+                    TextField(
+                      controller: _searchCtrl,
+                      onSubmitted: (v) {
+                        _search = v.trim();
+                        _load();
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'reports.search_hint'.tr(),
+                        hintStyle: AppType.input(color: AppColors.textLow),
+                        prefixIcon: Icon(LucideIcons.search,
+                            size: 18, color: AppColors.textMid),
+                        filled: true,
+                        fillColor: AppColors.surfaceInput,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(R.sm),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(R.sm),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  ReportFiltersPanel(
-                    value: _filters,
-                    onChanged: (v) {
-                      setState(() {
-                        _filters = v;
-                        _page = 0;
-                      });
-                      _load();
-                    },
-                  ),
-                ],
+                    const SizedBox(height: Sp.sm),
+                    ReportFiltersPanel(
+                      value: _filters,
+                      onChanged: (v) {
+                        setState(() {
+                          _filters = v;
+                          _page = 0;
+                        });
+                        _load();
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _load,
-                color: AppColors.brand,
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _error != null
-                        ? _errorState()
-                        : _rows.isEmpty
-                            ? _emptyState()
-                            : ListView(
-                                padding: const EdgeInsets.fromLTRB(
-                                    Sp.lg, Sp.sm, Sp.lg, Sp.huge),
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ReportStatsBar(
-                                          totalItems: visible.length,
-                                          pageStart: pageStart,
-                                          pageEnd: pageEnd,
-                                          pageSize: _pageSize,
-                                          onPageSizeChange: (s) =>
-                                              setState(() {
-                                            _pageSize = s;
-                                            _page = 0;
-                                          }),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _load,
+                  color: AppColors.brand,
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error != null
+                          ? _errorState()
+                          : _rows.isEmpty
+                              ? _emptyState()
+                              : ListView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      Sp.lg, Sp.sm, Sp.lg, Sp.huge),
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ReportStatsBar(
+                                            totalItems: visible.length,
+                                            pageStart: pageStart,
+                                            pageEnd: pageEnd,
+                                            pageSize: _pageSize,
+                                            onPageSizeChange: (s) =>
+                                                setState(() {
+                                              _pageSize = s;
+                                              _page = 0;
+                                            }),
+                                          ),
                                         ),
+                                        ReportExportBar(
+                                          title: 'reports.activity_log'.tr(),
+                                          subtitle:
+                                              '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                                          fileNameBase: 'activity_log',
+                                          columns: [
+                                            'reports.col_subscriber'.tr(),
+                                            'reports.col_username'.tr(),
+                                            'reports.col_amount'.tr(),
+                                            'reports.col_date'.tr(),
+                                            'reports.col_description'.tr(),
+                                            'reports.col_type'.tr(),
+                                            'reports.col_executor'.tr(),
+                                          ],
+                                          columnWeights: _pdfWeights,
+                                          rows: _exportRows,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: Sp.sm),
+                                    for (final r in pageRows) ...[
+                                      ReportLogTile(
+                                        actionType: r.actionType,
+                                        description: r.actionDescription ?? '',
+                                        amount: r.amount,
+                                        adminUsername: r.adminUsername,
+                                        employeeFullName:
+                                            r.actingEmployeeFullName,
+                                        subscriberFullName: r.userFullName,
+                                        subscriberUsername: r.userUsername,
+                                        targetName:
+                                            r.targetName ?? r.userUsername,
+                                        createdAt: r.createdAt,
                                       ),
-                                      ReportExportBar(
-                                        title: 'reports.activity_log'.tr(),
-                                        subtitle:
-                                            '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                                        fileNameBase: 'activity_log',
-                                        columns: [
-                                          'reports.col_subscriber'.tr(),
-                                          'reports.col_username'.tr(),
-                                          'reports.col_amount'.tr(),
-                                          'reports.col_date'.tr(),
-                                          'reports.col_description'.tr(),
-                                          'reports.col_type'.tr(),
-                                          'reports.col_executor'.tr(),
-                                        ],
-                                        columnWeights: _pdfWeights,
-                                        rows: _exportRows,
-                                      ),
+                                      const SizedBox(height: 4),
                                     ],
-                                  ),
-                                  const SizedBox(height: Sp.sm),
-                                  for (final r in pageRows) ...[
-                                    ReportLogTile(
-                                      actionType: r.actionType,
-                                      description: r.actionDescription ?? '',
-                                      amount: r.amount,
-                                      adminUsername: r.adminUsername,
-                                      employeeFullName:
-                                          r.actingEmployeeFullName,
-                                      subscriberFullName: r.userFullName,
-                                      subscriberUsername: r.userUsername,
-                                      targetName:
-                                          r.targetName ?? r.userUsername,
-                                      createdAt: r.createdAt,
-                                    ),
-                                    const SizedBox(height: 4),
+                                    if (totalPages > 1)
+                                      ReportPager(
+                                        page: _page,
+                                        totalPages: totalPages,
+                                        onPrev: () => setState(() => _page--),
+                                        onNext: () => setState(() => _page++),
+                                      ),
                                   ],
-                                  if (totalPages > 1)
-                                    ReportPager(
-                                      page: _page,
-                                      totalPages: totalPages,
-                                      onPrev: () => setState(() => _page--),
-                                      onNext: () => setState(() => _page++),
-                                    ),
-                                ],
-                              ),
+                                ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -369,5 +368,4 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
-
 }

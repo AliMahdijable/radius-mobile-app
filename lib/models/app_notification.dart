@@ -5,11 +5,11 @@ import 'dart:convert';
 /// الـkeys مطابقة `data.type` اللي يرسله backend
 /// (adminExpiryNotifier.js:260 + مصادر أخرى في server.js).
 enum NotificationKind {
-  nearExpiryDigest,   // اشتراكات قاربت الانتهاء
+  nearExpiryDigest, // اشتراكات قاربت الانتهاء
   expiredTodayDigest, // اشتراكات انتهت اليوم
-  managerDebt,        // دين مدير فرعي
-  managerBalance,     // تحديث رصيد مدير
-  other;              // fallback
+  managerDebt, // دين مدير فرعي
+  managerBalance, // تحديث رصيد مدير
+  other; // fallback
 
   static NotificationKind fromString(String? s) {
     switch ((s ?? '').trim()) {

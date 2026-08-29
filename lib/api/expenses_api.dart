@@ -15,10 +15,12 @@ class ExpenseRow {
   });
   final int id;
   final num amount;
+
   /// 'YYYY-MM-DD' from the backend — kept as a string for round-trip
   /// safety (date-only, no TZ).
   final String expenseDate;
   final String? note;
+
   /// Set when an employee created the row instead of the admin.
   final String? actingEmployeeUsername;
 
@@ -72,7 +74,8 @@ class ExpensesApi {
         },
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return (rows: const <ExpenseRow>[], total: 0);
+      if (body['success'] != true)
+        return (rows: const <ExpenseRow>[], total: 0);
       final list = body['expenses'];
       if (list is! List) return (rows: const <ExpenseRow>[], total: 0);
       final rows = list
@@ -111,7 +114,10 @@ class ExpensesApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('admin/expenses (PUT)', e);
       final body = e.response?.data;
@@ -130,7 +136,10 @@ class ExpensesApi {
         '/api/admin/expenses/$id',
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('admin/expenses (DELETE)', e);
       final body = e.response?.data;
@@ -163,9 +172,7 @@ class ExpensesApi {
       final body = r.data ?? const {};
       final ok = body['success'] == true;
       final rawId = body['id'];
-      final id = rawId is int
-          ? rawId
-          : int.tryParse(rawId?.toString() ?? '');
+      final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
       return (ok: ok, message: body['message']?.toString(), id: id);
     } on DioException catch (e) {
       _log('admin/expenses (POST)', e);

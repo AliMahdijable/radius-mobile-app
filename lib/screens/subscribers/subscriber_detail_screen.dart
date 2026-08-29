@@ -356,8 +356,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor:
-                  wantEnable ? AppColors.brand : const Color(0xFFCD8B00),
+              backgroundColor: wantEnable ? AppColors.brand : AppColors.warning,
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(action),

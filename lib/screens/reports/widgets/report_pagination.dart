@@ -30,7 +30,7 @@ class ReportStatsBar extends StatelessWidget {
 
   final int totalItems;
   final int pageStart; // 0-based, inclusive (نعرضه +1)
-  final int pageEnd;   // 0-based, exclusive
+  final int pageEnd; // 0-based, exclusive
   final int pageSize;
   final ValueChanged<int> onPageSizeChange;
 
@@ -87,7 +87,8 @@ class ReportPager extends StatelessWidget {
           ),
           const SizedBox(width: Sp.md),
           Text(
-            'subscribers.page_of'.tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
+            'subscribers.page_of'
+                .tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
             style: AppType.label(color: AppColors.textHi).copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -132,8 +133,7 @@ class _PageSizePicker extends StatelessWidget {
               style: AppType.muted(color: AppColors.textLow)
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
           const SizedBox(width: 2),
-          Icon(LucideIcons.chevronDown,
-              size: 11, color: AppColors.textLow),
+          Icon(LucideIcons.chevronDown, size: 11, color: AppColors.textLow),
         ],
       ),
     );
@@ -161,14 +161,10 @@ class _ArrowBtn extends StatelessWidget {
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-          color: enabled
-              ? AppColors.brand.withValues(alpha: 0.10)
-              : AppColors.surface,
+          color: enabled ? AppColors.brandSoftBg : AppColors.surface,
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
-            color: enabled
-                ? AppColors.brand.withValues(alpha: 0.30)
-                : AppColors.border,
+            color: enabled ? AppColors.brandSoftBorder : AppColors.border,
           ),
         ),
         alignment: Alignment.center,

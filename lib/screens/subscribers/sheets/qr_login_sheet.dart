@@ -340,7 +340,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.brand.withOpacity(0.08),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.pill),
           ),
           child: Row(
@@ -423,7 +423,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                 ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: BorderSide(color: AppColors.brand.withOpacity(0.4)),
+                  side: BorderSide(color: AppColors.brandSoftBorder),
                   foregroundColor: AppColors.brand,
                 ),
               ),
@@ -449,7 +449,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF25D366),
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onBrand,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),

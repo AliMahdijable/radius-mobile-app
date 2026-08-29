@@ -139,7 +139,7 @@ class _ChooserSheet extends StatelessWidget {
             _actionRow(
               icon: LucideIcons.pencil,
               label: 'تعديل الموقع',
-              color: const Color(0xFFE08F2D),
+              color: AppColors.warning,
               onTap: () async {
                 Navigator.of(context).pop();
                 await showLocationEditSheet(context, sub: sub);
@@ -438,10 +438,10 @@ class _EditSheetState extends State<_EditSheet> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.08),
+                color: AppColors.dangerSoftBg,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: AppColors.error.withValues(alpha: 0.3),
+                  color: AppColors.dangerSoftBorder,
                   width: 0.5,
                 ),
               ),
@@ -485,7 +485,7 @@ class _EditSheetState extends State<_EditSheet> {
                   ),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF14B8A6),
+                  backgroundColor: AppColors.success,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
@@ -551,7 +551,7 @@ class _EditSheetState extends State<_EditSheet> {
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide:
-                          BorderSide(color: const Color(0xFF14B8A6), width: 1),
+                          BorderSide(color: AppColors.success, width: 1),
                     ),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
@@ -585,17 +585,17 @@ class _EditSheetState extends State<_EditSheet> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF14B8A6).withValues(alpha: 0.08),
+                color: AppColors.success.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
+                  color: AppColors.success.withValues(alpha: 0.3),
                   width: 0.5,
                 ),
               ),
               child: Row(
                 children: [
                   Icon(LucideIcons.circleCheck,
-                      size: 14, color: const Color(0xFF14B8A6)),
+                      size: 14, color: AppColors.success),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(

@@ -37,6 +37,7 @@ class ManagerNoticeService {
     required num currentCredit,
     required num currentDebt,
     required String actionKind,
+
     /// مطلب 2026-06-11 (مطابق v1 _ManagerFinancialNoticeData): الكاش
     /// والقالب يفصلان دين الـSAS عن الديون الأخرى. callers يعرفون
     /// التقسيم عند العملية ويمرّرونه؛ لو ما مرّر سيُحسب كله SAS.
@@ -162,9 +163,8 @@ class ManagerNoticeService {
       isLoan: isLoan,
       notes: notes,
     );
-    final managerName = manager.fullName.isNotEmpty
-        ? manager.fullName
-        : manager.username;
+    final managerName =
+        manager.fullName.isNotEmpty ? manager.fullName : manager.username;
     final replacements = <String, String>{
       '{manager_name}': managerName,
       '{manager_username}': manager.username,
@@ -204,13 +204,11 @@ class ManagerNoticeService {
     required String actionKind,
     String? notes,
   }) {
-    final name = manager.fullName.isNotEmpty
-        ? manager.fullName
-        : manager.username;
+    final name =
+        manager.fullName.isNotEmpty ? manager.fullName : manager.username;
     final label = _actionTypeLabel(actionKind, isLoan: isLoan);
-    final totalDebt = sasDebts + otherDebts > 0
-        ? sasDebts + otherDebts
-        : currentDebt;
+    final totalDebt =
+        sasDebts + otherDebts > 0 ? sasDebts + otherDebts : currentDebt;
     final lines = <String>[
       'عزيزي المدير $name، 👋',
       '',
@@ -218,11 +216,9 @@ class ManagerNoticeService {
       '💵 المبلغ: ${_fmt(amount)} د.ع',
       '',
       '💳 رصيدك الحالي: ${_fmt(currentCredit)} د.ع',
-      if (previousDebt > 0)
-        '↩️ الدين السابق: ${_fmt(previousDebt)} د.ع',
+      if (previousDebt > 0) '↩️ الدين السابق: ${_fmt(previousDebt)} د.ع',
       if (totalDebt > 0) '📊 الدين الحالي: ${_fmt(totalDebt)} د.ع',
-      if ((notes ?? '').trim().isNotEmpty)
-        '📝 ملاحظة: ${notes!.trim()}',
+      if ((notes ?? '').trim().isNotEmpty) '📝 ملاحظة: ${notes!.trim()}',
     ];
     return lines.join('\n');
   }

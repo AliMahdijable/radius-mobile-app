@@ -5,9 +5,9 @@ import '../core/util/format.dart';
 class DeviceRegion {
   final int id;
   final String name;
-  final String? color;    // #RRGGBB أو null
+  final String? color; // #RRGGBB أو null
   final int sortOrder;
-  final int deviceCount;  // من backend JOIN — 0 لو ما فيها أجهزة بعد
+  final int deviceCount; // من backend JOIN — 0 لو ما فيها أجهزة بعد
   final DateTime createdAt;
 
   const DeviceRegion({

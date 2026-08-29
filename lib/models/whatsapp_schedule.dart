@@ -68,8 +68,7 @@ class WhatsAppSchedule {
           ? json['execution_count'] as int
           : int.tryParse(json['execution_count']?.toString() ?? '0') ?? 0,
       scheduleMode: (json['schedule_mode'] ?? 'weekly').toString(),
-      monthDays: _parseIntList(json['month_days'],
-              defaultVal: const [])
+      monthDays: _parseIntList(json['month_days'], defaultVal: const [])
           .where((n) => n >= 1 && n <= 31)
           .toList(),
       channelPreference: () {
@@ -129,8 +128,7 @@ class WhatsAppSchedule {
     );
   }
 
-  static List<int> _parseIntList(dynamic raw,
-      {required List<int> defaultVal}) {
+  static List<int> _parseIntList(dynamic raw, {required List<int> defaultVal}) {
     if (raw is List) {
       try {
         return raw.map((e) {
@@ -144,8 +142,7 @@ class WhatsAppSchedule {
     }
     if (raw is String) {
       try {
-        final cleaned =
-            raw.replaceAll('[', '').replaceAll(']', '').trim();
+        final cleaned = raw.replaceAll('[', '').replaceAll(']', '').trim();
         if (cleaned.isEmpty) return defaultVal;
         return cleaned
             .split(',')

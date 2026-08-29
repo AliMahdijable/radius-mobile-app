@@ -138,8 +138,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content:
-            Text(r.ok ? (r.message ?? 'أُعيدت المحاولة') : (r.message ?? 'فشل')),
+        content: Text(
+            r.ok ? (r.message ?? 'أُعيدت المحاولة') : (r.message ?? 'فشل')),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -175,8 +175,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
         actions: [
           IconButton(
             tooltip: 'تحديث',
-            icon: Icon(LucideIcons.refreshCw,
-                size: 18, color: AppColors.textMid),
+            icon:
+                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
             onPressed: _loading ? null : () => _load(refresh: true),
           ),
         ],
@@ -207,7 +207,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                               child: SizedBox(
                                 width: 22,
                                 height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
                           );
@@ -238,8 +239,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
           suffixIcon: _searchCtrl.text.isEmpty
               ? null
               : IconButton(
-                  icon: Icon(LucideIcons.x,
-                      size: 14, color: AppColors.textMid),
+                  icon: Icon(LucideIcons.x, size: 14, color: AppColors.textMid),
                   onPressed: () {
                     _searchCtrl.clear();
                     _onSearchChanged('');
@@ -277,10 +277,10 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
         children: [
           _stat('الكل', t, AppColors.textHi),
           const SizedBox(width: 6),
-          _stat('مرسلة', s?.sent ?? 0, const Color(0xFF14B8A6)),
+          _stat('مرسلة', s?.sent ?? 0, AppColors.success),
           const SizedBox(width: 6),
           _stat('انتظار', (s?.pending ?? 0) + (s?.processing ?? 0),
-              const Color(0xFFE08F2D)),
+              AppColors.warning),
           const SizedBox(width: 6),
           _stat('فاشلة', s?.failed ?? 0, AppColors.error),
         ],
@@ -308,8 +308,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
               ),
             ),
             const SizedBox(height: 1),
-            Text(label,
-                style: AppType.muted().copyWith(fontSize: 9.5)),
+            Text(label, style: AppType.muted().copyWith(fontSize: 9.5)),
           ],
         ),
       ),
@@ -375,7 +374,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                 setState(() => _typeFilter = k);
                 _load(refresh: true);
               },
-              color: const Color(0xFF8B5CF6),
+              color: AppColors.brandAccent,
             ),
             const SizedBox(width: 6),
           ],
@@ -391,9 +390,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
     required Color color,
   }) {
     return Material(
-      color: active
-          ? color.withValues(alpha: 0.12)
-          : AppColors.surfaceInput,
+      color: active ? color.withValues(alpha: 0.12) : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.pill),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -498,19 +495,18 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(R.sm),
                       border: Border.all(
-                          color: color.withValues(alpha: 0.25),
-                          width: 0.5),
+                          color: color.withValues(alpha: 0.25), width: 0.5),
                     ),
                     child: Text(
                       statusText,
-                      style: AppType.button(color: color)
-                          .copyWith(fontSize: 10),
+                      style:
+                          AppType.button(color: color).copyWith(fontSize: 10),
                     ),
                   ),
                 ],
@@ -519,8 +515,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceInput,
                     borderRadius: BorderRadius.circular(R.sm),
@@ -557,8 +553,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(LucideIcons.clock,
-                      size: 10, color: AppColors.textLow),
+                  Icon(LucideIcons.clock, size: 10, color: AppColors.textLow),
                   const SizedBox(width: 3),
                   Text(
                     _formatTime(m.createdAt),
@@ -566,8 +561,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                   ),
                   if ((m.messageType ?? '').isNotEmpty) ...[
                     const SizedBox(width: 8),
-                    Icon(LucideIcons.tag,
-                        size: 10, color: AppColors.textLow),
+                    Icon(LucideIcons.tag, size: 10, color: AppColors.textLow),
                     const SizedBox(width: 3),
                     Text(
                       _typeLabel(m.messageType!),
@@ -600,11 +594,11 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
   (Color, IconData, String) _statusVisual(MessageLog m) {
     switch (m.status) {
       case 'sent':
-        return (const Color(0xFF14B8A6), LucideIcons.check, 'أُرسلت');
+        return (AppColors.success, LucideIcons.check, 'أُرسلت');
       case 'pending':
-        return (const Color(0xFFE08F2D), LucideIcons.clock, 'انتظار');
+        return (AppColors.warning, LucideIcons.clock, 'انتظار');
       case 'processing':
-        return (const Color(0xFF3B82F6), LucideIcons.loader, 'يُرسل الآن');
+        return (AppColors.brandAccent, LucideIcons.loader, 'يُرسل الآن');
       case 'failed':
         return (AppColors.error, LucideIcons.x, 'فشل');
       case 'cancelled':
@@ -672,8 +666,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       return const SizedBox.shrink();
     }
     final isTg = ch == 'telegram';
-    final color =
-        isTg ? const Color(0xFF229ED9) : const Color(0xFF25D366);
+    final color = isTg ? const Color(0xFF229ED9) : const Color(0xFF25D366);
     final icon = isTg ? LucideIcons.send : LucideIcons.messageCircle;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -728,16 +721,14 @@ class _MessageDetailSheet extends StatelessWidget {
             if ((message.messageType ?? '').isNotEmpty)
               _row('النوع', _typeLabel(message.messageType!)),
             _row('التاريخ', _formatFullDateTime(message.createdAt)),
-            if (message.isFailed &&
-                (message.errorMessage ?? '').isNotEmpty)
+            if (message.isFailed && (message.errorMessage ?? '').isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
+                  color: AppColors.dangerSoftBg,
                   borderRadius: BorderRadius.circular(R.sm),
-                  border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.25)),
+                  border: Border.all(color: AppColors.dangerSoftBorder),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -784,8 +775,8 @@ class _MessageDetailSheet extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(
-                          text: message.messagePreview ?? ''));
+                      Clipboard.setData(
+                          ClipboardData(text: message.messagePreview ?? ''));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('تمّ نسخ النصّ'),
@@ -813,8 +804,8 @@ class _MessageDetailSheet extends StatelessWidget {
                       icon: const Icon(LucideIcons.rotateCw, size: 14),
                       label: const Text('إعادة المحاولة'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE08F2D),
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppColors.warning,
+                        foregroundColor: AppColors.onBrand,
                       ),
                     ),
                   ),
@@ -836,8 +827,7 @@ class _MessageDetailSheet extends StatelessWidget {
         children: [
           SizedBox(
             width: 82,
-            child: Text(label,
-                style: AppType.muted().copyWith(fontSize: 11.5)),
+            child: Text(label, style: AppType.muted().copyWith(fontSize: 11.5)),
           ),
           Expanded(
             child: Text(
@@ -845,9 +835,8 @@ class _MessageDetailSheet extends StatelessWidget {
               style: AppType.subtitle(color: AppColors.textHi).copyWith(
                 fontSize: 12.5,
                 fontFamily: 'Cairo',
-                fontFeatures: mono
-                    ? const [FontFeature.tabularFigures()]
-                    : null,
+                fontFeatures:
+                    mono ? const [FontFeature.tabularFigures()] : null,
               ),
               textDirection: mono ? TextDirection.ltr : null,
             ),

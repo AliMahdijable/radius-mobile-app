@@ -99,7 +99,8 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
         actions: [
           IconButton(
             tooltip: 'common.refresh'.tr(),
-            icon: Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textHi),
+            icon:
+                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textHi),
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -110,7 +111,8 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
               color: AppColors.brand,
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+                padding:
+                    const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
                 children: [
                   // Banner: التحرير من الويب فقط
                   _WebOnlyBanner(),
@@ -153,8 +155,8 @@ Widget _sectionLabel(String text, IconData icon) => Row(
         Icon(icon, size: 14, color: AppColors.brand),
         const SizedBox(width: Sp.xs),
         Text(text,
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 12)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 12)),
       ],
     );
 
@@ -164,8 +166,8 @@ class _WebOnlyBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.brand.withOpacity(0.06),
-        border: Border.all(color: AppColors.brand.withOpacity(0.2)),
+        color: AppColors.brandSoftBg,
+        border: Border.all(color: AppColors.brandSoftBorder),
         borderRadius: BorderRadius.circular(R.md),
       ),
       child: Column(
@@ -207,13 +209,12 @@ class _WebOnlyBanner extends StatelessWidget {
                   horizontal: Sp.md, vertical: Sp.sm),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                border: Border.all(color: AppColors.brand.withOpacity(0.25)),
+                border: Border.all(color: AppColors.brandSoftBorder),
                 borderRadius: BorderRadius.circular(R.sm),
               ),
               child: Row(
                 children: [
-                  Icon(LucideIcons.link,
-                      size: 12, color: AppColors.brand),
+                  Icon(LucideIcons.link, size: 12, color: AppColors.brand),
                   const SizedBox(width: Sp.sm),
                   Expanded(
                     child: Text(
@@ -226,7 +227,7 @@ class _WebOnlyBanner extends StatelessWidget {
                     ),
                   ),
                   Icon(LucideIcons.copy,
-                      size: 12, color: AppColors.brand.withOpacity(0.6)),
+                      size: 12, color: AppColors.brandSoftBorder),
                 ],
               ),
             ),
@@ -266,7 +267,7 @@ class _TemplateViewCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.brand.withOpacity(0.1),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Icon(typeIcon, color: AppColors.brand, size: 22),
@@ -294,7 +295,7 @@ class _TemplateViewCard extends StatelessWidget {
                       horizontal: Sp.sm, vertical: 2),
                   decoration: BoxDecoration(
                     color: (exists && template!.isActive)
-                        ? AppColors.brand.withOpacity(0.1)
+                        ? AppColors.brandSoftBg
                         : AppColors.textMid.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
@@ -316,7 +317,7 @@ class _TemplateViewCard extends StatelessWidget {
           ),
           if (exists && onPreview != null)
             Material(
-              color: AppColors.brand.withOpacity(0.1),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
@@ -330,8 +331,7 @@ class _TemplateViewCard extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.eye,
-                          size: 14, color: AppColors.brand),
+                      Icon(LucideIcons.eye, size: 14, color: AppColors.brand),
                       const SizedBox(width: 4),
                       Text(
                         'print_templates.preview'.tr(),

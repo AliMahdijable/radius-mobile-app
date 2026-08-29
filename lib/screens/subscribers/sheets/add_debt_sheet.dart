@@ -139,7 +139,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE08F2D),
+              backgroundColor: AppColors.warning,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('تأكيد'),

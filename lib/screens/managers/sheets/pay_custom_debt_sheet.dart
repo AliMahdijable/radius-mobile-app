@@ -115,18 +115,22 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   Future<void> _submit() async {
     if (_submitting || _amount <= 0) return;
     if (_amount > _remaining) {
-      showSheetSnack(context, 'المبلغ يتجاوز المتبقي (${formatIQD(_remaining)})', isError: true);
+      showSheetSnack(
+          context, 'المبلغ يتجاوز المتبقي (${formatIQD(_remaining)})',
+          isError: true);
       return;
     }
     setState(() => _submitting = true);
     final r = await ManagerDebtsApi.addPayment(
-        debtId: widget.debt.id,
-        amountPaid: _amount,
+      debtId: widget.debt.id,
+      amountPaid: _amount,
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    showSheetSnack(context, r.ok ? 'تم التسديد' : (r.errorMessage ?? 'تعذّر التسديد'), isError: (r.ok) ? false : true);
+    showSheetSnack(
+        context, r.ok ? 'تم التسديد' : (r.errorMessage ?? 'تعذّر التسديد'),
+        isError: (r.ok) ? false : true);
     if (r.ok) {
       SubscriberEvents.notifyChange();
       _changed = true;
@@ -148,8 +152,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('إلغاء')),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('حذف'),
           ),
@@ -163,13 +166,14 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       _changed = true;
       _loadPayments();
     }
-    showSheetSnack(context, r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف'), isError: (r.ok) ? false : true);
+    showSheetSnack(context, r.ok ? 'تم الحذف' : (r.message ?? 'تعذّر الحذف'),
+        isError: (r.ok) ? false : true);
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF0EA5E9);
+    final accent = AppColors.brandAccent;
     // iOS keyboard-avoidance: push the sheet up so amount + note +
     // submit button stay visible when the keyboard opens.
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -188,8 +192,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
           return Container(
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(R.xl)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
             ),
             padding: EdgeInsets.only(bottom: bottomInset),
             child: Column(
@@ -206,8 +209,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                   ),
                 ),
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
                   child: Row(
                     children: [
                       Container(
@@ -216,8 +218,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                           color: accent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(R.md),
                         ),
-                        child: const Icon(LucideIcons.banknote,
-                            size: 16, color: accent),
+                        child:
+                            Icon(LucideIcons.banknote, size: 16, color: accent),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -249,8 +251,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                 Expanded(
                   child: ListView(
                     controller: controller,
-                    padding: const EdgeInsets.fromLTRB(
-                        Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                    padding:
+                        const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                     children: [
                       _statBlock(accent),
                       const SizedBox(height: Sp.md),
@@ -268,21 +270,17 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                onTap:
-                                    _remaining > 0 ? _fillFull : null,
+                                onTap: _remaining > 0 ? _fillFull : null,
                                 borderRadius: BorderRadius.circular(R.sm),
                                 child: Container(
                                   padding:
-                                      const EdgeInsets.symmetric(
-                                          vertical: 8),
+                                      const EdgeInsets.symmetric(vertical: 8),
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
                                     color: accent.withValues(alpha: 0.08),
-                                    borderRadius:
-                                        BorderRadius.circular(R.sm),
+                                    borderRadius: BorderRadius.circular(R.sm),
                                     border: Border.all(
-                                        color: accent
-                                            .withValues(alpha: 0.3)),
+                                        color: accent.withValues(alpha: 0.3)),
                                   ),
                                   child: Text(
                                     'تسديد كامل المتبقي',
@@ -315,14 +313,12 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                 SafeArea(
                   top: false,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        Sp.lg, 0, Sp.lg, Sp.md),
+                    padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                     child: SizedBox(
                       height: 50,
                       child: ElevatedButton.icon(
-                        onPressed: (_amount > 0 && !_submitting)
-                            ? _submit
-                            : null,
+                        onPressed:
+                            (_amount > 0 && !_submitting) ? _submit : null,
                         icon: _submitting
                             ? const SizedBox(
                                 width: 14,
@@ -344,7 +340,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: accent,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.onBrand,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(R.md),
                           ),
@@ -371,13 +367,13 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       ),
       child: Row(
         children: [
-          Expanded(child: _statLine('الإجمالي', widget.debt.amount, AppColors.textHi)),
+          Expanded(
+              child:
+                  _statLine('الإجمالي', widget.debt.amount, AppColors.textHi)),
           _statDivider(),
           Expanded(
               child: _statLine(
-                  'المسدّد',
-                  widget.debt.amount - _remaining,
-                  AppColors.brand)),
+                  'المسدّد', widget.debt.amount - _remaining, AppColors.brand)),
           _statDivider(),
           Expanded(child: _statLine('المتبقي', _remaining, AppColors.error)),
         ],
@@ -427,16 +423,14 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       children: [
         for (final p in _payments) ...[
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Row(
               children: [
-                Icon(LucideIcons.circleCheck,
-                    size: 13, color: AppColors.brand),
+                Icon(LucideIcons.circleCheck, size: 13, color: AppColors.brand),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Column(
@@ -444,21 +438,17 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     children: [
                       Text(
                         '${formatIQD(p.amountPaid)} د.ع',
-                        style: AppType.label(color: AppColors.brand)
-                            .copyWith(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800),
+                        style: AppType.label(color: AppColors.brand).copyWith(
+                            fontSize: 12, fontWeight: FontWeight.w800),
                       ),
                       Text(
                         _fmtIsoDate(p.paymentDate),
-                        style:
-                            AppType.muted().copyWith(fontSize: 10.5),
+                        style: AppType.muted().copyWith(fontSize: 10.5),
                       ),
                       if ((p.note ?? '').isNotEmpty)
                         Text(
                           p.note!,
-                          style:
-                              AppType.muted().copyWith(fontSize: 10.5),
+                          style: AppType.muted().copyWith(fontSize: 10.5),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -470,8 +460,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                   radius: 16,
                   child: Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(LucideIcons.x,
-                        size: 13, color: AppColors.error),
+                    child:
+                        Icon(LucideIcons.x, size: 13, color: AppColors.error),
                   ),
                 ),
               ],
@@ -486,8 +476,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 4, right: 2),
         child: Text(t,
-            style: AppType.muted(color: AppColors.textMid).copyWith(
-                fontSize: 11, fontWeight: FontWeight.w700)),
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
       );
 
   InputDecoration _dec({String? hint, String? suffix}) => InputDecoration(
@@ -497,13 +487,11 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         isDense: true,
         contentPadding:

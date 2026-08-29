@@ -234,7 +234,7 @@ class _Header extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.brand.withValues(alpha: 0.12),
+              color: AppColors.brandSoftBg,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Icon(LucideIcons.history, color: AppColors.brand, size: 18),
@@ -336,14 +336,11 @@ class _FilterChips extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.brand.withValues(alpha: 0.12)
-                    : AppColors.surface,
+                color: selected ? AppColors.brandSoftBg : AppColors.surface,
                 borderRadius: BorderRadius.circular(R.pill),
                 border: Border.all(
-                  color: selected
-                      ? AppColors.brand.withValues(alpha: 0.4)
-                      : AppColors.border,
+                  color:
+                      selected ? AppColors.brandSoftBorder : AppColors.border,
                 ),
               ),
               alignment: Alignment.center,
@@ -539,12 +536,12 @@ class _MovementTile extends StatelessWidget {
           isNonCash ? 'تفعيل أجل' : 'تفعيل'
         );
       case 'SUBSCRIBER_EXTEND':
-        return (LucideIcons.repeat, const Color(0xFF3B82F6), 'تمديد');
+        return (LucideIcons.repeat, AppColors.brandAccent, 'تمديد');
       case 'BALANCE_DEDUCT':
       case 'DEBT_PAY':
-        return (LucideIcons.banknote, const Color(0xFF14B8A6), 'تسديد دين');
+        return (LucideIcons.banknote, AppColors.success, 'تسديد دين');
       case 'BALANCE_ADD':
-        return (LucideIcons.plus, const Color(0xFFE08F2D), 'إضافة دين');
+        return (LucideIcons.plus, AppColors.warning, 'إضافة دين');
       case 'PAYMENT_ADD':
         return (LucideIcons.wallet, AppColors.brand, 'إيراد');
       default:

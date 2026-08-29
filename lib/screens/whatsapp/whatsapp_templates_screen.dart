@@ -206,8 +206,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           'قوالب الواتساب',
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
@@ -216,8 +215,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
           color: accent,
           onRefresh: _load,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-                Sp.lg, Sp.md, Sp.lg, Sp.huge),
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
               if (_loading)
                 const Padding(
@@ -275,7 +273,7 @@ class _TemplateTile extends StatelessWidget {
     final hasBody = (existing?.messageContent ?? '').trim().isNotEmpty;
     final accent = isActive
         ? const Color(0xFF25D366)
-        : (hasBody ? const Color(0xFFE08F2D) : AppColors.textLow);
+        : (hasBody ? AppColors.warning : AppColors.textLow);
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
@@ -336,8 +334,7 @@ class _TemplateTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16, color: AppColors.textLow),
+              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
             ],
           ),
         ),
@@ -353,7 +350,7 @@ class _TemplateTile extends StatelessWidget {
       color = const Color(0xFF25D366);
     } else if (hasBody) {
       label = 'معطّل';
-      color = const Color(0xFFE08F2D);
+      color = AppColors.warning;
     } else {
       label = 'فاضي';
       color = AppColors.textLow;
@@ -389,6 +386,7 @@ class _EditTemplateSheet extends StatefulWidget {
 class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   late final TextEditingController _bodyCtrl;
   late bool _isActive;
+
   /// 2026-08-26: قناة افتراضيّة للقالب — auto/whatsapp/telegram.
   late String _defaultChannel;
   bool _saving = false;
@@ -396,8 +394,8 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   @override
   void initState() {
     super.initState();
-    _bodyCtrl = TextEditingController(
-        text: widget.existing?.messageContent ?? '');
+    _bodyCtrl =
+        TextEditingController(text: widget.existing?.messageContent ?? '');
     _isActive = widget.existing?.isActive ?? true;
     _defaultChannel = widget.existing?.defaultChannel ?? 'auto';
   }
@@ -464,8 +462,8 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                     icon: options[i].icon,
                     color: options[i].color,
                     selected: _defaultChannel == options[i].value,
-                    onTap: () => setState(
-                        () => _defaultChannel = options[i].value),
+                    onTap: () =>
+                        setState(() => _defaultChannel = options[i].value),
                   ),
                 ),
               ],
@@ -501,9 +499,8 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? color.withValues(alpha: 0.14)
-              : AppColors.surfaceInput,
+          color:
+              selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected ? color : AppColors.border,
@@ -513,8 +510,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                size: 13, color: selected ? color : AppColors.textMid),
+            Icon(icon, size: 13, color: selected ? color : AppColors.textMid),
             const SizedBox(width: 4),
             Flexible(
               child: Text(label,
@@ -541,8 +537,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     final next = text.substring(0, start) + ph + text.substring(end);
     _bodyCtrl.value = TextEditingValue(
       text: next,
-      selection:
-          TextSelection.collapsed(offset: start + ph.length),
+      selection: TextSelection.collapsed(offset: start + ph.length),
     );
   }
 
@@ -620,239 +615,229 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.md),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(R.md),
+                        ),
+                        child: Icon(widget.def.icon, size: 16, color: accent),
                       ),
-                      child:
-                          Icon(widget.def.icon, size: 16, color: accent),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.def.label,
-                            style: AppType.title(color: AppColors.textHi)
-                                .copyWith(fontSize: 15),
-                          ),
-                          Text(
-                            widget.def.type,
-                            style:
-                                AppType.muted().copyWith(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
-                  children: [
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      activeColor: accent,
-                      title: const Text(
-                        'القالب مفعّل',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        _isActive
-                            ? 'الـbackend سيستعمل هذا القالب لإرسال الإشعارات'
-                            : 'الـbackend سيتجاهل القالب حتى لو الـtoggle مفعّل',
-                        style: AppType.muted().copyWith(fontSize: 11),
-                      ),
-                      value: _isActive,
-                      onChanged: (v) => setState(() => _isActive = v),
-                    ),
-                    const SizedBox(height: Sp.sm),
-                    // 2026-08-26: قناة افتراضيّة للقالب — auto / whatsapp / telegram.
-                    _defaultChannelPicker(),
-                    const SizedBox(height: Sp.md),
-                    if (widget.def.placeholders.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4, right: 2),
-                        child: Row(
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'إضافة متغير',
-                              style: AppType.muted(color: AppColors.textMid)
-                                  .copyWith(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700),
+                              widget.def.label,
+                              style: AppType.title(color: AppColors.textHi)
+                                  .copyWith(fontSize: 15),
                             ),
-                            const SizedBox(width: 6),
-                            Icon(LucideIcons.arrowLeftRight,
-                                size: 11, color: AppColors.textLow),
+                            Text(
+                              widget.def.type,
+                              style: AppType.muted().copyWith(fontSize: 11),
+                            ),
                           ],
                         ),
                       ),
-                      // مطلب 2026-06-12: scroll أفقي قابل للسحب يمين/يسار،
-                      // الـchips تظهر مرتّبة في صف واحد بدون انتشار عمودي.
-                      SizedBox(
-                        // 52dp يضمن استيعاب 2 سطر نص + padding بلا
-                        // overflow على iPhone (الـtext rendering يأخذ
-                        // ~1dp إضافي بسبب الـArabic glyphs).
-                        height: 52,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: widget.def.placeholders.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 6),
-                          itemBuilder: (_, i) =>
-                              _phChip(widget.def.placeholders[i]),
-                        ),
+                      IconButton(
+                        onPressed:
+                            _saving ? null : () => Navigator.of(context).pop(),
+                        icon: const Icon(LucideIcons.x, size: 16),
+                        color: AppColors.textMid,
                       ),
-                      const SizedBox(height: Sp.md),
                     ],
-                    Text(
-                      'نص الرسالة',
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(
-                              fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _bodyCtrl,
-                      maxLines: 14,
-                      minLines: 8,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: InputDecoration(
-                        hintText: 'مثلاً: مرحباً {name}، باقتك {package}…',
-                        hintStyle: AppType.input(color: AppColors.textLow),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(
-                              color: AppColors.border
-                                  .withValues(alpha: 0.5)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(
-                              color: AppColors.border
-                                  .withValues(alpha: 0.5)),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 10),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                  child: SizedBox(
-                    height: 50,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _saving ? null : _save,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(LucideIcons.save, size: 16),
-                            label: const Text(
-                              'حفظ',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: accent,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(R.md),
+                Expanded(
+                  child: ListView(
+                    controller: controller,
+                    padding:
+                        const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                    children: [
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        activeColor: accent,
+                        title: const Text(
+                          'القالب مفعّل',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(
+                          _isActive
+                              ? 'الـbackend سيستعمل هذا القالب لإرسال الإشعارات'
+                              : 'الـbackend سيتجاهل القالب حتى لو الـtoggle مفعّل',
+                          style: AppType.muted().copyWith(fontSize: 11),
+                        ),
+                        value: _isActive,
+                        onChanged: (v) => setState(() => _isActive = v),
+                      ),
+                      const SizedBox(height: Sp.sm),
+                      // 2026-08-26: قناة افتراضيّة للقالب — auto / whatsapp / telegram.
+                      _defaultChannelPicker(),
+                      const SizedBox(height: Sp.md),
+                      if (widget.def.placeholders.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4, right: 2),
+                          child: Row(
+                            children: [
+                              Text(
+                                'إضافة متغير',
+                                style: AppType.muted(color: AppColors.textMid)
+                                    .copyWith(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(LucideIcons.arrowLeftRight,
+                                  size: 11, color: AppColors.textLow),
+                            ],
+                          ),
+                        ),
+                        // مطلب 2026-06-12: scroll أفقي قابل للسحب يمين/يسار،
+                        // الـchips تظهر مرتّبة في صف واحد بدون انتشار عمودي.
+                        SizedBox(
+                          // 52dp يضمن استيعاب 2 سطر نص + padding بلا
+                          // overflow على iPhone (الـtext rendering يأخذ
+                          // ~1dp إضافي بسبب الـArabic glyphs).
+                          height: 52,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: widget.def.placeholders.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 6),
+                            itemBuilder: (_, i) =>
+                                _phChip(widget.def.placeholders[i]),
+                          ),
+                        ),
+                        const SizedBox(height: Sp.md),
+                      ],
+                      Text(
+                        'نص الرسالة',
+                        style: AppType.muted(color: AppColors.textMid).copyWith(
+                            fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _bodyCtrl,
+                        maxLines: 14,
+                        minLines: 8,
+                        style: AppType.input(color: AppColors.textHi),
+                        decoration: InputDecoration(
+                          hintText: 'مثلاً: مرحباً {name}، باقتك {package}…',
+                          hintStyle: AppType.input(color: AppColors.textLow),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(R.sm),
+                            borderSide: BorderSide(
+                                color: AppColors.border.withValues(alpha: 0.5)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(R.sm),
+                            borderSide: BorderSide(
+                                color: AppColors.border.withValues(alpha: 0.5)),
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+                    child: SizedBox(
+                      height: 50,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _saving ? null : _save,
+                              icon: _saving
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(LucideIcons.save, size: 16),
+                              label: const Text(
+                                'حفظ',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 14),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accent,
+                                foregroundColor: AppColors.onBrand,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(R.md),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        if (widget.existing != null) ...[
-                          const SizedBox(width: 8),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: _saving ? null : _delete,
-                              borderRadius: BorderRadius.circular(R.md),
-                              child: Container(
-                                width: 50,
-                                height: 50,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: AppColors.error
-                                      .withValues(alpha: 0.08),
-                                  borderRadius:
-                                      BorderRadius.circular(R.md),
-                                  border: Border.all(
-                                    color: AppColors.error
-                                        .withValues(alpha: 0.4),
+                          if (widget.existing != null) ...[
+                            const SizedBox(width: 8),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _saving ? null : _delete,
+                                borderRadius: BorderRadius.circular(R.md),
+                                child: Container(
+                                  width: 50,
+                                  height: 50,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        AppColors.error.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(R.md),
+                                    border: Border.all(
+                                      color: AppColors.error
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    LucideIcons.trash2,
+                                    size: 18,
+                                    color: AppColors.error,
                                   ),
                                 ),
-                                child: Icon(
-                                  LucideIcons.trash2,
-                                  size: 18,
-                                  color: AppColors.error,
-                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         );
       },
@@ -883,8 +868,8 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               if (arabicLabel != null) ...[
                 Text(
                   arabicLabel,
-                  style: const TextStyle(
-                    color: Color(0xFF0F6A2D),
+                  style: TextStyle(
+                    color: AppColors.successFill,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -907,4 +892,3 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     );
   }
 }
-

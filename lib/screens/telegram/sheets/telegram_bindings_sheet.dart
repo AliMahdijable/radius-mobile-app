@@ -21,7 +21,7 @@ Future<void> showTelegramBindingsSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _BindingsSheet(adminId: adminId, onChanged: onChanged),
   );
 }
@@ -82,15 +82,13 @@ class _BindingsSheetState extends State<_BindingsSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('فكّ الربط',
-            style:
-                TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
         content: Text('فكّ ربط "$display" من بوت تلغرام؟',
             style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
@@ -107,8 +105,8 @@ class _BindingsSheetState extends State<_BindingsSheet> {
     if (!mounted) return;
     if (done) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('تمّ فكّ الربط',
-            style: TextStyle(fontFamily: 'Cairo')),
+        content:
+            const Text('تمّ فكّ الربط', style: TextStyle(fontFamily: 'Cairo')),
         backgroundColor: AppColors.brand,
         behavior: SnackBarBehavior.floating,
       ));
@@ -116,8 +114,8 @@ class _BindingsSheetState extends State<_BindingsSheet> {
       _load();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('فشل فكّ الربط',
-            style: TextStyle(fontFamily: 'Cairo')),
+        content:
+            const Text('فشل فكّ الربط', style: TextStyle(fontFamily: 'Cairo')),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
       ));
@@ -177,12 +175,12 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF14B8A6).withValues(alpha: 0.14),
+                        color: AppColors.success.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(11),
                       ),
                       alignment: Alignment.center,
-                      child: const Icon(LucideIcons.users,
-                          color: Color(0xFF14B8A6), size: 18),
+                      child: Icon(LucideIcons.users,
+                          color: AppColors.success, size: 18),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -295,8 +293,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                               )
                             : ListView.builder(
                                 controller: scrollCtrl,
-                                padding:
-                                    const EdgeInsets.only(bottom: 24),
+                                padding: const EdgeInsets.only(bottom: 24),
                                 itemCount: _filtered.length,
                                 itemBuilder: (_, i) =>
                                     _bindingTile(_filtered[i]),
@@ -333,9 +330,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                 width: 3,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: b.isBlocked
-                      ? AppColors.error
-                      : const Color(0xFF14B8A6),
+                  color: b.isBlocked ? AppColors.error : AppColors.success,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -376,7 +371,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: AppColors.error.withValues(alpha: 0.15),
+                              color: AppColors.dangerSoftBg,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text('محظور',
@@ -410,14 +405,13 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                 ),
               ),
               IconButton(
-                icon: Icon(LucideIcons.unlink,
-                    size: 15, color: AppColors.error),
+                icon:
+                    Icon(LucideIcons.unlink, size: 15, color: AppColors.error),
                 onPressed: () => _unbind(b),
                 tooltip: 'فكّ الربط',
                 splashRadius: 18,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
             ],
           ),

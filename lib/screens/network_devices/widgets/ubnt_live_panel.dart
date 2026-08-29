@@ -16,12 +16,14 @@ import 'expandable_section.dart';
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
 class UbntLivePanel extends StatefulWidget {
   final NetworkDevice device;
+
   /// callback يُطلق مرّة واحدة حين نكتشف من الـstats أن الجهاز فعلاً
   /// airFiber 60 (رغم أن الـdevice.model ما مذكور فيه). الـcaller
   /// (details screen) يستخدمها ليبدّل للـAirFiber60LivePanel.
   /// 2026-08-18.
   final VoidCallback? onAirFiber60Detected;
-  const UbntLivePanel({super.key, required this.device, this.onAirFiber60Detected});
+  const UbntLivePanel(
+      {super.key, required this.device, this.onAirFiber60Detected});
 
   @override
   State<UbntLivePanel> createState() => _UbntLivePanelState();
@@ -96,19 +98,21 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       final isFirstLoad = _stats == null;
       final stats = await UbntApi.fetchStats(
         ip: widget.device.ip,
-        port: widget.device.apiPort ?? 22,  // SSH default
+        port: widget.device.apiPort ?? 22, // SSH default
         user: user,
         pass: pass,
         // ⚡ Tier 1 partial بعد mca-status (~500ms-1s): CPU/RAM/temp/signal
         // بدل انتظار wstalist + ifconfig + link speeds (~2-3s كامل)
         // ⚠️ **لا** نلمس _lastFetch/_lastBytes هنا (نفس bug Mikrotik السابق —
         // rate calc يستعمل elapsed مغلوط).
-        onPartialReady: isFirstLoad ? (partial) {
-          if (!mounted) return;
-          setState(() {
-            _stats = partial;
-          });
-        } : null,  // ← refresh: تجاهل partial، انتظر البيانات الكاملة
+        onPartialReady: isFirstLoad
+            ? (partial) {
+                if (!mounted) return;
+                setState(() {
+                  _stats = partial;
+                });
+              }
+            : null, // ← refresh: تجاهل partial، انتظر البيانات الكاملة
       );
       if (!mounted) return;
 
@@ -119,7 +123,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         if (elapsed > 0) {
           for (final iface in stats.interfaces) {
             final prev = _lastBytes[iface.ifname];
-            if (prev != null && iface.rxBytes != null && iface.txBytes != null) {
+            if (prev != null &&
+                iface.rxBytes != null &&
+                iface.txBytes != null) {
               final dRx = iface.rxBytes! - prev.rxBytes;
               final dTx = iface.txBytes! - prev.txBytes;
               if (dRx >= 0 && dTx >= 0) {
@@ -247,20 +253,21 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   /// 2026-08-18: طلب المستخدم — يريد فرق مرئي واضح بين الاثنين.
   Widget _modeIndicator({required bool isAp}) {
     final color = isAp
-        ? const Color(0xFF7C3AED)   // بنفسجي — AP يخدم عملاء
-        : const Color(0xFF0891B2);  // فيروزي — لينك PtP
+        ? AppColors.brandAccent // بنفسجي — AP يخدم عملاء
+        : AppColors.info; // فيروزي — لينك PtP
     final icon = isAp ? LucideIcons.radioTower : LucideIcons.arrowLeftRight;
-    final title = isAp ? 'نقطة وصول (Access Point)' : 'لينك نقطة-إلى-نقطة (PtP)';
-    final subtitle = isAp
-        ? 'يخدم عدة عملاء — PtMP'
-        : 'اتصال مباشر مع peer واحد';
+    final title =
+        isAp ? 'نقطة وصول (Access Point)' : 'لينك نقطة-إلى-نقطة (PtP)';
+    final subtitle =
+        isAp ? 'يخدم عدة عملاء — PtMP' : 'اتصال مباشر مع peer واحد';
     // 2026-08-20: نستعمل _stickyStations لعرض العدد كي ما يتذبذب عند refresh عابر
     final count = isAp && _stickyStations.isNotEmpty
         ? '${_stickyStations.length} عميل'
         : null;
     return Row(children: [
       Container(
-        width: 44, height: 44,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
           shape: BoxShape.circle,
@@ -275,7 +282,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           children: [
             Text(title,
                 style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textHi)),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text(subtitle,
                 style: TextStyle(fontSize: 11, color: AppColors.textMid)),
@@ -291,7 +300,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           ),
           child: Text(count,
               style: const TextStyle(
-                  color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800)),
         ),
     ]);
   }
@@ -319,65 +330,82 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     // (وحتى لو موقع القسم في الـColumn تغيّر). أساسي لأنّ refresh قد
     // يُغيّر ترتيب/وجود الأقسام (لكن الحالة تبقى محفوظة).
     final deviceId = widget.device.id;
-    final wirelessSection = s.wireless == null ? null : [
-      const SizedBox(height: Sp.md),
-      ExpandableSection(
-        key: PageStorageKey('ubnt-$deviceId-wireless'),
-        initiallyExpanded: !isAp,  // AP: مطويّ افتراضياً (المهمّ العملاء)
-        header: Row(children: [
-          Icon(LucideIcons.wifi, size: 14, color: const Color(0xFF0559C9)),
-          const SizedBox(width: 6),
-          Text('تفاصيل Wireless',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-        ]),
-        content: _wirelessDetails(s.wireless!),
-      ),
-    ];
+    final wirelessSection = s.wireless == null
+        ? null
+        : [
+            const SizedBox(height: Sp.md),
+            ExpandableSection(
+              key: PageStorageKey('ubnt-$deviceId-wireless'),
+              initiallyExpanded: !isAp, // AP: مطويّ افتراضياً (المهمّ العملاء)
+              header: Row(children: [
+                Icon(LucideIcons.wifi, size: 14, color: AppColors.brandAccent),
+                const SizedBox(width: 6),
+                Text('تفاصيل Wireless',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textHi)),
+              ]),
+              content: _wirelessDetails(s.wireless!),
+            ),
+          ];
     // 2026-08-20: نستعمل _stickyStations بدل s.stations كي القسم لا يختفي
     // عند refresh عابر يرجع wstalist فارغاً.
-    final stationsSection = _stickyStations.isEmpty ? null : [
-      const SizedBox(height: Sp.md),
-      ExpandableSection(
-        key: PageStorageKey('ubnt-$deviceId-stations'),
-        initiallyExpanded: isAp,  // AP: مفتوح افتراضياً
-        header: Row(children: [
-          Icon(LucideIcons.users, size: 14, color: const Color(0xFF7C3AED)),
-          const SizedBox(width: 6),
-          Text(
-            isAp
-                ? 'العملاء المتّصلون (${_stickyStations.length})'
-                : 'الطرف الآخر (peer)',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi),
-          ),
-        ]),
-        content: Column(children: [
-          for (final st in _stickyStations.take(20)) _stationRow(st),
-          if (_stickyStations.length > 20)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text('+ ${_stickyStations.length - 20} عميل آخر',
-                  style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+    final stationsSection = _stickyStations.isEmpty
+        ? null
+        : [
+            const SizedBox(height: Sp.md),
+            ExpandableSection(
+              key: PageStorageKey('ubnt-$deviceId-stations'),
+              initiallyExpanded: isAp, // AP: مفتوح افتراضياً
+              header: Row(children: [
+                Icon(LucideIcons.users, size: 14, color: AppColors.brandAccent),
+                const SizedBox(width: 6),
+                Text(
+                  isAp
+                      ? 'العملاء المتّصلون (${_stickyStations.length})'
+                      : 'الطرف الآخر (peer)',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textHi),
+                ),
+              ]),
+              content: Column(children: [
+                for (final st in _stickyStations.take(20)) _stationRow(st),
+                if (_stickyStations.length > 20)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('+ ${_stickyStations.length - 20} عميل آخر',
+                        style:
+                            TextStyle(fontSize: 10, color: AppColors.textLow)),
+                  ),
+              ]),
             ),
-        ]),
-      ),
-    ];
-    final ethernetSection = s.interfaces.isEmpty ? null : [
-      const SizedBox(height: Sp.md),
-      ExpandableSection(
-        key: PageStorageKey('ubnt-$deviceId-interfaces'),
-        initiallyExpanded: false,  // دائماً مطويّ — معلومات ثانويّة
-        header: Row(children: [
-          Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
-          const SizedBox(width: 6),
-          Text('Interfaces (${s.interfaces.where(_isDataIface).length})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-        ]),
-        content: Column(children: [
-          for (final iface in s.interfaces.where(_isDataIface))
-            _interfaceRow(iface),
-        ]),
-      ),
-    ];
+          ];
+    final ethernetSection = s.interfaces.isEmpty
+        ? null
+        : [
+            const SizedBox(height: Sp.md),
+            ExpandableSection(
+              key: PageStorageKey('ubnt-$deviceId-interfaces'),
+              initiallyExpanded: false, // دائماً مطويّ — معلومات ثانويّة
+              header: Row(children: [
+                Icon(LucideIcons.network,
+                    size: 14, color: AppColors.brandAccent),
+                const SizedBox(width: 6),
+                Text('Interfaces (${s.interfaces.where(_isDataIface).length})',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textHi)),
+              ]),
+              content: Column(children: [
+                for (final iface in s.interfaces.where(_isDataIface))
+                  _interfaceRow(iface),
+              ]),
+            ),
+          ];
     // ترتيب mode-aware:
     // - PtMP AP: Stations أوّلاً (العملاء = الأهم) ثمّ Wireless ثمّ Ethernet
     // - PtP link: Wireless (peer info) أوّلاً ثمّ Stations (peer الوحيد) ثمّ Ethernet
@@ -402,8 +430,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         border: Border.all(color: AppColors.border),
       ),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        SizedBox(width: 16, height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand)),
+        SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppColors.brand)),
         const SizedBox(width: 10),
         Text('جاري الاتصال بـUBNT…',
             style: TextStyle(fontSize: 12, color: AppColors.textMid)),
@@ -414,72 +445,80 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   Widget _header() {
     // 2026-08-18: أُزيل الـPadding — الآن _cardWrapper يهتمّ بالـpadding
     return Row(children: [
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(
-            color: const Color(0xFF0559C9).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(LucideIcons.radioTower, size: 16, color: const Color(0xFF0559C9)),
+      Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppColors.brandAccent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('مراقبة حيّة (UBNT via SSH)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
-            const SizedBox(height: 2),
-            Row(children: [
-              if (_monitoring) ...[
-                // 2026-08-18: opacity pulse بدل استبدال النصّ بـ"جاري التحديث…"
-                // — لتفادي ظهور الجهاز كأنّه فُصل ورجع عند كل fetch
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 400),
-                  opacity: _loading ? 0.35 : 1.0,
-                  child: Container(
-                    width: 6, height: 6,
-                    decoration: const BoxDecoration(
-                        color: Color(0xFF10B981), shape: BoxShape.circle),
-                  ),
+        child: Icon(LucideIcons.radioTower,
+            size: 16, color: AppColors.brandAccent),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('مراقبة حيّة (UBNT via SSH)',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
+          const SizedBox(height: 2),
+          Row(children: [
+            if (_monitoring) ...[
+              // 2026-08-18: opacity pulse بدل استبدال النصّ بـ"جاري التحديث…"
+              // — لتفادي ظهور الجهاز كأنّه فُصل ورجع عند كل fetch
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: _loading ? 0.35 : 1.0,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                      color: AppColors.success, shape: BoxShape.circle),
                 ),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                _monitoring
-                    ? 'مباشر · كل ${_refreshInterval.inSeconds}s'
-                    : 'متوقّف',
-                style: TextStyle(fontSize: 10, color: AppColors.textMid),
               ),
-            ]),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              _monitoring
+                  ? 'مباشر · كل ${_refreshInterval.inSeconds}s'
+                  : 'متوقّف',
+              style: TextStyle(fontSize: 10, color: AppColors.textMid),
+            ),
           ]),
-        ),
-        IconButton(
-          icon: const Icon(LucideIcons.refreshCw, size: 16),
-          onPressed: _loading ? null : _fetch,
-          color: const Color(0xFF0559C9),
-          visualDensity: VisualDensity.compact,
-        ),
-        IconButton(
-          icon: Icon(_monitoring ? LucideIcons.pause : LucideIcons.play, size: 16,
-              color: _monitoring ? AppColors.error : const Color(0xFF10B981)),
-          onPressed: _monitoring ? _stopMonitoring : _startMonitoring,
-          visualDensity: VisualDensity.compact,
-        ),
-      ]);
+        ]),
+      ),
+      IconButton(
+        icon: const Icon(LucideIcons.refreshCw, size: 16),
+        onPressed: _loading ? null : _fetch,
+        color: AppColors.brandAccent,
+        visualDensity: VisualDensity.compact,
+      ),
+      IconButton(
+        icon: Icon(_monitoring ? LucideIcons.pause : LucideIcons.play,
+            size: 16, color: _monitoring ? AppColors.error : AppColors.success),
+        onPressed: _monitoring ? _stopMonitoring : _startMonitoring,
+        visualDensity: VisualDensity.compact,
+      ),
+    ]);
   }
 
   Widget _errorBox() {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
+        color: AppColors.dangerSoftBg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(children: [
         Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.error),
         const SizedBox(width: 8),
-        Expanded(child: Text(_error!,
-            style: TextStyle(fontSize: 11, color: AppColors.error, height: 1.4))),
+        Expanded(
+            child: Text(_error!,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.error, height: 1.4))),
       ]),
     );
   }
@@ -489,31 +528,36 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF0559C9).withValues(alpha: 0.06),
+        color: AppColors.brandAccent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children: [
-        Icon(LucideIcons.radioTower, size: 14, color: const Color(0xFF0559C9)),
+        Icon(LucideIcons.radioTower, size: 14, color: AppColors.brandAccent),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             '${h.devmodel} • airOS ${h.fwversion}',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textHi),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textHi),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: const Color(0xFF0559C9).withValues(alpha: 0.14),
+            color: AppColors.brandAccent.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(LucideIcons.clock, size: 9, color: const Color(0xFF0559C9)),
+            Icon(LucideIcons.clock, size: 9, color: AppColors.brandAccent),
             const SizedBox(width: 3),
             Text(_formatUptime(h.uptime),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0559C9))),
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.brandAccent)),
           ]),
         ),
       ]),
@@ -529,12 +573,15 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _percentCard(
-            icon: LucideIcons.cpu, label: 'CPU',
+          Expanded(
+              child: _percentCard(
+            icon: LucideIcons.cpu,
+            label: 'CPU',
             percent: h.cpuload.toDouble(),
           )),
           const SizedBox(width: 8),
-          Expanded(child: _valueCard(
+          Expanded(
+              child: _valueCard(
             icon: LucideIcons.thermometer,
             label: 'حرارة',
             value: h.temperature > 0 ? '${h.temperature}' : '—',
@@ -542,12 +589,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             color: _tempColor(h.temperature),
           )),
           const SizedBox(width: 8),
-          Expanded(child: _valueCard(
+          Expanded(
+              child: _valueCard(
             icon: LucideIcons.clock,
             label: 'Uptime',
             value: h.uptime > 0 ? _formatUptime(h.uptime) : '—',
-            unit: '',  // نضم كل النصّ في value بحجم موحّد
-            color: const Color(0xFF0559C9),
+            unit: '', // نضم كل النصّ في value بحجم موحّد
+            color: AppColors.brandAccent,
           )),
         ],
       ),
@@ -571,14 +619,23 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         Row(children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMid)),
         ]),
         const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             Text('${percent.round()}',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                    color: AppColors.textHi, height: 1)),
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textHi,
+                    height: 1)),
             const SizedBox(width: 2),
             Text('%', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
           ],
@@ -621,17 +678,26 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Row(children: [
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMid)),
           ]),
-          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               Text(value,
-                  style: TextStyle(fontSize: valueSize, fontWeight: FontWeight.w800,
+                  style: TextStyle(
+                      fontSize: valueSize,
+                      fontWeight: FontWeight.w800,
                       color: value == '—' ? AppColors.textLow : color,
                       height: 1)),
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
-                Text(unit, style: TextStyle(fontSize: 11, color: AppColors.textLow)),
+                Text(unit,
+                    style: TextStyle(fontSize: 11, color: AppColors.textLow)),
               ],
             ],
           ),
@@ -643,16 +709,16 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
 
   Color _percentGradeColor(double p) {
     if (p >= 85) return AppColors.error;
-    if (p >= 65) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
+    if (p >= 65) return AppColors.warning;
+    return AppColors.success;
   }
 
   Color _tempColor(int t) {
     if (t <= 0) return AppColors.textLow;
     if (t >= 75) return AppColors.error;
-    if (t >= 60) return const Color(0xFFF59E0B);
-    if (t >= 45) return const Color(0xFF06B6D4);
-    return const Color(0xFF10B981);
+    if (t >= 60) return AppColors.warning;
+    if (t >= 45) return AppColors.info;
+    return AppColors.success;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -661,82 +727,99 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   Widget _signalHero(UbntWireless w) {
     final signalColor = _signalColor(w.signal);
     return Container(
-        padding: const EdgeInsets.all(Sp.lg),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              signalColor.withValues(alpha: 0.08),
-              signalColor.withValues(alpha: 0.02),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: signalColor.withValues(alpha: 0.25), width: 1),
+      padding: const EdgeInsets.all(Sp.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            signalColor.withValues(alpha: 0.08),
+            signalColor.withValues(alpha: 0.02),
+          ],
         ),
-        child: Row(children: [
-          // Gauge on the right — RepaintBoundary لعزل الـCustomPaint (rebuild
-          // كل fetch كان يُعيد رسم الـpainter → jank بسيط لكن ملحوظ)
-          SizedBox(
-            width: 120, height: 90,
-            child: RepaintBoundary(child: CustomPaint(
-              painter: _SignalGaugePainter(
-                percent: w.signalQualityPercent,
-                color: signalColor,
-                background: AppColors.border,
-              ),
-              child: Center(
-                child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                  Text('${w.signal}',
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900,
-                          color: signalColor, height: 1)),
-                  const SizedBox(height: 2),
-                  Text('dBm',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                          color: AppColors.textMid)),
-                ]),
-              ),
-            )),
-          ),
-          const SizedBox(width: 16),
-          // Details on the left
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('جودة الإشارة',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
-              const SizedBox(height: 4),
-              Text(_signalLabel(w.signal),
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: signalColor, height: 1.1)),
-              const SizedBox(height: 10),
-              _metric('SNR',
-                  w.snr != null ? '${w.snr}' : '—',
-                  w.snr != null ? 'dB' : '',
-                  color: w.snr != null ? _snrColor(w.snr!) : AppColors.textLow),
-              const SizedBox(height: 4),
-              _metric('Noise',
-                  w.hasNoise ? '${w.noise}' : '—',
-                  w.hasNoise ? 'dBm' : '',
-                  color: w.hasNoise ? AppColors.textMid : AppColors.textLow),
-              const SizedBox(height: 4),
-              _metric('CCQ',
-                  w.hasCcq ? '${w.ccq}' : '—',
-                  w.hasCcq ? '%' : '',
-                  color: w.hasCcq ? _percentColor(w.ccq.toDouble()) : AppColors.textLow),
-            ]),
-          ),
-        ]),
-      );
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: signalColor.withValues(alpha: 0.25), width: 1),
+      ),
+      child: Row(children: [
+        // Gauge on the right — RepaintBoundary لعزل الـCustomPaint (rebuild
+        // كل fetch كان يُعيد رسم الـpainter → jank بسيط لكن ملحوظ)
+        SizedBox(
+          width: 120,
+          height: 90,
+          child: RepaintBoundary(
+              child: CustomPaint(
+            painter: _SignalGaugePainter(
+              percent: w.signalQualityPercent,
+              color: signalColor,
+              background: AppColors.border,
+            ),
+            child: Center(
+              child:
+                  Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                Text('${w.signal}',
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        color: signalColor,
+                        height: 1)),
+                const SizedBox(height: 2),
+                Text('dBm',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMid)),
+              ]),
+            ),
+          )),
+        ),
+        const SizedBox(width: 16),
+        // Details on the left
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('جودة الإشارة',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMid)),
+            const SizedBox(height: 4),
+            Text(_signalLabel(w.signal),
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: signalColor,
+                    height: 1.1)),
+            const SizedBox(height: 10),
+            _metric('SNR', w.snr != null ? '${w.snr}' : '—',
+                w.snr != null ? 'dB' : '',
+                color: w.snr != null ? _snrColor(w.snr!) : AppColors.textLow),
+            const SizedBox(height: 4),
+            _metric('Noise', w.hasNoise ? '${w.noise}' : '—',
+                w.hasNoise ? 'dBm' : '',
+                color: w.hasNoise ? AppColors.textMid : AppColors.textLow),
+            const SizedBox(height: 4),
+            _metric('CCQ', w.hasCcq ? '${w.ccq}' : '—', w.hasCcq ? '%' : '',
+                color: w.hasCcq
+                    ? _percentColor(w.ccq.toDouble())
+                    : AppColors.textLow),
+          ]),
+        ),
+      ]),
+    );
   }
 
-  Widget _metric(String label, String value, String unit, {required Color color}) {
+  Widget _metric(String label, String value, String unit,
+      {required Color color}) {
     return Row(children: [
-      SizedBox(width: 42,
-        child: Text(label,
-            style: TextStyle(fontSize: 10, color: AppColors.textLow))),
+      SizedBox(
+          width: 42,
+          child: Text(label,
+              style: TextStyle(fontSize: 10, color: AppColors.textLow))),
       Text(value,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-              color: color)),
+          style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w800, color: color)),
       const SizedBox(width: 2),
       Text(unit, style: TextStyle(fontSize: 9, color: AppColors.textLow)),
     ]);
@@ -756,24 +839,29 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           border: Border.all(color: AppColors.border),
         ),
         child: Column(children: [
-          _detailRow(LucideIcons.wifi, 'ESSID', w.essid.isEmpty ? '—' : w.essid),
+          _detailRow(
+              LucideIcons.wifi, 'ESSID', w.essid.isEmpty ? '—' : w.essid),
           _detailRow(LucideIcons.radioTower, 'الوضع', _modeLabel(w.mode)),
           Row(children: [
             Expanded(
-              child: _detailRow(LucideIcons.arrowDown, 'RX',
-                  '${w.rxRate}', suffix: 'Mbps', color: const Color(0xFF10B981)),
+              child: _detailRow(LucideIcons.arrowDown, 'RX', '${w.rxRate}',
+                  suffix: 'Mbps', color: AppColors.success),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _detailRow(LucideIcons.arrowUp, 'TX',
-                  '${w.txRate}', suffix: 'Mbps', color: const Color(0xFF3B82F6)),
+              child: _detailRow(LucideIcons.arrowUp, 'TX', '${w.txRate}',
+                  suffix: 'Mbps', color: AppColors.brandAccent),
             ),
           ]),
           _detailRow(LucideIcons.satellite, 'التردد',
               '${w.frequency} MHz${w.chanbw > 0 ? " (${w.chanbw}MHz)" : ""}${w.channel > 0 ? " • ch ${w.channel}" : ""}'),
           if (w.distance > 0)
-            _detailRow(LucideIcons.mapPin, 'المسافة',
-                w.distance >= 1000 ? '${(w.distance / 1000).toStringAsFixed(1)}km' : '${w.distance}m'),
+            _detailRow(
+                LucideIcons.mapPin,
+                'المسافة',
+                w.distance >= 1000
+                    ? '${(w.distance / 1000).toStringAsFixed(1)}km'
+                    : '${w.distance}m'),
         ]),
       ),
     );
@@ -789,7 +877,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMid)),
         const Spacer(),
         Text(value,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
                 color: color ?? AppColors.textHi)),
         if (suffix != null) ...[
           const SizedBox(width: 3),
@@ -809,10 +899,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(LucideIcons.network, size: 14, color: const Color(0xFF0559C9)),
+          Icon(LucideIcons.network, size: 14, color: AppColors.brandAccent),
           const SizedBox(width: 6),
           Text('Ethernet (${ethers.length})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
         ]),
         const SizedBox(height: 8),
         for (final iface in ethers) _interfaceRow(iface),
@@ -823,7 +916,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   Widget _interfaceRow(UbntInterface iface) {
     final rate = _rates[iface.ifname];
     final up = iface.plugged && iface.enabled;
-    final color = up ? const Color(0xFF10B981) : AppColors.error;
+    final color = up ? AppColors.success : AppColors.error;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -832,10 +925,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children: [
-        Icon(up ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 12, color: color),
+        Icon(up ? LucideIcons.arrowUp : LucideIcons.arrowDown,
+            size: 12, color: color),
         const SizedBox(width: 6),
         Text(iface.ifname,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
                 color: AppColors.textHi)),
         if (iface.speed != null && up) ...[
           const SizedBox(width: 6),
@@ -846,22 +942,28 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(_speedLabel(iface.speed!),
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
                     color: _speedColor(iface.speed!))),
           ),
         ],
         const Spacer(),
         if (rate != null) ...[
-          Icon(LucideIcons.arrowDown, size: 9, color: const Color(0xFF10B981)),
+          Icon(LucideIcons.arrowDown, size: 9, color: AppColors.success),
           const SizedBox(width: 2),
           Text(_formatBps(rate.rxBps),
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const SizedBox(width: 8),
-          Icon(LucideIcons.arrowUp, size: 9, color: const Color(0xFF3B82F6)),
+          Icon(LucideIcons.arrowUp, size: 9, color: AppColors.brandAccent),
           const SizedBox(width: 2),
           Text(_formatBps(rate.txBps),
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ],
       ]),
@@ -877,10 +979,13 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(LucideIcons.users, size: 14, color: const Color(0xFF0559C9)),
+          Icon(LucideIcons.users, size: 14, color: AppColors.brandAccent),
           const SizedBox(width: 6),
           Text('العملاء المتّصلون (${ss.length})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
         ]),
         const SizedBox(height: 8),
         for (final s in ss.take(20)) _stationRow(s),
@@ -905,19 +1010,28 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       ),
       child: Row(children: [
         Container(
-          width: 4, height: 30, decoration: BoxDecoration(
-            color: signalColor, borderRadius: BorderRadius.circular(2),
+          width: 4,
+          height: 30,
+          decoration: BoxDecoration(
+            color: signalColor,
+            borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(s.hostname ?? s.ip ?? s.mac,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis),
             if (s.ip != null || s.mac.isNotEmpty)
-              Text([s.ip, s.mac].where((e) => e != null && e.isNotEmpty).join(' • '),
+              Text(
+                  [s.ip, s.mac]
+                      .where((e) => e != null && e.isNotEmpty)
+                      .join(' • '),
                   style: TextStyle(fontSize: 9, color: AppColors.textLow),
                   overflow: TextOverflow.ellipsis),
           ]),
@@ -926,19 +1040,24 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text('${s.signalDisplay} dBm',
                 textDirection: TextDirection.ltr,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
                     color: signalColor)),
             if (s.ccq > 0) ...[
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _percentColor(s.ccq.toDouble()).withValues(alpha: 0.15),
+                  color:
+                      _percentColor(s.ccq.toDouble()).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text('${s.ccq}%',
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
                         color: _percentColor(s.ccq.toDouble()))),
               ),
             ],
@@ -956,9 +1075,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // Helpers
   // ══════════════════════════════════════════════════════════════
   Color _signalColor(int dbm) {
-    if (dbm >= -60) return const Color(0xFF10B981);
-    if (dbm >= -70) return const Color(0xFF06B6D4);
-    if (dbm >= -80) return const Color(0xFFF59E0B);
+    if (dbm >= -60) return AppColors.success;
+    if (dbm >= -70) return AppColors.info;
+    if (dbm >= -80) return AppColors.warning;
     return AppColors.error;
   }
 
@@ -970,23 +1089,23 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   }
 
   Color _snrColor(int snr) {
-    if (snr >= 30) return const Color(0xFF10B981);
-    if (snr >= 20) return const Color(0xFF06B6D4);
-    if (snr >= 15) return const Color(0xFFF59E0B);
+    if (snr >= 30) return AppColors.success;
+    if (snr >= 20) return AppColors.info;
+    if (snr >= 15) return AppColors.warning;
     return AppColors.error;
   }
 
   Color _percentColor(double p) {
-    if (p >= 80) return const Color(0xFF10B981);
-    if (p >= 50) return const Color(0xFF06B6D4);
-    if (p >= 30) return const Color(0xFFF59E0B);
+    if (p >= 80) return AppColors.success;
+    if (p >= 50) return AppColors.info;
+    if (p >= 30) return AppColors.warning;
     return AppColors.error;
   }
 
   Color _speedColor(int mbps) {
-    if (mbps >= 1000) return const Color(0xFF10B981);
-    if (mbps >= 100) return const Color(0xFF06B6D4);
-    if (mbps >= 10) return const Color(0xFFF59E0B);
+    if (mbps >= 1000) return AppColors.success;
+    if (mbps >= 100) return AppColors.info;
+    if (mbps >= 10) return AppColors.warning;
     return AppColors.error;
   }
 
@@ -1031,8 +1150,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   static bool _isDataIface(UbntInterface i) {
     final n = i.ifname;
     if (n.startsWith('eth')) return true;
-    if (n.startsWith('br')) return true;   // bridge (airFiber 60)
-    if (n.startsWith('wlan') || n.startsWith('ath')) return true;  // wireless
+    if (n.startsWith('br')) return true; // bridge (airFiber 60)
+    if (n.startsWith('wlan') || n.startsWith('ath')) return true; // wireless
     if (n == 'ppp0' || n == 'wan') return true;
     return false;
   }
@@ -1042,10 +1161,11 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
 // Signal Gauge Painter — semi-circular arc مع لون متدرّج
 // ══════════════════════════════════════════════════════════════
 class _SignalGaugePainter extends CustomPainter {
-  final double percent;      // 0..100
+  final double percent; // 0..100
   final Color color;
   final Color background;
-  _SignalGaugePainter({required this.percent, required this.color, required this.background});
+  _SignalGaugePainter(
+      {required this.percent, required this.color, required this.background});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1062,7 +1182,10 @@ class _SignalGaugePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      startAngle, sweepAngle, false, bgPaint,
+      startAngle,
+      sweepAngle,
+      false,
+      bgPaint,
     );
 
     // foreground arc based on percent
@@ -1078,7 +1201,10 @@ class _SignalGaugePainter extends CustomPainter {
     final sweep = (percent / 100).clamp(0.0, 1.0) * sweepAngle;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      startAngle, sweep, false, fgPaint,
+      startAngle,
+      sweep,
+      false,
+      fgPaint,
     );
 
     // scale ticks
@@ -1121,7 +1247,8 @@ class _TrafficSample {
   final DateTime at;
   final int rxBps;
   final int txBps;
-  const _TrafficSample({required this.at, required this.rxBps, required this.txBps});
+  const _TrafficSample(
+      {required this.at, required this.rxBps, required this.txBps});
 }
 
 /// كارت traffic graph مستقلّ — StatefulWidget مع KeepAlive لضمان أن
@@ -1145,11 +1272,11 @@ class _TrafficGraphCard extends StatefulWidget {
 class _TrafficGraphCardState extends State<_TrafficGraphCard>
     with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => true;   // ينجو من ListView/Column rebuilds
+  bool get wantKeepAlive => true; // ينجو من ListView/Column rebuilds
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);   // مطلوب لـAutomaticKeepAlive
+    super.build(context); // مطلوب لـAutomaticKeepAlive
     final history = widget.history;
     final rxSpots = <FlSpot>[];
     final txSpots = <FlSpot>[];
@@ -1166,17 +1293,19 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
     final lastRx = history.isNotEmpty ? history.last.rxBps : 0;
     final lastTx = history.isNotEmpty ? history.last.txBps : 0;
 
-    const rxColor = Color(0xFF10B981);
-    const txColor = Color(0xFF3B82F6);
+    final rxColor = AppColors.success;
+    final txColor = AppColors.brandAccent;
 
     return widget.cardWrapper(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(LucideIcons.chartLine, size: 14, color: const Color(0xFF0559C9)),
+          Icon(LucideIcons.chartLine, size: 14, color: AppColors.brandAccent),
           const SizedBox(width: 6),
           Text('أعلى interface (سير الترفك)',
               style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
           const SizedBox(width: 6),
@@ -1185,8 +1314,9 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
         const SizedBox(height: 12),
         SizedBox(
           height: 120,
-          child: RepaintBoundary(child: LineChart(
-            duration: Duration.zero,   // لا animation → لا وميض
+          child: RepaintBoundary(
+              child: LineChart(
+            duration: Duration.zero, // لا animation → لا وميض
             LineChartData(
               gridData: FlGridData(
                 show: true,
@@ -1199,9 +1329,12 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
               ),
               titlesData: FlTitlesData(
                 show: true,
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
@@ -1226,7 +1359,8 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
               lineTouchData: LineTouchData(
                 enabled: true,
                 touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => AppColors.textHi.withValues(alpha: 0.9),
+                  getTooltipColor: (_) =>
+                      AppColors.textHi.withValues(alpha: 0.9),
                   getTooltipItems: (spots) => spots.map((s) {
                     final isTx = s.barIndex == 0;
                     return LineTooltipItem(
@@ -1278,7 +1412,8 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text('$arrow $value',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
     );
   }
 

@@ -61,8 +61,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       from: _range.from,
       to: _range.to,
       // scope الافتراضي فقط لو المستخدم ما اختار مدير حركة محدّد.
-      userIds:
-          _filters.actionManagerId == null ? _scopeIds : null,
+      userIds: _filters.actionManagerId == null ? _scopeIds : null,
       actionManagerId: _filters.actionManagerId,
       userManager: _filters.userManager,
       employeeId: _filters.employeeId,
@@ -86,77 +85,77 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       permission: 'reports.financial',
       title: 'reports.financial'.tr(),
       child: Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'reports.financial'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'reports.financial'.tr(),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: AppColors.brand,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-            children: [
-              DateRangeChipBar(
-                value: _range,
-                onChanged: (r) {
-                  setState(() => _range = r);
-                  _load();
-                },
-              ),
-              const SizedBox(height: Sp.sm),
-              ReportFiltersPanel(
-                value: _filters,
-                actionTypeOptions: kFinancialActionTypes,
-                onChanged: (v) {
-                  setState(() {
-                    _filters = v;
-                    _page = 0;
-                  });
-                  _load();
-                },
-              ),
-              const SizedBox(height: Sp.md),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Sp.huge),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                _errorPanel()
-              else if (_data != null) ...[
-                // KPIs: عند فلتر أنواع الحركات نحسبها من الـrecentLogs
-                // المفلترة (client-side)، وإلا نستعمل قيم backend للفترة كاملة.
-                Builder(builder: (_) {
-                  final hasTypeFilter = _filters.actionTypes != null &&
-                      _filters.actionTypes!.isNotEmpty;
-                  final filtered = _filterLogs(_data!.recentLogs);
-                  final effectiveKpis = hasTypeFilter
-                      ? _kpisFromLogs(filtered)
-                      : _data!.kpis;
-                  return Column(
-                    children: [
-                      _hero(effectiveKpis),
-                      const SizedBox(height: Sp.md),
-                      _kpiGrid(effectiveKpis),
-                      const SizedBox(height: Sp.lg),
-                    ],
-                  );
-                }),
-                _recentLogs(_data!.recentLogs),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            color: AppColors.brand,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+              children: [
+                DateRangeChipBar(
+                  value: _range,
+                  onChanged: (r) {
+                    setState(() => _range = r);
+                    _load();
+                  },
+                ),
+                const SizedBox(height: Sp.sm),
+                ReportFiltersPanel(
+                  value: _filters,
+                  actionTypeOptions: kFinancialActionTypes,
+                  onChanged: (v) {
+                    setState(() {
+                      _filters = v;
+                      _page = 0;
+                    });
+                    _load();
+                  },
+                ),
+                const SizedBox(height: Sp.md),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Sp.huge),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  _errorPanel()
+                else if (_data != null) ...[
+                  // KPIs: عند فلتر أنواع الحركات نحسبها من الـrecentLogs
+                  // المفلترة (client-side)، وإلا نستعمل قيم backend للفترة كاملة.
+                  Builder(builder: (_) {
+                    final hasTypeFilter = _filters.actionTypes != null &&
+                        _filters.actionTypes!.isNotEmpty;
+                    final filtered = _filterLogs(_data!.recentLogs);
+                    final effectiveKpis =
+                        hasTypeFilter ? _kpisFromLogs(filtered) : _data!.kpis;
+                    return Column(
+                      children: [
+                        _hero(effectiveKpis),
+                        const SizedBox(height: Sp.md),
+                        _kpiGrid(effectiveKpis),
+                        const SizedBox(height: Sp.lg),
+                      ],
+                    );
+                  }),
+                  _recentLogs(_data!.recentLogs),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -206,13 +205,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                   color: brand.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(LucideIcons.wallet,
-                    size: 14, color: brand),
+                child: Icon(LucideIcons.wallet, size: 14, color: brand),
               ),
               const SizedBox(width: 8),
               Text('reports.total_cash_revenue'.tr(),
-                  style: AppType.muted().copyWith(
-                      fontSize: 11, fontWeight: FontWeight.w700)),
+                  style: AppType.muted()
+                      .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
@@ -294,8 +292,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(label,
-                  style: AppType.muted().copyWith(
-                      fontSize: 10, fontWeight: FontWeight.w600)),
+                  style: AppType.muted()
+                      .copyWith(fontSize: 10, fontWeight: FontWeight.w600)),
               Text(
                 value,
                 style: TextStyle(
@@ -317,13 +315,28 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     // Financial.tsx. كان يفتقد paymentsSum ويظهر أقلّ من الويب.
     final debtPayTotal = k.totalDebtPayments;
     final items = <_KpiItem>[
-      _KpiItem('actions.activate_cash'.tr(), formatIQD(k.activateCashSum), const Color(0xFF14B8A6), LucideIcons.zap),
-      _KpiItem('actions.debt_pay'.tr(), formatIQD(debtPayTotal), const Color(0xFF14B8A6), LucideIcons.banknote),
-      _KpiItem('actions.activate_non_cash'.tr(), formatIQD(k.activateNonCashSum), AppColors.error, LucideIcons.creditCard, isDebit: true),
-      _KpiItem('actions.debt_add'.tr(), formatIQD(k.balanceAddSum), AppColors.error, LucideIcons.plus, isDebit: true),
-      _KpiItem('# تفعيلات', '${k.activationsCount}', const Color(0xFF8B5CF6), LucideIcons.userCheck, isCount: true),
-      _KpiItem('# تمديدات', '${k.extendCount}', const Color(0xFF26A69A), LucideIcons.repeat, isCount: true),
-      _KpiItem('# مصاريف', '${k.expensesCount}', AppColors.error, LucideIcons.receipt, isCount: true),
+      _KpiItem('actions.activate_cash'.tr(), formatIQD(k.activateCashSum),
+          AppColors.success, LucideIcons.zap),
+      _KpiItem('actions.debt_pay'.tr(), formatIQD(debtPayTotal),
+          AppColors.success, LucideIcons.banknote),
+      _KpiItem(
+          'actions.activate_non_cash'.tr(),
+          formatIQD(k.activateNonCashSum),
+          AppColors.error,
+          LucideIcons.creditCard,
+          isDebit: true),
+      _KpiItem('actions.debt_add'.tr(), formatIQD(k.balanceAddSum),
+          AppColors.error, LucideIcons.plus,
+          isDebit: true),
+      _KpiItem('# تفعيلات', '${k.activationsCount}', AppColors.brandAccent,
+          LucideIcons.userCheck,
+          isCount: true),
+      _KpiItem('# تمديدات', '${k.extendCount}', AppColors.success,
+          LucideIcons.repeat,
+          isCount: true),
+      _KpiItem('# مصاريف', '${k.expensesCount}', AppColors.error,
+          LucideIcons.receipt,
+          isCount: true),
     ];
     return Wrap(
       spacing: 8,
@@ -375,9 +388,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                     // العدّاد يبقى بلون النص العادي.
                     color: it.isCount
                         ? AppColors.textHi
-                        : (it.isDebit
-                            ? AppColors.error
-                            : const Color(0xFF14B8A6)),
+                        : (it.isDebit ? AppColors.error : AppColors.success),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.3,
@@ -425,8 +436,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   };
 
   List<FinanceLog> _filterLogs(List<FinanceLog> logs) {
-    final base = logs
-        .where((l) => !_excludedTypes.contains(l.actionType.toUpperCase().trim()));
+    final base = logs.where(
+        (l) => !_excludedTypes.contains(l.actionType.toUpperCase().trim()));
     final types = _filters.actionTypes;
     if (types == null || types.isEmpty) return base.toList();
     return base
@@ -501,8 +512,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       );
     }
     final filtered = _filterLogs(logs);
-    final totalPages =
-        (filtered.length / _pageSize).ceil().clamp(1, 99999);
+    final totalPages = (filtered.length / _pageSize).ceil().clamp(1, 99999);
     final pageStart = _page * _pageSize;
     final pageEnd = (pageStart + _pageSize).clamp(0, filtered.length);
     final pageRows = filtered.isEmpty
@@ -609,7 +619,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
-
 }
 
 class _KpiItem {

@@ -54,7 +54,7 @@ class _ConsumptionSheet extends StatelessWidget {
                   icon: LucideIcons.upload,
                   label: 'رفع',
                   value: _fmtBytes(sub.uploadBytes ?? 0),
-                  color: const Color(0xFF3B82F6),
+                  color: AppColors.brandAccent,
                 ),
               ),
             ],
@@ -67,16 +67,15 @@ class _ConsumptionSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFE08F2D).withValues(alpha: 0.08),
+                color: AppColors.warning.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(R.md),
                 border: Border.all(
-                  color: const Color(0xFFE08F2D).withValues(alpha: 0.25),
+                  color: AppColors.warning.withValues(alpha: 0.25),
                 ),
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.info,
-                      size: 13, color: Color(0xFFE08F2D)),
+                  Icon(LucideIcons.info, size: 13, color: AppColors.warning),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -104,7 +103,7 @@ class _ConsumptionSheet extends StatelessWidget {
                     icon: LucideIcons.download,
                     label: 'تحميل اليوم',
                     value: _fmtBytes(sub.dailyDownload ?? 0),
-                    color: const Color(0xFF10B981),
+                    color: AppColors.success,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -113,7 +112,7 @@ class _ConsumptionSheet extends StatelessWidget {
                     icon: LucideIcons.upload,
                     label: 'رفع اليوم',
                     value: _fmtBytes(sub.dailyUpload ?? 0),
-                    color: const Color(0xFF6366F1),
+                    color: AppColors.brandAccent,
                   ),
                 ),
               ],
@@ -122,7 +121,7 @@ class _ConsumptionSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.brand.withValues(alpha: 0.08),
+                color: AppColors.brandSoftBg,
                 borderRadius: BorderRadius.circular(R.md),
                 border: Border.all(
                   color: AppColors.brand.withValues(alpha: 0.2),

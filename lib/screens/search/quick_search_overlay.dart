@@ -24,7 +24,7 @@ Future<void> showQuickSearch(BuildContext context) {
     context: context,
     barrierDismissible: true,
     barrierLabel: 'QuickSearch',
-    barrierColor: Colors.black.withValues(alpha: 0.4),
+    barrierColor: AppColors.scrim,
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (_, __, ___) => const QuickSearchOverlay(),
     transitionBuilder: (_, anim, __, child) => FadeTransition(
@@ -60,6 +60,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   bool _listening = false;
   bool _speechReady = false;
   String _q = '';
+
   /// Arabic localeId picked from whatever the device actually exposes
   /// (ar-IQ → ar-SA → first 'ar*' → null fallback). Probed once on
   /// init so a tap on the mic doesn't have to await locales() and risk
@@ -162,9 +163,8 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
             (l) => l.localeId.toLowerCase() == 'ar-sa',
             orElse: () => locales.firstWhere(
               (l) => l.localeId.toLowerCase().startsWith('ar'),
-              orElse: () => locales.isEmpty
-                  ? throw _NoLocales()
-                  : locales.first,
+              orElse: () =>
+                  locales.isEmpty ? throw _NoLocales() : locales.first,
             ),
           )
           .localeId;
@@ -365,8 +365,8 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                                 const SizedBox(width: Sp.sm),
                                 Text(
                                   'الاستماع... تكلّم الآن',
-                                  style: AppType.subtitle(
-                                      color: AppColors.brand),
+                                  style:
+                                      AppType.subtitle(color: AppColors.brand),
                                 ),
                               ],
                             ),
@@ -406,7 +406,7 @@ class _MicButton extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final bg = listening
         ? AppColors.error
-        : (enabled ? AppColors.brand.withValues(alpha: 0.12) : AppColors.surfaceInput);
+        : (enabled ? AppColors.brandSoftBg : AppColors.surfaceInput);
     final fg = listening
         ? Colors.white
         : (enabled ? AppColors.brand : AppColors.textLow);
@@ -504,8 +504,7 @@ class _Results extends StatelessWidget {
             child: Center(
               child: Column(
                 children: [
-                  Icon(LucideIcons.searchX,
-                      color: AppColors.textLow, size: 32),
+                  Icon(LucideIcons.searchX, color: AppColors.textLow, size: 32),
                   const SizedBox(height: Sp.sm),
                   Text(
                     'لا يوجد مشترك يطابق "$trimmed"',
@@ -524,8 +523,7 @@ class _Results extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
+                padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
                 child: Text(
                   matches.length > _maxResults
                       ? 'أول $_maxResults من ${matches.length} نتيجة'
@@ -649,8 +647,7 @@ class _Results extends StatelessWidget {
       if (phoneCore.contains(qPhone) || mobileCore.contains(qPhone)) {
         // Prefix > middle match — 077 typed should rank 07712xxx
         // above 0xxxx77yyy.
-        if (phoneCore.startsWith(qPhone) ||
-            mobileCore.startsWith(qPhone)) {
+        if (phoneCore.startsWith(qPhone) || mobileCore.startsWith(qPhone)) {
           score += 70;
         } else {
           score += 45;
@@ -726,8 +723,8 @@ class _ResultRow extends StatelessWidget {
         },
         borderRadius: BorderRadius.circular(R.md),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.sm, vertical: Sp.sm),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -741,8 +738,8 @@ class _ResultRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.14),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: statusColor.withValues(alpha: 0.3)),
+                      border:
+                          Border.all(color: statusColor.withValues(alpha: 0.3)),
                     ),
                     alignment: Alignment.center,
                     child: Icon(
@@ -761,8 +758,8 @@ class _ResultRow extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: AppColors.brand,
                           shape: BoxShape.circle,
-                          border: Border.all(
-                              color: AppColors.surface, width: 1.5),
+                          border:
+                              Border.all(color: AppColors.surface, width: 1.5),
                         ),
                       ),
                     ),
@@ -779,8 +776,8 @@ class _ResultRow extends StatelessWidget {
                         Flexible(
                           child: Text(
                             sub.fullName,
-                            style: AppType.label(color: AppColors.textHi)
-                                .copyWith(
+                            style:
+                                AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
                             ),
@@ -818,8 +815,7 @@ class _ResultRow extends StatelessWidget {
                           ),
                           child: Text(
                             statusLabel,
-                            style: AppType.muted(color: statusColor)
-                                .copyWith(
+                            style: AppType.muted(color: statusColor).copyWith(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
                             ),
@@ -846,19 +842,16 @@ class _ResultRow extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color:
-                                  AppColors.error.withValues(alpha: 0.1),
+                              color: AppColors.dangerSoftBg,
                               borderRadius: BorderRadius.circular(R.pill),
                               border: Border.all(
-                                color: AppColors.error
-                                    .withValues(alpha: 0.25),
+                                color: AppColors.error.withValues(alpha: 0.25),
                               ),
                             ),
                             child: Text(
                               'دين ${formatIQD(sub.debtAbs.round())}',
-                              style:
-                                  AppType.muted(color: AppColors.error)
-                                      .copyWith(
+                              style: AppType.muted(color: AppColors.error)
+                                  .copyWith(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -942,8 +935,7 @@ class _ResultRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  color: AppColors.textLow, size: 16),
+              Icon(LucideIcons.chevronLeft, color: AppColors.textLow, size: 16),
             ],
           ),
         ),
@@ -952,15 +944,15 @@ class _ResultRow extends StatelessWidget {
   }
 
   static Color _statusColor(Subscriber s) {
-    if (s.isDisabled) return const Color(0xFF94A3B8);
+    if (s.isDisabled) return AppColors.textLabel;
     if (s.isOnline) {
-      if (s.isExpired) return const Color(0xFF8B5CF6);
-      if (s.isNearExpiry) return const Color(0xFFF59E0B);
-      return const Color(0xFF2563EB);
+      if (s.isExpired) return AppColors.brandAccent;
+      if (s.isNearExpiry) return AppColors.warning;
+      return AppColors.brandAccent;
     }
     if (s.isExpired) return AppColors.error;
-    if (s.isNearExpiry) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
+    if (s.isNearExpiry) return AppColors.warning;
+    return AppColors.success;
   }
 
   static String _statusLabel(Subscriber s) {
@@ -1014,7 +1006,7 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: AppColors.brand.withValues(alpha: 0.08),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.pill),
       ),
       child: Row(
@@ -1034,4 +1026,3 @@ class _InfoChip extends StatelessWidget {
     );
   }
 }
-

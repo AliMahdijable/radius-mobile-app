@@ -151,7 +151,8 @@ class TelegramApi {
       );
       final body = r.data ?? const {};
       final s = body['status'];
-      if (s is Map) return TelegramStatus.fromJson(Map<String, dynamic>.from(s));
+      if (s is Map)
+        return TelegramStatus.fromJson(Map<String, dynamic>.from(s));
       return null;
     } catch (e) {
       _log('status', e);
@@ -266,8 +267,8 @@ class TelegramApi {
     }
   }
 
-  static Future<({bool ok, String? message})>
-      sendLinkViaWa(String adminId, String idx) async {
+  static Future<({bool ok, String? message})> sendLinkViaWa(
+      String adminId, String idx) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/telegram/send-link-via-wa/$adminId/$idx',
@@ -309,8 +310,8 @@ class TelegramApi {
     }
   }
 
-  static Future<({bool ok, int enqueued, String? message})>
-      sendBroadcastLinks(String adminId) async {
+  static Future<({bool ok, int enqueued, String? message})> sendBroadcastLinks(
+      String adminId) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/telegram/broadcast-links/$adminId',

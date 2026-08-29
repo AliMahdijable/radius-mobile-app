@@ -93,23 +93,23 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
     _ChipDef(SubscriberFilter.all, 'subscribers.filter_all', LucideIcons.users,
         AppColors.brand),
     _ChipDef(SubscriberFilter.active, 'subscribers.filter_active',
-        LucideIcons.circleCheck, Color(0xFF14B8A6)),
+        LucideIcons.circleCheck, AppColors.success),
     _ChipDef(SubscriberFilter.online, 'subscribers.filter_online',
-        LucideIcons.wifi, Color(0xFF3B82F6)),
+        LucideIcons.wifi, AppColors.brandAccent),
     _ChipDef(SubscriberFilter.offline, 'subscribers.filter_offline',
-        LucideIcons.wifiOff, Color(0xFF90A4AE)),
+        LucideIcons.wifiOff, AppColors.textMid),
     _ChipDef(SubscriberFilter.disabled, 'subscribers.filter_disabled',
-        LucideIcons.ban, Color(0xFF6D4C41)),
+        LucideIcons.ban, AppColors.textLabel),
     _ChipDef(SubscriberFilter.expired, 'subscribers.filter_expired',
-        LucideIcons.timerOff, Color(0xFFC62828)),
+        LucideIcons.timerOff, AppColors.error),
     // "بدون نت" — متصل + منتهي. لون بنفسجي يطابق status_online_expired
     // في الويب حتى الإدمن يربط الـchip بالحالة اللونية للصف.
     _ChipDef(SubscriberFilter.onlineNoPlan, 'subscribers.filter_online_no_plan',
-        LucideIcons.wifiOff, Color(0xFF9333EA)),
+        LucideIcons.wifiOff, AppColors.brandAccent),
     _ChipDef(SubscriberFilter.debtors, 'subscribers.filter_debtors',
-        LucideIcons.creditCard, Color(0xFFF57F17)),
+        LucideIcons.creditCard, AppColors.warning),
     _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry',
-        LucideIcons.triangleAlert, Color(0xFFE08F2D)),
+        LucideIcons.triangleAlert, AppColors.warning),
   ];
 
   @override

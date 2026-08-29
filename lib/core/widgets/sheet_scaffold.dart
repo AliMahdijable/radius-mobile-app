@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../theme/colors.dart';
 
 /// Overlay-based helper to show a floating snack from **inside** a modal
 /// bottom sheet without breaking the sheet's own layout.
@@ -78,9 +79,7 @@ class _SheetSnackEntry {
         child: Material(
           elevation: 8,
           borderRadius: BorderRadius.circular(10),
-          color: isError
-              ? const Color(0xFFDC2626)
-              : const Color(0xFF16A34A),
+          color: isError ? AppColors.errorFill : AppColors.successFill,
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: _dismiss,

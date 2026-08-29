@@ -117,13 +117,13 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
   // ── ONT layout: [ONT badge]  RX -22.5 dBm  •  45 °C ───────────────
   Widget _ontMetrics(OntOpticalInfo o) {
     final rxColor = o.rxOk ? AppColors.brand : AppColors.error;
-    final tempColor = o.tempOk ? AppColors.brand : const Color(0xFFE08F2D);
+    final tempColor = o.tempOk ? AppColors.brand : AppColors.warning;
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 6,
       runSpacing: 4,
       children: [
-        _kindBadge('ONT', const Color(0xFF7C3AED), LucideIcons.signalHigh),
+        _kindBadge('ONT', AppColors.brandAccent, LucideIcons.signalHigh),
         _stat(
           icon: LucideIcons.signal,
           label: 'RX',
@@ -150,7 +150,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
       spacing: 6,
       runSpacing: 4,
       children: [
-        _kindBadge('UBNT', const Color(0xFF14B8A6), LucideIcons.wifi),
+        _kindBadge('UBNT', AppColors.success, LucideIcons.wifi),
         if (u.signalDbm != null)
           _stat(
             icon: LucideIcons.signal,
@@ -248,7 +248,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.08),
+          color: AppColors.dangerSoftBg,
           borderRadius: BorderRadius.circular(R.sm),
         ),
         child: body,
@@ -277,12 +277,12 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
             border: Border.all(color: AppColors.border),
           ),
           child: _refreshing
-              ? const SizedBox(
+              ? SizedBox(
                   width: 13,
                   height: 13,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.6,
-                    color: Color(0xFF7C3AED),
+                    color: AppColors.brandAccent,
                   ),
                 )
               : Icon(LucideIcons.refreshCw, size: 14, color: AppColors.textMid),
@@ -294,7 +294,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
   static Color _signalColor(int? signal) {
     if (signal == null) return AppColors.textMid;
     if (signal > -65) return AppColors.brand;
-    if (signal > -75) return const Color(0xFFE08F2D);
+    if (signal > -75) return AppColors.warning;
     return AppColors.error;
   }
 
@@ -303,7 +303,7 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
       case 'good':
         return AppColors.brand;
       case 'warn':
-        return const Color(0xFFE08F2D);
+        return AppColors.warning;
       case 'bad':
         return AppColors.error;
       default:

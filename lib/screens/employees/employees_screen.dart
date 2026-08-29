@@ -45,8 +45,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       EmployeesApi.catalog(),
     ]);
     if (!mounted) return;
-    final listResult =
-        results[0] as ({List<Employee> rows, String? error});
+    final listResult = results[0] as ({List<Employee> rows, String? error});
     final cat = results[1] as PermissionsCatalog?;
     setState(() {
       _rows = listResult.rows;
@@ -74,8 +73,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('حذف الموظف',
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         content: Text(
           'حذف "${emp.fullName?.isNotEmpty == true ? emp.fullName : emp.username}"؟ '
           'لا يمكن التراجع.',
@@ -100,9 +99,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok
-            ? 'تم حذف الموظف'
-            : (r.message ?? 'تعذّر الحذف')),
+        content: Text(r.ok ? 'تم حذف الموظف' : (r.message ?? 'تعذّر الحذف')),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -132,14 +129,14 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       title: emp.fullName?.isNotEmpty == true ? emp.fullName! : emp.username,
       subtitle: 'كلمة سرّ الموظّف',
       password: res.password!,
-      accentColor: const Color(0xFF7C3AED),
+      accentColor: AppColors.brandAccent,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF8B5CF6);
+    final accent = AppColors.brandAccent;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -147,16 +144,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text('الموظفون',
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      floatingActionButton: (_catalog == null ||
-              !Perms.has('employees.manage'))
+      floatingActionButton: (_catalog == null || !Perms.has('employees.manage'))
           ? null
           : FloatingActionButton.extended(
               backgroundColor: accent,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onBrand,
               onPressed: () => _openEditor(),
               icon: const Icon(LucideIcons.userPlus, size: 16),
               label: const Text('موظف جديد'),
@@ -240,15 +236,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             ),
           ),
           _statBadge(
-              label: 'مفعّل',
-              count: activeCount,
-              color: const Color(0xFF14B8A6)),
+              label: 'مفعّل', count: activeCount, color: AppColors.success),
           if (disabledCount > 0) ...[
             const SizedBox(width: 6),
             _statBadge(
-                label: 'معطّل',
-                count: disabledCount,
-                color: AppColors.textLow),
+                label: 'معطّل', count: disabledCount, color: AppColors.textLow),
           ],
         ],
       ),
@@ -300,8 +292,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.circleAlert,
-                  size: 36, color: AppColors.error),
+              Icon(LucideIcons.circleAlert, size: 36, color: AppColors.error),
               const SizedBox(height: 10),
               Text(msg,
                   style: AppType.label(color: AppColors.textMid),
@@ -355,24 +346,24 @@ class _EmployeeTile extends StatelessWidget {
     this.onShowPassword,
   });
   final Employee emp;
+
   /// null لو الـactor ما عنده صلاحية التعديل — InkWell يصير inert
   /// (لا ripple، لا فعل) بدل ما يفتح editor فاضي.
   final VoidCallback? onTap;
+
   /// null لو الـactor ما عنده صلاحية الحذف — يخفي زر الحذف بدل
   /// تعطيله.
   final VoidCallback? onDelete;
+
   /// 2026-08-26: إظهار كلمة سرّ الموظّف الحاليّة (طلب المستخدم).
   final VoidCallback? onShowPassword;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final display = (emp.fullName?.isNotEmpty == true)
-        ? emp.fullName!
-        : emp.username;
-    final accentColor = emp.isActive
-        ? const Color(0xFF14B8A6)
-        : AppColors.textLow;
+    final display =
+        (emp.fullName?.isNotEmpty == true) ? emp.fullName! : emp.username;
+    final accentColor = emp.isActive ? AppColors.success : AppColors.textLow;
     return Material(
       color: AppColors.surface,
       child: InkWell(
@@ -408,9 +399,7 @@ class _EmployeeTile extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  display.characters.isEmpty
-                      ? '?'
-                      : display.characters.first,
+                  display.characters.isEmpty ? '?' : display.characters.first,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -445,8 +434,7 @@ class _EmployeeTile extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: AppColors.textLow
-                                  .withValues(alpha: 0.15),
+                              color: AppColors.textLow.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -498,16 +486,16 @@ class _EmployeeTile extends StatelessWidget {
                       Row(
                         children: [
                           Icon(LucideIcons.userCheck,
-                              size: 10, color: const Color(0xFF7C3AED)),
+                              size: 10, color: AppColors.brandAccent),
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
                               'مقيَّد بـ@${emp.scopeAdminUsername ?? emp.scopeAdminId}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF7C3AED),
+                                color: AppColors.brandAccent,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -523,20 +511,19 @@ class _EmployeeTile extends StatelessWidget {
               // 2026-08-26: زر نسخ اليوزر — يتوفّر لأي حساب مصادَق (بلا
               // perm gating لأن الـusername ليس بيانات حسّاسة).
               IconButton(
-                icon: Icon(LucideIcons.copy,
-                    color: AppColors.textMid, size: 15),
+                icon:
+                    Icon(LucideIcons.copy, color: AppColors.textMid, size: 15),
                 onPressed: () => copyToClipboard(context, emp.username,
                     label: 'اسم المستخدم'),
                 tooltip: 'نسخ اسم المستخدم',
                 splashRadius: 18,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               if (onShowPassword != null)
                 IconButton(
                   icon: Icon(LucideIcons.keyRound,
-                      color: const Color(0xFF7C3AED), size: 16),
+                      color: AppColors.brandAccent, size: 16),
                   onPressed: onShowPassword,
                   tooltip: 'إظهار كلمة السر',
                   splashRadius: 18,

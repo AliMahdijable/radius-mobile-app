@@ -65,7 +65,8 @@ class _Row extends StatelessWidget {
   }) _normalize() {
     final m = item;
     final action = (m['action'] ?? m['action_type'] ?? '').toString();
-    final descr = (m['action_description'] ?? m['description'] ?? '').toString();
+    final descr =
+        (m['action_description'] ?? m['description'] ?? '').toString();
     final visual = _visualForAction(action);
     // Backend enriches each row with user_firstname / user_lastname /
     // user_username via SAS4's user directory (see
@@ -144,15 +145,12 @@ class _Row extends StatelessWidget {
     //   'تفعيل نقدي - المستخدم: ahmed@x | السعر: 35,000 د.ع'
     //   'تفعيل نقدي جزئي - ... | السعر: 35,000 د.ع | المدفوع: 10,000 د.ع | الدين: 25,000 د.ع'
     //   'تفعيل غير نقدي - ... | السعر: 35,000 د.ع | الدين: 35,000 د.ع'
-    final isActivation =
-        lower.contains('activ') ||
-            (description.contains('تفعيل') &&
-                !description.contains('تسديد دين'));
+    final isActivation = lower.contains('activ') ||
+        (description.contains('تفعيل') && !description.contains('تسديد دين'));
     if (isActivation) {
       final isPartial = description.contains('جزئي');
       final isNonCash = !isPartial && description.contains('غير نقدي');
-      final isCash =
-          !isPartial && !isNonCash && description.contains('نقدي');
+      final isCash = !isPartial && !isNonCash && description.contains('نقدي');
       final variant = isPartial
           ? 'جزئي'
           : isNonCash
@@ -161,7 +159,8 @@ class _Row extends StatelessWidget {
                   ? 'نقدي'
                   : null;
       final label = variant != null ? 'تفعيل $variant' : 'تفعيل';
-      final price = _extractAmount(description, RegExp(r'السعر\s*:?\s*([\d,]+)'));
+      final price =
+          _extractAmount(description, RegExp(r'السعر\s*:?\s*([\d,]+)'));
       final paid =
           _extractAmount(description, RegExp(r'المدفوع\s*:?\s*([\d,]+)'));
       // For partial we want both السعر + المدفوع because the cash
@@ -176,7 +175,8 @@ class _Row extends StatelessWidget {
       return (label: label, detail: detail);
     }
     if (lower.contains('extend')) {
-      final price = _extractAmount(description, RegExp(r'السعر\s*:?\s*([\d,]+)'));
+      final price =
+          _extractAmount(description, RegExp(r'السعر\s*:?\s*([\d,]+)'));
       return (
         label: 'تمديد',
         detail: price != null ? '${_formatIntCompact(price)} د.ع' : null,
@@ -191,7 +191,8 @@ class _Row extends StatelessWidget {
     }
     // 2026-08-26: موقع GPS — SUBSCRIBER_EDIT + description يحوي "موقع GPS".
     // نُميّزها قبل قاعدة "تعديل مشترك" العامّة حتى تظهر بلابل واضح للأدمن.
-    if ((lower.contains('subscriber_edit') || lower.contains('edit_subscriber')) &&
+    if ((lower.contains('subscriber_edit') ||
+            lower.contains('edit_subscriber')) &&
         description.contains('موقع GPS')) {
       final isClear = description.contains('حذف موقع');
       return (label: 'تعديل', detail: isClear ? 'حذف موقع' : 'إضافة موقع');
@@ -285,8 +286,7 @@ class _Row extends StatelessWidget {
       // Generic amount fallback for manual payment-add — the
       // description shape varies, but a leading numeric chunk is
       // common ('PAYMENT_ADD 5,000 …').
-      final amt =
-          _extractAmount(description, RegExp(r'([\d,]+)\s*د\.ع'));
+      final amt = _extractAmount(description, RegExp(r'([\d,]+)\s*د\.ع'));
       return (
         label: 'إيراد',
         detail: amt != null ? '${_formatIntCompact(amt)} د.ع' : null,
@@ -294,13 +294,16 @@ class _Row extends StatelessWidget {
     }
     // مطلب المستخدم 2026-07-12: تشغيل/تعطيل/فصل حساب المشترك ما كانت
     // تظهر بـلابل في feed آخر الحركات — تُعرض بدون action label.
-    if (lower.contains('subscriber_enable') || lower.contains('enable_subscriber')) {
+    if (lower.contains('subscriber_enable') ||
+        lower.contains('enable_subscriber')) {
       return (label: 'تشغيل', detail: null);
     }
-    if (lower.contains('subscriber_disable') || lower.contains('disable_subscriber')) {
+    if (lower.contains('subscriber_disable') ||
+        lower.contains('disable_subscriber')) {
       return (label: 'تعطيل', detail: null);
     }
-    if (lower.contains('subscriber_disconnect') || lower.contains('disconnect_subscriber')) {
+    if (lower.contains('subscriber_disconnect') ||
+        lower.contains('disconnect_subscriber')) {
       return (label: 'فصل المستخدم', detail: null);
     }
     return (label: null, detail: null);
@@ -396,8 +399,7 @@ class _Row extends StatelessWidget {
                     else
                       Text(
                         n.title,
-                        style:
-                            AppType.label(color: AppColors.textHi).copyWith(
+                        style: AppType.label(color: AppColors.textHi).copyWith(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           height: 1.3,
@@ -474,7 +476,8 @@ class _Row extends StatelessWidget {
                               color: n.amount < 0
                                   ? AppColors.error
                                   : AppColors.brand,
-                            ).copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                            ).copyWith(
+                                fontSize: 12, fontWeight: FontWeight.w700),
                           ),
                         ],
                       ],
@@ -490,7 +493,7 @@ class _Row extends StatelessWidget {
                             n.actorIsEmployee ? Icons.badge : Icons.shield,
                             size: 10,
                             color: n.actorIsEmployee
-                                ? const Color(0xFF7C3AED)
+                                ? AppColors.brandAccent
                                 : AppColors.textMid,
                           ),
                           const SizedBox(width: 4),
@@ -527,11 +530,11 @@ class _Row extends StatelessWidget {
     // Order matters — subscriber_edit contains 'edit' (and 'subscrib')
     // so check the specific labels before the generic 'activ' match.
     if (lower.contains('subscriber_add') || lower.contains('add_subscriber')) {
-      return (Icons.person_add_rounded, const Color(0xFF8B5CF6));
+      return (Icons.person_add_rounded, AppColors.brandAccent);
     }
     if (lower.contains('subscriber_edit') ||
         lower.contains('edit_subscriber')) {
-      return (Icons.edit_rounded, const Color(0xFF2D5F47));
+      return (Icons.edit_rounded, AppColors.brand);
     }
     if (lower.contains('subscriber_delete') ||
         lower.contains('delete_subscriber')) {
@@ -539,7 +542,7 @@ class _Row extends StatelessWidget {
     }
     if (lower.contains('activ')) return (Icons.bolt_rounded, AppColors.brand);
     if (lower.contains('extend')) {
-      return (Icons.loop_rounded, const Color(0xFF3B82F6));
+      return (Icons.loop_rounded, AppColors.brandAccent);
     }
     if (lower.contains('pay') || lower.contains('debt_pay')) {
       return (Icons.payments_rounded, AppColors.brand);
@@ -548,16 +551,19 @@ class _Row extends StatelessWidget {
       return (Icons.account_balance_wallet_rounded, AppColors.error);
     }
     if (lower.contains('whatsapp') || lower.contains('message')) {
-      return (Icons.chat_bubble_rounded, const Color(0xFFE08F2D));
+      return (Icons.chat_bubble_rounded, AppColors.warning);
     }
     // 2026-07-12: تشغيل/تعطيل/فصل — نُميّزهم بأيقونات + ألوان مناسبة.
-    if (lower.contains('subscriber_enable') || lower.contains('enable_subscriber')) {
-      return (Icons.check_circle_rounded, const Color(0xFF14B8A6));
+    if (lower.contains('subscriber_enable') ||
+        lower.contains('enable_subscriber')) {
+      return (Icons.check_circle_rounded, AppColors.success);
     }
-    if (lower.contains('subscriber_disable') || lower.contains('disable_subscriber')) {
-      return (Icons.block_rounded, const Color(0xFFE08F2D));
+    if (lower.contains('subscriber_disable') ||
+        lower.contains('disable_subscriber')) {
+      return (Icons.block_rounded, AppColors.warning);
     }
-    if (lower.contains('subscriber_disconnect') || lower.contains('disconnect_subscriber')) {
+    if (lower.contains('subscriber_disconnect') ||
+        lower.contains('disconnect_subscriber')) {
       return (Icons.power_settings_new_rounded, AppColors.error);
     }
     return (Icons.history_rounded, AppColors.textMid);

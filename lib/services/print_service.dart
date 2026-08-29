@@ -159,8 +159,10 @@ class PrintService {
             : const pw.EdgeInsets.all(32),
         textDirection: pw.TextDirection.rtl,
         build: (context) => isPos
-            ? _buildPosLayout(data: data, title: title, companyName: companyName)
-            : _buildA4Layout(data: data, title: title, companyName: companyName),
+            ? _buildPosLayout(
+                data: data, title: title, companyName: companyName)
+            : _buildA4Layout(
+                data: data, title: title, companyName: companyName),
       ),
     );
     return doc.save();
@@ -276,13 +278,16 @@ class PrintService {
                 pw.Text(
                   companyName,
                   style: pw.TextStyle(
-                      fontSize: 22, fontWeight: pw.FontWeight.bold, color: brand),
+                      fontSize: 22,
+                      fontWeight: pw.FontWeight.bold,
+                      color: brand),
                   textAlign: pw.TextAlign.center,
                 ),
               pw.SizedBox(height: 6),
               pw.Text(
                 title,
-                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
                 textAlign: pw.TextAlign.center,
               ),
               pw.SizedBox(height: 4),

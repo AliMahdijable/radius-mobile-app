@@ -125,8 +125,7 @@ class UbiquitiService {
     if (data is String && data.trim().startsWith('{')) {
       try {
         final m = jsonDecode(data);
-        return m is Map &&
-            (m.containsKey('wireless') || m.containsKey('host'));
+        return m is Map && (m.containsKey('wireless') || m.containsKey('host'));
       } catch (_) {
         return false;
       }
@@ -161,8 +160,7 @@ class UbiquitiService {
       UbiquitiLoginResult session) async {
     final dio = _buildDio(session.baseUrl);
     try {
-      final path =
-          session.airosVariant == 'v8' ? '/api/status' : '/status.cgi';
+      final path = session.airosVariant == 'v8' ? '/api/status' : '/status.cgi';
       final res = await dio.get(
         path,
         options: Options(headers: {

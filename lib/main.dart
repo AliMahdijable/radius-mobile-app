@@ -70,15 +70,15 @@ void main() async {
         .then((_) {
       NotificationService.markFirebaseReady(true);
       // Crashlytics: كل uncaught Flutter error يُرسل تلقائياً
-      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      FlutterError.onError =
+          FirebaseCrashlytics.instance.recordFlutterFatalError;
       // Crashlytics: كل uncaught async error يُرسل تلقائياً
       PlatformDispatcher.instance.onError = (error, stack) {
         FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
         return true;
       };
       // Debug mode: نعطّل الإرسال حتى لا نضيف noise أثناء التطوير
-      FirebaseCrashlytics.instance
-          .setCrashlyticsCollectionEnabled(!kDebugMode);
+      FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
     }).catchError((e) {
       if (kDebugMode) debugPrint('Firebase init failed: $e');
       NotificationService.markFirebaseReady(false);
@@ -106,8 +106,7 @@ void main() async {
 
 /// المرجع الأساسي للـNavigator — نستعمله لعرض الـInAppNotificationBanner
 /// من داخل FcmService.onForegroundNotification (خارج شجرة الـwidgets).
-final GlobalKey<NavigatorState> _appNavigatorKey =
-    GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> _appNavigatorKey = GlobalKey<NavigatorState>();
 
 class MyServicesApp extends StatefulWidget {
   const MyServicesApp({super.key});
@@ -237,9 +236,8 @@ class _MyServicesAppState extends State<MyServicesApp>
     final wasDark = AppColors.isDark;
     AppColors.setDarkMode(brightness == Brightness.dark);
 
-    final base = brightness == Brightness.dark
-        ? ThemeData.dark()
-        : ThemeData.light();
+    final base =
+        brightness == Brightness.dark ? ThemeData.dark() : ThemeData.light();
 
     final theme = ThemeData(
       useMaterial3: true,

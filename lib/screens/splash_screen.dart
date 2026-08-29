@@ -166,7 +166,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 borderRadius: BorderRadius.circular(R.lg),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brand.withValues(alpha: 0.12),
+                    color: AppColors.brandSoftBg,
                     blurRadius: 32,
                     offset: const Offset(0, 16),
                   ),
@@ -190,9 +190,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Text(
               'MyServices Radius',
               style: AppType.title(color: AppColors.textHi),
-            )
-                .animate()
-                .fadeIn(
+            ).animate().fadeIn(
                   delay: const Duration(milliseconds: 150),
                   duration: const Duration(milliseconds: 300),
                 ),
@@ -204,9 +202,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 strokeWidth: 2.2,
                 color: AppColors.brand,
               ),
-            )
-                .animate()
-                .fadeIn(
+            ).animate().fadeIn(
                   delay: const Duration(milliseconds: 300),
                   duration: const Duration(milliseconds: 200),
                 ),

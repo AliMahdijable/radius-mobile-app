@@ -320,16 +320,16 @@ class _SummaryStrip extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF14B8A6).withValues(alpha: 0.1),
+              color: AppColors.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(R.pill),
               border: Border.all(
-                color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
+                color: AppColors.success.withValues(alpha: 0.3),
               ),
             ),
             child: Text(
               'sheets.ready_of'.tr(
                   namedArgs: {'ready': '$readyCount', 'total': '$totalRows'}),
-              style: AppType.muted(color: const Color(0xFF14B8A6))
+              style: AppType.muted(color: AppColors.success)
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
             ),
           ),
@@ -373,7 +373,7 @@ class _PayRowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF14B8A6);
+    final accent = AppColors.success;
     final chips = const [5000, 10000, 15000, 25000, 50000]
         .where((c) => c < row.debt)
         .toList();
@@ -433,10 +433,10 @@ class _PayRowCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.1),
+                  color: AppColors.dangerSoftBg,
                   borderRadius: BorderRadius.circular(R.pill),
                   border: Border.all(
-                    color: AppColors.error.withValues(alpha: 0.25),
+                    color: AppColors.dangerSoftBorder,
                   ),
                 ),
                 child: Text(
@@ -451,7 +451,7 @@ class _PayRowCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Icon(
                   row.ok! ? LucideIcons.circleCheck : LucideIcons.circleX,
-                  color: row.ok! ? const Color(0xFF14B8A6) : AppColors.error,
+                  color: row.ok! ? AppColors.success : AppColors.error,
                   size: 18,
                 ),
               ],
@@ -601,10 +601,10 @@ class _PayRowCard extends StatelessWidget {
   /// Border color reflects per-row state — soft border by default,
   /// brand-tinted while configured, success/error when done.
   static Color _statusBorderColor(_PayRow r) {
-    if (r.ok == true) return const Color(0xFF14B8A6).withValues(alpha: 0.5);
-    if (r.ok == false) return AppColors.error.withValues(alpha: 0.5);
+    if (r.ok == true) return AppColors.success.withValues(alpha: 0.5);
+    if (r.ok == false) return AppColors.dangerSoftBorder;
     if (r.ready) {
-      return const Color(0xFF14B8A6).withValues(alpha: 0.35);
+      return AppColors.success.withValues(alpha: 0.35);
     }
     return AppColors.border;
   }
@@ -622,7 +622,7 @@ class _RowPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final isCredit = balanceAfter >= 0;
-    final color = isCredit ? const Color(0xFF14B8A6) : const Color(0xFFE08F2D);
+    final color = isCredit ? AppColors.success : AppColors.warning;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(

@@ -51,8 +51,8 @@ class NotificationBell extends StatelessWidget {
                 top: 4,
                 child: IgnorePointer(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color: AppColors.error,
                       borderRadius: BorderRadius.circular(10),

@@ -97,7 +97,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       builder: (_) => AlertDialog(
         title: Text('exp.delete_title'.tr()),
         content: Text(
-          'exp.delete_body'.tr(namedArgs: {'amt': '${formatIQD(row.amount)} ${'common.currency'.tr()}'}),
+          'exp.delete_body'.tr(namedArgs: {
+            'amt': '${formatIQD(row.amount)} ${'common.currency'.tr()}'
+          }),
         ),
         actions: [
           TextButton(
@@ -105,8 +107,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.delete'.tr()),
           ),
@@ -121,8 +122,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         content: Text(result.ok
             ? 'exp.deleted'.tr()
             : (result.message ?? 'subscribers.delete_failed'.tr())),
-        backgroundColor:
-            result.ok ? AppColors.brand : AppColors.error,
+        backgroundColor: result.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -132,7 +132,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF8B5CF6);
+    final accent = AppColors.brandAccent;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -141,14 +141,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           'more.expenses'.tr(),
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onBrand,
         onPressed: _openAdd,
         icon: const Icon(LucideIcons.plus, size: 16),
         label: Text('common.add'.tr()),
@@ -205,13 +204,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ),
       child: Column(
         children: [
-          Icon(LucideIcons.receiptText,
-              size: 36, color: AppColors.textLow),
+          Icon(LucideIcons.receiptText, size: 36, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text(
-'exp.empty_range'.tr(),
-            style: AppType.muted(color: AppColors.textHi)
-                .copyWith(fontSize: 13),
+            'exp.empty_range'.tr(),
+            style:
+                AppType.muted(color: AppColors.textHi).copyWith(fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
@@ -292,8 +290,8 @@ class _CompactHeader extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
@@ -314,8 +312,7 @@ class _CompactHeader extends StatelessWidget {
             onTap: onPickRange,
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.surfaceInput,
                 borderRadius: BorderRadius.circular(8),
@@ -413,7 +410,7 @@ class _ExpenseTile extends StatelessWidget {
                                 color: AppColors.textLow,
                               )),
                           Icon(Icons.badge,
-                              size: 11, color: const Color(0xFF7C3AED)),
+                              size: 11, color: AppColors.brandAccent),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
@@ -421,7 +418,7 @@ class _ExpenseTile extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF7C3AED),
+                                color: AppColors.brandAccent,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -459,14 +456,13 @@ class _ExpenseTile extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: Icon(LucideIcons.trash2,
-                    size: 15, color: AppColors.error),
+                icon:
+                    Icon(LucideIcons.trash2, size: 15, color: AppColors.error),
                 onPressed: onDelete,
                 tooltip: 'common.delete'.tr(),
                 splashRadius: 18,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
             ],
           ),

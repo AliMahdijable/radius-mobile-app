@@ -86,6 +86,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
   int? _aclGroupId;
   int? _parentId;
   List<AclGroup> _aclGroups = const [];
+
   /// قائمة المدراء الفرعيين للـparent picker (مطلب 2026-06-12 مطابق v1).
   /// null = لم تُحمَّل بعد، [] = الـbackend ما رجّع أحد فنخفي الـpicker.
   List<({int id, String username, String displayName})>? _parents;
@@ -189,8 +190,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
@@ -216,8 +216,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                         color: widget.accent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.md),
                       ),
-                      child:
-                          Icon(widget.icon, size: 16, color: widget.accent),
+                      child: Icon(widget.icon, size: 16, color: widget.accent),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -225,12 +224,10 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(widget.title,
-                              style:
-                                  AppType.title(color: AppColors.textHi)
-                                      .copyWith(fontSize: 15)),
+                              style: AppType.title(color: AppColors.textHi)
+                                  .copyWith(fontSize: 15)),
                           Text(widget.subtitle,
-                              style:
-                                  AppType.muted().copyWith(fontSize: 11),
+                              style: AppType.muted().copyWith(fontSize: 11),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis),
                         ],
@@ -249,8 +246,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
                   children: [
                     _label('اسم المستخدم *'),
                     _field(_user, hint: 'manager_xxx'),
@@ -264,9 +260,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                       obscure: _obscurePass,
                       suffix: IconButton(
                         icon: Icon(
-                          _obscurePass
-                              ? LucideIcons.eye
-                              : LucideIcons.eyeOff,
+                          _obscurePass ? LucideIcons.eye : LucideIcons.eyeOff,
                           size: 16,
                           color: AppColors.textMid,
                         ),
@@ -301,8 +295,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                     const SizedBox(height: Sp.md),
                     _label('الهاتف'),
                     _field(_mobile,
-                        hint: '07XXXXXXXXX',
-                        keyboard: TextInputType.phone),
+                        hint: '07XXXXXXXXX', keyboard: TextInputType.phone),
                     const SizedBox(height: Sp.md),
                     _label('البريد الإلكتروني'),
                     _field(_email,
@@ -326,17 +319,14 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                       contentPadding: EdgeInsets.zero,
                       title: Text(
                         'الحساب مفعّل',
-                        style: AppType.label(color: AppColors.textHi)
-                            .copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700),
+                        style: AppType.label(color: AppColors.textHi).copyWith(
+                            fontSize: 13, fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
                         _enabled
                             ? 'يستطيع المدير تسجيل الدخول'
                             : 'الحساب معطّل — لا يستطيع الدخول',
-                        style:
-                            AppType.muted().copyWith(fontSize: 11),
+                        style: AppType.muted().copyWith(fontSize: 11),
                       ),
                       value: _enabled,
                       activeColor: AppColors.brand,
@@ -348,8 +338,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, 0, Sp.lg, Sp.md),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
@@ -365,16 +354,13 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
                             )
                           : const Icon(LucideIcons.save, size: 16),
                       label: Text(
-                        _submitting
-                            ? 'جاري الحفظ...'
-                            : widget.submitLabel,
+                        _submitting ? 'جاري الحفظ...' : widget.submitLabel,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14),
+                            fontWeight: FontWeight.w700, fontSize: 14),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),
@@ -393,8 +379,8 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 4, right: 2),
         child: Text(t,
-            style: AppType.muted(color: AppColors.textMid).copyWith(
-                fontSize: 11, fontWeight: FontWeight.w700)),
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
       );
 
   Widget _field(
@@ -437,20 +423,17 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         isDense: true,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       ),
-      hint: Text('افتراضي — أنا',
-          style: TextStyle(color: AppColors.textLow)),
+      hint: Text('افتراضي — أنا', style: TextStyle(color: AppColors.textLow)),
       items: [
         const DropdownMenuItem<int?>(
           value: null,
@@ -485,13 +468,11 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         decoration: BoxDecoration(
           color: AppColors.error.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(
-              color: AppColors.error.withValues(alpha: 0.3)),
+          border: Border.all(color: AppColors.dangerSoftBorder),
         ),
         child: Text(
           'لا توجد مجموعات صلاحيات متاحة',
-          style: AppType.muted(color: AppColors.error)
-              .copyWith(fontSize: 12),
+          style: AppType.muted(color: AppColors.error).copyWith(fontSize: 12),
         ),
       );
     }
@@ -509,8 +490,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       ),
-      hint: Text('اختر مجموعة',
-          style: TextStyle(color: AppColors.textLow)),
+      hint: Text('اختر مجموعة', style: TextStyle(color: AppColors.textLow)),
       items: [
         for (final g in _aclGroups)
           DropdownMenuItem(value: g.id, child: Text(g.name)),

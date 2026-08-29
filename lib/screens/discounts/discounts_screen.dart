@@ -34,6 +34,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
 
   bool _loading = true;
   List<Subscriber> _all = const [];
+
   /// خريطة username (lowercased) → قيمة الخصم. مبنية من
   /// DiscountsApi.list. مستخدمة لـ:
   ///   1. badge "-X" على كارت المشترك إذا عنده خصم سابق.
@@ -130,8 +131,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     }).toList();
   }
 
-  num get _totalDiscount =>
-      _existing.values.fold<num>(0, (acc, v) => acc + v);
+  num get _totalDiscount => _existing.values.fold<num>(0, (acc, v) => acc + v);
 
   void _toggle(String username) {
     setState(() {
@@ -157,9 +157,9 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     if (_submitting) return;
     if (_amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('أدخل قيمة الخصم'),
-          backgroundColor: Color(0xFFE08F2D),
+          backgroundColor: AppColors.warning,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -167,9 +167,9 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     }
     if (_selected.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('اختر مشتركاً واحداً على الأقل'),
-          backgroundColor: Color(0xFFE08F2D),
+          backgroundColor: AppColors.warning,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -240,9 +240,8 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(r.ok
-            ? 'تم حذف ${r.deleted} خصم'
-            : (r.message ?? 'تعذّر الحذف')),
+        content: Text(
+            r.ok ? 'تم حذف ${r.deleted} خصم' : (r.message ?? 'تعذّر الحذف')),
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
@@ -253,7 +252,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF14B8A6);
+    final accent = AppColors.success;
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -263,8 +262,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           'الخصومات',
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
@@ -274,8 +272,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           children: [
             // ---------- HEADER (hero + actions + amount + search) ----------
             Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
               child: Column(
                 children: [
                   _hero(accent),
@@ -304,9 +301,8 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                                 ? 'إزالة الجميع'
                                 : 'لا يوجد',
                             color: AppColors.error,
-                            onTap: _existing.isNotEmpty
-                                ? _confirmDeleteAll
-                                : null,
+                            onTap:
+                                _existing.isNotEmpty ? _confirmDeleteAll : null,
                           ),
                         ),
                       ],
@@ -338,8 +334,8 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                           onRefresh: _load,
                           color: accent,
                           child: GridView.builder(
-                            padding: const EdgeInsets.fromLTRB(
-                                Sp.lg, 0, Sp.lg, 90),
+                            padding:
+                                const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
                               // مطلب 2026-06-11: cards أصغر — 3
@@ -374,47 +370,47 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       bottomNavigationBar: !Perms.has('discounts.manage')
           ? null
           : SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-          child: SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed:
-                  (_amount > 0 && _selected.isNotEmpty && !_submitting)
-                      ? _submit
-                      : null,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        (_amount > 0 && _selected.isNotEmpty && !_submitting)
+                            ? _submit
+                            : null,
+                    icon: _submitting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(LucideIcons.percent, size: 16),
+                    label: Text(
+                      _submitting
+                          ? 'جاري التطبيق...'
+                          : (_amount > 0 && _selected.isNotEmpty
+                              ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
+                              : 'تطبيق الخصم'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: AppColors.onBrand,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(R.md),
                       ),
-                    )
-                  : const Icon(LucideIcons.percent, size: 16),
-              label: Text(
-                _submitting
-                    ? 'جاري التطبيق...'
-                    : (_amount > 0 && _selected.isNotEmpty
-                        ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
-                        : 'تطبيق الخصم'),
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(R.md),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -485,13 +481,11 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             prefixIcon: const Icon(LucideIcons.percent, size: 16),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.sm),
-              borderSide:
-                  BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+              borderSide: BorderSide(color: AppColors.borderSoft),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.sm),
-              borderSide:
-                  BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+              borderSide: BorderSide(color: AppColors.borderSoft),
             ),
             isDense: true,
             contentPadding:
@@ -543,7 +537,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.borderSoft),
       ),
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Row(
@@ -613,17 +607,13 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 : color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
-              color: disabled
-                  ? AppColors.border
-                  : color.withValues(alpha: 0.3),
+              color: disabled ? AppColors.border : color.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon,
-                  size: 11,
-                  color: disabled ? AppColors.textLow : color),
+              Icon(icon, size: 11, color: disabled ? AppColors.textLow : color),
               const SizedBox(width: 4),
               Text(
                 label,
@@ -650,9 +640,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             Icon(LucideIcons.users, size: 36, color: AppColors.textLow),
             const SizedBox(height: 10),
             Text(
-              _query.isEmpty
-                  ? 'لا يوجد مشتركون'
-                  : 'لا توجد نتائج لـ "$_query"',
+              _query.isEmpty ? 'لا يوجد مشتركون' : 'لا توجد نتائج لـ "$_query"',
               style: AppType.muted().copyWith(fontSize: 12),
             ),
           ],
@@ -774,14 +762,11 @@ class _SubscriberCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           decoration: BoxDecoration(
-            color: selected
-                ? accent.withValues(alpha: 0.10)
-                : AppColors.surface,
+            color:
+                selected ? accent.withValues(alpha: 0.10) : AppColors.surface,
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
-              color: selected
-                  ? accent
-                  : AppColors.border.withValues(alpha: 0.5),
+              color: selected ? accent : AppColors.borderSoft,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -794,9 +779,7 @@ class _SubscriberCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    selected
-                        ? LucideIcons.squareCheck
-                        : LucideIcons.square,
+                    selected ? LucideIcons.squareCheck : LucideIcons.square,
                     size: 11,
                     color: selected ? accent : AppColors.textLow,
                   ),
@@ -804,10 +787,8 @@ class _SubscriberCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       hasName ? sub.fullName : sub.username,
-                      style: AppType.label(color: AppColors.textHi)
-                          .copyWith(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800),
+                      style: AppType.label(color: AppColors.textHi).copyWith(
+                          fontSize: 10.5, fontWeight: FontWeight.w800),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -830,11 +811,8 @@ class _SubscriberCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         sub.profileName!,
-                        style: AppType.label(
-                                color: const Color(0xFF14B8A6))
-                            .copyWith(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700),
+                        style: AppType.label(color: AppColors.success)
+                            .copyWith(fontSize: 9, fontWeight: FontWeight.w700),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -846,14 +824,13 @@ class _SubscriberCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE08F2D)
-                            .withValues(alpha: 0.15),
+                        color: AppColors.warning.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(R.sm),
                       ),
                       child: Text(
                         '-${formatIQD(existingDiscount!)}',
-                        style: const TextStyle(
-                          color: Color(0xFFE08F2D),
+                        style: TextStyle(
+                          color: AppColors.warning,
                           fontSize: 8.5,
                           fontWeight: FontWeight.w800,
                         ),

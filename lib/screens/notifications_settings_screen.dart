@@ -105,15 +105,14 @@ class _NotificationsSettingsScreenState
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text('notifications.title'.tr(),
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: _loading || p == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                  Sp.lg, Sp.md, Sp.lg, Sp.huge),
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
                 _SectionLabel('notifs.types_section'.tr()),
                 _Toggle(
@@ -146,7 +145,10 @@ class _NotificationsSettingsScreenState
                   icon: LucideIcons.moon,
                   label: 'notifs.mute_window_label'.tr(),
                   sub: p.quietHoursEnabled
-                      ? 'notifs.mute_range'.tr(namedArgs: {'from': p.quietHoursStart, 'to': p.quietHoursEnd})
+                      ? 'notifs.mute_range'.tr(namedArgs: {
+                          'from': p.quietHoursStart,
+                          'to': p.quietHoursEnd
+                        })
                       : 'notifs.no_mute_hint'.tr(),
                   value: p.quietHoursEnabled,
                   onChanged: (v) =>
@@ -246,8 +248,7 @@ class _Toggle extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
@@ -317,8 +318,8 @@ class _TimePickerTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: Sp.md),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.border),
             borderRadius: BorderRadius.circular(R.md),
@@ -334,16 +335,14 @@ class _TimePickerTile extends StatelessWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(LucideIcons.clock,
-                      size: 14, color: AppColors.brand),
+                  Icon(LucideIcons.clock, size: 14, color: AppColors.brand),
                   const SizedBox(width: 6),
                   Text(
                     value,
-                    style: AppType.title(color: AppColors.textHi)
-                        .copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5),
+                    style: AppType.title(color: AppColors.textHi).copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5),
                   ),
                 ],
               ),

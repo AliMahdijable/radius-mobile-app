@@ -972,12 +972,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 10,
                       height: 10,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.5,
-                        color: Color(0xFF7C3AED),
+                        color: AppColors.brandAccent,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -1539,9 +1539,9 @@ class _SelectionHeader extends StatelessWidget {
     return Container(
       height: 42,
       decoration: BoxDecoration(
-        color: AppColors.brand.withValues(alpha: 0.08),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.pill),
-        border: Border.all(color: AppColors.brand.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.brandSoftBorder),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(
@@ -1674,9 +1674,7 @@ class _ArrowBtn extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final color = enabled ? AppColors.brand : AppColors.textLow;
     return Material(
-      color: enabled
-          ? AppColors.brand.withValues(alpha: 0.08)
-          : AppColors.surfaceInput,
+      color: enabled ? AppColors.brandSoftBg : AppColors.surfaceInput,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -1779,7 +1777,7 @@ class _BulkActionBar extends StatelessWidget {
         child: _PrimaryPill(
           icon: LucideIcons.banknote,
           label: '${'subscribers.pay_debt'.tr()} ($debtorCount)',
-          color: const Color(0xFF14B8A6),
+          color: AppColors.success,
           onTap: onPayDebt!,
         ),
       ));
@@ -1825,7 +1823,7 @@ class _BulkActionBar extends StatelessWidget {
                         label: enabledCount > 0
                             ? '${'subscribers.disable'.tr()} ($enabledCount)'
                             : 'subscribers.disable'.tr(),
-                        color: const Color(0xFFCD8B00),
+                        color: AppColors.warning,
                         enabled: enabledCount > 0,
                         onTap: onDisable,
                       ),
@@ -1998,18 +1996,18 @@ class _DebtSummaryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFFE65100).withValues(alpha: 0.08),
+          color: AppColors.warning.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
-            color: const Color(0xFFE65100).withValues(alpha: 0.22),
+            color: AppColors.warning.withValues(alpha: 0.22),
           ),
         ),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               LucideIcons.wallet,
               size: 13,
-              color: Color(0xFFE65100),
+              color: AppColors.warning,
             ),
             const SizedBox(width: 6),
             Text(
@@ -2026,10 +2024,10 @@ class _DebtSummaryCard extends StatelessWidget {
                 alignment: AlignmentDirectional.centerStart,
                 child: Text(
                   '${formatIQD(total)} د.ع  •  $count مشترك',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFFE65100),
+                    color: AppColors.warning,
                   ),
                 ),
               ),

@@ -53,11 +53,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           borderRadius: BorderRadius.circular(R.lg),
         ),
         title: Text('settings.logout_title'.tr(),
-            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 18)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 18)),
         content: Text(
           'settings.logout_body'.tr(),
-          style: AppType.subtitle(color: AppColors.textMid)
-              .copyWith(height: 1.55),
+          style:
+              AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.55),
         ),
         actions: [
           TextButton(
@@ -211,9 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (_, choice, __) => _Row(
                 icon: Icons.print_outlined,
                 label: 'settings.default_printer'.tr(),
-                trailing: choice == PrintFormatChoice.a4
-                    ? 'A4'
-                    : 'POS 80mm',
+                trailing: choice == PrintFormatChoice.a4 ? 'A4' : 'POS 80mm',
                 onTap: () => _openPrinterFormatPicker(context),
               ),
             ),
@@ -337,7 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: double.infinity,
               height: 54,
               child: Material(
-                color: AppColors.error.withValues(alpha: 0.08),
+                color: AppColors.dangerSoftBg,
                 borderRadius: BorderRadius.circular(R.md),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -384,8 +383,8 @@ class _IdentityCard extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               name.isEmpty ? '?' : name.characters.first,
-              style: AppType.title(color: AppColors.brand)
-                  .copyWith(fontSize: 22),
+              style:
+                  AppType.title(color: AppColors.brand).copyWith(fontSize: 22),
             ),
           ),
           const SizedBox(width: Sp.md),
@@ -487,8 +486,7 @@ class _LanguagePickerSheet extends StatelessWidget {
     final current = context.locale;
     return Material(
       color: AppColors.surface,
-      borderRadius:
-          const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -529,8 +527,7 @@ class _LanguagePickerSheet extends StatelessWidget {
                 subtitle: 'العربية · RTL',
                 selected: current.languageCode == 'ar',
                 onTap: () async {
-                  await LocaleService.setLocale(
-                      context, LocaleService.arabic);
+                  await LocaleService.setLocale(context, LocaleService.arabic);
                   if (context.mounted) Navigator.of(context).pop();
                 },
               ),
@@ -541,8 +538,7 @@ class _LanguagePickerSheet extends StatelessWidget {
                 subtitle: 'English · LTR',
                 selected: current.languageCode == 'en',
                 onTap: () async {
-                  await LocaleService.setLocale(
-                      context, LocaleService.english);
+                  await LocaleService.setLocale(context, LocaleService.english);
                   if (context.mounted) Navigator.of(context).pop();
                 },
               ),
@@ -562,8 +558,7 @@ class _ThemePickerSheet extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
-      borderRadius:
-          const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -653,8 +648,7 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
-      borderRadius:
-          const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -743,9 +737,7 @@ class _ThemeOptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: selected
-          ? AppColors.brand.withValues(alpha: 0.10)
-          : AppColors.surfaceInput,
+      color: selected ? AppColors.brandSoftBg : AppColors.surfaceInput,
       borderRadius: BorderRadius.circular(R.md),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -823,6 +815,7 @@ class _Row extends StatelessWidget {
   final IconData icon;
   final String label;
   final String? trailing;
+
   /// When non-null the row becomes an InkWell — section entries
   /// (واتساب / طباعة / مظهر / إلخ) use this; the about-version row
   /// leaves it null so it reads as a static info card.
@@ -846,8 +839,7 @@ class _Row extends StatelessWidget {
           Icon(icon, color: AppColors.textMid, size: 20),
           const SizedBox(width: Sp.md),
           Expanded(
-            child: Text(label,
-                style: AppType.label(color: AppColors.textHi)),
+            child: Text(label, style: AppType.label(color: AppColors.textHi)),
           ),
           if (trailing != null) ...[
             Text(trailing!,

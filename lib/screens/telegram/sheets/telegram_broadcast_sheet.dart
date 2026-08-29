@@ -14,7 +14,7 @@ Future<void> showTelegramBroadcastSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _BroadcastSheet(adminId: adminId),
   );
 }
@@ -65,20 +65,18 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style:
-                TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
         content: Text(
             'سيتمّ إرسال الرسالة لـ${_preview!.eligible} مشترك مربوط. متأكّد؟',
             style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6)),
+            style:
+                FilledButton.styleFrom(backgroundColor: AppColors.brandAccent),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('أرسل',
                 style: TextStyle(
@@ -115,7 +113,9 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom + 12,
-          left: 16, right: 16, top: 12,
+          left: 16,
+          right: 16,
+          top: 12,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -127,7 +127,8 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
                   borderRadius: BorderRadius.circular(2),
@@ -137,14 +138,15 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
               Row(
                 children: [
                   Container(
-                    width: 42, height: 42,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.14),
+                      color: AppColors.brandAccent.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(LucideIcons.messageCircle,
-                        color: Color(0xFF8B5CF6), size: 20),
+                    child: Icon(LucideIcons.messageCircle,
+                        color: AppColors.brandAccent, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -170,8 +172,8 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 20, color: AppColors.textMid),
+                    icon:
+                        Icon(LucideIcons.x, size: 20, color: AppColors.textMid),
                     onPressed: () => Navigator.of(context).pop(),
                     splashRadius: 20,
                   ),
@@ -180,8 +182,8 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
               const SizedBox(height: 16),
               // Textarea
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceInput,
                   borderRadius: BorderRadius.circular(10),
@@ -223,18 +225,16 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color:
-                        const Color(0xFF14B8A6).withValues(alpha: 0.08),
+                    color: AppColors.success.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: const Color(0xFF14B8A6)
-                            .withValues(alpha: 0.3),
+                        color: AppColors.success.withValues(alpha: 0.3),
                         width: 0.5),
                   ),
                   child: Row(
                     children: [
                       Icon(LucideIcons.circleCheck,
-                          size: 16, color: const Color(0xFF14B8A6)),
+                          size: 16, color: AppColors.success),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -276,9 +276,10 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                         onPressed: _checking ? null : _check,
                         icon: _checking
                             ? const SizedBox(
-                                width: 14, height: 14,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 1.5))
+                                width: 14,
+                                height: 14,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 1.5))
                             : const Icon(LucideIcons.search, size: 16),
                         label: const Text('فحص مسبق',
                             style: TextStyle(
@@ -288,8 +289,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                             )),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.textHi,
-                          side: BorderSide(
-                              color: AppColors.border, width: 1),
+                          side: BorderSide(color: AppColors.border, width: 1),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                         ),
@@ -309,7 +309,8 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                             : _send,
                         icon: _sending
                             ? const SizedBox(
-                                width: 14, height: 14,
+                                width: 14,
+                                height: 14,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 1.5, color: Colors.white))
                             : const Icon(LucideIcons.send, size: 16),
@@ -320,7 +321,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                               fontWeight: FontWeight.w800,
                             )),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF8B5CF6),
+                          backgroundColor: AppColors.brandAccent,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                         ),

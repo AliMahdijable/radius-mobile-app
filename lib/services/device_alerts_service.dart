@@ -5,15 +5,16 @@ import 'dart:ui' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../theme/colors.dart';
 
 /// نوع الـalert.
 enum DeviceAlertKind {
-  offline,     // جهاز فصل (online → offline)
-  online,      // جهاز عاد (offline → online) — recovery
+  offline, // جهاز فصل (online → offline)
+  online, // جهاز عاد (offline → online) — recovery
 }
 
 class DeviceAlert {
-  final int id;                // timestamp millis كـID
+  final int id; // timestamp millis كـID
   final int deviceId;
   final String deviceName;
   final String deviceIp;
@@ -116,7 +117,7 @@ class DeviceAlertsService {
     // OS notification setup
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
-      requestAlertPermission: false,  // نطلبها لاحقاً بعد ما المستخدم يفهم
+      requestAlertPermission: false, // نطلبها لاحقاً بعد ما المستخدم يفهم
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
@@ -170,6 +171,7 @@ class DeviceAlertsService {
     required String deviceIp,
     required String oldStatus,
     required String newStatus,
+
     /// 2026-08-18: bypass dedup للاختبار من UI (long-press على البيل).
     /// المستخدم يظنّ الإشعارات مكسورة لو dedup يُسكت الاختبار الثاني.
     bool bypassDedup = false,
@@ -191,8 +193,10 @@ class DeviceAlertsService {
     final dedupKey = '$deviceId:${kind.name}';
     if (!bypassDedup) {
       final lastFired = _lastFiredAt[dedupKey];
-      if (lastFired != null && DateTime.now().difference(lastFired) < _dedupWindow) {
-        if (kDebugMode) debugPrint('🔕 dedup: $dedupKey فُلتِر (نفس النوع خلال 5د)');
+      if (lastFired != null &&
+          DateTime.now().difference(lastFired) < _dedupWindow) {
+        if (kDebugMode)
+          debugPrint('🔕 dedup: $dedupKey فُلتِر (نفس النوع خلال 5د)');
         return;
       }
     }
@@ -255,9 +259,9 @@ class DeviceAlertsService {
     _lastFiredAt.clear();
     unreadCount.value = 0;
     try {
-      await _notifications.cancelAll();  // يمسح إشعارات OS المعلّقة
-    } catch (_) { /* best-effort */ }
-    await _persist();  // يحفظ الـempty list ليُبقي storage نظيف
+      await _notifications.cancelAll(); // يمسح إشعارات OS المعلّقة
+    } catch (_) {/* best-effort */}
+    await _persist(); // يحفظ الـempty list ليُبقي storage نظيف
   }
 
   void _updateUnreadCount() {
@@ -284,11 +288,12 @@ class DeviceAlertsService {
         : '${a.deviceIp} صار متّصل';
 
     final androidDetails = AndroidNotificationDetails(
-      _channelId, _channelName,
+      _channelId,
+      _channelName,
       channelDescription: 'تنبيهات عندما جهاز يفصل أو يعود',
       importance: isOffline ? Importance.high : Importance.defaultImportance,
       priority: isOffline ? Priority.high : Priority.defaultPriority,
-      color: isOffline ? const Color(0xFFE11D48) : const Color(0xFF10B981),
+      color: isOffline ? AppColors.error : AppColors.success,
       icon: '@mipmap/ic_launcher',
     );
     const iosDetails = DarwinNotificationDetails(
@@ -299,7 +304,7 @@ class DeviceAlertsService {
 
     try {
       await _notifications.show(
-        a.id.remainder(0x7FFFFFFF),                   // int32 safe
+        a.id.remainder(0x7FFFFFFF), // int32 safe
         title, body,
         NotificationDetails(android: androidDetails, iOS: iosDetails),
       );
@@ -308,4 +313,3 @@ class DeviceAlertsService {
     }
   }
 }
-

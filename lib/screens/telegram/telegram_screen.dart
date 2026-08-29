@@ -76,16 +76,14 @@ class _TelegramScreenState extends State<TelegramScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('فصل البوت',
-            style:
-                TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
         content: const Text(
             'سيتوقّف كل إرسال تلغرام. المشتركون المربوطون يبقون في قاعدة البيانات — يمكن إعادة الربط لاحقاً بنفس التوكن.',
             style: TextStyle(fontFamily: 'Cairo', height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
@@ -185,17 +183,16 @@ class _TelegramScreenState extends State<TelegramScreen> {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.08),
+              color: AppColors.dangerSoftBg,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: AppColors.error.withValues(alpha: 0.3),
+                color: AppColors.dangerSoftBorder,
                 width: 0.5,
               ),
             ),
             child: Row(
               children: [
-                Icon(LucideIcons.circleAlert,
-                    size: 16, color: AppColors.error),
+                Icon(LucideIcons.circleAlert, size: 16, color: AppColors.error),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -224,7 +221,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         icon: LucideIcons.circleCheck,
         title: 'متّصل بـ@${s.botUsername ?? '?'}',
         subtitle: s.botFirstName ?? 'بوت التلغرام يعمل',
-        color: const Color(0xFF14B8A6),
+        color: AppColors.success,
       ),
       _statsRow(s),
       const SizedBox(height: 12),
@@ -241,7 +238,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         children: [
           _statCard('مرتبطون', s.totalBindings, _tgBlue),
           const SizedBox(width: 8),
-          _statCard('نشطون', s.activeBindings, const Color(0xFF14B8A6)),
+          _statCard('نشطون', s.activeBindings, AppColors.success),
           const SizedBox(width: 8),
           _statCard('حظر', s.blockedBindings, AppColors.error),
         ],
@@ -300,7 +297,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
       ),
       _TgAction(
         icon: LucideIcons.megaphone,
-        color: const Color(0xFFE08F2D),
+        color: AppColors.warning,
         title: 'بث روابط جماعي',
         subtitle: 'أرسل رابط الربط لكل مشترك عبر واتساب',
         onTap: () => showTelegramBulkLinksSheet(context,
@@ -308,7 +305,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
       ),
       _TgAction(
         icon: LucideIcons.users,
-        color: const Color(0xFF14B8A6),
+        color: AppColors.success,
         title: 'المرتبطون',
         subtitle: 'قائمة المشتركين المربوطين + بحث',
         onTap: () => showTelegramBindingsSheet(context,
@@ -316,7 +313,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
       ),
       _TgAction(
         icon: LucideIcons.messageCircle,
-        color: const Color(0xFF8B5CF6),
+        color: AppColors.brandAccent,
         title: 'إرسال عام',
         subtitle: 'ابعث رسالة لكل المرتبطين',
         onTap: () => showTelegramBroadcastSheet(context, adminId: _adminId!),
@@ -388,8 +385,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 18, color: AppColors.textLow),
+              Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
             ],
           ),
         ),
@@ -416,10 +412,9 @@ class _TelegramScreenState extends State<TelegramScreen> {
           ),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.error,
-            side: BorderSide(
-                color: AppColors.error.withValues(alpha: 0.5), width: 1),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+            side: BorderSide(color: AppColors.dangerSoftBorder, width: 1),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
@@ -606,8 +601,8 @@ class _StepsCard extends StatelessWidget {
                   ),
                 if (code != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     margin: const EdgeInsets.symmetric(horizontal: 2),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceInput,
@@ -705,7 +700,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('تمّ الربط بـ@${res.botUsername ?? "?"}',
             style: const TextStyle(fontFamily: 'Cairo')),
-        backgroundColor: const Color(0xFF14B8A6),
+        backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ));
@@ -744,9 +739,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
               color: AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _err != null
-                    ? AppColors.error
-                    : AppColors.border,
+                color: _err != null ? AppColors.error : AppColors.border,
                 width: _err != null ? 1 : 0.5,
               ),
             ),
@@ -829,8 +822,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.shieldCheck,
-                  size: 12, color: AppColors.textLow),
+              Icon(LucideIcons.shieldCheck, size: 12, color: AppColors.textLow),
               const SizedBox(width: 5),
               Text('التوكن يُحفظ مشفَّراً — لا يظهر مجدَّداً.',
                   style: TextStyle(

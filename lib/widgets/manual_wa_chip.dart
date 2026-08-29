@@ -33,8 +33,8 @@ class ManualWaChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final isManual = mode;
     final color = isManual
-        ? const Color(0xFF7C3AED) // بنفسجي — يدوي (وضع خاصّ)
-        : const Color(0xFF14B8A6); // تيّل — تلقائي (الطبيعيّ)
+        ? AppColors.brandAccent // بنفسجي — يدوي (وضع خاصّ)
+        : AppColors.success; // تيّل — تلقائي (الطبيعيّ)
     return Material(
       color: color.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(10),
@@ -77,7 +77,8 @@ class ManualWaChip extends StatelessWidget {
               if (!compact) ...[
                 const SizedBox(width: 6),
                 Container(
-                  width: 1, height: 10,
+                  width: 1,
+                  height: 10,
                   color: color.withValues(alpha: 0.25),
                 ),
                 const SizedBox(width: 6),
@@ -95,7 +96,9 @@ class ManualWaChip extends StatelessWidget {
 /// الحاليّة + آلية التبديل المحلّي (يبدأ من الـglobal لكن يقبل override).
 class ManualWaModeBuilder extends StatefulWidget {
   const ManualWaModeBuilder({super.key, required this.builder});
-  final Widget Function(BuildContext context, bool manualMode, ValueChanged<bool> setMode) builder;
+  final Widget Function(
+          BuildContext context, bool manualMode, ValueChanged<bool> setMode)
+      builder;
 
   @override
   State<ManualWaModeBuilder> createState() => _ManualWaModeBuilderState();
@@ -132,7 +135,7 @@ Future<ManualWaChoice?> showManualWaPreviewSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _WaPreviewSheet(
       title: title,
       phone: phone,
@@ -167,7 +170,9 @@ class _WaPreviewSheet extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom + 12,
-          left: 16, right: 16, top: 12,
+          left: 16,
+          right: 16,
+          top: 12,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -181,7 +186,8 @@ class _WaPreviewSheet extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.border,
                     borderRadius: BorderRadius.circular(2),
@@ -192,7 +198,8 @@ class _WaPreviewSheet extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 40, height: 40,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(11),
@@ -226,8 +233,8 @@ class _WaPreviewSheet extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 20, color: AppColors.textMid),
+                    icon:
+                        Icon(LucideIcons.x, size: 20, color: AppColors.textMid),
                     onPressed: () => Navigator.of(context).pop(),
                     splashRadius: 20,
                   ),
@@ -291,9 +298,8 @@ class _WaPreviewSheet extends StatelessWidget {
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: manualMode
-                              ? const Color(0xFF7C3AED)
-                              : accent,
+                          backgroundColor:
+                              manualMode ? AppColors.brandAccent : accent,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                         ),

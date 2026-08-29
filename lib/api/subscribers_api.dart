@@ -108,6 +108,7 @@ class OnlineSessionInfo {
   final int? sessionTime;
   final int? downloadBytes;
   final int? uploadBytes;
+
   /// `device` from /api/v2/online-users (SAS4 `oui` — Huawei/Mikrotik/etc).
   final String? device;
 }
@@ -211,14 +212,16 @@ class SubscribersApi {
   static Future<Map<String, PackageInfo>?> loadPackages() async {
     // اقرأ من الـcache لو حديث
     final ct = _packagesCacheTime;
-    if (_packagesCache != null && ct != null &&
+    if (_packagesCache != null &&
+        ct != null &&
         DateTime.now().difference(ct) < _packagesCacheTtl) {
       return _packagesCache;
     }
     final token = await AuthStorage.readToken();
     if (token == null) return null;
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/packages');
+      final r =
+          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/packages');
       final body = r.data ?? const {};
       if (body['success'] != true) {
         if (!kReleaseMode) {
@@ -242,14 +245,16 @@ class SubscribersApi {
         if (rawPrice is num) {
           price = rawPrice > 0 ? rawPrice : null;
         } else {
-          final parsed = num.tryParse((rawPrice ?? '').toString().replaceAll(',', ''));
+          final parsed =
+              num.tryParse((rawPrice ?? '').toString().replaceAll(',', ''));
           price = (parsed != null && parsed > 0) ? parsed : null;
         }
         out[id] = PackageInfo(name: name, price: price);
       }
       _packagesCache = out;
       _packagesCacheTime = DateTime.now();
-      if (!kReleaseMode) debugPrint('🟢 v2/packages: ${out.length} loaded (cached 5m)');
+      if (!kReleaseMode)
+        debugPrint('🟢 v2/packages: ${out.length} loaded (cached 5m)');
       return out;
     } on DioException catch (e) {
       _log('v2/packages', e);
@@ -289,6 +294,7 @@ class SubscribersApi {
         if (v is num) return v.toInt();
         return int.tryParse(v.toString());
       }
+
       for (final row in rows) {
         if (row is! Map) continue;
         // .trim() — defense-in-depth: لو SAS4 رجّع username بمسافة زائدة
@@ -348,8 +354,9 @@ class SubscribersApi {
         return null;
       }
     }
-    final modern = await tryUrl(
-        '/api/subscribers/last-financial-movements/$adminId');
+
+    final modern =
+        await tryUrl('/api/subscribers/last-financial-movements/$adminId');
     if (modern != null) return modern;
     return tryUrl('/api/subscribers/last-payments/$adminId');
   }
@@ -373,7 +380,8 @@ class SubscribersApi {
     ]);
     final base = results[0] as List<Subscriber>?;
     if (base == null) return null;
-    final onlineMap = (results[1] as Map<String, OnlineSessionInfo>?) ?? const {};
+    final onlineMap =
+        (results[1] as Map<String, OnlineSessionInfo>?) ?? const {};
     if (onlineMap.isEmpty) return base;
     return base.map((s) {
       final sess = onlineMap[s.username.toLowerCase()];
@@ -489,8 +497,13 @@ class SubscribersApi {
 
   /// Result of an activate call. ok=true on success; ok=false carries
   /// the backend's Arabic error message for the UI.
-  static Future<({bool ok, String? message, WhatsAppSendInfo? wa, WaPreview? waPreview})>
-      activate({
+  static Future<
+      ({
+        bool ok,
+        String? message,
+        WhatsAppSendInfo? wa,
+        WaPreview? waPreview
+      })> activate({
     required String idx,
     required String paymentType, // 'cash' | 'partial-cash' | 'non-cash'
     required Map<String, dynamic> activationData,
@@ -520,7 +533,12 @@ class SubscribersApi {
       _log('activate/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التفعيل', wa: null, waPreview: null);
+      return (
+        ok: false,
+        message: msg ?? 'تعذّر التفعيل',
+        wa: null,
+        waPreview: null
+      );
     } catch (e) {
       _log('activate/$idx', e);
       return (ok: false, message: 'تعذّر التفعيل', wa: null, waPreview: null);
@@ -557,8 +575,13 @@ class SubscribersApi {
   /// POST /api/v2/subscribers/:idx/extend — extend into a new package.
   /// Method: 'balance' (charge manager wallet) or 'points' (deduct
   /// reward points).
-  static Future<({bool ok, String? message, WhatsAppSendInfo? wa, WaPreview? waPreview})>
-      extend({
+  static Future<
+      ({
+        bool ok,
+        String? message,
+        WhatsAppSendInfo? wa,
+        WaPreview? waPreview
+      })> extend({
     required String idx,
     required String profileId,
     required String method, // 'balance' | 'points'
@@ -585,7 +608,12 @@ class SubscribersApi {
       _log('extend/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التمديد', wa: null, waPreview: null);
+      return (
+        ok: false,
+        message: msg ?? 'تعذّر التمديد',
+        wa: null,
+        waPreview: null
+      );
     } catch (e) {
       _log('extend/$idx', e);
       return (ok: false, message: 'تعذّر التمديد', wa: null, waPreview: null);
@@ -620,8 +648,7 @@ class SubscribersApi {
   /// expiration / debt /etc. without an account. The backend stores
   /// the token in-memory and serves /v2/user-info/:token. Mirrors
   /// v1's _generateInfoLink flow.
-  static Future<({bool ok, String? url, String? message})>
-      generateInfoLink({
+  static Future<({bool ok, String? url, String? message})> generateInfoLink({
     required Subscriber sub,
   }) async {
     final token = await AuthStorage.readToken();
@@ -704,8 +731,7 @@ class SubscribersApi {
     if (token == null) return null;
     final now = DateTime.now();
     final from = DateTime(now.year - 5, now.month, now.day);
-    String fmt(DateTime d) =>
-        '${d.year.toString().padLeft(4, '0')}-'
+    String fmt(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
         '${d.month.toString().padLeft(2, '0')}-'
         '${d.day.toString().padLeft(2, '0')}';
     try {
@@ -774,7 +800,7 @@ class SubscribersApi {
   /// كان يظهر ٣ مرات. الآن الـUI يقرّر التنسيق (اسم رئيسي + username
   /// ثانوي بلون مختلف عند اختلافهما).
   static Future<
-      List<({int id, String username, String firstname, String lastname})>?>
+          List<({int id, String username, String firstname, String lastname})>?>
       loadManagers() async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -788,9 +814,7 @@ class SubscribersApi {
       for (final row in list) {
         if (row is! Map) continue;
         final rawId = row['id'];
-        final id = rawId is int
-            ? rawId
-            : int.tryParse(rawId?.toString() ?? '');
+        final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
         if (id == null) continue;
         final username = (row['username'] ?? '').toString();
         out.add((
@@ -834,10 +858,8 @@ class SubscribersApi {
           'password': password,
           'profile_id': profileId,
           'parent_id': parentId,
-          if (firstname != null && firstname.isNotEmpty)
-            'firstname': firstname,
-          if (lastname != null && lastname.isNotEmpty)
-            'lastname': lastname,
+          if (firstname != null && firstname.isNotEmpty) 'firstname': firstname,
+          if (lastname != null && lastname.isNotEmpty) 'lastname': lastname,
           if (phone != null && phone.isNotEmpty) 'phone': phone,
           if (expiration != null && expiration.isNotEmpty)
             'expiration': expiration,
@@ -922,8 +944,13 @@ class SubscribersApi {
   /// (e.g. واتساب غير متصل). reasons like 'feature_off' or
   /// 'notifications_disabled' stay silent — admin intentionally
   /// disabled them.
-  static Future<({bool ok, String? message, WhatsAppSendInfo? wa, WaPreview? waPreview})>
-      payDebt({
+  static Future<
+      ({
+        bool ok,
+        String? message,
+        WhatsAppSendInfo? wa,
+        WaPreview? waPreview
+      })> payDebt({
     required String idx,
     required double amount,
     String? comment,
@@ -1047,14 +1074,14 @@ class SubscribersApi {
   /// backend يرفض بـ409 لو حقل address في SAS4 يحمل نصّاً يدوياً بلا
   /// prefix `gps:` (حماية من الكتابة فوقه صامتاً). `existingText`
   /// يعرض للمدير النصّ الذي يجب حذفه من SAS4 يدوياً أوّلاً.
-  static Future<({bool ok, String? message, String? code, String? existingText})>
-      setLocation(String idx, {double? lat, double? lng, bool clear = false}) async {
+  static Future<
+          ({bool ok, String? message, String? code, String? existingText})>
+      setLocation(String idx,
+          {double? lat, double? lng, bool clear = false}) async {
     try {
       final r = await ApiClient.dio.patch<Map<String, dynamic>>(
         '/api/v2/subscribers/$idx/location',
-        data: clear
-            ? {'clear': true}
-            : {'lat': lat, 'lng': lng},
+        data: clear ? {'clear': true} : {'lat': lat, 'lng': lng},
       );
       final data = r.data ?? const {};
       if (data['success'] == true) {

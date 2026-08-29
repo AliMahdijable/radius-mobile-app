@@ -31,7 +31,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   bool _loading = false;
   String? _error;
   Timer? _timer;
-  Timer? _bootstrapT1, _bootstrapT2;   // fast-bootstrap timers — لازم dispose
+  Timer? _bootstrapT1, _bootstrapT2; // fast-bootstrap timers — لازم dispose
   bool _monitoring = false;
   DateTime? _lastFetch;
 
@@ -43,7 +43,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   /// history للـtraffic الإجمالي — للرسم البياني
   final List<_TrafficSample> _history = [];
-  static const int _maxHistory = 30;              // 30 × 8s ≈ 4 دقائق history
+  static const int _maxHistory = 30; // 30 × 8s ≈ 4 دقائق history
 
   /// 2026-08-20: sticky snapshot لآخر مجموعة عملاء غير فارغة. عند refresh
   /// إذا reg-table returned empty (glitch، permission، timeout عابر)،
@@ -92,7 +92,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   void _stopMonitoring() {
     _timer?.cancel();
-    setState(() { _monitoring = false; });
+    setState(() {
+      _monitoring = false;
+    });
   }
 
   Future<void> _fetch() async {
@@ -124,12 +126,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         //
         // Rate calculation يبقى فقط في المكان الي بعد الـawait (النهائي)
         // — يستعمل _lastFetch الصحيح من fetch السابق.
-        onPartialReady: isFirstLoad ? (partial) {
-          if (!mounted) return;
-          setState(() {
-            _stats = partial;
-          });
-        } : null,
+        onPartialReady: isFirstLoad
+            ? (partial) {
+                if (!mounted) return;
+                setState(() {
+                  _stats = partial;
+                });
+              }
+            : null,
       );
       if (!mounted) return;
 
@@ -140,7 +144,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         if (elapsed > 0) {
           for (final iface in stats.interfaces) {
             final prev = _lastBytes[iface.name];
-            if (prev != null && iface.rxBytes != null && iface.txBytes != null) {
+            if (prev != null &&
+                iface.rxBytes != null &&
+                iface.txBytes != null) {
               final dRx = iface.rxBytes! - prev.rxBytes;
               final dTx = iface.txBytes! - prev.txBytes;
               if (dRx >= 0 && dTx >= 0) {
@@ -148,7 +154,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 final txBps = (dTx * 8 / elapsed).round();
                 // Safety cap: أي رقم > 10Gbps = خطأ (لا يوجد راوتر Mikrotik
                 // يتجاوز 10G على واجهة واحدة). نتجاهله بدل عرض قراءة مضلّلة.
-                const maxSaneBps = 10000000000;   // 10 Gbps
+                const maxSaneBps = 10000000000; // 10 Gbps
                 if (rxBps <= maxSaneBps && txBps <= maxSaneBps) {
                   _rates[iface.name] = _IfaceRate(rxBps: rxBps, txBps: txBps);
                 }
@@ -220,8 +226,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     }
   }
 
-  bool _isEther(MikrotikInterface i) =>
-      i.type == 'ether' || i.type == 'sfp';
+  bool _isEther(MikrotikInterface i) => i.type == 'ether' || i.type == 'sfp';
 
   /// أعلى interface بالـRX (download) — منفصل عن الـTX
   ({String name, int bps})? _maxRxIface() {
@@ -263,8 +268,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         ),
         child: Column(children: [
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            SizedBox(width: 16, height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand)),
+            SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.brand)),
             const SizedBox(width: 10),
             Text('جاري الاتصال بـMikrotik…',
                 style: TextStyle(fontSize: 12, color: AppColors.textMid)),
@@ -291,7 +299,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             RepaintBoundary(child: _metricsRow()),
             if (_history.length >= 2) ...[
               const SizedBox(height: 4),
-              _trafficGraph(),   // فيه RepaintBoundary داخلياً
+              _trafficGraph(), // فيه RepaintBoundary داخلياً
             ],
             const SizedBox(height: Sp.md),
           ],
@@ -316,7 +324,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.network, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
             Text('Ethernet Interfaces (${ethers.length})',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
           ]),
           // RepaintBoundary → عزل الـinterface list عن باقي rebuilds
           content: RepaintBoundary(child: _interfacesContent(ethers)),
@@ -331,7 +342,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
             Text('Wireless (${s.wirelessInterfaces.length})',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
           ]),
           content: Column(children: [
             for (final w in s.wirelessInterfaces) _wirelessCard(w),
@@ -351,7 +365,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.users, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
             Text('العملاء المتّصلون (${_stickyClients.length})',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
           ]),
           content: RepaintBoundary(
             child: _stickyClients.isEmpty
@@ -381,7 +398,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       child: Column(
         children: [
-          Icon(LucideIcons.userX, size: 22, color: AppColors.textLow.withValues(alpha: 0.6)),
+          Icon(LucideIcons.userX,
+              size: 22, color: AppColors.textLow.withValues(alpha: 0.6)),
           const SizedBox(height: 6),
           Text('لا يوجد عملاء متصلون حالياً',
               style: TextStyle(
@@ -418,18 +436,23 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.all(Sp.md),
       child: Row(children: [
         Container(
-          width: 32, height: 32,
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-            color: AppColors.brand.withValues(alpha: 0.1),
+            color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة حيّة (Mikrotik API)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textHi)),
             const SizedBox(height: 2),
             Row(children: [
               if (_monitoring) ...[
@@ -445,7 +468,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 style: TextStyle(fontSize: 10, color: AppColors.textMid),
               ),
               if (_lastFetch != null) ...[
-                Text(' • ', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+                Text(' • ',
+                    style: TextStyle(fontSize: 10, color: AppColors.textLow)),
                 Text(
                   'آخر: ${_lastFetch!.hour.toString().padLeft(2, '0')}:${_lastFetch!.minute.toString().padLeft(2, '0')}:${_lastFetch!.second.toString().padLeft(2, '0')}',
                   style: TextStyle(fontSize: 10, color: AppColors.textLow),
@@ -465,7 +489,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           icon: Icon(
             _monitoring ? LucideIcons.pause : LucideIcons.play,
             size: 16,
-            color: _monitoring ? AppColors.error : const Color(0xFF10B981),
+            color: _monitoring ? AppColors.error : AppColors.success,
           ),
           onPressed: _monitoring ? _stopMonitoring : _startMonitoring,
           tooltip: _monitoring ? 'إيقاف' : 'استئناف',
@@ -476,8 +500,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   }
 
   Widget _pulseDot() => Container(
-        width: 6, height: 6,
-        decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle),
+        width: 6,
+        height: 6,
+        decoration:
+            BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
       );
 
   Widget _errorBox() {
@@ -485,15 +511,17 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       margin: const EdgeInsets.symmetric(horizontal: Sp.md),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
+        color: AppColors.dangerSoftBg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.dangerSoftBorder),
       ),
       child: Row(children: [
         Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.error),
         const SizedBox(width: 8),
-        Expanded(child: Text(_error!,
-            style: TextStyle(fontSize: 11, color: AppColors.error, height: 1.4))),
+        Expanded(
+            child: Text(_error!,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.error, height: 1.4))),
       ]),
     );
   }
@@ -507,7 +535,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       margin: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.brand.withValues(alpha: 0.06),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children: [
@@ -516,7 +544,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Expanded(
           child: Text(
             '${s.boardName} • ${s.version.split(' ').first}',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textHi),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textHi),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -531,7 +562,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.clock, size: 9, color: AppColors.brand),
             const SizedBox(width: 3),
             Text(_formatUptime(s.uptime),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.brand)),
           ]),
         ),
@@ -540,12 +573,14 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+              color: AppColors.success.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text('PPP: ${s.pppActiveCount}',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: const Color(0xFF10B981))),
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.success)),
           ),
         ],
       ]),
@@ -567,17 +602,22 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _percentCard(
-                icon: LucideIcons.cpu, label: 'CPU',
+              Expanded(
+                  child: _percentCard(
+                icon: LucideIcons.cpu,
+                label: 'CPU',
                 percent: s.cpuLoad.toDouble(),
               )),
               const SizedBox(width: 8),
-              Expanded(child: _percentCard(
-                icon: LucideIcons.memoryStick, label: 'RAM',
+              Expanded(
+                  child: _percentCard(
+                icon: LucideIcons.memoryStick,
+                label: 'RAM',
                 percent: s.memUsedPercent.toDouble(),
               )),
               const SizedBox(width: 8),
-              Expanded(child: _valueCard(
+              Expanded(
+                  child: _valueCard(
                 icon: LucideIcons.thermometer,
                 label: 'حرارة',
                 value: s.temperature != null ? '${s.temperature}' : '—',
@@ -599,16 +639,18 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               //   جهاز صغير قد لا يعطي أي شيء (—).
               Expanded(child: _powerStatusCard(s)),
               const SizedBox(width: 8),
-              Expanded(child: _topRateCard(
-                label: 'أعلى iface ↓',   // per-interface max ↓
+              Expanded(
+                  child: _topRateCard(
+                label: 'أعلى iface ↓', // per-interface max ↓
                 iface: maxRx,
-                color: const Color(0xFF10B981),
+                color: AppColors.success,
               )),
               const SizedBox(width: 8),
-              Expanded(child: _topRateCard(
+              Expanded(
+                  child: _topRateCard(
                 label: 'أعلى iface ↑',
                 iface: maxTx,
-                color: const Color(0xFF3B82F6),
+                color: AppColors.brandAccent,
               )),
             ],
           ),
@@ -640,9 +682,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       final allOk = okCount == total;
       final anyOk = okCount > 0;
       final color = allOk
-          ? const Color(0xFF10B981)
+          ? AppColors.success
           : anyOk
-              ? const Color(0xFFF59E0B)
+              ? AppColors.warning
               : AppColors.error;
       return _valueCard(
         icon: LucideIcons.batteryCharging,
@@ -654,16 +696,15 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     }
     // #3 Fans
     if (s.fans.isNotEmpty) {
-      final avgRpm = s.fans
-              .map((f) => f.intValue ?? 0)
-              .fold<int>(0, (a, b) => a + b) ~/
-          s.fans.length;
+      final avgRpm =
+          s.fans.map((f) => f.intValue ?? 0).fold<int>(0, (a, b) => a + b) ~/
+              s.fans.length;
       return _valueCard(
         icon: LucideIcons.fan,
         label: '${s.fans.length} مروحة',
-        value: '${(avgRpm / 100).round() / 10}K',   // 4185 → 4.2K
+        value: '${(avgRpm / 100).round() / 10}K', // 4185 → 4.2K
         unit: 'RPM',
-        color: const Color(0xFF06B6D4),
+        color: AppColors.info,
       );
     }
     // #4 غير متوفّر
@@ -699,17 +740,26 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Row(children: [
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMid)),
           ]),
-          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               Text(value,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
                       color: value == '—' ? AppColors.textLow : color,
                       height: 1)),
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
-                Text(unit, style: TextStyle(fontSize: 11, color: AppColors.textLow)),
+                Text(unit,
+                    style: TextStyle(fontSize: 11, color: AppColors.textLow)),
               ],
             ],
           ),
@@ -723,17 +773,17 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   Color _tempColor(int? t) {
     if (t == null) return AppColors.textLow;
     if (t >= 75) return AppColors.error;
-    if (t >= 60) return const Color(0xFFF59E0B);
-    if (t >= 45) return const Color(0xFF06B6D4);
-    return const Color(0xFF10B981);
+    if (t >= 60) return AppColors.warning;
+    if (t >= 45) return AppColors.info;
+    return AppColors.success;
   }
 
   Color _voltageColor(double? v) {
     if (v == null) return AppColors.textLow;
     // فولتيّة PoE عادية 24V / 48V — انحراف كبير = مشكلة
     if (v < 20 || v > 60) return AppColors.error;
-    if (v < 22 || v > 55) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
+    if (v < 22 || v > 55) return AppColors.warning;
+    return AppColors.success;
   }
 
   Widget _percentCard({
@@ -753,14 +803,23 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Row(children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMid)),
         ]),
         const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             Text('${percent.round()}',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800,
-                    color: AppColors.textHi, height: 1)),
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textHi,
+                    height: 1)),
             const SizedBox(width: 2),
             Text('%', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
           ],
@@ -800,20 +859,28 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Row(children: [
             Icon(
               label.contains('↓') ? LucideIcons.arrowDown : LucideIcons.arrowUp,
-              size: 12, color: color,
+              size: 12,
+              color: color,
             ),
             const SizedBox(width: 4),
             Text(label.replaceAll(RegExp(r'[↓↑]'), '').trim(),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMid)),
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMid)),
           ]),
           // Row 2: اسم الـiface بحجم مقروء بلا تقطيع (لأنّه في سطره الخاصّ)
           if (hasData)
             Text(iface.name,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
           // Row 3: value (big number)
           Text(hasData ? _formatBps(iface.bps) : '—',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
                   color: hasData ? color : AppColors.textLow,
                   height: 1)),
         ],
@@ -842,8 +909,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     final lastRx = _history.isNotEmpty ? _history.last.rxBps : 0;
     final lastTx = _history.isNotEmpty ? _history.last.txBps : 0;
 
-    const rxColor = Color(0xFF10B981);
-    const txColor = Color(0xFF3B82F6);
+    final rxColor = AppColors.success;
+    final txColor = AppColors.brandAccent;
 
     return Container(
       margin: const EdgeInsets.all(Sp.md),
@@ -860,7 +927,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           // الكراف يعرض trajectory أعلى interface (يتطابق مع كروت
           // "أعلى iface ↓ / ↑" اللي فوق)
           Text('أعلى interface (سير الترفك)',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
           const SizedBox(width: 6),
@@ -871,8 +941,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         // الـchart كان أكبر مصدر للـjank (animation 150ms افتراضي × كل fetch)
         SizedBox(
           height: 120,
-          child: RepaintBoundary(child: LineChart(
-            duration: Duration.zero,       // ألغي الـanimation بين updates
+          child: RepaintBoundary(
+              child: LineChart(
+            duration: Duration.zero, // ألغي الـanimation بين updates
             LineChartData(
               gridData: FlGridData(
                 show: true,
@@ -885,9 +956,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               ),
               titlesData: FlTitlesData(
                 show: true,
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
@@ -909,15 +983,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               // الأخضر (RX) ثاني — فوق (top layer) لكن بتعبئة شفّافة
               // → مناطق التداخل تظهر بلون مختلط
               lineBarsData: [
-                _lineBarData(txSpots, txColor),   // أزرق تحت
-                _lineBarData(rxSpots, rxColor),   // أخضر فوق
+                _lineBarData(txSpots, txColor), // أزرق تحت
+                _lineBarData(rxSpots, rxColor), // أخضر فوق
               ],
               lineTouchData: LineTouchData(
                 enabled: true,
                 touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => AppColors.textHi.withValues(alpha: 0.9),
+                  getTooltipColor: (_) =>
+                      AppColors.textHi.withValues(alpha: 0.9),
                   getTooltipItems: (spots) => spots.map((s) {
-                    final isTx = s.barIndex == 0;  // الأوّل في lineBarsData
+                    final isTx = s.barIndex == 0; // الأوّل في lineBarsData
                     return LineTooltipItem(
                       '${isTx ? "↑" : "↓"} ${_formatBps(s.y.toInt())}',
                       TextStyle(
@@ -953,7 +1028,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            color.withValues(alpha: 0.25),  // شفّاف عشان التداخل يبان
+            color.withValues(alpha: 0.25), // شفّاف عشان التداخل يبان
             color.withValues(alpha: 0.02),
           ],
         ),
@@ -969,8 +1044,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text('$arrow $value',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-              color: color)),
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
     );
   }
 
@@ -1005,9 +1080,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(LucideIcons.network, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('Ethernet Interfaces (${ethers.length})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
           const SizedBox(width: 8),
-          _countBadge('↑ $up', const Color(0xFF10B981)),
+          _countBadge('↑ $up', AppColors.success),
           if (down > 0) ...[
             const SizedBox(width: 4),
             _countBadge('↓ $down', AppColors.error),
@@ -1027,8 +1105,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(text,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-              color: color)),
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
     );
   }
 
@@ -1036,7 +1114,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     final rate = _rates[iface.name];
     final color = iface.disabled
         ? AppColors.textLow
-        : (iface.running ? const Color(0xFF10B981) : AppColors.error);
+        : (iface.running ? AppColors.success : AppColors.error);
     final statusIcon = iface.disabled
         ? LucideIcons.circleOff
         : (iface.running ? LucideIcons.arrowUp : LucideIcons.arrowDown);
@@ -1060,12 +1138,15 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               color: iface.disabled ? AppColors.textLow : AppColors.textHi,
             ),
           ),
-          if (iface.linkSpeed != null && iface.linkSpeed!.isNotEmpty && iface.running) ...[
+          if (iface.linkSpeed != null &&
+              iface.linkSpeed!.isNotEmpty &&
+              iface.running) ...[
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: _linkSpeedColor(iface.linkSpeed!).withValues(alpha: 0.14),
+                color:
+                    _linkSpeedColor(iface.linkSpeed!).withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -1080,27 +1161,31 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           ],
           const Spacer(),
           if (rate != null) ...[
-            Icon(LucideIcons.arrowDown, size: 9, color: const Color(0xFF10B981)),
+            Icon(LucideIcons.arrowDown, size: 9, color: AppColors.success),
             const SizedBox(width: 2),
             Text(_formatBps(rate.rxBps),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(width: 8),
-            Icon(LucideIcons.arrowUp, size: 9, color: const Color(0xFF3B82F6)),
+            Icon(LucideIcons.arrowUp, size: 9, color: AppColors.brandAccent),
             const SizedBox(width: 2),
             Text(_formatBps(rate.txBps),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
           ] else if (iface.running) ...[
-            Text('—',
-                style: TextStyle(fontSize: 10, color: AppColors.textLow)),
+            Text('—', style: TextStyle(fontSize: 10, color: AppColors.textLow)),
           ],
         ]),
         // شريط نسبي حسب أعلى traffic بين كل الـethers
         if (rate != null && maxRate > 0 && (rate.rxBps + rate.txBps) > 0) ...[
           const SizedBox(height: 4),
           Row(children: [
-            Expanded(child: _miniBar((rate.rxBps + rate.txBps) / maxRate, color)),
+            Expanded(
+                child: _miniBar((rate.rxBps + rate.txBps) / maxRate, color)),
           ]),
         ],
       ]),
@@ -1134,7 +1219,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('Wireless (${wls.length})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
         ]),
         const SizedBox(height: 8),
         for (final w in wls) _wirelessCard(w),
@@ -1144,7 +1232,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   Widget _wirelessCard(MikrotikWireless w) {
     final active = w.running && !w.disabled;
-    final color = active ? const Color(0xFF10B981) : AppColors.error;
+    final color = active ? AppColors.success : AppColors.error;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(10),
@@ -1158,7 +1246,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               size: 14, color: color),
           const SizedBox(width: 6),
           Text(w.name,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const SizedBox(width: 6),
           Container(
@@ -1168,14 +1258,13 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(_modeLabel(w.mode),
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: color)),
+                style: TextStyle(
+                    fontSize: 9, fontWeight: FontWeight.w700, color: color)),
           ),
         ]),
         const SizedBox(height: 6),
-        if (w.ssid.isNotEmpty)
-          _wlRow(LucideIcons.wifi, 'SSID', w.ssid),
-        if (w.band.isNotEmpty)
-          _wlRow(LucideIcons.radio, 'Band', w.band),
+        if (w.ssid.isNotEmpty) _wlRow(LucideIcons.wifi, 'SSID', w.ssid),
+        if (w.band.isNotEmpty) _wlRow(LucideIcons.radio, 'Band', w.band),
         if (w.frequency > 0)
           _wlRow(LucideIcons.satellite, 'التردد',
               '${w.frequency} MHz${w.channelWidth > 0 ? " • ${w.channelWidth}MHz" : ""}'),
@@ -1194,7 +1283,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMid)),
         const Spacer(),
         Text(value,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
       ]),
     );
@@ -1222,7 +1313,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(LucideIcons.users, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('العملاء المتّصلون (${cs.length})',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textHi)),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi)),
         ]),
         const SizedBox(height: 8),
         for (final c in cs.take(30)) _clientRow(c),
@@ -1250,24 +1344,29 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(children: [
-        Container(width: 3, height: 30, decoration: BoxDecoration(
-          color: signalColor, borderRadius: BorderRadius.circular(1.5),
-        )),
+        Container(
+            width: 3,
+            height: 30,
+            decoration: BoxDecoration(
+              color: signalColor,
+              borderRadius: BorderRadius.circular(1.5),
+            )),
         const SizedBox(width: 8),
         // Name + secondary
         // primary: hostname/comment لو موجود، وإلا نعرض IP لو موجود، وإلا MAC
         // secondary: MAC (لو الـprimary مو MAC) + IP (لو الـprimary مو IP)
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             () {
               // اختر الـprimary display — hostname → IP → MAC
               // Cairo دائماً (feedback_font_cairo_always)
-              final String primary = hasName
-                  ? (c.hostname ?? c.comment!)
-                  : (c.ip ?? c.mac);
+              final String primary =
+                  hasName ? (c.hostname ?? c.comment!) : (c.ip ?? c.mac);
               return Text(primary,
                   style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
                   ),
                   overflow: TextOverflow.ellipsis);
@@ -1296,10 +1395,13 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text(c.signalDisplay,
                 textDirection: TextDirection.ltr,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
                     color: signalColor)),
             const SizedBox(width: 2),
-            Text('dBm', style: TextStyle(fontSize: 8, color: AppColors.textLow)),
+            Text('dBm',
+                style: TextStyle(fontSize: 8, color: AppColors.textLow)),
             if (ccq > 0) ...[
               const SizedBox(width: 6),
               Container(
@@ -1310,23 +1412,30 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 ),
                 child: Text('$ccq%',
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
                         color: ccqColor)),
               ),
             ],
           ]),
           const SizedBox(height: 2),
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(LucideIcons.arrowDown, size: 8, color: const Color(0xFF10B981)),
+            Icon(LucideIcons.arrowDown, size: 8, color: AppColors.success),
             Text(' ${c.rxRate}',
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(width: 6),
-            Icon(LucideIcons.arrowUp, size: 8, color: const Color(0xFF3B82F6)),
+            Icon(LucideIcons.arrowUp, size: 8, color: AppColors.brandAccent),
             Text(' ${c.txRate}',
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
-            Text(' Mbps', style: TextStyle(fontSize: 8, color: AppColors.textLow)),
+            Text(' Mbps',
+                style: TextStyle(fontSize: 8, color: AppColors.textLow)),
           ]),
         ]),
       ]),
@@ -1334,22 +1443,22 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   }
 
   Color _ccqColor(int ccq) {
-    if (ccq >= 80) return const Color(0xFF10B981);
-    if (ccq >= 50) return const Color(0xFFF59E0B);
+    if (ccq >= 80) return AppColors.success;
+    if (ccq >= 50) return AppColors.warning;
     return AppColors.error;
   }
 
   Color _signalColorFor(int dbm) {
-    if (dbm >= -60) return const Color(0xFF10B981);
-    if (dbm >= -70) return const Color(0xFF06B6D4);
-    if (dbm >= -80) return const Color(0xFFF59E0B);
+    if (dbm >= -60) return AppColors.success;
+    if (dbm >= -70) return AppColors.info;
+    if (dbm >= -80) return AppColors.warning;
     return AppColors.error;
   }
 
   Color _colorForPercent(double p) {
     if (p >= 85) return AppColors.error;
-    if (p >= 65) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
+    if (p >= 65) return AppColors.warning;
+    return AppColors.success;
   }
 
   /// اختصار الـlink speed: "1Gbps" → "1G", "100Mbps" → "100M", "10Mbps" → "10M"
@@ -1363,9 +1472,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   /// اللون حسب سرعة الـport — 1G أخضر، 100M أزرق، 10M أصفر، أقلّ أحمر
   Color _linkSpeedColor(String raw) {
     final r = raw.toLowerCase();
-    if (r.contains('g') || r.contains('10000') || r.contains('2500')) return const Color(0xFF10B981);
-    if (r.contains('1000') || r.contains('100m')) return const Color(0xFF06B6D4);
-    if (r.contains('10m')) return const Color(0xFFF59E0B);
+    if (r.contains('g') || r.contains('10000') || r.contains('2500'))
+      return AppColors.success;
+    if (r.contains('1000') || r.contains('100m')) return AppColors.info;
+    if (r.contains('10m')) return AppColors.warning;
     return AppColors.textMid;
   }
 
@@ -1403,7 +1513,8 @@ class _BytesPoint {
   final int rxBytes;
   final int txBytes;
   final DateTime at;
-  const _BytesPoint({required this.rxBytes, required this.txBytes, required this.at});
+  const _BytesPoint(
+      {required this.rxBytes, required this.txBytes, required this.at});
 }
 
 class _IfaceRate {
@@ -1416,5 +1527,6 @@ class _TrafficSample {
   final DateTime at;
   final int rxBps;
   final int txBps;
-  const _TrafficSample({required this.at, required this.rxBps, required this.txBps});
+  const _TrafficSample(
+      {required this.at, required this.rxBps, required this.txBps});
 }

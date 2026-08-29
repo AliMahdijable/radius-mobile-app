@@ -56,8 +56,8 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('تعديل ${m.arabicLabel}',
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 16)),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -66,7 +66,8 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
-                helperText: 'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
+                helperText:
+                    'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
                 helperMaxLines: 2,
               ),
             ),
@@ -159,8 +160,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
         iconTheme: IconThemeData(color: AppColors.textHi),
         title: Text(
           'حركات ${widget.manager.username}',
-          style: AppType.title(color: AppColors.textHi)
-              .copyWith(fontSize: 16),
+          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         actions: [
           Padding(
@@ -245,22 +245,22 @@ class _MovementCard extends StatelessWidget {
 
   ({IconData icon, Color color}) get _style {
     if (movement.rowType == 'debt_created') {
-      return (icon: LucideIcons.receipt, color: const Color(0xFF0EA5E9));
+      return (icon: LucideIcons.receipt, color: AppColors.brandAccent);
     }
     if (movement.rowType == 'debt_payment') {
-      return (icon: LucideIcons.banknote, color: const Color(0xFF0EA5E9));
+      return (icon: LucideIcons.banknote, color: AppColors.brandAccent);
     }
     switch (movement.subKind) {
       case 'deposit_cash':
-        return (icon: LucideIcons.plus, color: const Color(0xFF14B8A6));
+        return (icon: LucideIcons.plus, color: AppColors.success);
       case 'deposit_loan':
-        return (icon: LucideIcons.plus, color: const Color(0xFFE08F2D));
+        return (icon: LucideIcons.plus, color: AppColors.warning);
       case 'withdraw':
         return (icon: LucideIcons.circleMinus, color: AppColors.error);
       case 'points':
-        return (icon: LucideIcons.star, color: const Color(0xFF8B5CF6));
+        return (icon: LucideIcons.star, color: AppColors.brandAccent);
       case 'sas_pay_debt':
-        return (icon: LucideIcons.banknote, color: const Color(0xFFE08F2D));
+        return (icon: LucideIcons.banknote, color: AppColors.warning);
       default:
         return (icon: LucideIcons.activity, color: AppColors.textMid);
     }
@@ -276,8 +276,7 @@ class _MovementCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.symmetric(
-          horizontal: Sp.md, vertical: Sp.md),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -19,10 +19,13 @@ class Package {
   });
   final int id;
   final String name;
+
   /// سعر البيع للمشترك — اللي يطبع على الوصل.
   final num? userPrice;
+
   /// كلفة الباقة على المدير الفرعي (سعر شراء من السوبر).
   final num? cost;
+
   /// السعر الأصلي من SAS4 (لـSAS4 admins). أحياناً = userPrice.
   final num? basePrice;
   final int? downrate;
@@ -64,8 +67,8 @@ class PackagesApi {
   /// / uprate / users_count / type when SAS4 provides them.
   static Future<List<Package>> list() async {
     try {
-      final r = await ApiClient.dio
-          .get<Map<String, dynamic>>('/api/v2/packages');
+      final r =
+          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/packages');
       final body = r.data ?? const {};
       if (body['success'] != true) return const [];
       final list = body['data'];
@@ -129,7 +132,10 @@ class PackagesApi {
         },
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('v2/price-list (POST)', e);
       final body = e.response?.data;

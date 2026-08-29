@@ -49,24 +49,24 @@ class MimosaApi {
   //     11 = mimosaPtmpStaDistance   (int, meters)
   //     12 = mimosaPtmpStaUptime     (int, seconds)
   //     13 = mimosaPtmpStaOnline     (int, 1=online 0=offline)
-  static const String _oidPtmpStaTable   = '$_ptmp.2';
-  static const String _oidPtmpStaIP      = '$_ptmp.2.1.2';
-  static const String _oidPtmpStaName    = '$_ptmp.2.1.3';
-  static const String _oidPtmpStaHw      = '$_ptmp.2.1.4';
-  static const String _oidPtmpStaFw      = '$_ptmp.2.1.5';
-  static const String _oidPtmpStaRssi    = '$_ptmp.2.1.6';
-  static const String _oidPtmpStaSnr     = '$_ptmp.2.1.7';
-  static const String _oidPtmpStaTxRate  = '$_ptmp.2.1.8';
-  static const String _oidPtmpStaRxRate  = '$_ptmp.2.1.9';
+  static const String _oidPtmpStaTable = '$_ptmp.2';
+  static const String _oidPtmpStaIP = '$_ptmp.2.1.2';
+  static const String _oidPtmpStaName = '$_ptmp.2.1.3';
+  static const String _oidPtmpStaHw = '$_ptmp.2.1.4';
+  static const String _oidPtmpStaFw = '$_ptmp.2.1.5';
+  static const String _oidPtmpStaRssi = '$_ptmp.2.1.6';
+  static const String _oidPtmpStaSnr = '$_ptmp.2.1.7';
+  static const String _oidPtmpStaTxRate = '$_ptmp.2.1.8';
+  static const String _oidPtmpStaRxRate = '$_ptmp.2.1.9';
   static const String _oidPtmpStaTxPower = '$_ptmp.2.1.10';
-  static const String _oidPtmpStaDist    = '$_ptmp.2.1.11';
-  static const String _oidPtmpStaUptime  = '$_ptmp.2.1.12';
-  static const String _oidPtmpStaOnline  = '$_ptmp.2.1.13';
+  static const String _oidPtmpStaDist = '$_ptmp.2.1.11';
+  static const String _oidPtmpStaUptime = '$_ptmp.2.1.12';
+  static const String _oidPtmpStaOnline = '$_ptmp.2.1.13';
 
   // — Standard MIB-II (works for any SNMP device) —
-  static const String _oidSysDescr   = '1.3.6.1.2.1.1.1.0';
-  static const String _oidSysUpTime  = '1.3.6.1.2.1.1.3.0';
-  static const String _oidSysName    = '1.3.6.1.2.1.1.5.0';
+  static const String _oidSysDescr = '1.3.6.1.2.1.1.1.0';
+  static const String _oidSysUpTime = '1.3.6.1.2.1.1.3.0';
+  static const String _oidSysName = '1.3.6.1.2.1.1.5.0';
 
   // — Mimosa scalar OIDs (BFIVE) —
   //   mimosaGeneral.1 = mimosaDeviceName          → 2.1.1.1.0
@@ -75,35 +75,35 @@ class MimosaApi {
   //   mimosaGeneral.4 = mimosaFirmwareBuildDate   → 2.1.1.4.0
   //   mimosaGeneral.5 = mimosaLastRebootTime      → 2.1.1.5.0
   //   mimosaGeneral.8 = mimosaInternalTemp        → 2.1.1.8.0 (×10 lookup: 42.7°C = 427)
-  static const String _oidDeviceName       = '$_bfive.1.1.0';
-  static const String _oidSerialNumber     = '$_bfive.1.2.0';
-  static const String _oidFirmwareVersion  = '$_bfive.1.3.0';
-  static const String _oidInternalTemp     = '$_bfive.1.8.0';
+  static const String _oidDeviceName = '$_bfive.1.1.0';
+  static const String _oidSerialNumber = '$_bfive.1.2.0';
+  static const String _oidFirmwareVersion = '$_bfive.1.3.0';
+  static const String _oidInternalTemp = '$_bfive.1.8.0';
 
   //   mimosaLocInfo.2 = longitude, .3 = latitude, .4 = altitude, .7 = gps sats
-  static const String _oidLongitude        = '$_bfive.2.2.0';
-  static const String _oidLatitude         = '$_bfive.2.3.0';
-  static const String _oidAltitude         = '$_bfive.2.4.0';
-  static const String _oidGpsSats          = '$_bfive.2.7.0';
+  static const String _oidLongitude = '$_bfive.2.2.0';
+  static const String _oidLatitude = '$_bfive.2.3.0';
+  static const String _oidAltitude = '$_bfive.2.4.0';
+  static const String _oidGpsSats = '$_bfive.2.7.0';
 
   //   mimosaTdmaInfo.1 = wirelessMode, .3 = tdmaMode
-  static const String _oidWirelessMode     = '$_bfive.4.1.0';
-  static const String _oidTdmaMode         = '$_bfive.4.3.0';
+  static const String _oidWirelessMode = '$_bfive.4.1.0';
+  static const String _oidTdmaMode = '$_bfive.4.3.0';
 
   //   mimosaRfInfo.4 = antennaGain
   //   mimosaRfInfo.5 = totalTxPower
   //   mimosaRfInfo.6 = totalRxPower
   //   mimosaRfInfo.7 = targetRxPower
-  static const String _oidAntennaGain      = '$_bfive.6.4.0';
-  static const String _oidTotalTxPower     = '$_bfive.6.5.0';
-  static const String _oidTotalRxPower     = '$_bfive.6.6.0';
-  static const String _oidTargetRxPower    = '$_bfive.6.7.0';
+  static const String _oidAntennaGain = '$_bfive.6.4.0';
+  static const String _oidTotalTxPower = '$_bfive.6.5.0';
+  static const String _oidTotalRxPower = '$_bfive.6.6.0';
+  static const String _oidTargetRxPower = '$_bfive.6.7.0';
 
   //   mimosaPerfInfo.1 = phyRxRate, .2 = phyTxRate, .3 = perTxRate, .4 = perRxRate
-  static const String _oidPhyRxRate        = '$_bfive.7.1.0';
-  static const String _oidPhyTxRate        = '$_bfive.7.2.0';
-  static const String _oidPerTxRate        = '$_bfive.7.3.0';
-  static const String _oidPerRxRate        = '$_bfive.7.4.0';
+  static const String _oidPhyRxRate = '$_bfive.7.1.0';
+  static const String _oidPhyTxRate = '$_bfive.7.2.0';
+  static const String _oidPerTxRate = '$_bfive.7.3.0';
+  static const String _oidPerRxRate = '$_bfive.7.4.0';
 
   // — Mimosa chain table (per-chain signal) —
   //   mimosaRfInfo.3.1.2.<chain> = mimosaChain (int)
@@ -111,9 +111,9 @@ class MimosaApi {
   //   mimosaRfInfo.3.1.4.<chain> = mimosaRxPower
   //   mimosaRfInfo.3.1.5.<chain> = mimosaRxNoise
   //   mimosaRfInfo.3.1.6.<chain> = mimosaSNR
-  static const String _oidChainRxPower     = '$_bfive.6.3.1.4';   // GETBULK
-  static const String _oidChainRxNoise     = '$_bfive.6.3.1.5';
-  static const String _oidChainSnr         = '$_bfive.6.3.1.6';
+  static const String _oidChainRxPower = '$_bfive.6.3.1.4'; // GETBULK
+  static const String _oidChainRxNoise = '$_bfive.6.3.1.5';
+  static const String _oidChainSnr = '$_bfive.6.3.1.6';
 
   /// جلب صورة كاملة عن حالة الجهاز عبر SNMP GET متعدّد + GETBULK للـchain table.
   ///
@@ -136,15 +136,29 @@ class MimosaApi {
 
     // ═══ Tier 1 (fast — ~500ms): system + GPS + temp ═══
     final scalarBatch1 = <String>[
-      _oidSysDescr, _oidSysName, _oidSysUpTime,
-      _oidDeviceName, _oidSerialNumber, _oidFirmwareVersion, _oidInternalTemp,
-      _oidLongitude, _oidLatitude, _oidGpsSats,
+      _oidSysDescr,
+      _oidSysName,
+      _oidSysUpTime,
+      _oidDeviceName,
+      _oidSerialNumber,
+      _oidFirmwareVersion,
+      _oidInternalTemp,
+      _oidLongitude,
+      _oidLatitude,
+      _oidGpsSats,
     ];
     // ═══ Tier 2 (~500ms إضافيّة): RF details ═══
     final scalarBatch2 = <String>[
-      _oidWirelessMode, _oidTdmaMode,
-      _oidAntennaGain, _oidTotalTxPower, _oidTotalRxPower, _oidTargetRxPower,
-      _oidPhyRxRate, _oidPhyTxRate, _oidPerTxRate, _oidPerRxRate,
+      _oidWirelessMode,
+      _oidTdmaMode,
+      _oidAntennaGain,
+      _oidTotalTxPower,
+      _oidTotalRxPower,
+      _oidTargetRxPower,
+      _oidPhyRxRate,
+      _oidPhyTxRate,
+      _oidPerTxRate,
+      _oidPerRxRate,
     ];
 
     final results = <String, Varbind>{};
@@ -157,7 +171,8 @@ class MimosaApi {
       if (onPartialReady != null) {
         try {
           onPartialReady(MimosaStats.fromVarbinds(
-              Map<String, Varbind>.from(results), chains: const []));
+              Map<String, Varbind>.from(results),
+              chains: const []));
         } catch (_) {}
       }
       // Tier 2 — RF details
@@ -181,7 +196,11 @@ class MimosaApi {
       final indexRxNoise = _byIndex(rxNoises, _oidChainRxNoise);
       final indexSnr = _byIndex(snrs, _oidChainSnr);
 
-      final allIndices = <int>{...indexRxPower.keys, ...indexRxNoise.keys, ...indexSnr.keys};
+      final allIndices = <int>{
+        ...indexRxPower.keys,
+        ...indexRxNoise.keys,
+        ...indexSnr.keys
+      };
       for (final i in allIndices.toList()..sort()) {
         chains.add(MimosaChain(
           index: i,
@@ -264,16 +283,16 @@ class MimosaApi {
         snmp.walk(_oidPtmpStaOnline, chunkSize: 20),
       ]);
 
-      final ipsBySuffix       = _byMacSuffix(futures[0], _oidPtmpStaIP);
-      final namesBySuffix     = _byMacSuffix(futures[1], _oidPtmpStaName);
-      final rssiBySuffix      = _byMacSuffix(futures[2], _oidPtmpStaRssi);
-      final snrBySuffix       = _byMacSuffix(futures[3], _oidPtmpStaSnr);
-      final txRateBySuffix    = _byMacSuffix(futures[4], _oidPtmpStaTxRate);
-      final rxRateBySuffix    = _byMacSuffix(futures[5], _oidPtmpStaRxRate);
-      final txPowerBySuffix   = _byMacSuffix(futures[6], _oidPtmpStaTxPower);
-      final distBySuffix      = _byMacSuffix(futures[7], _oidPtmpStaDist);
-      final uptimeBySuffix    = _byMacSuffix(futures[8], _oidPtmpStaUptime);
-      final onlineBySuffix    = _byMacSuffix(futures[9], _oidPtmpStaOnline);
+      final ipsBySuffix = _byMacSuffix(futures[0], _oidPtmpStaIP);
+      final namesBySuffix = _byMacSuffix(futures[1], _oidPtmpStaName);
+      final rssiBySuffix = _byMacSuffix(futures[2], _oidPtmpStaRssi);
+      final snrBySuffix = _byMacSuffix(futures[3], _oidPtmpStaSnr);
+      final txRateBySuffix = _byMacSuffix(futures[4], _oidPtmpStaTxRate);
+      final rxRateBySuffix = _byMacSuffix(futures[5], _oidPtmpStaRxRate);
+      final txPowerBySuffix = _byMacSuffix(futures[6], _oidPtmpStaTxPower);
+      final distBySuffix = _byMacSuffix(futures[7], _oidPtmpStaDist);
+      final uptimeBySuffix = _byMacSuffix(futures[8], _oidPtmpStaUptime);
+      final onlineBySuffix = _byMacSuffix(futures[9], _oidPtmpStaOnline);
 
       // كل الـMAC suffixes الي شفناها (union)
       final allSuffixes = <String>{
@@ -377,7 +396,7 @@ class MimosaStats {
   final int? gpsSats;
 
   // TDMA / mode
-  final int? wirelessMode;      // 1=AP, 2=STA (typical)
+  final int? wirelessMode; // 1=AP, 2=STA (typical)
   final int? tdmaMode;
 
   // RF summary
@@ -389,7 +408,7 @@ class MimosaStats {
   // Performance
   final int? phyTxRateMbps;
   final int? phyRxRateMbps;
-  final double? perTxRatePct;   // packet error rate %
+  final double? perTxRatePct; // packet error rate %
   final double? perRxRatePct;
 
   final List<MimosaChain> chains;
@@ -419,8 +438,8 @@ class MimosaStats {
     this.chains = const [],
   });
 
-  bool get hasGps => latitude != null && longitude != null &&
-      latitude != 0 && longitude != 0;
+  bool get hasGps =>
+      latitude != null && longitude != null && latitude != 0 && longitude != 0;
 
   /// هامش الإشارة عن المتوقّع (dB) — سالب = أضعف من الأمثل
   double? get signalMarginDb {
@@ -454,18 +473,21 @@ class MimosaStats {
       final v = vb.asInt;
       return v == 0 ? null : v / 10.0;
     }
+
     int? _n(String oid) {
       final vb = m[oid];
       if (vb == null) return null;
       final v = vb.asInt;
       return v == 0 ? null : v;
     }
+
     String? _s(String oid) {
       final vb = m[oid];
       if (vb == null) return null;
       final s = vb.asString.trim();
       return s.isEmpty ? null : s;
     }
+
     double? _gps(String oid) {
       // Mimosa GPS often stored as int × 1e7 (LibreNMS uses / 1e7)
       final vb = m[oid];
@@ -503,7 +525,7 @@ class MimosaStats {
 }
 
 class MimosaChain {
-  final int index;              // 1..N
+  final int index; // 1..N
   final double? rxPowerDbm;
   final double? rxNoiseDbm;
   final double? snrDb;
@@ -530,10 +552,10 @@ class MimosaClient {
   final String mac;
   final String? ip;
   final String? name;
-  final int? rssiDbm;         // dBm — أقرب للصفر أفضل (-40 ممتاز، -80 ضعيف)
-  final int? snrDb;           // dB — أعلى أفضل (35+ ممتاز، 15- سيئ)
-  final int? txRateMbps;      // معدّل الإرسال من الجهاز للعميل
-  final int? rxRateMbps;      // معدّل الاستقبال من العميل
+  final int? rssiDbm; // dBm — أقرب للصفر أفضل (-40 ممتاز، -80 ضعيف)
+  final int? snrDb; // dB — أعلى أفضل (35+ ممتاز، 15- سيئ)
+  final int? txRateMbps; // معدّل الإرسال من الجهاز للعميل
+  final int? rxRateMbps; // معدّل الاستقبال من العميل
   final int? txPowerDbm;
   final int? distanceMeters;
   final int? uptimeSec;

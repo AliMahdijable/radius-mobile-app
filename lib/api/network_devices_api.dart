@@ -44,8 +44,10 @@ class NetworkDevicesApi {
           if (brand != null && brand.isNotEmpty) 'brand': brand,
           if (type != null && type.isNotEmpty) 'type': type,
           if (status != null && status.isNotEmpty) 'status': status,
-          if (regionId == 0) 'region_id': 'none'
-          else if (regionId != null && regionId > 0) 'region_id': regionId,
+          if (regionId == 0)
+            'region_id': 'none'
+          else if (regionId != null && regionId > 0)
+            'region_id': regionId,
         },
       );
       final data = (r.data?['data'] as List?) ?? const [];
@@ -100,7 +102,8 @@ class NetworkDevicesApi {
   ///
   /// Body: `{devices: [{...deviceFields}, ...]}` — max 300 لكل طلب.
   /// يُرجع `{created: List<NetworkDevice>, count: int}`.
-  static Future<List<NetworkDevice>> bulkCreate(List<Map<String, dynamic>> devices) async {
+  static Future<List<NetworkDevice>> bulkCreate(
+      List<Map<String, dynamic>> devices) async {
     if (devices.isEmpty) return const [];
     final r = await ApiClient.dio.post<Map<String, dynamic>>(
       '/api/v2/admin/devices/bulk-create',
@@ -115,7 +118,8 @@ class NetworkDevicesApi {
       throw Exception(msg);
     }
     final list = (r.data?['created'] as List?) ?? const [];
-    return list.whereType<Map>()
+    return list
+        .whereType<Map>()
         .map((m) => NetworkDevice.fromJson(Map<String, dynamic>.from(m)))
         .toList();
   }
@@ -124,7 +128,8 @@ class NetworkDevicesApi {
   /// طلب واحد بدل N → لا rate-limit من Cloudflare. 2026-08-18.
   /// يرجع `{deleted: int, requested: int}` — لو الاثنين مختلفان يعني
   /// بعض الـids ليست ملك المدير أو ما موجودة (تُتجاهل بصمت في backend).
-  static Future<({int deleted, int requested})> bulkDelete(List<int> ids) async {
+  static Future<({int deleted, int requested})> bulkDelete(
+      List<int> ids) async {
     if (ids.isEmpty) return (deleted: 0, requested: 0);
     final r = await ApiClient.dio.post<Map<String, dynamic>>(
       '/api/v2/admin/devices/bulk-delete',
@@ -150,13 +155,16 @@ class NetworkDevicesApi {
   /// - الـcreds لا تتغيّر إلا عند edit → cache 60s آمن جداً
   ///
   /// [forceRefresh] يتخطّى الـcache — يُستعمل بعد edit form save.
-  static final Map<int, ({Map<String, dynamic> creds, DateTime at})> _credsCache = {};
+  static final Map<int, ({Map<String, dynamic> creds, DateTime at})>
+      _credsCache = {};
   static const _credsCacheTtl = Duration(seconds: 60);
 
-  static Future<Map<String, dynamic>> getCredentials(int id, {bool forceRefresh = false}) async {
+  static Future<Map<String, dynamic>> getCredentials(int id,
+      {bool forceRefresh = false}) async {
     if (!forceRefresh) {
       final cached = _credsCache[id];
-      if (cached != null && DateTime.now().difference(cached.at) < _credsCacheTtl) {
+      if (cached != null &&
+          DateTime.now().difference(cached.at) < _credsCacheTtl) {
         return cached.creds;
       }
     }
@@ -167,7 +175,8 @@ class NetworkDevicesApi {
       throw Exception(r.data?['message'] ?? 'فشل جلب المعلومات');
     }
     final creds = r.data!['credentials'];
-    final result = (creds is Map<String, dynamic>) ? creds : <String, dynamic>{};
+    final result =
+        (creds is Map<String, dynamic>) ? creds : <String, dynamic>{};
     _credsCache[id] = (creds: result, at: DateTime.now());
     return result;
   }
@@ -196,11 +205,12 @@ class NetworkDevicesApi {
   ///
   /// نستعمل [tcpPort] لو متوفّر (Mikrotik=8728، UBNT=22، Mimosa=161).
   /// ICMP fallback فقط لأجهزة بلا port معروف.
-  static Future<({String status, int? responseMs, double? packetLoss})> localIcmpPing({
+  static Future<({String status, int? responseMs, double? packetLoss})>
+      localIcmpPing({
     required String ip,
     int count = 3,
     Duration timeout = const Duration(seconds: 2),
-    int? tcpPort,   // نُفضّله على ICMP
+    int? tcpPort, // نُفضّله على ICMP
   }) async {
     // ── 1. TCP probe (الأولوية) ──
     if (tcpPort != null && tcpPort > 0) {
@@ -213,7 +223,8 @@ class NetworkDevicesApi {
   /// TCP connect probe — أدقّ probe للأجهزة على LAN.
   /// نجاح = الجهاز يقبل connections على هذا الـport (بمعنى: online + السيرفس شغّال).
   /// فشل = timeout أو refused → offline.
-  static Future<({String status, int? responseMs, double? packetLoss})> _tcpProbe({
+  static Future<({String status, int? responseMs, double? packetLoss})>
+      _tcpProbe({
     required String ip,
     required int port,
     required Duration timeout,
@@ -224,16 +235,23 @@ class NetworkDevicesApi {
       socket = await Socket.connect(ip, port, timeout: timeout);
       sw.stop();
       socket.destroy();
-      return (status: 'online', responseMs: sw.elapsedMilliseconds, packetLoss: 0.0);
+      return (
+        status: 'online',
+        responseMs: sw.elapsedMilliseconds,
+        packetLoss: 0.0
+      );
     } catch (e) {
       if (kDebugMode) print('⚠️ tcpProbe $ip:$port failed: $e');
-      try { socket?.destroy(); } catch (_) {}
+      try {
+        socket?.destroy();
+      } catch (_) {}
       return (status: 'offline', responseMs: null, packetLoss: 100.0);
     }
   }
 
   /// ICMP ping — fallback لو ما نعرف الـport.
-  static Future<({String status, int? responseMs, double? packetLoss})> _icmpProbe({
+  static Future<({String status, int? responseMs, double? packetLoss})>
+      _icmpProbe({
     required String ip,
     required int count,
     required Duration timeout,
@@ -292,15 +310,16 @@ class NetworkDevicesApi {
   static const List<int> scanPorts = [8728, 22, 443, 80, 161, 23];
 
   /// خمّن brand + protocol + apiPort من أوّل port فُتح.
-  static ({String brand, String protocol, int apiPort}) guessDeviceFromPort(int port) {
+  static ({String brand, String protocol, int apiPort}) guessDeviceFromPort(
+      int port) {
     return switch (port) {
       8728 => (brand: 'mikrotik', protocol: 'api', apiPort: 8728),
-      22   => (brand: 'ubnt',     protocol: 'ssh', apiPort: 22),
-      443  => (brand: 'mimosa',   protocol: 'api', apiPort: 443),
-      161  => (brand: 'other',    protocol: 'snmp', apiPort: 161),
-      80   => (brand: 'other',    protocol: 'api', apiPort: 80),
-      23   => (brand: 'other',    protocol: 'telnet', apiPort: 23),
-      _    => (brand: 'other',    protocol: 'api', apiPort: port),
+      22 => (brand: 'ubnt', protocol: 'ssh', apiPort: 22),
+      443 => (brand: 'mimosa', protocol: 'api', apiPort: 443),
+      161 => (brand: 'other', protocol: 'snmp', apiPort: 161),
+      80 => (brand: 'other', protocol: 'api', apiPort: 80),
+      23 => (brand: 'other', protocol: 'telnet', apiPort: 23),
+      _ => (brand: 'other', protocol: 'api', apiPort: port),
     };
   }
 
@@ -313,7 +332,7 @@ class NetworkDevicesApi {
   ///
   /// يرجع القائمة الكاملة عند انتهاء الـscan.
   static Future<List<ScanResult>> bulkScanSubnet({
-    required String base,   // "192.168.1"
+    required String base, // "192.168.1"
     int startOctet = 1,
     int endOctet = 254,
     List<int> ports = scanPorts,
@@ -322,7 +341,8 @@ class NetworkDevicesApi {
     void Function(int done, int total)? onProgress,
     void Function(ScanResult result)? onFound,
   }) async {
-    final base3 = base.endsWith('.') ? base.substring(0, base.length - 1) : base;
+    final base3 =
+        base.endsWith('.') ? base.substring(0, base.length - 1) : base;
     final ips = <String>[
       for (var i = startOctet; i <= endOctet; i++) '$base3.$i',
     ];

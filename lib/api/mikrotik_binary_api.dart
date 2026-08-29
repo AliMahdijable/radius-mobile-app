@@ -86,7 +86,8 @@ class MikrotikBinaryClient {
   ///
   /// [debugLog]: إذا true (kDebugMode + للـqueries المشتبه بها)، يطبع
   /// كل sentence مستلمة — للتشخيص عندما query يرجع empty بلا سبب واضح.
-  Future<List<Map<String, String>>> query(List<String> command, {bool debugLog = false}) async {
+  Future<List<Map<String, String>>> query(List<String> command,
+      {bool debugLog = false}) async {
     if (kDebugMode && debugLog) {
       debugPrint('▶️ [mtk-api] send: ${command.join(" ")}');
     }
@@ -99,7 +100,8 @@ class MikrotikBinaryClient {
       if (sentence.isEmpty) continue;
       final tag = sentence.first;
       if (kDebugMode && debugLog) {
-        debugPrint('◀️ [mtk-api] sentence #$sentenceCount tag=$tag words=${sentence.length}');
+        debugPrint(
+            '◀️ [mtk-api] sentence #$sentenceCount tag=$tag words=${sentence.length}');
         if (tag == '!re' && sentence.length > 1) {
           // اطبع أول 3 keys لنتأكّد من شكل الحقول
           final keys = sentence.skip(1).take(3).join(', ');
@@ -117,7 +119,8 @@ class MikrotikBinaryClient {
       } else if (tag == '!fatal') {
         // 2026-08-20: RouterOS 6.4x قد ترسل !fatal عند خطأ ماحد يعالجه — ما
         // كنّا نُلاحظه فيقطع الـconnection ويرجع 0 results بصمت.
-        final msg = sentence.length > 1 ? sentence.skip(1).join(' ') : 'fatal error';
+        final msg =
+            sentence.length > 1 ? sentence.skip(1).join(' ') : 'fatal error';
         throw MikrotikBinaryException('fatal: $msg');
       }
     }
@@ -238,7 +241,7 @@ class MikrotikBinaryClient {
     while (_receivedBytes.isEmpty) {
       await _waitForBytes(deadline);
     }
-    return _receivedBytes.removeFirst();      // O(1) على Queue
+    return _receivedBytes.removeFirst(); // O(1) على Queue
   }
 
   Future<List<int>> _readBytes(int n, DateTime deadline) async {

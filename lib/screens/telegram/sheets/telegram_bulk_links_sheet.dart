@@ -15,7 +15,7 @@ Future<void> showTelegramBulkLinksSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _BulkSheet(adminId: adminId, onDone: onDone),
   );
 }
@@ -56,20 +56,17 @@ class _BulkSheetState extends State<_BulkSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style:
-                TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
         content: Text(
             'سيُدرَج ${_preview!.eligible} رسالة في طابور واتساب. الإرسال يحترم حدود الإرسال.',
             style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE08F2D)),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('أرسل الآن',
                 style: TextStyle(
@@ -109,7 +106,9 @@ class _BulkSheetState extends State<_BulkSheet> {
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.paddingOf(context).bottom + 16,
-          left: 16, right: 16, top: 12,
+          left: 16,
+          right: 16,
+          top: 12,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -121,7 +120,8 @@ class _BulkSheetState extends State<_BulkSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
                   borderRadius: BorderRadius.circular(2),
@@ -131,14 +131,15 @@ class _BulkSheetState extends State<_BulkSheet> {
               Row(
                 children: [
                   Container(
-                    width: 42, height: 42,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE08F2D).withValues(alpha: 0.14),
+                      color: AppColors.warning.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(LucideIcons.megaphone,
-                        color: Color(0xFFE08F2D), size: 20),
+                    child: Icon(LucideIcons.megaphone,
+                        color: AppColors.warning, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -165,8 +166,8 @@ class _BulkSheetState extends State<_BulkSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 20, color: AppColors.textMid),
+                    icon:
+                        Icon(LucideIcons.x, size: 20, color: AppColors.textMid),
                     onPressed: () => Navigator.of(context).pop(),
                     splashRadius: 20,
                   ),
@@ -207,7 +208,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                           fontWeight: FontWeight.w800,
                         )),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFE08F2D),
+                      backgroundColor: AppColors.warning,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
@@ -244,8 +245,7 @@ class _BulkSheetState extends State<_BulkSheet> {
           const SizedBox(height: 6),
           _row('بلا واتساب (QR فقط)', p.skippedNoPhone, AppColors.error),
           const Divider(height: 16),
-          _row('مؤهّلون للإرسال', p.eligible, const Color(0xFF14B8A6),
-              bold: true),
+          _row('مؤهّلون للإرسال', p.eligible, AppColors.success, bold: true),
         ],
       ),
     );

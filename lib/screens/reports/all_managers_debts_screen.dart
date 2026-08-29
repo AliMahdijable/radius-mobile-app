@@ -56,6 +56,7 @@ class _MgrEvent {
 
   final Manager manager;
   final ManagerMovement movement;
+
   /// true = تسديد كامل (لآخر جزء من دين). يُحسب post-fetch من الملاحظات.
   final bool isFullPayment;
 
@@ -99,9 +100,10 @@ class _MgrEvent {
     // debt_payment — أخضر
     if (movement.rowType == 'debt_payment') {
       return (
-        label: isFullPayment ? 'تسديد كامل — دين أخرى' : 'تسديد جزئي — دين أخرى',
+        label:
+            isFullPayment ? 'تسديد كامل — دين أخرى' : 'تسديد جزئي — دين أخرى',
         icon: LucideIcons.banknote,
-        color: const Color(0xFF14B8A6),
+        color: AppColors.success,
         debit: false,
       );
     }
@@ -110,14 +112,14 @@ class _MgrEvent {
         return (
           label: 'شحن نقدي',
           icon: LucideIcons.plus,
-          color: const Color(0xFF14B8A6),
+          color: AppColors.success,
           debit: false,
         );
       case 'deposit_loan':
         return (
           label: 'شحن آجل — دين SAS',
           icon: LucideIcons.plus,
-          color: const Color(0xFFE08F2D),
+          color: AppColors.warning,
           debit: true,
         );
       case 'withdraw':
@@ -131,14 +133,14 @@ class _MgrEvent {
         return (
           label: 'تسديد دين SAS',
           icon: LucideIcons.banknote,
-          color: const Color(0xFF14B8A6),
+          color: AppColors.success,
           debit: false,
         );
       case 'points':
         return (
           label: 'نقاط مكافأة',
           icon: LucideIcons.star,
-          color: const Color(0xFF8B5CF6),
+          color: AppColors.brandAccent,
           debit: false,
         );
       default:
@@ -196,8 +198,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     // 2) concurrent fetch movements — قيد للـtop 60 مدير لتفادي الإرهاق.
     final targets = mgrs.take(60).toList();
     final moveResults = await Future.wait(
-      targets.map((m) =>
-          ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
+      targets.map(
+          (m) => ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
     );
 
     // 3) اربط الديون بالـid — عشان نميّز "تسديد كامل" من "جزئي".
@@ -415,8 +417,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
           ),
           IconButton(
             tooltip: 'common.refresh'.tr(),
-            icon: Icon(LucideIcons.refreshCw,
-                size: 18, color: AppColors.textMid),
+            icon:
+                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -455,8 +457,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                       ),
                     ),
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(
-                          Sp.lg, 4, Sp.lg, Sp.huge),
+                      padding:
+                          const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, Sp.huge),
                       sliver: SliverList.separated(
                         itemCount: visible.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 6),
@@ -514,7 +516,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             label: 'إيرادات مستحصَلة',
             hint: 'شحن نقدي + تسديد ديون (SAS + أخرى)',
             value: _totalIncoming,
-            color: const Color(0xFF14B8A6),
+            color: AppColors.success,
             icon: LucideIcons.trendingUp,
           ),
           const SizedBox(height: 8),
@@ -524,21 +526,20 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               _statTile(
                 label: 'متبقّي SAS',
                 value: _totalSasDebt,
-                color: const Color(0xFF0EA5E9),
+                color: AppColors.brandAccent,
               ),
               const SizedBox(width: 6),
               _statTile(
                 label: 'متبقّي أخرى',
                 value: _totalCustomRemaining,
-                color: const Color(0xFF8B5CF6),
+                color: AppColors.brandAccent,
               ),
               const SizedBox(width: 6),
               _statTile(
                 label: 'إجمالي المتبقّي',
                 value: _grandRemaining,
-                color: _grandRemaining > 0
-                    ? AppColors.error
-                    : const Color(0xFF14B8A6),
+                color:
+                    _grandRemaining > 0 ? AppColors.error : AppColors.success,
                 emphasize: true,
               ),
             ],
@@ -611,15 +612,13 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               Text(
                 formatIQD(value.round()),
                 style: AppType.title(color: color).copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    height: 1.1),
+                    fontSize: 18, fontWeight: FontWeight.w800, height: 1.1),
               ),
               const SizedBox(width: 4),
               Text(
                 'د.ع',
-                style: AppType.muted(color: color).copyWith(
-                    fontSize: 10.5, fontWeight: FontWeight.w700),
+                style: AppType.muted(color: color)
+                    .copyWith(fontSize: 10.5, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -669,8 +668,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                   const SizedBox(width: 3),
                   Text(
                     'د.ع',
-                    style: AppType.muted(color: color).copyWith(
-                        fontSize: 9, fontWeight: FontWeight.w700),
+                    style: AppType.muted(color: color)
+                        .copyWith(fontSize: 9, fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -697,8 +696,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
           suffixIcon: _managerSearchCtrl.text.isEmpty
               ? null
               : IconButton(
-                  icon: Icon(LucideIcons.x,
-                      size: 14, color: AppColors.textMid),
+                  icon: Icon(LucideIcons.x, size: 14, color: AppColors.textMid),
                   onPressed: () {
                     _managerSearchCtrl.clear();
                     setState(() => _managerFilter = '');
@@ -731,15 +729,15 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   Widget _typeFilters() {
     // 2026-07-14: فلاتر مفصّلة — شحن نقدي/آجل منفصلان، تسديد SAS/أخرى
     // منفصلان. المستخدم يقدر يفصّل الحركات بدقّة.
-    const filters = <(_TypeFilter, String, Color)>[
-      (_TypeFilter.all, 'الكل', Color(0xFF64748B)),
-      (_TypeFilter.depositCash, 'شحن نقدي', Color(0xFF14B8A6)),
-      (_TypeFilter.depositLoan, 'شحن آجل', Color(0xFFE08F2D)),
-      (_TypeFilter.debtCreated, 'إضافة دين', Color(0xFFDC2626)),
-      (_TypeFilter.paymentSas, 'تسديد SAS', Color(0xFF0EA5E9)),
-      (_TypeFilter.paymentCustom, 'تسديد أخرى', Color(0xFF8B5CF6)),
-      (_TypeFilter.withdraw, 'سحب', Color(0xFFCD8B00)),
-      (_TypeFilter.points, 'نقاط', Color(0xFFC084FC)),
+    final filters = <(_TypeFilter, String, Color)>[
+      (_TypeFilter.all, 'الكل', AppColors.textMid),
+      (_TypeFilter.depositCash, 'شحن نقدي', AppColors.success),
+      (_TypeFilter.depositLoan, 'شحن آجل', AppColors.warning),
+      (_TypeFilter.debtCreated, 'إضافة دين', AppColors.errorFill),
+      (_TypeFilter.paymentSas, 'تسديد SAS', AppColors.brandAccent),
+      (_TypeFilter.paymentCustom, 'تسديد أخرى', AppColors.brandAccent),
+      (_TypeFilter.withdraw, 'سحب', AppColors.warning),
+      (_TypeFilter.points, 'نقاط', AppColors.brandAccent),
     ];
     return SizedBox(
       height: 44,
@@ -873,156 +871,156 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
           border: Border.all(color: AppColors.border),
           borderRadius: BorderRadius.circular(R.md),
         ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Icon square (نفس تصميم ReportLogTile)
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: meta.color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(meta.icon, color: meta.color, size: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Icon square (نفس تصميم ReportLogTile)
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: meta.color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(R.sm),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Row 1: type badge + amount
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: meta.color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            meta.label,
-                            style: TextStyle(
-                              color: meta.color,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
+              child: Icon(meta.icon, color: meta.color, size: 16),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row 1: type badge + amount
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: meta.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          meta.label,
+                          style: TextStyle(
+                            color: meta.color,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const Spacer(),
-                        if (e.amount != 0)
-                          Text(
-                            '${meta.debit ? '-' : '+'}${formatIQD(e.amount.abs().round())} د.ع',
-                            style: TextStyle(
-                              color: meta.debit
-                                  ? AppColors.error
-                                  : const Color(0xFF14B8A6),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
+                      ),
+                      const Spacer(),
+                      if (e.amount != 0)
+                        Text(
+                          '${meta.debit ? '-' : '+'}${formatIQD(e.amount.abs().round())} د.ع',
+                          style: TextStyle(
+                            color: meta.debit
+                                ? AppColors.error
+                                : AppColors.success,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
                           ),
-                      ],
-                    ),
-                    // Row 2: الى من (manager) — أخضر برند بارز
-                    const SizedBox(height: 4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.userCog,
-                            size: 11,
+                        ),
+                    ],
+                  ),
+                  // Row 2: الى من (manager) — أخضر برند بارز
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.userCog,
+                          size: 11,
+                          color: AppColors.isDark
+                              ? AppColors.brandLight
+                              : AppColors.brand),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          e.manager.fullName.isEmpty
+                              ? e.manager.username
+                              : e.manager.fullName,
+                          style: TextStyle(
                             color: AppColors.isDark
                                 ? AppColors.brandLight
-                                : AppColors.brand),
-                        const SizedBox(width: 4),
+                                : AppColors.brand,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                            letterSpacing: -0.1,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (e.manager.fullName.isNotEmpty &&
+                          e.manager.username.isNotEmpty) ...[
+                        const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            e.manager.fullName.isEmpty
-                                ? e.manager.username
-                                : e.manager.fullName,
-                            style: TextStyle(
-                              color: AppColors.isDark
-                                  ? AppColors.brandLight
-                                  : AppColors.brand,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              height: 1.15,
-                              letterSpacing: -0.1,
+                            e.manager.username,
+                            style: AppType.muted().copyWith(
+                              fontSize: 10.5,
+                              height: 1.2,
+                              color: AppColors.textLow,
+                              fontWeight: FontWeight.w500,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (e.manager.fullName.isNotEmpty &&
-                            e.manager.username.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              e.manager.username,
-                              style: AppType.muted().copyWith(
-                                fontSize: 10.5,
-                                height: 1.2,
-                                color: AppColors.textLow,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
-                    // Row 3: note (لو موجود)
-                    if ((e.movement.note ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        e.movement.note!.trim(),
-                        style: AppType.muted(color: AppColors.textMid)
-                            .copyWith(fontSize: 11.5, height: 1.3),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ],
-                    // Row 4: time + source
+                  ),
+                  // Row 3: note (لو موجود)
+                  if ((e.movement.note ?? '').trim().isNotEmpty) ...[
                     const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Icon(LucideIcons.clock,
-                            size: 10, color: AppColors.textLow),
-                        const SizedBox(width: 3),
-                        Text(
-                          _fmtDateTime(e.date),
-                          style: AppType.muted()
-                              .copyWith(fontSize: 10, height: 1.2),
-                        ),
-                        if (e.movement.source != null) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceInput,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              e.movement.source == MovementSource.sas4
-                                  ? 'الساس'
-                                  : 'يدوي',
-                              style: AppType.muted().copyWith(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                    Text(
+                      e.movement.note!.trim(),
+                      style: AppType.muted(color: AppColors.textMid)
+                          .copyWith(fontSize: 11.5, height: 1.3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                ),
+                  // Row 4: time + source
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.clock,
+                          size: 10, color: AppColors.textLow),
+                      const SizedBox(width: 3),
+                      Text(
+                        _fmtDateTime(e.date),
+                        style:
+                            AppType.muted().copyWith(fontSize: 10, height: 1.2),
+                      ),
+                      if (e.movement.source != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceInput,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            e.movement.source == MovementSource.sas4
+                                ? 'الساس'
+                                : 'يدوي',
+                            style: AppType.muted().copyWith(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
     );
   }
 

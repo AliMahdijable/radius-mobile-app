@@ -36,8 +36,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
   void initState() {
     super.initState();
     _amount = widget.discount.discountAmount.toInt();
-    _amountCtrl = TextEditingController(
-        text: _amount > 0 ? _fmt(_amount) : '');
+    _amountCtrl = TextEditingController(text: _amount > 0 ? _fmt(_amount) : '');
     _amountCtrl.addListener(_onAmount);
   }
 
@@ -83,16 +82,16 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    showSheetSnack(context, r.ok
-            ? 'تم التعديل'
-            : (r.message ?? 'تعذّر التعديل'), isError: (r.ok) ? false : true);
+    showSheetSnack(
+        context, r.ok ? 'تم التعديل' : (r.message ?? 'تعذّر التعديل'),
+        isError: (r.ok) ? false : true);
     if (r.ok) Navigator.of(context).pop(true);
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF14B8A6);
+    final accent = AppColors.success;
     final d = widget.discount;
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
@@ -103,8 +102,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           child: Column(
             children: [
@@ -129,8 +127,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                         color: accent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.md),
                       ),
-                      child: const Icon(LucideIcons.percent,
-                          size: 16, color: accent),
+                      child: Icon(LucideIcons.percent, size: 16, color: accent),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -162,8 +159,8 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     if (d.packagePrice != null) ...[
                       Container(
@@ -171,8 +168,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                         decoration: BoxDecoration(
                           color: AppColors.surfaceInput,
                           borderRadius: BorderRadius.circular(R.md),
-                          border:
-                              Border.all(color: AppColors.border),
+                          border: Border.all(color: AppColors.border),
                         ),
                         child: Row(
                           children: [
@@ -181,8 +177,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                             const SizedBox(width: 6),
                             Text(
                               'السعر الأصلي ',
-                              style:
-                                  AppType.muted().copyWith(fontSize: 11),
+                              style: AppType.muted().copyWith(fontSize: 11),
                             ),
                             Text(
                               '${formatIQD(d.packagePrice!)} د.ع',
@@ -197,18 +192,15 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.brand
-                                      .withValues(alpha: 0.1),
-                                  borderRadius:
-                                      BorderRadius.circular(R.sm),
+                                  color: AppColors.brand.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(R.sm),
                                   border: Border.all(
                                       color: AppColors.brand
                                           .withValues(alpha: 0.3)),
                                 ),
                                 child: Text(
                                   'بعد الخصم ${formatIQD((d.packagePrice! - _amount).clamp(0, double.infinity))}',
-                                  style: AppType.label(
-                                          color: AppColors.brand)
+                                  style: AppType.label(color: AppColors.brand)
                                       .copyWith(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w800),
@@ -223,8 +215,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                       padding: const EdgeInsets.only(bottom: 4, right: 2),
                       child: Text(
                         'قيمة الخصم *',
-                        style:
-                            AppType.muted(color: AppColors.textMid).copyWith(
+                        style: AppType.muted(color: AppColors.textMid).copyWith(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -236,8 +227,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                       style: AppType.input(color: AppColors.textHi),
                       decoration: InputDecoration(
                         hintText: 'مثلاً 5,000',
-                        hintStyle:
-                            AppType.input(color: AppColors.textLow),
+                        hintStyle: AppType.input(color: AppColors.textLow),
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
@@ -265,13 +255,11 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, 0, Sp.lg, Sp.md),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed:
-                          _submitting || _amount < 0 ? null : _submit,
+                      onPressed: _submitting || _amount < 0 ? null : _submit,
                       icon: _submitting
                           ? const SizedBox(
                               width: 14,
@@ -294,7 +282,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
                             _amount == 0 ? AppColors.error : accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),
@@ -319,8 +307,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
           final f = _fmt(next);
           _suppressFormat = true;
           _amountCtrl.value = TextEditingValue(
-              text: f,
-              selection: TextSelection.collapsed(offset: f.length));
+              text: f, selection: TextSelection.collapsed(offset: f.length));
           _suppressFormat = false;
           setState(() => _amount = next);
         },

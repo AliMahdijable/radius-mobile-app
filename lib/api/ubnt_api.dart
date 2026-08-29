@@ -41,12 +41,17 @@ class UbntApi {
               'ip=$ip:$port');
         }
         return await _fetchWithUser(
-            ip: ip, port: port, user: u, pass: pass, timeout: timeout,
+            ip: ip,
+            port: port,
+            user: u,
+            pass: pass,
+            timeout: timeout,
             onPartialReady: onPartialReady);
       } on UbntException catch (e) {
         if (kDebugMode) debugPrint('   ❌ $e');
         // auth error → جرّب الـuser التالي
-        if (e.message.contains('اسم المستخدم') || e.message.contains('SSH auth')) {
+        if (e.message.contains('اسم المستخدم') ||
+            e.message.contains('SSH auth')) {
           lastAuthErr = e;
           continue;
         }
@@ -79,9 +84,10 @@ class UbntApi {
       try {
         await _rebootWithUser(
             ip: ip, port: port, user: u, pass: pass, timeout: timeout);
-        return;   // نجح
+        return; // نجح
       } on UbntException catch (e) {
-        if (e.message.contains('اسم المستخدم') || e.message.contains('SSH auth')) {
+        if (e.message.contains('اسم المستخدم') ||
+            e.message.contains('SSH auth')) {
           lastAuthErr = e;
           continue;
         }
@@ -115,8 +121,10 @@ class UbntApi {
       } catch (e) {
         // Socket closure / timeout = الجهاز بدأ يُعيد التشغيل (متوقّع)
         final msg = e.toString().toLowerCase();
-        if (msg.contains('closed') || msg.contains('timeout') ||
-            msg.contains('reset') || msg.contains('eof')) {
+        if (msg.contains('closed') ||
+            msg.contains('timeout') ||
+            msg.contains('reset') ||
+            msg.contains('eof')) {
           return;
         }
         // خطأ آخر — قد يكون permission denied أو command not found
@@ -132,8 +140,12 @@ class UbntApi {
       if (e is UbntException) rethrow;
       throw UbntException('فشل reboot: $e');
     } finally {
-      try { client?.close(); } catch (_) {}
-      try { socket?.close(); } catch (_) {}
+      try {
+        client?.close();
+      } catch (_) {}
+      try {
+        socket?.close();
+      } catch (_) {}
     }
   }
 
@@ -196,7 +208,8 @@ class UbntApi {
           final result = await client.run('mca-status').timeout(timeout);
           output = utf8.decode(result, allowMalformed: true);
         } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
+          if (kDebugMode)
+            debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
           final result = await client.run('ubntbox status').timeout(timeout);
           output = utf8.decode(result, allowMalformed: true);
         }
@@ -207,24 +220,31 @@ class UbntApi {
       }
 
       if (kDebugMode) {
-        debugPrint('══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════');
-        debugPrint(output.substring(0, output.length > 2000 ? 2000 : output.length));
+        debugPrint(
+            '══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════');
+        debugPrint(
+            output.substring(0, output.length > 2000 ? 2000 : output.length));
         debugPrint('════════════════════════════════');
       }
 
       // لو JSON: نحوّله لـflat map key=value ليعمل مع نفس الـparser
-      final parsed = isJsonDump
-          ? _flattenMcaDump(output)
-          : _parseMcaStatus(output);
+      final parsed =
+          isJsonDump ? _flattenMcaDump(output) : _parseMcaStatus(output);
 
       // airFiber 60: أوامر إضافيّة لجلب wireless info (يفشل بصمت لغير airFiber)
       try {
-        final afOut = utf8.decode(await client.run('af-status 2>/dev/null')
-            .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
+        final afOut = utf8
+            .decode(
+                await client
+                    .run('af-status 2>/dev/null')
+                    .timeout(const Duration(seconds: 4)),
+                allowMalformed: true)
+            .trim();
         if (afOut.isNotEmpty) {
           if (kDebugMode) {
             debugPrint('🔵 af-status output (first 1500 chars):');
-            debugPrint(afOut.substring(0, afOut.length > 1500 ? 1500 : afOut.length));
+            debugPrint(
+                afOut.substring(0, afOut.length > 1500 ? 1500 : afOut.length));
           }
           if (afOut.startsWith('{')) {
             _mergeFromJson(parsed, afOut);
@@ -238,7 +258,7 @@ class UbntApi {
       if (onPartialReady != null) {
         try {
           final partial = UbntStats.fromMcaStatus(
-              Map<String, String>.from(parsed),   // نسخة عشان لا نعدّلها
+              Map<String, String>.from(parsed), // نسخة عشان لا نعدّلها
               interfaces: const [],
               wstalistStations: const []);
           onPartialReady(partial);
@@ -289,38 +309,61 @@ class UbntApi {
       // بعملاء متصلين يعرض "لا يوجد عملاء" بلا سبب حقيقي.
       if (batchedOut.isNotEmpty && !wstaOut.startsWith('[')) {
         try {
-          final r = utf8.decode(
-            await client.run('wstalist 2>/dev/null')
-                .timeout(const Duration(seconds: 5)),
-            allowMalformed: true,
-          ).trim();
+          final r = utf8
+              .decode(
+                await client
+                    .run('wstalist 2>/dev/null')
+                    .timeout(const Duration(seconds: 5)),
+                allowMalformed: true,
+              )
+              .trim();
           if (r.startsWith('[')) {
             wstaOut = r;
-            if (kDebugMode) debugPrint('🟢 [ubnt] wstalist recovered via fallback fetch');
+            if (kDebugMode)
+              debugPrint('🟢 [ubnt] wstalist recovered via fallback fetch');
           }
         } catch (_) {}
       }
       if (batchedOut.isEmpty) {
         // fallback: أوامر منفصلة (سلوك قديم)
         try {
-          wstaOut = utf8.decode(await client.run('wstalist 2>/dev/null')
-              .timeout(const Duration(seconds: 4)), allowMalformed: true).trim();
+          wstaOut = utf8
+              .decode(
+                  await client
+                      .run('wstalist 2>/dev/null')
+                      .timeout(const Duration(seconds: 4)),
+                  allowMalformed: true)
+              .trim();
         } catch (_) {}
         try {
-          uptimeOut = utf8.decode(await client.run('cat /proc/uptime')
-              .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
+          uptimeOut = utf8
+              .decode(
+                  await client
+                      .run('cat /proc/uptime')
+                      .timeout(const Duration(seconds: 3)),
+                  allowMalformed: true)
+              .trim();
         } catch (_) {}
         try {
-          loadOut = utf8.decode(await client.run('cat /proc/loadavg')
-              .timeout(const Duration(seconds: 3)), allowMalformed: true).trim();
+          loadOut = utf8
+              .decode(
+                  await client
+                      .run('cat /proc/loadavg')
+                      .timeout(const Duration(seconds: 3)),
+                  allowMalformed: true)
+              .trim();
         } catch (_) {}
         try {
-          iwOut = utf8.decode(await client.run('iwconfig 2>/dev/null')
-              .timeout(const Duration(seconds: 4)), allowMalformed: true);
+          iwOut = utf8.decode(
+              await client
+                  .run('iwconfig 2>/dev/null')
+                  .timeout(const Duration(seconds: 4)),
+              allowMalformed: true);
         } catch (_) {}
         try {
-          ifOut = utf8.decode(await client.run('ifconfig')
-              .timeout(const Duration(seconds: 4)), allowMalformed: true);
+          ifOut = utf8.decode(
+              await client.run('ifconfig').timeout(const Duration(seconds: 4)),
+              allowMalformed: true);
         } catch (_) {}
       }
 
@@ -331,8 +374,10 @@ class UbntApi {
         try {
           final parsedJson = json.decode(wstaOut);
           if (parsedJson is List) {
-            stations = parsedJson.whereType<Map>()
-                .map((e) => e.cast<String, dynamic>()).toList();
+            stations = parsedJson
+                .whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .toList();
           }
         } catch (_) {}
       }
@@ -371,8 +416,13 @@ class UbntApi {
 
         // 1) /sys/class/net
         try {
-          final r = utf8.decode(await client.run('cat /sys/class/net/$name/speed 2>/dev/null')
-              .timeout(const Duration(seconds: 2)), allowMalformed: true).trim();
+          final r = utf8
+              .decode(
+                  await client
+                      .run('cat /sys/class/net/$name/speed 2>/dev/null')
+                      .timeout(const Duration(seconds: 2)),
+                  allowMalformed: true)
+              .trim();
           if (r.isNotEmpty && int.tryParse(r) != null && int.parse(r) > 0) {
             iface['speed'] = r;
             continue;
@@ -381,8 +431,13 @@ class UbntApi {
 
         // 2) mii-tool — الأشهر على airOS 5/6 القديم
         try {
-          final r = utf8.decode(await client.run('mii-tool $name 2>/dev/null')
-              .timeout(const Duration(seconds: 2)), allowMalformed: true).trim();
+          final r = utf8
+              .decode(
+                  await client
+                      .run('mii-tool $name 2>/dev/null')
+                      .timeout(const Duration(seconds: 2)),
+                  allowMalformed: true)
+              .trim();
           // نموذج: "eth0: negotiated 100baseTx-FD flow-control, link ok"
           final m = RegExp(r'(\d+)base').firstMatch(r);
           if (m != null) {
@@ -393,8 +448,11 @@ class UbntApi {
 
         // 3) ethtool
         try {
-          final r = utf8.decode(await client.run('ethtool $name 2>/dev/null')
-              .timeout(const Duration(seconds: 2)), allowMalformed: true);
+          final r = utf8.decode(
+              await client
+                  .run('ethtool $name 2>/dev/null')
+                  .timeout(const Duration(seconds: 2)),
+              allowMalformed: true);
           // "Speed: 1000Mb/s"
           final m = RegExp(r'Speed:\s*(\d+)').firstMatch(r);
           if (m != null) {
@@ -417,7 +475,8 @@ class UbntApi {
 
       // wstalist سبق واستخرجناه أعلاه من الـbatched command (stations متغيّر
       // مُعبّأ فوق). لا نُكرّر الأمر — كان يستهلك 4s إضافيّة بلا فائدة.
-      return UbntStats.fromMcaStatus(parsed, interfaces: ifaceRaws, wstalistStations: stations);
+      return UbntStats.fromMcaStatus(parsed,
+          interfaces: ifaceRaws, wstalistStations: stations);
     } on SSHAuthAbortError {
       throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
     } on SSHAuthFailError {
@@ -437,8 +496,12 @@ class UbntApi {
       }
       throw UbntException('خطأ: $msg');
     } finally {
-      try { client?.close(); } catch (_) {}
-      try { socket?.close(); } catch (_) {}
+      try {
+        client?.close();
+      } catch (_) {}
+      try {
+        socket?.close();
+      } catch (_) {}
     }
   }
 
@@ -459,7 +522,8 @@ class UbntApi {
       // host section — الأكثر ثباتاً بين الأجهزة
       final host = (root['host'] as Map?)?.cast<String, dynamic>() ?? const {};
       _set(map, 'deviceName', host['hostname'] ?? host['device_id']);
-      _set(map, 'firmwareVersion', host['fwversion'] ?? host['firmwareVersion']);
+      _set(
+          map, 'firmwareVersion', host['fwversion'] ?? host['firmwareVersion']);
       _set(map, 'platform', host['devmodel'] ?? host['sysid']);
       _set(map, 'uptime', host['uptime']);
       _set(map, 'cpuload', host['cpuload'] ?? host['cpu_load']);
@@ -489,20 +553,29 @@ class UbntApi {
       if (radio != null) {
         if (kDebugMode) debugPrint('🔵 radio keys: ${radio.keys.toList()}');
         // نستعمل radio لتكميل ما ينقص من wireless
-        map['wlanSignal'] ??= (radio['signal'] ?? radio['rxlevel'] ?? radio['rx_level'])?.toString() ?? '';
-        map['wlanNoiseFloor'] ??= (radio['noise'] ?? radio['noise_level'])?.toString() ?? '';
-        map['wlanFrequency'] ??= (radio['frequency'] ?? radio['freq'])?.toString() ?? '';
+        map['wlanSignal'] ??=
+            (radio['signal'] ?? radio['rxlevel'] ?? radio['rx_level'])
+                    ?.toString() ??
+                '';
+        map['wlanNoiseFloor'] ??=
+            (radio['noise'] ?? radio['noise_level'])?.toString() ?? '';
+        map['wlanFrequency'] ??=
+            (radio['frequency'] ?? radio['freq'])?.toString() ?? '';
         // معدّلات النقل في radio.link_capacity أو radio.tx_capacity
-        map['wlanTxRate'] ??= (radio['tx_capacity'] ?? radio['tx_rate'])?.toString() ?? '';
-        map['wlanRxRate'] ??= (radio['rx_capacity'] ?? radio['rx_rate'])?.toString() ?? '';
-        map['temperature'] ??= (radio['temperature'] ?? radio['temp'])?.toString() ?? '';
+        map['wlanTxRate'] ??=
+            (radio['tx_capacity'] ?? radio['tx_rate'])?.toString() ?? '';
+        map['wlanRxRate'] ??=
+            (radio['rx_capacity'] ?? radio['rx_rate'])?.toString() ?? '';
+        map['temperature'] ??=
+            (radio['temperature'] ?? radio['temp'])?.toString() ?? '';
       }
 
       // airFiber 60: قد يكون فيه 'link' section
       final link = (root['link'] as Map?)?.cast<String, dynamic>();
       if (link != null) {
         if (kDebugMode) debugPrint('🔵 link keys: ${link.keys.toList()}');
-        map['wlanTxRate'] ??= (link['tx_capacity'] ?? link['capacity'])?.toString() ?? '';
+        map['wlanTxRate'] ??=
+            (link['tx_capacity'] ?? link['capacity'])?.toString() ?? '';
         map['wlanRxRate'] ??= (link['rx_capacity'])?.toString() ?? '';
       }
 
@@ -511,8 +584,10 @@ class UbntApi {
 
       // stations: قد تكون في wireless.sta أو root.stations أو root.remote (airFiber)
       List sta = const [];
-      if (w?['sta'] is List) sta = w!['sta'] as List;
-      else if (root['stations'] is List) sta = root['stations'] as List;
+      if (w?['sta'] is List)
+        sta = w!['sta'] as List;
+      else if (root['stations'] is List)
+        sta = root['stations'] as List;
       else if (root['peers'] is List) sta = root['peers'] as List;
       // airFiber remote peer
       final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
@@ -525,22 +600,19 @@ class UbntApi {
         final idx = i + 1;
         _set(map, 'station${idx}_mac',
             j['mac'] ?? j['mac_addr'] ?? j['mac_address']);
-        _set(map, 'station${idx}_ip',
-            j['lastip'] ?? j['ip'] ?? j['address']);
+        _set(map, 'station${idx}_ip', j['lastip'] ?? j['ip'] ?? j['address']);
         _set(map, 'station${idx}_name',
             j['name'] ?? j['hostname'] ?? j['device_name']);
         _set(map, 'station${idx}_signal',
             j['signal'] ?? j['rssi'] ?? j['rx_level']);
-        _set(map, 'station${idx}_noise',
-            j['noisefloor'] ?? j['noise']);
+        _set(map, 'station${idx}_noise', j['noisefloor'] ?? j['noise']);
         _set(map, 'station${idx}_ccq', j['ccq']);
         // tx/rx قد تكون بـKbps أو Mbps — نتركها كما هي والـUI يعرضها
         _set(map, 'station${idx}_tx',
             j['tx'] ?? j['tx_rate'] ?? j['tx_capacity']);
         _set(map, 'station${idx}_rx',
             j['rx'] ?? j['rx_rate'] ?? j['rx_capacity']);
-        _set(map, 'station${idx}_uptime',
-            j['uptime'] ?? j['conn_time']);
+        _set(map, 'station${idx}_uptime', j['uptime'] ?? j['conn_time']);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ mca-dump flatten error: $e');
@@ -554,37 +626,46 @@ class UbntApi {
       final data = json.decode(jsonStr);
       if (data is! Map) return;
       final root = data as Map<String, dynamic>;
-      if (kDebugMode) debugPrint('🔵 af-status root keys: ${root.keys.toList()}');
+      if (kDebugMode)
+        debugPrint('🔵 af-status root keys: ${root.keys.toList()}');
 
       // airFiber structure: radio/local/remote/link
       final local = (root['local'] as Map?)?.cast<String, dynamic>();
       if (local != null) {
-        if (kDebugMode) debugPrint('🔵 af-status.local keys: ${local.keys.toList()}');
-        map['wlanSignal'] ??= _asStr(local['rf']?['rxlevel'] ?? local['signal'] ?? local['rx_level']);
-        map['wlanNoiseFloor'] ??= _asStr(local['rf']?['noise'] ?? local['noise']);
+        if (kDebugMode)
+          debugPrint('🔵 af-status.local keys: ${local.keys.toList()}');
+        map['wlanSignal'] ??= _asStr(
+            local['rf']?['rxlevel'] ?? local['signal'] ?? local['rx_level']);
+        map['wlanNoiseFloor'] ??=
+            _asStr(local['rf']?['noise'] ?? local['noise']);
         map['temperature'] ??= _asStr(local['temperature'] ?? local['temp']);
       }
       final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
       if (remote != null) {
-        if (kDebugMode) debugPrint('🔵 af-status.remote keys: ${remote.keys.toList()}');
+        if (kDebugMode)
+          debugPrint('🔵 af-status.remote keys: ${remote.keys.toList()}');
         // remote peer — لو ما فيه station من مكان آخر، نضيفه
         if (map['station1_mac'] == null) {
           _set(map, 'station1_mac', remote['mac']);
           _set(map, 'station1_ip', remote['ip']);
-          _set(map, 'station1_name', remote['hostname'] ?? remote['device_name']);
-          _set(map, 'station1_signal', remote['rf']?['rxlevel'] ?? remote['signal']);
+          _set(map, 'station1_name',
+              remote['hostname'] ?? remote['device_name']);
+          _set(map, 'station1_signal',
+              remote['rf']?['rxlevel'] ?? remote['signal']);
           _set(map, 'station1_noise', remote['rf']?['noise']);
         }
       }
       final link = (root['link'] as Map?)?.cast<String, dynamic>();
       if (link != null) {
-        if (kDebugMode) debugPrint('🔵 af-status.link keys: ${link.keys.toList()}');
+        if (kDebugMode)
+          debugPrint('🔵 af-status.link keys: ${link.keys.toList()}');
         map['wlanTxRate'] ??= _asStr(link['tx_capacity'] ?? link['capacity']);
         map['wlanRxRate'] ??= _asStr(link['rx_capacity']);
       }
       final radio = (root['radio'] as Map?)?.cast<String, dynamic>();
       if (radio != null) {
-        if (kDebugMode) debugPrint('🔵 af-status.radio keys: ${radio.keys.toList()}');
+        if (kDebugMode)
+          debugPrint('🔵 af-status.radio keys: ${radio.keys.toList()}');
         map['wlanFrequency'] ??= _asStr(radio['frequency']);
       }
       map.removeWhere((k, v) => v.isEmpty);
@@ -595,7 +676,8 @@ class UbntApi {
 
   /// دمج stations من wstalist JSON — يدعم airMax و airFiber 60.
   /// airFiber 60 يستعمل prs_sta nested object فيه signal + capacity + snr.
-  static void _mergeStationsFromWstalist(Map<String, String> map, String jsonStr) {
+  static void _mergeStationsFromWstalist(
+      Map<String, String> map, String jsonStr) {
     try {
       final data = json.decode(jsonStr);
       // Debug: نطبع أسماء fields لأوّل station — يساعدنا نضبط CCQ للـAC
@@ -660,7 +742,7 @@ class UbntApi {
         //   2. prs_sta.tx_mcs/rx_mcs (airFiber MCS index)
         //   3. j['tx']/j['rx'] direct (airMax)
         //   4. j['tx']['rate'] nested
-        final dlCap = prs?['dl_capacity'];    // Kbps
+        final dlCap = prs?['dl_capacity']; // Kbps
         final ulCap = prs?['ul_capacity'];
         if (dlCap != null) {
           // Kbps → Mbps
@@ -674,13 +756,17 @@ class UbntApi {
         // fallback: direct tx/rx (airMax)
         if (dlCap == null) {
           final rxr = j['rx'];
-          if (rxr is Map) _set(map, 'station${idx}_rx', rxr['rate']);
-          else _set(map, 'station${idx}_rx', rxr);
+          if (rxr is Map)
+            _set(map, 'station${idx}_rx', rxr['rate']);
+          else
+            _set(map, 'station${idx}_rx', rxr);
         }
         if (ulCap == null) {
           final txr = j['tx'];
-          if (txr is Map) _set(map, 'station${idx}_tx', txr['rate']);
-          else _set(map, 'station${idx}_tx', txr);
+          if (txr is Map)
+            _set(map, 'station${idx}_tx', txr['rate']);
+          else
+            _set(map, 'station${idx}_tx', txr);
         }
 
         // Distance (airFiber يعطي prs_sta.distance بالأمتار)
@@ -695,8 +781,10 @@ class UbntApi {
           _set(map, 'station${idx}_link_uptime', prs['uptime']);
           _set(map, 'station${idx}_dl_signal_expect', prs['dl_signal_expect']);
           _set(map, 'station${idx}_ul_signal_expect', prs['ul_signal_expect']);
-          _set(map, 'station${idx}_dl_capacity_expect', prs['dl_capacity_expect']);
-          _set(map, 'station${idx}_ul_capacity_expect', prs['ul_capacity_expect']);
+          _set(map, 'station${idx}_dl_capacity_expect',
+              prs['dl_capacity_expect']);
+          _set(map, 'station${idx}_ul_capacity_expect',
+              prs['ul_capacity_expect']);
           _set(map, 'station${idx}_tx_sector', prs['tx_sector']);
           _set(map, 'station${idx}_rx_sector', prs['rx_sector']);
         }
@@ -744,7 +832,8 @@ class UbntApi {
   ///           Bit Rate:270 Mb/s   Tx-Power:25 dBm
   ///           Link Quality=54/70  Signal level=-56 dBm  Noise level=-95 dBm
   static void _enrichFromIwconfig(String output, Map<String, String> map) {
-    final essid = RegExp(r'ESSID:"?([^"\n]+)"?').firstMatch(output)?.group(1)?.trim();
+    final essid =
+        RegExp(r'ESSID:"?([^"\n]+)"?').firstMatch(output)?.group(1)?.trim();
     if (essid != null && essid.isNotEmpty && map['wlanEssid'] == null) {
       map['wlanEssid'] = essid;
     }
@@ -752,7 +841,8 @@ class UbntApi {
     if (mode != null && map['wlanMode'] == null) {
       map['wlanMode'] = mode;
     }
-    final freq = RegExp(r'Frequency:([\d.]+)\s*GHz').firstMatch(output)?.group(1);
+    final freq =
+        RegExp(r'Frequency:([\d.]+)\s*GHz').firstMatch(output)?.group(1);
     if (freq != null && map['wlanFrequency'] == null) {
       // GHz → MHz
       final ghz = double.tryParse(freq);
@@ -766,7 +856,8 @@ class UbntApi {
     if (noise != null && map['wlanNoiseFloor'] == null) {
       map['wlanNoiseFloor'] = noise;
     }
-    final bitrate = RegExp(r'Bit Rate[:=]\s*([\d.]+)\s*Mb/s').firstMatch(output)?.group(1);
+    final bitrate =
+        RegExp(r'Bit Rate[:=]\s*([\d.]+)\s*Mb/s').firstMatch(output)?.group(1);
     if (bitrate != null) {
       final rate = double.tryParse(bitrate)?.round().toString();
       if (rate != null) {
@@ -799,7 +890,8 @@ class UbntApi {
         final name = line.split(RegExp(r'\s+')).first;
         current = {'name': name};
         // hwaddr قد يكون في نفس السطر
-        final hw = RegExp(r'HWaddr\s+([0-9A-Fa-f:]+)').firstMatch(line)?.group(1);
+        final hw =
+            RegExp(r'HWaddr\s+([0-9A-Fa-f:]+)').firstMatch(line)?.group(1);
         if (hw != null) current['hwaddr'] = hw;
         // flags
         final up = line.contains('UP') || line.contains('RUNNING');
@@ -811,13 +903,15 @@ class UbntApi {
               .firstMatch(line);
           if (hw != null) current['hwaddr'] = hw.group(1) ?? hw.group(2) ?? '';
         }
-        final rxBytes = RegExp(r'RX\s+bytes:(\d+)|RX packets \d+\s+bytes\s+(\d+)')
-            .firstMatch(line);
+        final rxBytes =
+            RegExp(r'RX\s+bytes:(\d+)|RX packets \d+\s+bytes\s+(\d+)')
+                .firstMatch(line);
         if (rxBytes != null) {
           current['rx_bytes'] = rxBytes.group(1) ?? rxBytes.group(2) ?? '';
         }
-        final txBytes = RegExp(r'TX\s+bytes:(\d+)|TX packets \d+\s+bytes\s+(\d+)')
-            .firstMatch(line);
+        final txBytes =
+            RegExp(r'TX\s+bytes:(\d+)|TX packets \d+\s+bytes\s+(\d+)')
+                .firstMatch(line);
         if (txBytes != null) {
           current['tx_bytes'] = txBytes.group(1) ?? txBytes.group(2) ?? '';
         }
@@ -846,7 +940,7 @@ class UbntException implements Exception {
 // ═══════════════════════════════════════════════════════════
 
 class UbntStats {
-  final int apiVersion;               // 5 (SSH-based → نعتبرها 5+)
+  final int apiVersion; // 5 (SSH-based → نعتبرها 5+)
   final UbntHost host;
   final UbntWireless? wireless;
   final List<UbntInterface> interfaces;
@@ -857,7 +951,7 @@ class UbntStats {
   final int? memTotalKb;
   final int? memFreeKb;
   final int? memBuffersKb;
-  final String? lanSpeed;   // "1000Mbps-Full" — من mca-status لـairFiber
+  final String? lanSpeed; // "1000Mbps-Full" — من mca-status لـairFiber
 
   const UbntStats({
     this.apiVersion = 5,
@@ -881,6 +975,7 @@ class UbntStats {
     if (m == null) return false;
     return m.contains('ap') || m.contains('master');
   }
+
   bool get isStation {
     final m = wireless?.mode.toLowerCase();
     if (m == null) return false;
@@ -921,7 +1016,8 @@ class UbntStats {
   }
 
   /// هل الإحداثيّات مُعرَّفة (غير 0,0)؟
-  bool get hasLocation => (latitude != null && latitude != 0) ||
+  bool get hasLocation =>
+      (latitude != null && latitude != 0) ||
       (longitude != null && longitude != 0);
 
   /// يبني من mca-status output map + interfaces + wstalist stations (اختياريّان)
@@ -970,7 +1066,9 @@ class UbntStats {
     // نتقبّل essid من أي مصدر
     final essid = m['wlanEssid'] ?? m['essid'] ?? '';
     UbntWireless? wireless;
-    if (essid.isNotEmpty || m.containsKey('wlanSignal') || m.containsKey('signal')) {
+    if (essid.isNotEmpty ||
+        m.containsKey('wlanSignal') ||
+        m.containsKey('signal')) {
       // signal الرئيسي: airFiber يعطي signal=-93 (WLAN إدارة) والحقيقي في prs_sta
       // نُفضّل signal من station لو موجود بقيمة معقولة
       int signal = _n(m['wlanSignal']);
@@ -984,7 +1082,8 @@ class UbntStats {
       // rates: airFiber يعطي 0 في mca-status، الحقيقي في station.prs_sta.capacity
       int txRate = _n(m['wlanTxRate']);
       int rxRate = _n(m['wlanRxRate']);
-      if (txRate == 0) txRate = _n(m['station1_tx_capacity']) ~/ 1000; // Kbps → Mbps
+      if (txRate == 0)
+        txRate = _n(m['station1_tx_capacity']) ~/ 1000; // Kbps → Mbps
       if (rxRate == 0) rxRate = _n(m['station1_rx_capacity']) ~/ 1000;
 
       // CCQ: أسماء متعدّدة في mca-status حسب الإصدار
@@ -999,7 +1098,8 @@ class UbntStats {
       //   ratio = min(138/106.7, 1.0) = 1.0 → 100%
       // ratio أقلّ من 100% يعني الجهاز مو يستغلّ السعة الكاملة → quality أقلّ.
       if (ccq == 0) {
-        final txRateKbps = ((double.tryParse(m['wlanTxRate'] ?? '0') ?? 0) * 1000).round();
+        final txRateKbps =
+            ((double.tryParse(m['wlanTxRate'] ?? '0') ?? 0) * 1000).round();
         final dlCapKbps = _n(m['wlanDownlinkCapacity']);
         if (txRateKbps > 0 && dlCapKbps > 0) {
           ccq = ((txRateKbps / dlCapKbps) * 100).clamp(0, 100).round();
@@ -1013,16 +1113,24 @@ class UbntStats {
         essid: essid,
         mode: _normalizeMode(m['wlanMode'] ?? m['wlanOpmode'] ?? ''),
         signal: signal,
-        noise: _n(m['wlanNoiseFloor']) != 0 ? _n(m['wlanNoiseFloor']) : _n(m['noise']),
+        noise: _n(m['wlanNoiseFloor']) != 0
+            ? _n(m['wlanNoiseFloor'])
+            : _n(m['noise']),
         // explicit SNR من station لو موجود (airFiber 60 يعطي prs_sta.snr)
         explicitSnr: _n(m['station1_snr']),
         ccq: ccq,
         txRate: txRate,
         rxRate: rxRate,
         channel: _n(m['wlanChan']),
-        frequency: _n(m['wlanFrequency']) != 0 ? _n(m['wlanFrequency']) : _n(m['freq']),
-        distance: _n(m['wlanDistance']) != 0 ? _n(m['wlanDistance']) : _n(m['station1_distance']),
-        chanbw: _n(m['wlanChanWidth']) != 0 ? _n(m['wlanChanWidth']) : _n(m['chanbw']),
+        frequency: _n(m['wlanFrequency']) != 0
+            ? _n(m['wlanFrequency'])
+            : _n(m['freq']),
+        distance: _n(m['wlanDistance']) != 0
+            ? _n(m['wlanDistance'])
+            : _n(m['station1_distance']),
+        chanbw: _n(m['wlanChanWidth']) != 0
+            ? _n(m['wlanChanWidth'])
+            : _n(m['chanbw']),
       );
     }
 
@@ -1035,7 +1143,8 @@ class UbntStats {
       //         "uptime":12345, "tx_bytes":..., "rx_bytes":..., "rssi":58}
       // airFiber 60: نفس المفاتيح + prs_sta nested فيه rssi_data/snr/capacity/mcs
       for (final s in wstalistStations) {
-        final remote = (s['remote'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final remote =
+            (s['remote'] as Map?)?.cast<String, dynamic>() ?? const {};
         final prs = (s['prs_sta'] as Map?)?.cast<String, dynamic>();
 
         // إشارة: airFiber → prs_sta.rssi_data | airMax → s.signal
@@ -1049,14 +1158,14 @@ class UbntStats {
           txSig = _n((s['tx'] as Map)['signal']);
         }
         // معدّلات: airFiber → prs_sta.capacity Kbps → Mbps
-        final dlCap = prs?['dl_capacity'] != null ? _n(prs!['dl_capacity']) : null;
-        final ulCap = prs?['ul_capacity'] != null ? _n(prs!['ul_capacity']) : null;
-        final txRateMbps = dlCap != null
-            ? (dlCap / 1000).round()
-            : _n(_extractRate(s['tx']));
-        final rxRateMbps = ulCap != null
-            ? (ulCap / 1000).round()
-            : _n(_extractRate(s['rx']));
+        final dlCap =
+            prs?['dl_capacity'] != null ? _n(prs!['dl_capacity']) : null;
+        final ulCap =
+            prs?['ul_capacity'] != null ? _n(prs!['ul_capacity']) : null;
+        final txRateMbps =
+            dlCap != null ? (dlCap / 1000).round() : _n(_extractRate(s['tx']));
+        final rxRateMbps =
+            ulCap != null ? (ulCap / 1000).round() : _n(_extractRate(s['rx']));
 
         // CCQ من أماكن متعدّدة — نفس منطق _mergeStationsFromWstalist
         // CCQ للـclients — أسماء متعدّدة حسب firmware:
@@ -1081,14 +1190,16 @@ class UbntStats {
           ccqValue = _n((s['rx'] as Map)['ccq']);
         }
         // بعض إصدارات airOS ترجع CCQ ×10 (961 → 96.1%)
-        if (ccqValue > 100 && ccqValue <= 1000) ccqValue = (ccqValue / 10).round();
+        if (ccqValue > 100 && ccqValue <= 1000)
+          ccqValue = (ccqValue / 10).round();
         if (ccqValue > 100) ccqValue = 100;
 
         // Debug (مرّة واحدة لأوّل station) — نعرف أسماء fields الحقيقيّة
         if (kDebugMode && ccqValue == 0 && wstalistStations.indexOf(s) == 0) {
           debugPrint('🔵 [ubnt CCQ] first station keys: ${s.keys.toList()}');
           if (s['airmax'] is Map) {
-            debugPrint('🔵 [ubnt CCQ] airmax keys: ${(s['airmax'] as Map).keys.toList()}');
+            debugPrint(
+                '🔵 [ubnt CCQ] airmax keys: ${(s['airmax'] as Map).keys.toList()}');
           }
         }
 
@@ -1101,10 +1212,10 @@ class UbntStats {
         //   ثمّ s['name'] فقط لو الجهاز single-station (airFiber).
         //   وإلا نتركه null → الـUI يعرض MAC.
         final isSingleStation = wstalistStations.length == 1;
-        final hostRaw = _strOrNull(s['hostname'])
-            ?? _strOrNull(remote['hostname'])
-            ?? _strOrNull(remote['device_name'])
-            ?? (isSingleStation ? _strOrNull(s['name']) : null);
+        final hostRaw = _strOrNull(s['hostname']) ??
+            _strOrNull(remote['hostname']) ??
+            _strOrNull(remote['device_name']) ??
+            (isSingleStation ? _strOrNull(s['name']) : null);
 
         stations.add(UbntStation(
           mac: (s['mac'] ?? '').toString(),
@@ -1120,14 +1231,23 @@ class UbntStats {
           explicitSnr: prs?['snr'] != null ? _n(prs!['snr']) : null,
           txMcs: prs?['tx_mcs'] != null ? _n(prs!['tx_mcs']) : null,
           rxMcs: prs?['rx_mcs'] != null ? _n(prs!['rx_mcs']) : null,
-          distanceMeters: prs?['distance'] != null ? _n(prs!['distance']) : null,
+          distanceMeters:
+              prs?['distance'] != null ? _n(prs!['distance']) : null,
           linkUptimeSec: prs?['uptime'] != null ? _n(prs!['uptime']) : null,
-          dlSignalExpect: prs?['dl_signal_expect'] != null ? _n(prs!['dl_signal_expect']) : null,
-          ulSignalExpect: prs?['ul_signal_expect'] != null ? _n(prs!['ul_signal_expect']) : null,
+          dlSignalExpect: prs?['dl_signal_expect'] != null
+              ? _n(prs!['dl_signal_expect'])
+              : null,
+          ulSignalExpect: prs?['ul_signal_expect'] != null
+              ? _n(prs!['ul_signal_expect'])
+              : null,
           dlCapacityKbps: dlCap,
           ulCapacityKbps: ulCap,
-          dlCapacityExpectKbps: prs?['dl_capacity_expect'] != null ? _n(prs!['dl_capacity_expect']) : null,
-          ulCapacityExpectKbps: prs?['ul_capacity_expect'] != null ? _n(prs!['ul_capacity_expect']) : null,
+          dlCapacityExpectKbps: prs?['dl_capacity_expect'] != null
+              ? _n(prs!['dl_capacity_expect'])
+              : null,
+          ulCapacityExpectKbps: prs?['ul_capacity_expect'] != null
+              ? _n(prs!['ul_capacity_expect'])
+              : null,
           txSector: prs?['tx_sector'] != null ? _n(prs!['tx_sector']) : null,
           rxSector: prs?['rx_sector'] != null ? _n(prs!['rx_sector']) : null,
           isLinked60: s['linked_60'] == true,
@@ -1153,18 +1273,21 @@ class UbntStats {
     }
 
     // Interfaces من ifconfig
-    final ifs = interfaces.map((raw) {
-      final speed = _n(raw['speed']);
-      return UbntInterface(
-        ifname: raw['name'] ?? '',
-        hwaddr: raw['hwaddr'] ?? '',
-        enabled: raw['up'] == 'true',
-        plugged: raw['up'] == 'true',
-        rxBytes: int.tryParse(raw['rx_bytes'] ?? ''),
-        txBytes: int.tryParse(raw['tx_bytes'] ?? ''),
-        speed: speed > 0 ? speed : null,
-      );
-    }).where((i) => i.ifname.isNotEmpty && i.ifname != 'lo').toList();
+    final ifs = interfaces
+        .map((raw) {
+          final speed = _n(raw['speed']);
+          return UbntInterface(
+            ifname: raw['name'] ?? '',
+            hwaddr: raw['hwaddr'] ?? '',
+            enabled: raw['up'] == 'true',
+            plugged: raw['up'] == 'true',
+            rxBytes: int.tryParse(raw['rx_bytes'] ?? ''),
+            txBytes: int.tryParse(raw['tx_bytes'] ?? ''),
+            speed: speed > 0 ? speed : null,
+          );
+        })
+        .where((i) => i.ifname.isNotEmpty && i.ifname != 'lo')
+        .toList();
 
     return UbntStats(
       host: host,
@@ -1202,7 +1325,9 @@ class UbntStats {
     // mca-status: "master" = AP، "managed"/"station" = STA
     // نحوّل لصيغة موحّدة مثل airOS 8: ap-ptp/sta-ptp/ap-ptmp/sta-ptmp
     if (low.contains('master') || low.contains('ap')) return 'ap-ptmp';
-    if (low.contains('managed') || low.contains('station') || low.contains('sta')) return 'sta-ptp';
+    if (low.contains('managed') ||
+        low.contains('station') ||
+        low.contains('sta')) return 'sta-ptp';
     return raw;
   }
 }
@@ -1229,9 +1354,9 @@ class UbntWireless {
   final String essid;
   final String mode;
   final int signal;
-  final int noise;             // 0 = غير متوفّر (airFiber 60GHz)
-  final int explicitSnr;       // من station.prs_sta.snr (0 = غير متوفّر)
-  final int ccq;               // 0 = غير متوفّر
+  final int noise; // 0 = غير متوفّر (airFiber 60GHz)
+  final int explicitSnr; // من station.prs_sta.snr (0 = غير متوفّر)
+  final int ccq; // 0 = غير متوفّر
   final int txRate;
   final int rxRate;
   final int channel;
@@ -1258,7 +1383,7 @@ class UbntWireless {
   int? get snr {
     if (explicitSnr > 0) return explicitSnr;
     if (noise != 0 && signal != 0) return (signal - noise).abs();
-    return null;  // غير متوفّر
+    return null; // غير متوفّر
   }
 
   bool get hasNoise => noise != 0;
@@ -1299,22 +1424,22 @@ class UbntStation {
   final String mac;
   final String? ip;
   final String? hostname;
-  final int signal;             // RX: كيف الـAP يستقبل من هذا العميل
-  final int txSignal;           // TX: كيف العميل يستقبل منّا. 0 = غير متوفّر
+  final int signal; // RX: كيف الـAP يستقبل من هذا العميل
+  final int txSignal; // TX: كيف العميل يستقبل منّا. 0 = غير متوفّر
   final int noise;
   final int ccq;
   final int txRate;
   final int rxRate;
   final int connTime;
   // ── airFiber 60 & LR (PtP link view) ─────────────────
-  final int? explicitSnr;         // من prs_sta.snr
+  final int? explicitSnr; // من prs_sta.snr
   final int? txMcs;
   final int? rxMcs;
-  final int? distanceMeters;      // prs_sta.distance
-  final int? linkUptimeSec;       // prs_sta.uptime (منفصل عن system uptime)
-  final int? dlSignalExpect;      // -47 مثلاً
+  final int? distanceMeters; // prs_sta.distance
+  final int? linkUptimeSec; // prs_sta.uptime (منفصل عن system uptime)
+  final int? dlSignalExpect; // -47 مثلاً
   final int? ulSignalExpect;
-  final int? dlCapacityKbps;      // 1951000
+  final int? dlCapacityKbps; // 1951000
   final int? ulCapacityKbps;
   final int? dlCapacityExpectKbps;
   final int? ulCapacityExpectKbps;

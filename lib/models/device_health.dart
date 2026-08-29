@@ -88,8 +88,7 @@ class OntOpticalInfo {
 }
 
 class OntLoginResult {
-  const OntLoginResult(
-      {required this.sessionCookie, required this.baseUrl});
+  const OntLoginResult({required this.sessionCookie, required this.baseUrl});
   final String sessionCookie;
   final String baseUrl;
 }

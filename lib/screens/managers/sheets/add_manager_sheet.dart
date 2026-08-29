@@ -30,7 +30,7 @@ class _AddManagerSheet extends StatelessWidget {
       title: 'مدير جديد',
       subtitle: 'إضافة مدير فرعي',
       icon: LucideIcons.userPlus,
-      accent: const Color(0xFF3B82F6),
+      accent: AppColors.brandAccent,
       submitLabel: 'إنشاء',
       requirePassword: true,
       onSubmit: (data) async {

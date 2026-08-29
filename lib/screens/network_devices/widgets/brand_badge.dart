@@ -30,18 +30,19 @@ class BrandBadge extends StatelessWidget {
 
   static const _brands = {
     'mikrotik': (color: Color(0xFF293251), accent: Color(0xFF3D4A73)),
-    'ubnt':     (color: Color(0xFF0559C9), accent: Color(0xFF0074E8)),
-    'mimosa':   (color: Color(0xFFEA580C), accent: Color(0xFFF97316)),
-    'cisco':    (color: Color(0xFF049FD9), accent: Color(0xFF00BCEB)),
-    'ruijie':   (color: Color(0xFF5B4CDB), accent: Color(0xFF7B6EE8)),
-    'other':    (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
+    'ubnt': (color: Color(0xFF0559C9), accent: Color(0xFF0074E8)),
+    'mimosa': (color: Color(0xFFEA580C), accent: Color(0xFFF97316)),
+    'cisco': (color: Color(0xFF049FD9), accent: Color(0xFF00BCEB)),
+    'ruijie': (color: Color(0xFF5B4CDB), accent: Color(0xFF7B6EE8)),
+    'other': (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
   };
 
   @override
   Widget build(BuildContext context) {
     final info = _brands[brand] ?? _brands['other']!;
     return Container(
-      width: size, height: size,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -117,10 +118,12 @@ class _BrandGlyphPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
     )..layout();
-    tp.paint(canvas, Offset(
-      (size.width - tp.width) / 2,
-      (size.height - tp.height) / 2,
-    ));
+    tp.paint(
+        canvas,
+        Offset(
+          (size.width - tp.width) / 2,
+          (size.height - tp.height) / 2,
+        ));
   }
 
   /// Mikrotik: M عريض بس (المستخدم فضّل بلا شريط أحمر — أنظف).
@@ -162,7 +165,11 @@ class _BrandGlyphPainter extends CustomPainter {
     final startX = w * 0.5 - (barWidth * 5 + gap * 4) / 2;
     // أعمدة بارتفاع متدرّج: قصير-متوسّط-عالي-متوسّط-قصير (bell curve بسيط)
     final heights = <double>[
-      h * 0.28, h * 0.42, h * 0.52, h * 0.42, h * 0.28,
+      h * 0.28,
+      h * 0.42,
+      h * 0.52,
+      h * 0.42,
+      h * 0.28,
     ];
     final paint = Paint()..color = Colors.white;
     for (int i = 0; i < 5; i++) {
@@ -226,4 +233,3 @@ class TypeIcon extends StatelessWidget {
     return Icon(iconFor(type), size: size, color: color);
   }
 }
-

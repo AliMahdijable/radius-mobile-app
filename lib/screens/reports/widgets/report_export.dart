@@ -131,8 +131,7 @@ class ReportExportBar extends StatelessWidget {
             if (subtitle != null && subtitle!.isNotEmpty) ...[
               pw.SizedBox(height: 4),
               pw.Text(subtitle!,
-                  style:
-                      pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+                  style: pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
             ],
             pw.SizedBox(height: 12),
             // مطلب 2026-07-12: نُلف الجدول بـLTR Directionality عشان
@@ -154,8 +153,8 @@ class ReportExportBar extends StatelessWidget {
                 cellStyle: pw.TextStyle(font: font, fontSize: 9),
                 cellAlignment: pw.Alignment.centerRight,
                 headerAlignment: pw.Alignment.center,
-                border: pw.TableBorder.all(
-                    color: PdfColors.grey400, width: 0.4),
+                border:
+                    pw.TableBorder.all(color: PdfColors.grey400, width: 0.4),
                 columnWidths: {
                   for (int i = 0; i < columns.length; i++)
                     i: pw.FlexColumnWidth(
@@ -223,23 +222,17 @@ class _IconBtn extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: active
-                ? color.withValues(alpha: 0.10)
-                : AppColors.surface,
+            color: active ? color.withValues(alpha: 0.10) : AppColors.surface,
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
-              color: active
-                  ? color.withValues(alpha: 0.30)
-                  : AppColors.border,
+              color: active ? color.withValues(alpha: 0.30) : AppColors.border,
             ),
           ),
           alignment: Alignment.center,
-          child: Icon(icon,
-              size: 17,
-              color: active ? color : AppColors.textLow),
+          child:
+              Icon(icon, size: 17, color: active ? color : AppColors.textLow),
         ),
       ),
     );
   }
 }
-

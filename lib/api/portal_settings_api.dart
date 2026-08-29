@@ -153,8 +153,8 @@ class PortalSettingsApi {
 
   static Future<Branding> getBranding() async {
     try {
-      final r =
-          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/admin/branding');
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>('/api/v2/admin/branding');
       final body = r.data ?? const {};
       final b = body['branding'];
       if (b is Map) {

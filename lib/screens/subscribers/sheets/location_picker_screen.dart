@@ -125,7 +125,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
         iconTheme: IconThemeData(color: AppColors.textHi),
         actions: [
           IconButton(
-            icon: Icon(LucideIcons.check, color: const Color(0xFF14B8A6)),
+            icon: Icon(LucideIcons.check, color: AppColors.success),
             tooltip: 'تأكيد',
             onPressed: () => Navigator.of(context).pop(_center),
           ),
@@ -179,14 +179,14 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                   child: FloatingActionButton(
                     heroTag: 'my_location',
                     backgroundColor: AppColors.surface,
-                    foregroundColor: const Color(0xFF14B8A6),
+                    foregroundColor: AppColors.success,
                     onPressed: _locating ? null : _locate,
                     child: _locating
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2.2, color: Color(0xFF14B8A6)))
+                                strokeWidth: 2.2, color: AppColors.success))
                         : const Icon(LucideIcons.locateFixed),
                   ),
                 ),
@@ -265,7 +265,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                       ),
                     ),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF14B8A6),
+                      backgroundColor: AppColors.success,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
@@ -284,10 +284,10 @@ class _Pin extends StatelessWidget {
   const _Pin();
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(LucideIcons.mapPin, size: 44, color: Color(0xFF14B8A6)),
+        Icon(LucideIcons.mapPin, size: 44, color: AppColors.success),
         SizedBox(
           width: 10,
           height: 4,

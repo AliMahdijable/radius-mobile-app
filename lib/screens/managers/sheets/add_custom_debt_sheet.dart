@@ -86,8 +86,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     if (_submitting || _amount <= 0) return;
     setState(() => _submitting = true);
     String two(int n) => n.toString().padLeft(2, '0');
-    final dateStr =
-        '${_date.year}-${two(_date.month)}-${two(_date.day)}';
+    final dateStr = '${_date.year}-${two(_date.month)}-${two(_date.day)}';
     final r = await ManagerDebtsApi.create(
       debtorAdminId: widget.manager.id,
       amount: _amount,
@@ -96,17 +95,21 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    showSheetSnack(context, r.ok ? 'تم تسجيل الدين' : (r.message ?? 'تعذّر التسجيل'), isError: (r.ok) ? false : true);
-    if (r.ok) { SubscriberEvents.notifyChange(); Navigator.of(context).pop(true); }
+    showSheetSnack(
+        context, r.ok ? 'تم تسجيل الدين' : (r.message ?? 'تعذّر التسجيل'),
+        isError: (r.ok) ? false : true);
+    if (r.ok) {
+      SubscriberEvents.notifyChange();
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF0EA5E9);
+    final accent = AppColors.brandAccent;
     String two(int n) => n.toString().padLeft(2, '0');
-    final dateLabel =
-        '${_date.year}/${two(_date.month)}/${two(_date.day)}';
+    final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';
     // iOS keyboard-avoidance: push the sheet up so amount + note +
     // submit button stay visible when the keyboard opens.
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -119,8 +122,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
@@ -146,8 +148,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                         color: accent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.md),
                       ),
-                      child: const Icon(LucideIcons.receipt,
-                          size: 16, color: accent),
+                      child: Icon(LucideIcons.receipt, size: 16, color: accent),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -179,8 +180,8 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     _label('المبلغ *'),
                     TextField(
@@ -232,8 +233,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(R.sm),
                             border: Border.all(
-                                color: AppColors.border
-                                    .withValues(alpha: 0.5)),
+                                color: AppColors.border.withValues(alpha: 0.5)),
                           ),
                           child: Row(
                             children: [
@@ -243,8 +243,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                               Expanded(
                                 child: Text(
                                   dateLabel,
-                                  style: AppType.input(
-                                      color: AppColors.textHi),
+                                  style: AppType.input(color: AppColors.textHi),
                                 ),
                               ),
                               Icon(LucideIcons.chevronDown,
@@ -268,13 +267,11 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed:
-                          (_amount > 0 && !_submitting) ? _submit : null,
+                      onPressed: (_amount > 0 && !_submitting) ? _submit : null,
                       icon: _submitting
                           ? const SizedBox(
                               width: 14,
@@ -296,7 +293,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),
@@ -315,8 +312,8 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 4, right: 2),
         child: Text(t,
-            style: AppType.muted(color: AppColors.textMid).copyWith(
-                fontSize: 11, fontWeight: FontWeight.w700)),
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
       );
 
   InputDecoration _dec({String? hint, String? suffix}) => InputDecoration(
@@ -326,13 +323,11 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.sm),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: AppColors.borderSoft),
         ),
         isDense: true,
         contentPadding:
@@ -349,8 +344,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
           final f = _fmt(next);
           _suppressFormat = true;
           _amountCtrl.value = TextEditingValue(
-              text: f,
-              selection: TextSelection.collapsed(offset: f.length));
+              text: f, selection: TextSelection.collapsed(offset: f.length));
           _suppressFormat = false;
           setState(() => _amount = next);
         },

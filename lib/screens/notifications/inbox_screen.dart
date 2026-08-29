@@ -234,14 +234,14 @@ class _InboxScreenState extends State<InboxScreen> {
                     _SectionHeader(
                       title: 'notifications.near_expiry_section'.tr(),
                       count: _nearExpiry.length,
-                      color: const Color(0xFFE08F2D),
+                      color: AppColors.warning,
                       icon: LucideIcons.triangleAlert,
                     ),
                     for (final s in _nearExpiry) ...[
                       _SubscriberAlertRow(
                         sub: s,
                         detail: _formatRemaining(s.parsedExpiration),
-                        color: const Color(0xFFE08F2D),
+                        color: AppColors.warning,
                         icon: LucideIcons.clock,
                         onTap: () => _openSubscriber(s),
                       ),
@@ -275,8 +275,7 @@ class _InboxScreenState extends State<InboxScreen> {
     for (int gi = 0; gi < groups.length; gi++) {
       final g = groups[gi];
       widgets.add(Padding(
-        padding: EdgeInsets.only(
-            top: gi == 0 ? 0 : Sp.md, bottom: 6, right: 4),
+        padding: EdgeInsets.only(top: gi == 0 ? 0 : Sp.md, bottom: 6, right: 4),
         child: Text(
           g.label,
           style: AppType.label(color: AppColors.textMid)
@@ -292,11 +291,10 @@ class _InboxScreenState extends State<InboxScreen> {
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.12),
+              color: AppColors.dangerSoftBg,
               borderRadius: BorderRadius.circular(R.md),
             ),
-            child: Icon(LucideIcons.trash2,
-                size: 18, color: AppColors.error),
+            child: Icon(LucideIcons.trash2, size: 18, color: AppColors.error),
           ),
           child: _NotificationRow(
             n: n,
@@ -445,8 +443,7 @@ class _SubscriberAlertRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
-    final fullName =
-        '${sub.firstname} ${sub.lastname}'.trim();
+    final fullName = '${sub.firstname} ${sub.lastname}'.trim();
     final displayName = fullName.isEmpty ? sub.username : fullName;
     return Material(
       color: AppColors.surface,
@@ -483,8 +480,8 @@ class _SubscriberAlertRow extends StatelessWidget {
                         Expanded(
                           child: Text(
                             displayName,
-                            style: AppType.label(color: AppColors.textHi)
-                                .copyWith(
+                            style:
+                                AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
                             ),
@@ -522,7 +519,8 @@ class _SubscriberAlertRow extends StatelessWidget {
                       const SizedBox(height: 4),
                       _InboxInfoChip(
                         icon: LucideIcons.history,
-                        text: 'آخر اتصال: ${_formatLastOnlineInbox(sub.lastOnline!)}',
+                        text:
+                            'آخر اتصال: ${_formatLastOnlineInbox(sub.lastOnline!)}',
                       ),
                     ],
                     // معلومات الجلسة الحيّة (تظهر فقط لو المشترك online).
@@ -560,8 +558,7 @@ class _SubscriberAlertRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16, color: AppColors.textLow),
+              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
             ],
           ),
         ),
@@ -615,7 +612,7 @@ class _InboxInfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: AppColors.brand.withValues(alpha: 0.08),
+        color: AppColors.brandSoftBg,
         borderRadius: BorderRadius.circular(R.pill),
       ),
       child: Row(
@@ -677,9 +674,7 @@ class _NotificationRow extends StatelessWidget {
     Theme.of(context);
     final meta = _metaFor(n.kind);
     return Material(
-      color: n.isRead
-          ? AppColors.surface
-          : AppColors.brand.withValues(alpha: 0.06),
+      color: n.isRead ? AppColors.surface : AppColors.brandSoftBg,
       borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
         onTap: onTap,
@@ -689,9 +684,7 @@ class _NotificationRow extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-              color: n.isRead
-                  ? AppColors.border
-                  : AppColors.brand.withValues(alpha: 0.30),
+              color: n.isRead ? AppColors.border : AppColors.brandSoftBorder,
             ),
           ),
           child: Row(
@@ -717,13 +710,12 @@ class _NotificationRow extends StatelessWidget {
                         Expanded(
                           child: Text(
                             n.title.isEmpty ? meta.fallbackTitle : n.title,
-                            style: AppType.label(color: AppColors.textHi)
-                                .copyWith(
-                                  fontSize: 13,
-                                  fontWeight: n.isRead
-                                      ? FontWeight.w700
-                                      : FontWeight.w900,
-                                ),
+                            style:
+                                AppType.label(color: AppColors.textHi).copyWith(
+                              fontSize: 13,
+                              fontWeight:
+                                  n.isRead ? FontWeight.w700 : FontWeight.w900,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -770,7 +762,7 @@ class _NotificationRow extends StatelessWidget {
       case NotificationKind.nearExpiryDigest:
         return _KindMeta(
           icon: LucideIcons.alarmClock,
-          color: const Color(0xFFE08F2D),
+          color: AppColors.warning,
           fallbackTitle: 'notifications.digest_near_expiry'.tr(),
         );
       case NotificationKind.expiredTodayDigest:
@@ -788,7 +780,7 @@ class _NotificationRow extends StatelessWidget {
       case NotificationKind.managerBalance:
         return _KindMeta(
           icon: LucideIcons.banknote,
-          color: const Color(0xFF14B8A6),
+          color: AppColors.success,
           fallbackTitle: 'notifications.mgr_balance_update'.tr(),
         );
       case NotificationKind.other:

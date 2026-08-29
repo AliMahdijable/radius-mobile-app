@@ -129,7 +129,7 @@ class DateRangeChipBar extends StatelessWidget {
   }) {
     final c = selected ? AppColors.brand : AppColors.textMid;
     return Material(
-      color: selected ? AppColors.brand.withValues(alpha: 0.12) : AppColors.surface,
+      color: selected ? AppColors.brandSoftBg : AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
       child: InkWell(
         onTap: () {
@@ -142,9 +142,7 @@ class DateRangeChipBar extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.lg),
             border: Border.all(
-              color: selected
-                  ? AppColors.brand.withValues(alpha: 0.4)
-                  : AppColors.border,
+              color: selected ? AppColors.brandSoftBorder : AppColors.border,
             ),
           ),
           child: Row(

@@ -160,8 +160,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
           ),
           padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
@@ -220,17 +219,16 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                  padding:
+                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                   children: [
                     if (!hasPhone) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.06),
+                          color: AppColors.dangerSoftBg,
                           borderRadius: BorderRadius.circular(R.md),
-                          border: Border.all(
-                              color: AppColors.error.withValues(alpha: 0.3)),
+                          border: Border.all(color: AppColors.dangerSoftBorder),
                         ),
                         child: Row(
                           children: [
@@ -256,8 +254,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                       child: Text('الرسالة (قابلة للتعديل)',
                           style: AppType.muted(color: AppColors.textMid)
                               .copyWith(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700)),
+                                  fontSize: 11, fontWeight: FontWeight.w700)),
                     ),
                     TextField(
                       controller: _msgCtrl,
@@ -270,14 +267,12 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
                           borderSide: BorderSide(
-                              color: AppColors.border
-                                  .withValues(alpha: 0.5)),
+                              color: AppColors.border.withValues(alpha: 0.5)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(R.sm),
                           borderSide: BorderSide(
-                              color: AppColors.border
-                                  .withValues(alpha: 0.5)),
+                              color: AppColors.border.withValues(alpha: 0.5)),
                         ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
@@ -290,13 +285,11 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed:
-                          (hasPhone && !_submitting) ? _send : null,
+                      onPressed: (hasPhone && !_submitting) ? _send : null,
                       icon: _submitting
                           ? const SizedBox(
                               width: 14,
@@ -314,7 +307,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onBrand,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(R.md),
                         ),

@@ -68,8 +68,8 @@ class DeviceProbeApi {
         if (now.difference(at) >= _ttl) continue;
         final snapJson = v['snap'];
         if (snapJson is! Map) continue;
-        final snap = DeviceHealthSnapshot.fromJson(
-            Map<String, dynamic>.from(snapJson));
+        final snap =
+            DeviceHealthSnapshot.fromJson(Map<String, dynamic>.from(snapJson));
         if (snap == null) continue;
         _snapCache[entry.key.toString()] = _Cached(snap, at);
         _kindByIp[entry.key.toString()] = snap.kind;
@@ -124,8 +124,7 @@ class DeviceProbeApi {
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
     if (!force) {
       final deadAt = _deadCache[effectiveIp];
-      if (deadAt != null &&
-          DateTime.now().difference(deadAt) < _deadTtl) {
+      if (deadAt != null && DateTime.now().difference(deadAt) < _deadTtl) {
         return null;
       }
     }

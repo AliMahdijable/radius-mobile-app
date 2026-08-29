@@ -24,7 +24,7 @@ import '../theme/colors.dart';
 ///   title: 'admin@popq',
 ///   subtitle: 'كلمة سرّ المدير الفرعي',
 ///   password: 'hneen1995',
-///   accentColor: Color(0xFF7C3AED),
+///   accentColor: AppColors.brandAccent,
 /// );
 /// ```
 Future<void> showRevealPasswordSheet(
@@ -38,12 +38,12 @@ Future<void> showRevealPasswordSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _RevealSheet(
       title: title,
       subtitle: subtitle,
       password: password,
-      accent: accentColor ?? const Color(0xFF7C3AED),
+      accent: accentColor ?? AppColors.brandAccent,
     ),
   );
 }
@@ -102,17 +102,15 @@ class _RevealSheetState extends State<_RevealSheet>
       backgroundColor: AppColors.brand,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    final firstChar = widget.title.trim().isEmpty
-        ? '?'
-        : widget.title.characters.first;
+    final firstChar =
+        widget.title.trim().isEmpty ? '?' : widget.title.characters.first;
 
     return SafeArea(
       top: false,
@@ -212,13 +210,13 @@ class _RevealSheetState extends State<_RevealSheet>
                     ),
                   ),
                   IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 20, color: AppColors.textMid),
+                    icon:
+                        Icon(LucideIcons.x, size: 20, color: AppColors.textMid),
                     onPressed: () => Navigator.of(context).pop(),
                     splashRadius: 20,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                        minWidth: 32, minHeight: 32),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),
                 ],
               ),
@@ -252,8 +250,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         style: OutlinedButton.styleFrom(
                           foregroundColor: widget.accent,
                           side: BorderSide(
-                            color:
-                                widget.accent.withValues(alpha: 0.5),
+                            color: widget.accent.withValues(alpha: 0.5),
                             width: 1,
                           ),
                           shape: RoundedRectangleBorder(
@@ -357,8 +354,8 @@ class _PasswordDisplay extends StatelessWidget {
               const Spacer(),
               if (visible && remaining > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 7, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(5),
@@ -413,8 +410,7 @@ class _PasswordDisplay extends StatelessWidget {
                 tooltip: visible ? 'إخفاء' : 'إظهار',
                 splashRadius: 20,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 40, minHeight: 40),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
             ],
           ),

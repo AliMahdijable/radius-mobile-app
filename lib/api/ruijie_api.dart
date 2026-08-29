@@ -28,24 +28,24 @@ class RuijieApi {
   static const String _enterprise = '1.3.6.1.4.1.4881';
 
   // — Standard MIB-II (يعمل على أي جهاز SNMP) —
-  static const String _oidSysDescr  = '1.3.6.1.2.1.1.1.0';
+  static const String _oidSysDescr = '1.3.6.1.2.1.1.1.0';
   static const String _oidSysUpTime = '1.3.6.1.2.1.1.3.0';
-  static const String _oidSysName   = '1.3.6.1.2.1.1.5.0';
+  static const String _oidSysName = '1.3.6.1.2.1.1.5.0';
 
   // — HOST-RESOURCES-MIB fallback (يشتغل حتى لو Ruijie enterprise mib غير موجود) —
   static const String _oidHrProcessorLoad = '1.3.6.1.2.1.25.3.3.1.2';
-  static const String _oidHrStorageType   = '1.3.6.1.2.1.25.2.3.1.2';
-  static const String _oidHrStorageDescr  = '1.3.6.1.2.1.25.2.3.1.3';
-  static const String _oidHrStorageUnits  = '1.3.6.1.2.1.25.2.3.1.4';
-  static const String _oidHrStorageSize   = '1.3.6.1.2.1.25.2.3.1.5';
-  static const String _oidHrStorageUsed   = '1.3.6.1.2.1.25.2.3.1.6';
+  static const String _oidHrStorageType = '1.3.6.1.2.1.25.2.3.1.2';
+  static const String _oidHrStorageDescr = '1.3.6.1.2.1.25.2.3.1.3';
+  static const String _oidHrStorageUnits = '1.3.6.1.2.1.25.2.3.1.4';
+  static const String _oidHrStorageSize = '1.3.6.1.2.1.25.2.3.1.5';
+  static const String _oidHrStorageUsed = '1.3.6.1.2.1.25.2.3.1.6';
 
   // — IF-MIB (interfaces) —
-  static const String _oidIfDescr        = '1.3.6.1.2.1.2.2.1.2';
-  static const String _oidIfOperStatus   = '1.3.6.1.2.1.2.2.1.8';
-  static const String _oidIfSpeed        = '1.3.6.1.2.1.2.2.1.5';
-  static const String _oidIfHCInOctets   = '1.3.6.1.2.1.31.1.1.1.6';
-  static const String _oidIfHCOutOctets  = '1.3.6.1.2.1.31.1.1.1.10';
+  static const String _oidIfDescr = '1.3.6.1.2.1.2.2.1.2';
+  static const String _oidIfOperStatus = '1.3.6.1.2.1.2.2.1.8';
+  static const String _oidIfSpeed = '1.3.6.1.2.1.2.2.1.5';
+  static const String _oidIfHCInOctets = '1.3.6.1.2.1.31.1.1.1.6';
+  static const String _oidIfHCOutOctets = '1.3.6.1.2.1.31.1.1.1.10';
 
   // — Ruijie enterprise (fallback + primary if HOST-RESOURCES يفشل) —
   //   CPU: 4881.1.1.10.2.36.1.1  (table — walk، خذ average أو max)
@@ -70,7 +70,9 @@ class RuijieApi {
 
     // ═══ Tier 1 (سريع ~500ms): system identity + uptime ═══
     final scalars = <String>[
-      _oidSysDescr, _oidSysName, _oidSysUpTime,
+      _oidSysDescr,
+      _oidSysName,
+      _oidSysUpTime,
     ];
 
     final results = <String, Varbind>{};
@@ -83,13 +85,14 @@ class RuijieApi {
         try {
           onPartialReady(RuijieStats.fromResults(
             Map<String, Varbind>.from(results),
-            cpuPercent: null, memPercent: null, ifaces: const [],
+            cpuPercent: null,
+            memPercent: null,
+            ifaces: const [],
           ));
         } catch (_) {}
       }
     } on SnmpException catch (e) {
-      throw RuijieException(
-          'فشل الاتصال SNMP: $e\n'
+      throw RuijieException('فشل الاتصال SNMP: $e\n'
           'تحقّق:\n'
           '• community="$community" صحيح\n'
           '• SNMP مُفعّل على الجهاز (Reyee: Advanced → Basics → SNMP)\n'
@@ -113,14 +116,17 @@ class RuijieApi {
           cpuPercent = values.reduce((a, b) => a + b) / values.length;
         }
       }
-    } catch (_) { /* fallback أدناه */ }
+    } catch (_) {/* fallback أدناه */}
 
     // Fallback CPU: Ruijie enterprise table (.4881.1.1.10.2.36.1.1)
     if (cpuPercent == null) {
       try {
         final rjCpu = await snmp.walk(_oidRuijieCpuTable, chunkSize: 4);
         if (rjCpu.isNotEmpty) {
-          final values = rjCpu.map((vb) => vb.asInt).where((v) => v >= 0 && v <= 100).toList();
+          final values = rjCpu
+              .map((vb) => vb.asInt)
+              .where((v) => v >= 0 && v <= 100)
+              .toList();
           if (values.isNotEmpty) {
             cpuPercent = values.reduce((a, b) => a + b) / values.length;
           }
@@ -144,12 +150,15 @@ class RuijieApi {
         final descr = descrByIdx[idx]?.asString.toLowerCase() ?? '';
         final size = sizeByIdx[idx]?.asInt ?? 0;
         final used = usedByIdx[idx]?.asInt ?? 0;
-        if (size > 0 && (descr.contains('ram') || descr.contains('physical') || descr.contains('memory'))) {
+        if (size > 0 &&
+            (descr.contains('ram') ||
+                descr.contains('physical') ||
+                descr.contains('memory'))) {
           memPercent = (used / size) * 100.0;
           break;
         }
       }
-    } catch (_) { /* fallback */ }
+    } catch (_) {/* fallback */}
 
     // Fallback memory: Ruijie enterprise table
     if (memPercent == null) {
