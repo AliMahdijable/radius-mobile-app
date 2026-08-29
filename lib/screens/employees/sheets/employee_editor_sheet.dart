@@ -540,7 +540,6 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                   style: TextStyle(
                     color: AppColors.textLow,
                     fontSize: 10,
-                    fontFamily: 'monospace',
                   ),
                 ),
               ],

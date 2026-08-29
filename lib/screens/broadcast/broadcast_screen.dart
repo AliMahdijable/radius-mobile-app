@@ -777,7 +777,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 username,
                 style: AppType.button(
                   color: checked ? AppColors.brand : AppColors.textMid,
-                ).copyWith(fontSize: 10.5, fontFamily: 'monospace'),
+                ).copyWith(fontSize: 10.5),
                 textDirection: TextDirection.ltr,
               ),
             ],
@@ -1007,8 +1007,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       const SizedBox(width: 6),
                       Text(
                         s.phone ?? s.mobile ?? '',
-                        style: AppType.muted().copyWith(
-                            fontSize: 10, fontFamily: 'monospace'),
+                        style: AppType.muted().copyWith(fontSize: 10),
                         textDirection: TextDirection.ltr,
                       ),
                     ],

@@ -9,6 +9,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import 'location_picker_screen.dart';
 
@@ -28,7 +29,7 @@ Future<void> showLocationChooserSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _ChooserSheet(sub: sub),
   );
 }
@@ -46,7 +47,7 @@ Future<void> showLocationSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.55),
+      barrierColor: AppColors.scrim,
       builder: (_) => _ChooserSheet(sub: sub, allowEdit: canEditLocation()),
     );
     return;
@@ -66,7 +67,7 @@ Future<bool?> showLocationEditSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: AppColors.scrim,
     builder: (_) => _EditSheet(sub: sub),
   );
 }
@@ -86,7 +87,8 @@ class _ChooserSheet extends StatelessWidget {
   }
 
   Future<void> _copy(BuildContext ctx) async {
-    final coord = '${sub.latitude!.toStringAsFixed(6)},${sub.longitude!.toStringAsFixed(6)}';
+    final coord =
+        '${sub.latitude!.toStringAsFixed(6)},${sub.longitude!.toStringAsFixed(6)}';
     await Clipboard.setData(ClipboardData(text: coord));
     if (!ctx.mounted) return;
     showSheetSnack(ctx, 'نُسخت الإحداثيّات');
@@ -98,112 +100,53 @@ class _ChooserSheet extends StatelessWidget {
     final lat = sub.latitude!;
     final lng = sub.longitude!;
     final coord = '${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 12,
-          left: 16, right: 16, top: 12,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.mapPin,
+        title: 'موقع المشترك',
+        subtitle: coord,
+        subtitleLtr: true,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _actionRow(
+            icon: LucideIcons.map,
+            label: 'فتح في Google Maps',
+            color: const Color(0xFF4285F4),
+            onTap: () =>
+                _open('https://www.google.com/maps?q=$lat,$lng', context),
           ),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    width: 42, height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF14B8A6).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(LucideIcons.mapPin,
-                        color: Color(0xFF14B8A6), size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('موقع المشترك',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textHi,
-                            )),
-                        const SizedBox(height: 2),
-                        Text(
-                          coord,
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textMid,
-                          ),
-                          textDirection: TextDirection.ltr,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 20, color: AppColors.textMid),
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 20,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _actionRow(
-                icon: LucideIcons.map,
-                label: 'فتح في Google Maps',
-                color: const Color(0xFF4285F4),
-                onTap: () => _open('https://www.google.com/maps?q=$lat,$lng', context),
-              ),
-              const SizedBox(height: 8),
-              _actionRow(
-                icon: LucideIcons.navigation,
-                label: 'فتح في Waze',
-                color: const Color(0xFF33CCFF),
-                onTap: () => _open('https://waze.com/ul?ll=$lat,$lng&navigate=yes', context),
-              ),
-              const SizedBox(height: 8),
-              _actionRow(
-                icon: LucideIcons.copy,
-                label: 'نسخ الإحداثيّات',
-                color: AppColors.textMid,
-                onTap: () => _copy(context),
-              ),
-              if (allowEdit) ...[
-                const SizedBox(height: 8),
-                _actionRow(
-                  icon: LucideIcons.pencil,
-                  label: 'تعديل الموقع',
-                  color: const Color(0xFFE08F2D),
-                  onTap: () async {
-                    Navigator.of(context).pop();
-                    await showLocationEditSheet(context, sub: sub);
-                  },
-                ),
-              ],
-            ],
+          const SizedBox(height: 8),
+          _actionRow(
+            icon: LucideIcons.navigation,
+            label: 'فتح في Waze',
+            color: const Color(0xFF33CCFF),
+            onTap: () =>
+                _open('https://waze.com/ul?ll=$lat,$lng&navigate=yes', context),
           ),
-        ),
+          const SizedBox(height: 8),
+          _actionRow(
+            icon: LucideIcons.copy,
+            label: 'نسخ الإحداثيّات',
+            color: AppColors.textMid,
+            onTap: () => _copy(context),
+          ),
+          if (allowEdit) ...[
+            const SizedBox(height: 8),
+            _actionRow(
+              icon: LucideIcons.pencil,
+              label: 'تعديل الموقع',
+              color: const Color(0xFFE08F2D),
+              onTap: () async {
+                Navigator.of(context).pop();
+                await showLocationEditSheet(context, sub: sub);
+              },
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -288,7 +231,11 @@ class _EditSheetState extends State<_EditSheet> {
     final s = raw.trim();
     if (s.isEmpty) return (null, null, null);
     if (s.contains('goo.gl') || s.contains('maps.app.goo.gl')) {
-      return (null, null, 'روابط goo.gl القصيرة غير مدعومة — افتحها ثم انسخ الإحداثيّات');
+      return (
+        null,
+        null,
+        'روابط goo.gl القصيرة غير مدعومة — افتحها ثم انسخ الإحداثيّات'
+      );
     }
     // نمط عام: يبحث عن أوّل زوجَي أرقام lat,lng في النصّ.
     final re = RegExp(
@@ -296,7 +243,11 @@ class _EditSheetState extends State<_EditSheet> {
     );
     final m = re.firstMatch(s);
     if (m == null) {
-      return (null, null, 'ما قدرت أستخرج إحداثيّات — الصق رابط Google Maps أو "lat,lng"');
+      return (
+        null,
+        null,
+        'ما قدرت أستخرج إحداثيّات — الصق رابط Google Maps أو "lat,lng"'
+      );
     }
     final lat = double.tryParse(m.group(1)!);
     final lng = double.tryParse(m.group(2)!);
@@ -304,7 +255,8 @@ class _EditSheetState extends State<_EditSheet> {
       return (null, null, 'قيم غير صالحة');
     }
     if (lat < -90 || lat > 90) return (null, null, 'خط العرض خارج المدى (±90)');
-    if (lng < -180 || lng > 180) return (null, null, 'خط الطول خارج المدى (±180)');
+    if (lng < -180 || lng > 180)
+      return (null, null, 'خط الطول خارج المدى (±180)');
     return (lat, lng, null);
   }
 
@@ -328,9 +280,8 @@ class _EditSheetState extends State<_EditSheet> {
   /// يفتح شاشة الخريطة — لو المدير عند بيت المشترك يقدر يضغط
   /// "موقعي الحالي" داخل الشاشة، ويحرّك بيده لضبط بدقّة.
   Future<void> _pickOnMap() async {
-    final initial = (_lat != null && _lng != null)
-        ? LatLng(_lat!, _lng!)
-        : null;
+    final initial =
+        (_lat != null && _lng != null) ? LatLng(_lat!, _lng!) : null;
     final picked = await showLocationPickerScreen(context, initial: initial);
     if (picked == null || !mounted) return;
     final txt = '${picked.latitude.toStringAsFixed(6)},'
@@ -381,7 +332,8 @@ class _EditSheetState extends State<_EditSheet> {
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('حذف',
-                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                style: TextStyle(
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -413,7 +365,8 @@ class _EditSheetState extends State<_EditSheet> {
           children: [
             Text(
               'حقل العنوان في SAS4 يحتوي نصّاً يدوياً:',
-              style: TextStyle(fontFamily: 'Cairo', height: 1.6, color: AppColors.textMid),
+              style: TextStyle(
+                  fontFamily: 'Cairo', height: 1.6, color: AppColors.textMid),
             ),
             const SizedBox(height: 8),
             Container(
@@ -434,7 +387,8 @@ class _EditSheetState extends State<_EditSheet> {
             const SizedBox(height: 12),
             Text(
               'احذفه من SAS4 (لوحة الإدارة → المشترك → العنوان) أوّلاً، ثم أعد المحاولة.',
-              style: TextStyle(fontFamily: 'Cairo', height: 1.6, color: AppColors.textMid),
+              style: TextStyle(
+                  fontFamily: 'Cairo', height: 1.6, color: AppColors.textMid),
             ),
           ],
         ),
@@ -443,7 +397,8 @@ class _EditSheetState extends State<_EditSheet> {
             style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('فهمت',
-                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+                style: TextStyle(
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -454,315 +409,211 @@ class _EditSheetState extends State<_EditSheet> {
   Widget build(BuildContext context) {
     final hasParsed = _lat != null && _lng != null;
     final canSave = hasParsed && !_saving;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 12,
-          left: 16, right: 16, top: 12,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.mapPin,
+        title: widget.sub.hasLocation ? 'تعديل الموقع' : 'إضافة موقع',
+        subtitle: widget.sub.fullName,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _saving ? 'جارٍ الحفظ...' : 'حفظ',
+        icon: LucideIcons.save,
+        enabled: canSave,
+        busy: _saving,
+        onPressed: _save,
+        leading: widget.sub.hasLocation
+            ? SheetFooterIconButton(
+                icon: LucideIcons.trash2,
+                color: AppColors.error,
+                onTap: _saving ? null : _clear,
+              )
+            : null,
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.sub.hasManualAddressText) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.3),
+                  width: 0.5,
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 42, height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF14B8A6).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(LucideIcons.mapPin,
-                        color: Color(0xFF14B8A6), size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.sub.hasLocation ? 'تعديل الموقع' : 'إضافة موقع',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textHi,
-                            )),
-                        const SizedBox(height: 2),
-                        Text(widget.sub.fullName,
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMid,
-                            )),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 20, color: AppColors.textMid),
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 20,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (widget.sub.hasManualAddressText) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.3),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(LucideIcons.triangleAlert,
-                          size: 14, color: AppColors.error),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'حقل العنوان في SAS4 يحتوي نصّاً يدوياً — احذفه من لوحة SAS4 أوّلاً.',
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11.5,
-                            color: AppColors.textHi,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              // زر الخريطة — الطريقة الأسهل: المدير عند البيت يضغط
-              // "موقعي الحالي" داخل الشاشة، ويقدر يحرّك الدبّوس لضبط.
-              if (!widget.sub.hasManualAddressText) ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: FilledButton.icon(
-                    onPressed: _saving ? null : _pickOnMap,
-                    icon: const Icon(LucideIcons.map, size: 16),
-                    label: const Text(
-                      'اختر من الخريطة (موقعك الحالي)',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF14B8A6),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: AppColors.border, height: 1)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text('أو',
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11,
-                            color: AppColors.textMid,
-                          )),
-                    ),
-                    Expanded(child: Divider(color: AppColors.border, height: 1)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
-              Text('الصق رابط Google Maps أو "lat,lng"',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMid,
-                  )),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inputCtrl,
-                      onChanged: _onInputChanged,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12.5,
-                        color: AppColors.textHi,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'https://maps.google.com/… أو 33.315,44.366',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11.5,
-                          color: AppColors.textLow,
-                        ),
-                        filled: true,
-                        fillColor: AppColors.surfaceInput,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: AppColors.border, width: 0.5),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: AppColors.border, width: 0.5),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                              color: const Color(0xFF14B8A6), width: 1),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 12),
-                      ),
-                    ),
-                  ),
+                  Icon(LucideIcons.triangleAlert,
+                      size: 14, color: AppColors.error),
                   const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(LucideIcons.clipboardPaste,
-                        size: 18, color: AppColors.brand),
-                    onPressed: _pasteFromClipboard,
-                    tooltip: 'لصق',
+                  Expanded(
+                    child: Text(
+                      'حقل العنوان في SAS4 يحتوي نصّاً يدوياً — احذفه من لوحة SAS4 أوّلاً.',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11.5,
+                        color: AppColors.textHi,
+                        height: 1.5,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              if (_parseError != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  _parseError!,
+            ),
+            const SizedBox(height: 12),
+          ],
+          // زر الخريطة — الطريقة الأسهل: المدير عند البيت يضغط
+          // "موقعي الحالي" داخل الشاشة، ويقدر يحرّك الدبّوس لضبط.
+          if (!widget.sub.hasManualAddressText) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _pickOnMap,
+                icon: const Icon(LucideIcons.map, size: 16),
+                label: const Text(
+                  'اختر من الخريطة (موقعك الحالي)',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11,
-                    color: AppColors.error,
-                    height: 1.5,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF14B8A6),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: Divider(color: AppColors.border, height: 1)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('أو',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        color: AppColors.textMid,
+                      )),
+                ),
+                Expanded(child: Divider(color: AppColors.border, height: 1)),
               ],
-              if (hasParsed && _parseError == null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF14B8A6).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
-                      width: 0.5,
-                    ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Text('الصق رابط Google Maps أو "lat,lng"',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMid,
+              )),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _inputCtrl,
+                  onChanged: _onInputChanged,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12.5,
+                    color: AppColors.textHi,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.circleCheck,
-                          size: 14, color: const Color(0xFF14B8A6)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'تمّ استخراج: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textHi,
-                          ),
-                          textDirection: TextDirection.ltr,
-                        ),
-                      ),
-                    ],
+                  decoration: InputDecoration(
+                    hintText: 'https://maps.google.com/… أو 33.315,44.366',
+                    hintStyle: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11.5,
+                      color: AppColors.textLow,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.surfaceInput,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          BorderSide(color: AppColors.border, width: 0.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          BorderSide(color: AppColors.border, width: 0.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          BorderSide(color: const Color(0xFF14B8A6), width: 1),
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 12),
                   ),
                 ),
-              ],
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  if (widget.sub.hasLocation) ...[
-                    Expanded(
-                      child: SizedBox(
-                        height: 46,
-                        child: OutlinedButton.icon(
-                          onPressed: _saving ? null : _clear,
-                          icon: Icon(LucideIcons.trash2,
-                              size: 15, color: AppColors.error),
-                          label: Text('حذف',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.error,
-                              )),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                                color: AppColors.error.withValues(alpha: 0.5),
-                                width: 1),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 46,
-                      child: FilledButton.icon(
-                        onPressed: canSave ? _save : null,
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 14, height: 14,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 1.5, color: Colors.white))
-                            : const Icon(LucideIcons.save, size: 15),
-                        label: const Text('حفظ',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            )),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF14B8A6),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(LucideIcons.clipboardPaste,
+                    size: 18, color: AppColors.brand),
+                onPressed: _pasteFromClipboard,
+                tooltip: 'لصق',
               ),
             ],
           ),
-        ),
+          if (_parseError != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _parseError!,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                color: AppColors.error,
+                height: 1.5,
+              ),
+            ),
+          ],
+          if (hasParsed && _parseError == null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF14B8A6).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
+                  width: 0.5,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.circleCheck,
+                      size: 14, color: const Color(0xFF14B8A6)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'تمّ استخراج: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textHi,
+                      ),
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

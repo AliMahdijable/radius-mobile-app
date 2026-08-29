@@ -16,6 +16,7 @@ import '../../../api/subscribers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../widgets/manual_wa_chip.dart';
 import '../../../theme/spacing.dart';
@@ -29,6 +30,7 @@ Future<void> showQrLoginSheet(BuildContext context, Subscriber sub) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     builder: (_) => _QrLoginSheet(sub: sub),
   );
 }
@@ -89,8 +91,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       final boundary = ctx.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
       final image = await boundary.toImage(pixelRatio: 3.5);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (_) {
       return null;
@@ -243,81 +244,16 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(24)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.qrCode,
+        title: 'qr_login.title'.tr(),
+        subtitle: widget.sub.fullName.trim().isEmpty
+            ? widget.sub.username
+            : widget.sub.fullName,
+        onClose: () => Navigator.of(context).pop(),
       ),
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.textMid.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: Sp.md),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.brand.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(R.sm),
-                    ),
-                    child: Icon(LucideIcons.qrCode,
-                        size: 18, color: AppColors.brand),
-                  ),
-                  const SizedBox(width: Sp.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'qr_login.title'.tr(),
-                          style: AppType.title(color: AppColors.textHi)
-                              .copyWith(fontSize: 15),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.sub.fullName.trim().isEmpty
-                              ? widget.sub.username
-                              : widget.sub.fullName,
-                          style: AppType.subtitle(color: AppColors.textMid)
-                              .copyWith(fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    color: AppColors.textMid,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Sp.md),
-              _buildBody(),
-            ],
-          ),
-        ),
-      ),
+      body: _buildBody(),
     );
   }
 
@@ -402,8 +338,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         const SizedBox(height: Sp.md),
         // Expiry line
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
           decoration: BoxDecoration(
             color: AppColors.brand.withOpacity(0.08),
             borderRadius: BorderRadius.circular(R.pill),
@@ -424,8 +359,8 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         const SizedBox(height: Sp.md),
         // Link preview
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.md, vertical: Sp.sm),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
           decoration: BoxDecoration(
             color: AppColors.surfaceInput,
             border: Border.all(color: AppColors.border),
@@ -450,8 +385,8 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                 borderRadius: BorderRadius.circular(R.sm),
                 child: Padding(
                   padding: const EdgeInsets.all(4),
-                  child: Icon(LucideIcons.copy,
-                      size: 14, color: AppColors.brand),
+                  child:
+                      Icon(LucideIcons.copy, size: 14, color: AppColors.brand),
                 ),
               ),
               const SizedBox(width: 4),
@@ -487,8 +422,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                       .copyWith(fontSize: 12),
                 ),
                 style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   side: BorderSide(color: AppColors.brand.withOpacity(0.4)),
                   foregroundColor: AppColors.brand,
                 ),
@@ -504,8 +438,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation(Colors.white),
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
                         ),
                       )
                     : const Icon(LucideIcons.messageCircle, size: 14),
@@ -517,8 +450,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF25D366),
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),

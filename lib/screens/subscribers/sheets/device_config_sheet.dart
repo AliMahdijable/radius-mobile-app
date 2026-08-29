@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -7,6 +9,7 @@ import '../../../models/device_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Per-subscriber CPE override editor — opened from the gear button
@@ -106,269 +109,182 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, scroll) => Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    // ترتيب المخطّط: نوع الجهاز (شريط مقسّم) → بيانات الدخول (مجموعة
+    // صفوف في حاوية واحدة) → IP مخصّص → ملاحظات، وزرّ حذف 50×50 يسبق
+    // زرّ الحفظ في الشريط السفلي.
+    const kinds = [null, DeviceKind.ont, DeviceKind.ubiquiti];
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.router,
+        title: 'إعدادات جهاز المشترك',
+        subtitle: widget.username,
+        subtitleLtr: true,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _saving ? 'جارٍ الحفظ...' : 'حفظ وفحص الجهاز',
+        icon: LucideIcons.save,
+        busy: _saving,
+        enabled: !_loading,
+        onPressed: _save,
+        leading: SheetFooterIconButton(
+          icon: LucideIcons.trash2,
+          color: AppColors.error,
+          onTap: _saving ? null : _reset,
         ),
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                controller: scroll,
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
-                children: [
-                  _grabber(),
-                  const SizedBox(height: Sp.md),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                        child: const Icon(LucideIcons.router,
-                            size: 16, color: Color(0xFF7C3AED)),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'إعدادات جهاز المشترك',
-                              style: AppType.title(color: AppColors.textHi)
-                                  .copyWith(fontSize: 15),
-                            ),
-                            Text(
-                              widget.username,
-                              style: AppType.muted().copyWith(fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+      ),
+      body: _loading
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: Sp.mega),
+              child: Center(
+                child: CircularProgressIndicator(
+                    color: AppColors.brandAccent, strokeWidth: 2.5),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SheetSection(
+                  label: 'نوع الجهاز',
+                  hint: 'تلقائي يجرب Ubiquiti ثم ONT',
+                  gap: Sp.sm,
+                  child: SheetSegmented(
+                    labels: const ['تلقائي', 'ONT', 'Ubiquiti'],
+                    selectedIndex: kinds.indexOf(_kind),
+                    onSelect: (i) => setState(() => _kind = kinds[i]),
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'اتركه تلقائياً ليُجرَّب ONT ثم Ubiquiti.',
-                    style: AppType.muted().copyWith(fontSize: 11),
-                  ),
-                  const SizedBox(height: 10),
-                  _kindSegmented(),
-                  const SizedBox(height: 14),
-                  _label('اسم المستخدم'),
-                  TextField(
-                    controller: _user,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: _dec(_kind == DeviceKind.ubiquiti
-                        ? 'ubnt'
-                        : 'telecomadmin'),
-                  ),
-                  const SizedBox(height: 10),
-                  _label('كلمة السر'),
-                  TextField(
-                    controller: _pass,
-                    obscureText: _obscure,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: _dec(
-                      _kind == DeviceKind.ubiquiti ? 'ubnt' : 'admintelecom',
-                      suffix: IconButton(
-                        icon: Icon(
-                          _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
-                          size: 16,
-                          color: AppColors.textMid,
-                        ),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
+                ),
+                const SizedBox(height: Sp.lg),
+                // المخطّط يجمع اليوزر والباس في **حاوية واحدة** بصفّين
+                // يفصلهما خطّ شعري — لا حقلين منفصلين بتسميتين.
+                SheetSection(
+                  label: 'بيانات الدخول للجهاز',
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(R.lg),
+                      border: Border.all(color: AppColors.border),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  _label('IP مخصص (اختياري)'),
-                  TextField(
-                    controller: _ip,
-                    style: const TextStyle(fontSize: 13),
-                    keyboardType: TextInputType.number,
-                    decoration: _dec('يستخدم IP الساس إذا فارغ'),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'IP المخصص مفيد لـ Ubiquiti خلف NAT.',
-                    style: AppType.muted().copyWith(fontSize: 10.5),
-                  ),
-                  const SizedBox(height: 14),
-                  _label('ملاحظات'),
-                  TextField(
-                    controller: _notes,
-                    style: const TextStyle(fontSize: 13),
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: _dec(
-                        'مثال: VLAN 102، تقسيم فايبر للطابق الثاني، إلخ'),
-                  ),
-                  const SizedBox(height: 22),
-                  // مطلب 2026-06-11: تنسيق الأزرار — 'حذف الإعداد' كان
-                  // يلتف على سطرين بسبب flex 1:2. صار الترتيب: زر
-                  // 'حفظ' كبير ممتد، وزر دائري صغير للحذف بجانبه —
-                  // يحرّر مساحة + يبيّن وضوحه بالأيقونة وحدها بدل
-                  // النص المضغوط.
-                  SizedBox(
-                    height: 50,
-                    child: Row(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _saving ? null : _save,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(LucideIcons.save, size: 16),
-                            label: const Text(
-                              'حفظ',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brand,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(R.md),
-                              ),
-                            ),
-                          ),
+                        _credRow(
+                          icon: LucideIcons.user,
+                          label: 'اسم المستخدم',
+                          controller: _user,
+                          hint: _kind == DeviceKind.ubiquiti
+                              ? 'ubnt'
+                              : 'telecomadmin',
                         ),
-                        const SizedBox(width: 10),
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _saving ? null : _reset,
-                            borderRadius: BorderRadius.circular(R.md),
-                            child: Container(
-                              width: 50,
-                              height: 50,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: AppColors.error.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(R.md),
-                                border: Border.all(
-                                  color: AppColors.error.withValues(alpha: 0.4),
-                                ),
-                              ),
-                              child: Icon(
-                                LucideIcons.trash2,
-                                size: 18,
-                                color: AppColors.error,
-                              ),
+                        Divider(height: 1, color: AppColors.divider),
+                        _credRow(
+                          icon: LucideIcons.lock,
+                          label: 'كلمة السر',
+                          controller: _pass,
+                          hint: _kind == DeviceKind.ubiquiti
+                              ? 'ubnt'
+                              : 'admintelecom',
+                          obscure: _obscure,
+                          trailing: InkWell(
+                            onTap: () => setState(() => _obscure = !_obscure),
+                            borderRadius: BorderRadius.circular(R.pill),
+                            child: Icon(
+                              _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
+                              size: 18,
+                              color: AppColors.brandAccent,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: Sp.lg),
-                ],
-              ),
-      ),
+                ),
+                const SizedBox(height: Sp.lg),
+                SheetSection(
+                  label: 'IP مخصص (اختياري)',
+                  footnote: 'مفيد للأجهزة خلف NAT',
+                  child: SheetBox(
+                    icon: LucideIcons.network,
+                    child: TextField(
+                      controller: _ip,
+                      keyboardType: TextInputType.number,
+                      textDirection: ui.TextDirection.ltr,
+                      style: AppType.input(),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: 'يستخدم IP الساس إذا فارغ',
+                        hintStyle:
+                            AppType.input(color: AppColors.textPlaceholder),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Sp.lg),
+                SheetSection(
+                  label: 'ملاحظات',
+                  child: SheetBox(
+                    icon: LucideIcons.fileText,
+                    alignTop: true,
+                    child: TextField(
+                      controller: _notes,
+                      minLines: 2,
+                      maxLines: 4,
+                      style: AppType.body(color: AppColors.textHi),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: 'مثال: VLAN 102، تقسيم فايبر للطابق الثاني',
+                        hintStyle:
+                            AppType.body(color: AppColors.textPlaceholder),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
-  Widget _grabber() => Center(
-        child: Container(
-          width: 36,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-
-  Widget _kindSegmented() => Row(
+  /// صفّ داخل حاوية بيانات الدخول — أيقونة + تسمية خافتة + الحقل
+  /// محاذىً لليسار بالـltr كما في المخطّط.
+  Widget _credRow({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    required String hint,
+    bool obscure = false,
+    Widget? trailing,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.md),
+      child: Row(
         children: [
-          for (final entry in const [
-            (null, 'تلقائي'),
-            (DeviceKind.ont, 'ONT'),
-            (DeviceKind.ubiquiti, 'Ubiquiti'),
-          ])
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 4, right: 4),
-                child: _segChip(entry.$1, entry.$2),
+          Icon(icon, size: 18, color: AppColors.textHint),
+          const SizedBox(width: 10),
+          Text(label, style: AppType.muted()),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              obscureText: obscure,
+              textAlign: TextAlign.left,
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.input(),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: hint,
+                hintStyle: AppType.input(color: AppColors.textPlaceholder),
               ),
             ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: Sp.sm), trailing],
         ],
-      );
-
-  Widget _segChip(DeviceKind? kind, String label) {
-    final selected = _kind == kind;
-    return GestureDetector(
-      onTap: () => setState(() => _kind = kind),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.brand
-              : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(R.md),
-          border: Border.all(
-            color: selected ? AppColors.brand : AppColors.border,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: AppType.label(
-              color: selected ? Colors.white : AppColors.textHi,
-            ).copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-        ),
       ),
     );
   }
-
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(text,
-            style:
-                AppType.label(color: AppColors.textMid).copyWith(fontSize: 11)),
-      );
-
-  InputDecoration _dec(String hint, {Widget? suffix}) => InputDecoration(
-        hintText: hint,
-        hintStyle:
-            AppType.input(color: AppColors.textLow).copyWith(fontSize: 12),
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        filled: true,
-        fillColor: AppColors.surfaceInput,
-        suffixIcon: suffix,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.md),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.md),
-          borderSide:
-              BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.md),
-          borderSide: BorderSide(color: AppColors.brand, width: 1.4),
-        ),
-      );
 }

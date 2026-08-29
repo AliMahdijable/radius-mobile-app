@@ -741,7 +741,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     } else {
       body = SelectableText(qr,
           style: AppType.input(color: AppColors.textHi)
-              .copyWith(fontFamily: 'monospace', fontSize: 9));
+              .copyWith(fontSize: 9));
     }
     return Container(
       padding: const EdgeInsets.all(Sp.md),
@@ -818,14 +818,12 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               controller: _pairPhoneCtl,
               keyboardType: TextInputType.phone,
               textDirection: ui.TextDirection.ltr,
-              style: AppType.input(color: AppColors.textHi).copyWith(
-                fontFamily: 'monospace',
-                fontSize: 14,
-              ),
+              style: AppType.input(color: AppColors.textHi)
+                  .copyWith(fontSize: 14),
               decoration: InputDecoration(
                 isDense: true,
                 hintText: '9647701234567',
-                hintStyle: AppType.muted().copyWith(fontFamily: 'monospace'),
+                hintStyle: AppType.muted(),
                 prefixIcon:
                     Icon(LucideIcons.phone, size: 16, color: AppColors.textLow),
                 border: OutlineInputBorder(
@@ -896,7 +894,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     );
   }
 
-  /// Big monospace display for the 8-digit pair code returned by WAHA.
+  /// عرض كبير للرمز الثماني من WAHA — Cairo مثل بقيّة التطبيق.
   /// The admin types this into WhatsApp → Linked Devices → Link with
   /// phone number. Kept intentionally large + selectable.
   Widget _pairCodeCard(Color accent) {
@@ -933,7 +931,6 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               code,
               textDirection: ui.TextDirection.ltr,
               style: TextStyle(
-                fontFamily: 'monospace',
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 6,

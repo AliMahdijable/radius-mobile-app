@@ -7,6 +7,7 @@ import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -33,6 +34,7 @@ Future<bool?> showBulkPayDebtSheet(
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => _BulkPayDebtSheet(subs: subs),
@@ -65,8 +67,7 @@ class _PayRow {
   String? err;
   bool _suppressFormat = false;
 
-  double get effectiveAmount =>
-      payAll ? debt : amount.toDouble();
+  double get effectiveAmount => payAll ? debt : amount.toDouble();
 
   bool get ready => effectiveAmount > 0 && effectiveAmount <= debt;
 
@@ -211,9 +212,13 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
     if (anyOk) SubscriberEvents.notifyChange();
     final okCount = _rows.where((r) => r.ok == true).length;
     final failCount = _rows.where((r) => r.ok == false).length;
-    showSheetSnack(context, failCount == 0
-              ? 'sheets.paid_n_subs'.tr(namedArgs: {'n': '$okCount'})
-              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}), isError: (failCount == 0) ? false : true);
+    showSheetSnack(
+        context,
+        failCount == 0
+            ? 'sheets.paid_n_subs'.tr(namedArgs: {'n': '$okCount'})
+            : 'sheets.done_failed'
+                .tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}),
+        isError: (failCount == 0) ? false : true);
     // Auto-close only when everything succeeded — leave the sheet open
     // on partial failure so the admin can see which rows failed.
     if (anyOk && failCount == 0 && mounted) {
@@ -224,82 +229,66 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF14B8A6);
     final s = _summary;
-    // iOS keyboard-avoidance: push the sheet up so amount fields +
-    // submit button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.92,
-      minChildSize: 0.6,
-      maxChildSize: 0.97,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.banknote,
+        title: 'sheets.bulk_pay_debt_title'.tr(),
+        subtitle: '${_rows.length} مشترك',
+        tint: AppColors.brandAccent,
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting
+            ? 'sheets.paying_progress'.tr(
+                namedArgs: {'done': '$_doneCount', 'total': '${s.readyCount}'})
+            : 'sheets.pay_n_subs'.tr(namedArgs: {
+                'n': '${s.readyCount}',
+                'amt':
+                    '${formatIQD(s.totalCash.round())} ${'common.currency'.tr()}'
+              }),
+        icon: LucideIcons.banknote,
+        color: AppColors.brandAccent,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _submit,
+      ),
+      maxHeightFactor: 0.97,
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          _SummaryStrip(
+            readyCount: s.readyCount,
+            totalRows: _rows.length,
+            totalCash: s.totalCash,
+            doneCount: _doneCount,
+            submitting: _submitting,
           ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.banknote,
-                title: 'sheets.bulk_pay_debt_title'.tr(),
-                subtitle: '${_rows.length} مشترك',
-                color: accent,
-                onClose: _submitting
-                    ? null
-                    : () => Navigator.of(context).pop(),
-              ),
-              _SummaryStrip(
-                readyCount: s.readyCount,
-                totalRows: _rows.length,
-                totalCash: s.totalCash,
-                doneCount: _doneCount,
-                submitting: _submitting,
-              ),
-              Expanded(
-                child: ListView.separated(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.sm, Sp.lg, Sp.md),
-                  itemCount: _rows.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: Sp.sm),
-                  itemBuilder: (_, i) {
-                    final r = _rows[i];
-                    return _PayRowCard(
-                      row: r,
-                      enabled: !_submitting,
-                      onClear: () {
-                        r._suppressFormat = true;
-                        r.controller.clear();
-                        r._suppressFormat = false;
-                        setState(() => r.amount = 0);
-                      },
-                      onChipTap: (v) => _addToAmount(r, v),
-                      onTogglePayAll: () => _togglePayAll(r),
-                    );
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
+              itemCount: _rows.length,
+              separatorBuilder: (_, __) => const SizedBox(height: Sp.sm),
+              itemBuilder: (_, i) {
+                final r = _rows[i];
+                return _PayRowCard(
+                  row: r,
+                  enabled: !_submitting,
+                  onClear: () {
+                    r._suppressFormat = true;
+                    r.controller.clear();
+                    r._suppressFormat = false;
+                    setState(() => r.amount = 0);
                   },
-                ),
-              ),
-              _SubmitBar(
-                label: _submitting
-                    ? 'sheets.paying_progress'.tr(namedArgs: {'done': '$_doneCount', 'total': '${s.readyCount}'})
-                    : 'sheets.pay_n_subs'.tr(namedArgs: {'n': '${s.readyCount}', 'amt': '${formatIQD(s.totalCash.round())} ${'common.currency'.tr()}'}),
-                color: accent,
-                icon: LucideIcons.banknote,
-                enabled: _canSubmit,
-                busy: _submitting,
-                onPressed: _submit,
-              ),
-            ],
+                  onChipTap: (v) => _addToAmount(r, v),
+                  onTogglePayAll: () => _togglePayAll(r),
+                );
+              },
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
@@ -322,16 +311,14 @@ class _SummaryStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      padding:
-          const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, Sp.sm),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, Sp.sm),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0xFF14B8A6).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(R.pill),
@@ -340,7 +327,8 @@ class _SummaryStrip extends StatelessWidget {
               ),
             ),
             child: Text(
-              'sheets.ready_of'.tr(namedArgs: {'ready': '$readyCount', 'total': '$totalRows'}),
+              'sheets.ready_of'.tr(
+                  namedArgs: {'ready': '$readyCount', 'total': '$totalRows'}),
               style: AppType.muted(color: const Color(0xFF14B8A6))
                   .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
             ),
@@ -390,8 +378,7 @@ class _PayRowCard extends StatelessWidget {
         .where((c) => c < row.debt)
         .toList();
     final showPreview = row.effectiveAmount > 0;
-    final balanceAfter =
-        row.sub.balanceAmount + row.effectiveAmount;
+    final balanceAfter = row.sub.balanceAmount + row.effectiveAmount;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -422,8 +409,7 @@ class _PayRowCard extends StatelessWidget {
                   children: [
                     Text(
                       row.sub.fullName,
-                      style:
-                          AppType.label(color: AppColors.textHi).copyWith(
+                      style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -433,8 +419,7 @@ class _PayRowCard extends StatelessWidget {
                     const SizedBox(height: 1),
                     Text(
                       row.sub.username,
-                      style:
-                          AppType.muted(color: AppColors.textLow).copyWith(
+                      style: AppType.muted(color: AppColors.textLow).copyWith(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
                       ),
@@ -446,8 +431,7 @@ class _PayRowCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: AppColors.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(R.pill),
@@ -490,18 +474,17 @@ class _PayRowCard extends StatelessWidget {
                 borderSide: BorderSide(color: AppColors.border),
               ),
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 10),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               suffixText: 'common.currency'.tr(),
-              suffixIcon: enabled &&
-                      !row.payAll &&
-                      row.controller.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      onPressed: onClear,
-                      visualDensity: VisualDensity.compact,
-                    )
-                  : null,
+              suffixIcon:
+                  enabled && !row.payAll && row.controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(LucideIcons.x, size: 16),
+                          onPressed: onClear,
+                          visualDensity: VisualDensity.compact,
+                        )
+                      : null,
             ),
           ),
           if (chips.isNotEmpty && !row.payAll) ...[
@@ -551,8 +534,7 @@ class _PayRowCard extends StatelessWidget {
                 : null,
             borderRadius: BorderRadius.circular(R.sm),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
                 color: row.payAll
                     ? accent.withValues(alpha: 0.08)
@@ -567,17 +549,14 @@ class _PayRowCard extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    row.payAll
-                        ? LucideIcons.squareCheck
-                        : LucideIcons.square,
+                    row.payAll ? LucideIcons.squareCheck : LucideIcons.square,
                     color: row.payAll ? accent : AppColors.textMid,
                     size: 16,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'sheets.full_debt'.tr(),
-                    style:
-                        AppType.label(color: AppColors.textHi).copyWith(
+                    style: AppType.label(color: AppColors.textHi).copyWith(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -643,8 +622,7 @@ class _RowPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final isCredit = balanceAfter >= 0;
-    final color =
-        isCredit ? const Color(0xFF14B8A6) : const Color(0xFFE08F2D);
+    final color = isCredit ? const Color(0xFF14B8A6) : const Color(0xFFE08F2D);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
@@ -690,139 +668,3 @@ class _RowPreview extends StatelessWidget {
 }
 
 // ───────── shared sheet chrome (copy of activate_sheet's) ─────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback? onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitBar extends StatelessWidget {
-  const _SubmitBar({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.enabled,
-    required this.busy,
-    required this.onPressed,
-  });
-  final String label;
-  final Color color;
-  final IconData icon;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              disabledBackgroundColor: color.withValues(alpha: 0.35),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-            ),
-            onPressed: enabled ? onPressed : null,
-            icon: busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(icon, size: 16),
-            label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-  }
-}

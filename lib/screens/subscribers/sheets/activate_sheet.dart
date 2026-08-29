@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
@@ -40,6 +41,7 @@ Future<bool?> showActivateSheet(BuildContext context, Subscriber sub) {
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => _ActivateSheet(sub: sub),
@@ -210,14 +212,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       idx: idx,
       paymentType: paymentType,
       activationData: _data!,
-      partialAmount:
-          _pay == _PayType.partial ? _partialAmount : null,
+      partialAmount: _pay == _PayType.partial ? _partialAmount : null,
       skipAutoWa: manualMode,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!result.ok) {
-      showSheetSnack(context, result.message ?? 'common.error'.tr(), isError: true);
+      showSheetSnack(context, result.message ?? 'common.error'.tr(),
+          isError: true);
       return;
     }
     SubscriberEvents.notifyChange();
@@ -252,9 +254,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       } else {
         final reason = result.wa?.reason;
         if (reason == 'no_phone') {
-          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك', isError: true);
+          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك',
+              isError: true);
         } else if (reason == 'no_template') {
-          showSheetSnack(context, 'لم يُبنَ preview: قالب "تفعيل" غير موجود — أضفه من إعدادات الواتساب', isError: true);
+          showSheetSnack(context,
+              'لم يُبنَ preview: قالب "تفعيل" غير موجود — أضفه من إعدادات الواتساب',
+              isError: true);
         }
       }
     }
@@ -264,61 +269,29 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // iOS keyboard-avoidance: push the sheet up so the partial-cash
-    // amount field + submit button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
-          ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.zap,
-                title: 'dashboard.renew_sub'.tr(),
-                subtitle: widget.sub.fullName,
-                color: AppColors.brand,
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.sm, Sp.lg, Sp.huge),
-                  children: _buildBody(),
-                ),
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
-                child: PrintReceiptCheckbox(
-                  value: _printReceiptChecked,
-                  onChanged: (v) =>
-                      setState(() => _printReceiptChecked = v),
-                ),
-              ),
-              _SubmitBar(
-                label: _submitting ? 'sheets.renewing'.tr() : 'sheets.renew_now'.tr(),
-                color: AppColors.brand,
-                icon: LucideIcons.zap,
-                enabled: _canSubmit,
-                busy: _submitting,
-                onPressed: _submit,
-              ),
-            ],
-          ),
-        );
-      },
+    // حشوة لوحة المفاتيح صارت داخل DesignSheet.
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.refreshCw,
+        title: 'dashboard.renew_sub'.tr(),
+        subtitle: widget.sub.fullName,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'sheets.renewing'.tr() : 'sheets.renew_now'.tr(),
+        icon: LucideIcons.refreshCw,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _submit,
+        above: PrintReceiptCheckbox(
+          value: _printReceiptChecked,
+          onChanged: (v) => setState(() => _printReceiptChecked = v),
+        ),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _buildBody(),
+      ),
     );
   }
 
@@ -339,11 +312,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           padding: const EdgeInsets.symmetric(vertical: Sp.huge),
           child: Column(
             children: [
-              Icon(LucideIcons.triangleAlert,
-                  color: AppColors.error, size: 32),
+              Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
               const SizedBox(height: Sp.sm),
-              Text(_loadError!,
-                  style: AppType.label(color: AppColors.error)),
+              Text(_loadError!, style: AppType.label(color: AppColors.error)),
               const SizedBox(height: Sp.sm),
               TextButton(
                 onPressed: _load,
@@ -359,7 +330,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _InfoCard(
         title: 'sheets.package_details'.tr(),
         rows: [
-          (LucideIcons.package, 'subscribers.label_package'.tr(), _profileName.isEmpty ? '—' : _profileName, null),
+          (
+            LucideIcons.package,
+            'subscribers.label_package'.tr(),
+            _profileName.isEmpty ? '—' : _profileName,
+            null
+          ),
           if (_duration != null && _duration!.isNotEmpty)
             (LucideIcons.clock, 'sheets.duration'.tr(), _duration!, null),
           (
@@ -389,10 +365,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         title: 'sheets.current_state'.tr(),
         rows: [
           (
+            _currentBalance < 0 ? LucideIcons.creditCard : LucideIcons.wallet,
             _currentBalance < 0
-                ? LucideIcons.creditCard
-                : LucideIcons.wallet,
-            _currentBalance < 0 ? 'sheets.current_debt'.tr() : 'sheets.current_credit'.tr(),
+                ? 'sheets.current_debt'.tr()
+                : 'sheets.current_credit'.tr(),
             '${formatIQD(_currentBalance.abs().round())} ${'common.currency'.tr()}',
             _currentBalance < 0 ? AppColors.error : AppColors.brand,
           ),
@@ -467,16 +443,13 @@ class _InfoCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(label,
                       style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(
-                              fontSize: 11, fontWeight: FontWeight.w600)),
+                          .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
                   const Spacer(),
                   Flexible(
                     child: Text(
                       value,
-                      style: AppType.label(
-                              color: color ?? AppColors.textHi)
-                          .copyWith(
-                              fontSize: 12, fontWeight: FontWeight.w700),
+                      style: AppType.label(color: color ?? AppColors.textHi)
+                          .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.end,
@@ -590,9 +563,7 @@ class _PayBtn extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.5)
-                  : AppColors.border,
+              color: selected ? color.withValues(alpha: 0.5) : AppColors.border,
               width: selected ? 1.4 : 1,
             ),
             boxShadow: [
@@ -638,6 +609,7 @@ class _PartialAmountField extends StatelessWidget {
   });
   final TextEditingController controller;
   final int price;
+
   /// Called with the chip value; the parent ADDS it to the current
   /// amount (v1 behaviour — tap 25k twice → 50k).
   final ValueChanged<int> onChipTap;
@@ -647,7 +619,16 @@ class _PartialAmountField extends StatelessWidget {
   // price (no point offering 25k on a 20k package). Chips ACCUMULATE
   // — tap 10k twice → 20k — so even denser sets stay short to render.
   static const _chips = [
-    5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000,
+    5000,
+    10000,
+    15000,
+    20000,
+    25000,
+    30000,
+    35000,
+    40000,
+    45000,
+    50000,
   ];
 
   @override
@@ -668,8 +649,8 @@ class _PartialAmountField extends StatelessWidget {
         children: [
           Text(
             'sheets.paid_cash_amount'.tr(),
-            style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 11, fontWeight: FontWeight.w700),
+            style: AppType.label(color: AppColors.textHi)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           TextField(
@@ -705,18 +686,16 @@ class _PartialAmountField extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6)
-                            .withValues(alpha: 0.12),
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(R.pill),
                         border: Border.all(
-                          color: const Color(0xFF8B5CF6)
-                              .withValues(alpha: 0.25),
+                          color:
+                              const Color(0xFF8B5CF6).withValues(alpha: 0.25),
                         ),
                       ),
                       child: Text(
                         formatIQD(amount),
-                        style: AppType.muted(
-                                color: const Color(0xFF8B5CF6))
+                        style: AppType.muted(color: const Color(0xFF8B5CF6))
                             .copyWith(
                                 fontSize: 11, fontWeight: FontWeight.w700),
                       ),
@@ -753,19 +732,21 @@ class _AfterCard extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             'sheets.after_activation'.tr(),
-            style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 11, fontWeight: FontWeight.w700),
+            style: AppType.label(color: AppColors.textHi)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
           ),
           const Spacer(),
           Text(
-            isDebt ? '${'subscribers.debt_short'.tr()} ' : '${'subscribers.balance_short'.tr()} ',
+            isDebt
+                ? '${'subscribers.debt_short'.tr()} '
+                : '${'subscribers.balance_short'.tr()} ',
             style: AppType.muted(color: color)
                 .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
           ),
           Text(
             '${formatIQD(balanceAfter.abs().round())} د.ع',
-            style: AppType.label(color: color).copyWith(
-                fontSize: 13, fontWeight: FontWeight.w800),
+            style: AppType.label(color: color)
+                .copyWith(fontSize: 13, fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -774,139 +755,3 @@ class _AfterCard extends StatelessWidget {
 }
 
 // ───────── shared sheet chrome ─────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitBar extends StatelessWidget {
-  const _SubmitBar({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.enabled,
-    required this.busy,
-    required this.onPressed,
-  });
-  final String label;
-  final Color color;
-  final IconData icon;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              disabledBackgroundColor: color.withValues(alpha: 0.35),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-            ),
-            onPressed: enabled ? onPressed : null,
-            icon: busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(icon, size: 16),
-            label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-  }
-}

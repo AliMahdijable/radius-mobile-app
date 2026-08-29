@@ -392,7 +392,6 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                         'MAC: ${s.mac!}',
                         style: AppType.muted().copyWith(
                           fontSize: 10,
-                          fontFamily: 'monospace',
                         ),
                       ),
                     ],

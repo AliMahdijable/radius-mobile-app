@@ -1,9 +1,12 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -32,6 +35,7 @@ Future<bool?> showQuickDiscountSheet(BuildContext context, Subscriber sub) {
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => _QuickDiscountSheet(sub: sub),
@@ -191,498 +195,153 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final accent =
-        _isRemoval ? AppColors.error : const Color(0xFF14B8A6);
-    // iOS keyboard-avoidance: push the sheet up so the amount field +
-    // save button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.8,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
-          ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.tag,
-                title: 'خصم سريع',
-                subtitle: widget.sub.fullName,
-                color: const Color(0xFF14B8A6),
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.sm, Sp.lg, Sp.huge),
-                  children: _buildBody(),
-                ),
-              ),
-              _SubmitBar(
-                label: _submitting
-                    ? 'جارٍ الحفظ...'
-                    : (_isRemoval
-                        ? 'حذف الخصم'
-                        : (_amount > 0 ? 'حفظ الخصم' : 'حفظ')),
-                color: accent,
-                icon: _isRemoval ? LucideIcons.trash2 : LucideIcons.tag,
-                enabled: _canSubmit,
-                busy: _submitting,
-                onPressed: _submit,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  List<Widget> _buildBody() {
-    if (_loading) {
-      return const [
-        Padding(
-          padding: EdgeInsets.symmetric(vertical: Sp.huge),
-          child: Center(
-            child: CircularProgressIndicator(color: Color(0xFF14B8A6)),
-          ),
-        ),
-      ];
-    }
+    // الحذف يصبغ الزرّ أحمر؛ ما عداه أخضر accent كما في المخطّط.
+    final accent = _isRemoval ? AppColors.error : AppColors.brandAccent;
     final finalPrice = _originalPrice > 0
         ? (_originalPrice - _amount).clamp(0.0, double.infinity)
         : 0.0;
     final overshoot =
         _amount > 0 && _originalPrice > 0 && _amount >= _originalPrice;
-    return [
-      _PriceBox(
-        originalPrice: _originalPrice,
-        currentDiscount: _currentDiscount,
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.tag,
+        title: 'خصم سريع',
+        subtitle: widget.sub.fullName,
+        tint: AppColors.brandAccent,
+        onClose: () => Navigator.of(context).pop(),
       ),
-      const SizedBox(height: Sp.md),
-      _AmountField(
-        controller: _amountCtrl,
-        accent: const Color(0xFF14B8A6),
-        onClear: () {
-          _suppressFormat = true;
-          _amountCtrl.clear();
-          _suppressFormat = false;
-          setState(() => _amount = 0);
-        },
-        chips: const [1000, 2500, 5000, 10000, 15000, 20000],
-        onChipTap: _setAmount,
+      footer: SheetFooterBar(
+        label: _submitting
+            ? 'جارٍ الحفظ...'
+            : (_isRemoval ? 'حذف الخصم' : (_amount > 0 ? 'حفظ الخصم' : 'حفظ')),
+        icon: _isRemoval ? LucideIcons.trash2 : LucideIcons.tag,
+        color: accent,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _submit,
       ),
-      if (_originalPrice > 0) ...[
-        const SizedBox(height: Sp.md),
-        _FinalPriceCard(
-          originalPrice: _originalPrice,
-          discount: _amount.toDouble(),
-          finalPrice: finalPrice,
-        ),
-      ],
-      if (overshoot) ...[
-        const SizedBox(height: Sp.sm),
-        Row(
-          children: [
-            const Icon(LucideIcons.triangleAlert,
-                size: 14, color: Color(0xFFE08F2D)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'الخصم يساوي أو يتجاوز السعر — السعر النهائي صفر',
-                style: AppType.muted(color: const Color(0xFFE08F2D))
-                    .copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w600),
+      body: _loading
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: Sp.mega),
+              child: Center(
+                child: CircularProgressIndicator(
+                    color: AppColors.brandAccent, strokeWidth: 2.5),
               ),
-            ),
-          ],
-        ),
-      ],
-    ];
-  }
-}
-
-class _PriceBox extends StatelessWidget {
-  const _PriceBox({
-    required this.originalPrice,
-    required this.currentDiscount,
-  });
-  final double originalPrice;
-  final double currentDiscount;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(LucideIcons.tag, color: AppColors.textMid, size: 13),
-              const SizedBox(width: 6),
-              Text(
-                'السعر الأصلي',
-                style: AppType.muted(color: AppColors.textMid).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                originalPrice > 0
-                    ? '${formatIQD(originalPrice.round())} د.ع'
-                    : '—',
-                style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          if (currentDiscount > 0) ...[
-            const SizedBox(height: 6),
-            Row(
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(LucideIcons.percent,
-                    color: const Color(0xFF14B8A6), size: 13),
-                const SizedBox(width: 6),
-                Text(
-                  'الخصم الحالي',
-                  style: AppType.muted(color: AppColors.textMid).copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                SheetSummaryBox(
+                  label: 'السعر الأصلي',
+                  value: '${formatIQD(_originalPrice.round())} د.ع',
+                ),
+                if (_currentDiscount > 0) ...[
+                  const SizedBox(height: Sp.sm),
+                  SheetSummaryBox(
+                    label: 'الخصم الحالي',
+                    value: '${formatIQD(_currentDiscount.round())} د.ع',
+                    valueColor: AppColors.brandAccent,
+                  ),
+                ],
+                const SizedBox(height: Sp.lg),
+                SheetSection(
+                  label: 'قيمة الخصم',
+                  hint: '0 = إلغاء الخصم',
+                  gap: 9,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SheetBox(
+                        focused: _amount > 0,
+                        radius: 18,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: Sp.lg, vertical: 14),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _amountCtrl,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9,]')),
+                                ],
+                                textDirection: ui.TextDirection.ltr,
+                                textAlign: TextAlign.right,
+                                style: AppType.amount(),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  hintText: '0',
+                                  hintStyle: AppType.amount(
+                                      color: AppColors.textPlaceholder),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: Sp.sm),
+                            Text('د.ع',
+                                style: AppType.input(color: AppColors.textLabel)
+                                    .copyWith(fontSize: 13)),
+                            if (_amount > 0) ...[
+                              const SizedBox(width: Sp.sm),
+                              InkWell(
+                                onTap: () {
+                                  _suppressFormat = true;
+                                  _amountCtrl.clear();
+                                  _suppressFormat = false;
+                                  setState(() => _amount = 0);
+                                },
+                                borderRadius: BorderRadius.circular(R.pill),
+                                child: Icon(LucideIcons.x,
+                                    size: 16, color: AppColors.textHint),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      // شرائح الخصم **تضبط** لا تُضيف (خلافاً لشيت الدين)
+                      // — الخصم قيمة نهائيّة لا تراكميّة. سلوك v1.
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: [
+                          for (final c in _chipScale)
+                            SheetQuickChip(
+                              label: _formatThousands(c),
+                              selected: _amount == c,
+                              onTap: () => _setAmount(c),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  '-${formatIQD(currentDiscount.round())} د.ع',
-                  style: AppType.label(color: const Color(0xFF14B8A6))
-                      .copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                if (_originalPrice > 0) ...[
+                  const SizedBox(height: Sp.lg),
+                  SheetBrandResultCard(
+                    label: 'السعر بعد الخصم',
+                    strikethrough:
+                        _amount > 0 ? formatIQD(_originalPrice.round()) : null,
+                    value: '${formatIQD(finalPrice.round())} د.ع',
                   ),
-                ),
+                ],
+                if (overshoot) ...[
+                  const SizedBox(height: Sp.md),
+                  SheetResultBanner(
+                    icon: LucideIcons.triangleAlert,
+                    label: 'الخصم يساوي السعر أو يتجاوزه',
+                    value: 'السعر النهائي 0',
+                    tone: SheetTone.warning,
+                  ),
+                ],
               ],
             ),
-          ],
-        ],
-      ),
     );
   }
-}
 
-class _AmountField extends StatelessWidget {
-  const _AmountField({
-    required this.controller,
-    required this.accent,
-    required this.onClear,
-    required this.chips,
-    required this.onChipTap,
-  });
-  final TextEditingController controller;
-  final Color accent;
-  final VoidCallback onClear;
-  final List<int> chips;
-  final ValueChanged<int> onChipTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'قيمة الخصم (0 = إلغاء)',
-            style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            style: AppType.input(color: AppColors.textHi),
-            decoration: InputDecoration(
-              hintText: 'مثلاً 5,000',
-              hintStyle: AppType.input(color: AppColors.textLow),
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(R.sm),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              suffixText: 'د.ع',
-              suffixIcon: controller.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      onPressed: onClear,
-                      visualDensity: VisualDensity.compact,
-                    )
-                  : null,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final amount in chips)
-                InkWell(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    onChipTap(amount);
-                  },
-                  borderRadius: BorderRadius.circular(R.pill),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(R.pill),
-                      border: Border.all(
-                        color: accent.withValues(alpha: 0.25),
-                      ),
-                    ),
-                    child: Text(
-                      formatIQD(amount),
-                      style: AppType.muted(color: accent).copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FinalPriceCard extends StatelessWidget {
-  const _FinalPriceCard({
-    required this.originalPrice,
-    required this.discount,
-    required this.finalPrice,
-  });
-  final double originalPrice;
-  final double discount;
-  final double finalPrice;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final hasDiscount = discount > 0 && discount < originalPrice;
-    final color = discount > 0 ? const Color(0xFF14B8A6) : AppColors.textHi;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: discount > 0
-            ? const Color(0xFF14B8A6).withValues(alpha: 0.07)
-            : AppColors.surface,
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(
-          color: discount > 0
-              ? const Color(0xFF14B8A6).withValues(alpha: 0.25)
-              : AppColors.border,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.arrowRight, color: color, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            'السعر بعد الخصم',
-            style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Spacer(),
-          if (hasDiscount) ...[
-            Text(
-              '${formatIQD(originalPrice.round())} د.ع',
-              style: AppType.muted(color: AppColors.textLow).copyWith(
-                fontSize: 11,
-                decoration: TextDecoration.lineThrough,
-              ),
-            ),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            '${formatIQD(finalPrice.round())} د.ع',
-            style: AppType.label(color: color).copyWith(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ───────── shared sheet chrome (copy of activate_sheet's) ─────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitBar extends StatelessWidget {
-  const _SubmitBar({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.enabled,
-    required this.busy,
-    required this.onPressed,
-  });
-  final String label;
-  final Color color;
-  final IconData icon;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              disabledBackgroundColor: color.withValues(alpha: 0.35),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-            ),
-            onPressed: enabled ? onPressed : null,
-            icon: busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(icon, size: 16),
-            label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-  }
+  static const _chipScale = [1000, 2500, 5000, 10000, 15000, 20000];
 }

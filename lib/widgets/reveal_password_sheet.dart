@@ -13,7 +13,7 @@ import '../theme/colors.dart';
 /// - إخفاء الكلمة افتراضياً (dots)، الضغط على 👁 يكشف
 /// - نسخ سريع للحافظة + haptic + toast
 /// - عدّاد تنازلي 15 ثانية — تُخفى تلقائياً وتُغلق الشيت
-/// - Font tabular للأرقام + monospace-ish للـpassword قابل للنسخ
+/// - Cairo للأرقام وكلمة السرّ (قابلة للنسخ)
 /// - avatar دائري ملوّن بالمبادرات + عنوان + subtitle
 /// - Dark-mode aware
 ///

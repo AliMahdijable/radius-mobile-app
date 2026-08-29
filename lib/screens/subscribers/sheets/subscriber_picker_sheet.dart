@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -26,10 +27,10 @@ Future<Subscriber?> showSubscriberPickerSheet(
   return showModalBottomSheet<Subscriber>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) =>
-        _PickerSheet(title: title, debtorsOnly: debtorsOnly),
+    builder: (_) => _PickerSheet(title: title, debtorsOnly: debtorsOnly),
   );
 }
 
@@ -101,8 +102,7 @@ class _PickerSheetState extends State<_PickerSheet> {
         score += 40;
       }
       if (qDigits.isNotEmpty && qDigits.length >= 3) {
-        final phone =
-            (s.phone ?? s.mobile ?? '').replaceAll(RegExp(r'\D'), '');
+        final phone = (s.phone ?? s.mobile ?? '').replaceAll(RegExp(r'\D'), '');
         if (phone.contains(qDigits)) score += 35;
       }
       if (score > 0) scored.add((score, s));
@@ -114,72 +114,51 @@ class _PickerSheetState extends State<_PickerSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
-          ),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.userSearch,
-                title: widget.title,
-                subtitle: widget.debtorsOnly
-                    ? 'اختر مشتركاً عليه دين'
-                    : 'اختر مشتركاً',
-                color: AppColors.brand,
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    Sp.lg, Sp.sm, Sp.lg, Sp.sm),
-                child: TextField(
-                  controller: _searchCtrl,
-                  focusNode: _focusNode,
-                  style: AppType.input(color: AppColors.textHi),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث بالاسم أو اليوزر أو الهاتف…',
-                    hintStyle: AppType.input(color: AppColors.textLow),
-                    prefixIcon: Icon(LucideIcons.search,
-                        size: 16, color: AppColors.textMid),
-                    suffixIcon: _query.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(LucideIcons.x, size: 16),
-                            color: AppColors.textMid,
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _searchCtrl.clear(),
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(R.sm),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 12),
-                  ),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.userSearch,
+        title: widget.title,
+        subtitle: widget.debtorsOnly ? 'اختر مشتركاً عليه دين' : 'اختر مشتركاً',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.md, Sp.xl, Sp.md),
+            child: SheetBox(
+              icon: LucideIcons.search,
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+              child: TextField(
+                controller: _searchCtrl,
+                focusNode: _focusNode,
+                style: AppType.input(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: 'ابحث بالاسم أو اليوزر أو الهاتف…',
+                  hintStyle: AppType.input(color: AppColors.textPlaceholder),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(LucideIcons.x, size: 16),
+                          color: AppColors.textMid,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _searchCtrl.clear(),
+                        ),
                 ),
               ),
-              Divider(height: 1, color: AppColors.border),
-              Expanded(child: _buildBody(controller)),
-            ],
+            ),
           ),
-        );
-      },
+          Divider(height: 1, color: AppColors.divider),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
-  Widget _buildBody(ScrollController controller) {
+  Widget _buildBody() {
     if (_loading) {
       return Center(
         child: CircularProgressIndicator(color: AppColors.brand),
@@ -190,8 +169,7 @@ class _PickerSheetState extends State<_PickerSheet> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(LucideIcons.circleAlert,
-                color: AppColors.error, size: 32),
+            Icon(LucideIcons.circleAlert, color: AppColors.error, size: 32),
             const SizedBox(height: Sp.sm),
             Text(
               'تعذّر جلب المشتركين',
@@ -218,8 +196,7 @@ class _PickerSheetState extends State<_PickerSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.searchX,
-                  size: 36, color: AppColors.textLow),
+              Icon(LucideIcons.searchX, size: 36, color: AppColors.textLow),
               const SizedBox(height: Sp.sm),
               Text(
                 widget.debtorsOnly && _query.trim().isEmpty
@@ -234,7 +211,6 @@ class _PickerSheetState extends State<_PickerSheet> {
       );
     }
     return ListView.separated(
-      controller: controller,
       padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.md),
       itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(height: 4),
@@ -269,8 +245,8 @@ class _Row extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.md),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: Sp.sm, vertical: Sp.sm),
+          padding:
+              const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(R.md),
@@ -284,8 +260,7 @@ class _Row extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.14),
                   shape: BoxShape.circle,
-                  border: Border.all(
-                      color: statusColor.withValues(alpha: 0.3)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
@@ -305,8 +280,8 @@ class _Row extends StatelessWidget {
                         Flexible(
                           child: Text(
                             sub.fullName,
-                            style: AppType.label(color: AppColors.textHi)
-                                .copyWith(
+                            style:
+                                AppType.label(color: AppColors.textHi).copyWith(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
                             ),
@@ -319,9 +294,8 @@ class _Row extends StatelessWidget {
                           Flexible(
                             child: Text(
                               '(${sub.username})',
-                              style:
-                                  AppType.muted(color: AppColors.textLow)
-                                      .copyWith(
+                              style: AppType.muted(color: AppColors.textLow)
+                                  .copyWith(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -340,9 +314,8 @@ class _Row extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 sub.profileName!,
-                                style:
-                                    AppType.muted(color: AppColors.textMid)
-                                        .copyWith(
+                                style: AppType.muted(color: AppColors.textMid)
+                                    .copyWith(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -356,12 +329,11 @@ class _Row extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
-                                color: AppColors.error
-                                    .withValues(alpha: 0.1),
+                                color: AppColors.error.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(R.pill),
                                 border: Border.all(
-                                  color: AppColors.error
-                                      .withValues(alpha: 0.25),
+                                  color:
+                                      AppColors.error.withValues(alpha: 0.25),
                                 ),
                               ),
                               child: Text(
@@ -380,8 +352,7 @@ class _Row extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft,
-                  size: 16, color: AppColors.textLow),
+              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
             ],
           ),
         ),
@@ -399,86 +370,5 @@ class _Row extends StatelessWidget {
     if (s.isExpired) return AppColors.error;
     if (s.isNearExpiry) return const Color(0xFFF59E0B);
     return const Color(0xFF10B981);
-  }
-}
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2)),
-                const SizedBox(height: 3),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        height: 1.2),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
   }
 }

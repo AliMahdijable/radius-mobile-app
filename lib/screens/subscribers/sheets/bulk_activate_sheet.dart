@@ -7,6 +7,7 @@ import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -38,6 +39,7 @@ Future<bool?> showBulkActivateSheet(
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => _BulkActivateSheet(subs: subs),
@@ -62,6 +64,7 @@ extension _PayMethodX on _PayMethod {
         _PayMethod.cash => AppColors.brand,
         _PayMethod.partial => const Color(0xFF8B5CF6),
       };
+
   /// Maps to the backend's expected enum on POST
   /// /api/v2/subscribers/:idx/activate.
   String get apiValue => switch (this) {
@@ -101,8 +104,10 @@ class _RenewRow {
   final Map<String, dynamic>? data;
   final double originalPrice;
   final double discount;
+
   /// Price the admin pays — originalPrice - discount, never negative.
   final double effectivePrice;
+
   /// Signed balance (negative = debt, positive = credit). v1 calls
   /// this currentBalance.
   final double currentBalance;
@@ -130,8 +135,7 @@ class _RenewRow {
   ///   partial → balance - price + partialAmount
   double get balanceAfter => switch (method) {
         _PayMethod.cash => currentBalance,
-        _PayMethod.partial =>
-          currentBalance - effectivePrice + partialAmount,
+        _PayMethod.partial => currentBalance - effectivePrice + partialAmount,
         _PayMethod.debt => currentBalance - effectivePrice,
       };
 
@@ -379,8 +383,7 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
         idx: r.sub.idx!,
         paymentType: r.method.apiValue,
         activationData: r.data!,
-        partialAmount:
-            r.method == _PayMethod.partial ? r.partialAmount : null,
+        partialAmount: r.method == _PayMethod.partial ? r.partialAmount : null,
       );
       if (!mounted) return;
       setState(() {
@@ -395,9 +398,13 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
     if (anyOk) SubscriberEvents.notifyChange();
     final okCount = _rows.where((r) => r.ok == true).length;
     final failCount = _rows.where((r) => r.ok == false).length;
-    showSheetSnack(context, failCount == 0
-              ? 'sheets.renewed_n'.tr(namedArgs: {'n': '$okCount'})
-              : 'sheets.done_failed'.tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}), isError: (failCount == 0) ? false : true);
+    showSheetSnack(
+        context,
+        failCount == 0
+            ? 'sheets.renewed_n'.tr(namedArgs: {'n': '$okCount'})
+            : 'sheets.done_failed'
+                .tr(namedArgs: {'ok': '$okCount', 'fail': '$failCount'}),
+        isError: (failCount == 0) ? false : true);
     if (anyOk && failCount == 0 && mounted) {
       Navigator.of(context).pop(true);
     }
@@ -407,99 +414,84 @@ class _BulkActivateSheetState extends State<_BulkActivateSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final s = _summary;
-    // iOS keyboard-avoidance: push the sheet up so partial-cash amount
-    // fields + submit button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.92,
-      minChildSize: 0.6,
-      maxChildSize: 0.97,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.calendarPlus,
+        title: 'sheets.bulk_renew_title'.tr(),
+        subtitle: _loading
+            ? 'sheets.loading_activation_data'.tr()
+            : '${widget.subs.length} ${'dashboard.subscriber_singular'.tr()}'
+                '${s.failed > 0 ? ' (${'sheets.load_failed_n'.tr(namedArgs: {
+                        'n': '${s.failed}'
+                      })})' : ''}',
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting
+            ? 'sheets.renewing_progress'.tr(namedArgs: {
+                'done': '$_doneCount',
+                'total': '${s.debt + s.cash + s.partial}',
+              })
+            : 'sheets.renew_n_subs'.tr(namedArgs: {
+                  'n': '${s.debt + s.cash + s.partial}',
+                }) +
+                (s.cashTotal > 0
+                    ? ' (${formatIQD(s.cashTotal.round())} ${'common.currency'.tr()} ${'sheets.cash_word'.tr()})'
+                    : ''),
+        icon: LucideIcons.calendarPlus,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _confirmAndSubmit,
+      ),
+      maxHeightFactor: 0.97,
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          if (!_loading) ...[
+            _SummaryStrip(summary: s),
+            _SetAllRow(
+              onSetAll: _setAll,
+              enabled: !_submitting,
+            ),
+          ],
+          Expanded(
+            child: _loading
+                ? Center(
+                    child: CircularProgressIndicator(color: AppColors.brand),
+                  )
+                : ListView.separated(
+                    padding:
+                        const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
+                    itemCount: _rows.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: Sp.sm),
+                    itemBuilder: (_, i) {
+                      final r = _rows[i];
+                      return _RenewRowCard(
+                        row: r,
+                        enabled: !_submitting,
+                        onMethod: (m) => _setRowMethod(r, m),
+                        onPartialChanged: () => _onPartialChanged(r),
+                        onPartialChip: (v) => _addToPartial(r, v),
+                      );
+                    },
+                  ),
           ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.calendarPlus,
-                title: 'sheets.bulk_renew_title'.tr(),
-                subtitle: _loading
-                    ? 'sheets.loading_activation_data'.tr()
-                    : '${widget.subs.length} ${'dashboard.subscriber_singular'.tr()}'
-                        '${s.failed > 0 ? ' (${'sheets.load_failed_n'.tr(namedArgs: {'n': '${s.failed}'})})' : ''}',
-                color: AppColors.brand,
-                onClose: _submitting
-                    ? null
-                    : () => Navigator.of(context).pop(),
-              ),
-              if (!_loading) ...[
-                _SummaryStrip(summary: s),
-                _SetAllRow(
-                  onSetAll: _setAll,
-                  enabled: !_submitting,
-                ),
-              ],
-              Expanded(
-                child: _loading
-                    ? Center(
-                        child:
-                            CircularProgressIndicator(color: AppColors.brand),
-                      )
-                    : ListView.separated(
-                        controller: controller,
-                        padding: const EdgeInsets.fromLTRB(
-                            Sp.lg, Sp.sm, Sp.lg, Sp.md),
-                        itemCount: _rows.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: Sp.sm),
-                        itemBuilder: (_, i) {
-                          final r = _rows[i];
-                          return _RenewRowCard(
-                            row: r,
-                            enabled: !_submitting,
-                            onMethod: (m) => _setRowMethod(r, m),
-                            onPartialChanged: () => _onPartialChanged(r),
-                            onPartialChip: (v) => _addToPartial(r, v),
-                          );
-                        },
-                      ),
-              ),
-              _SubmitBar(
-                label: _submitting
-                    ? 'sheets.renewing_progress'.tr(namedArgs: {
-                        'done': '$_doneCount',
-                        'total': '${s.debt + s.cash + s.partial}',
-                      })
-                    : 'sheets.renew_n_subs'.tr(namedArgs: {
-                          'n': '${s.debt + s.cash + s.partial}',
-                        }) +
-                        (s.cashTotal > 0
-                            ? ' (${formatIQD(s.cashTotal.round())} ${'common.currency'.tr()} ${'sheets.cash_word'.tr()})'
-                            : ''),
-                color: AppColors.brand,
-                icon: LucideIcons.calendarPlus,
-                enabled: _canSubmit,
-                busy: _submitting,
-                onPressed: _confirmAndSubmit,
-              ),
-            ],
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
 
 class _SummaryStrip extends StatelessWidget {
   const _SummaryStrip({required this.summary});
-  final ({int debt, int cash, int partial, double cashTotal, int failed})
-      summary;
+  final ({
+    int debt,
+    int cash,
+    int partial,
+    double cashTotal,
+    int failed
+  }) summary;
 
   @override
   Widget build(BuildContext context) {
@@ -705,8 +697,7 @@ class _RenewRowCard extends StatelessWidget {
                   children: [
                     Text(
                       row.sub.fullName,
-                      style:
-                          AppType.label(color: AppColors.textHi).copyWith(
+                      style: AppType.label(color: AppColors.textHi).copyWith(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -761,7 +752,9 @@ class _RenewRowCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  row.currentBalance < 0 ? '${'sheets.current_debt'.tr()} ' : '${'sheets.current_credit'.tr()} ',
+                  row.currentBalance < 0
+                      ? '${'sheets.current_debt'.tr()} '
+                      : '${'sheets.current_credit'.tr()} ',
                   style: AppType.muted(color: AppColors.textMid).copyWith(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -808,8 +801,7 @@ class _RenewRowCard extends StatelessWidget {
             ),
           ],
           // Live after-balance preview when there's something to show
-          if (row.method != _PayMethod.cash ||
-              row.currentBalance != 0) ...[
+          if (row.method != _PayMethod.cash || row.currentBalance != 0) ...[
             const SizedBox(height: 6),
             _AfterRow(balanceAfter: row.balanceAfter),
           ],
@@ -863,8 +855,7 @@ class _FailedRowCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.triangleAlert,
-              color: AppColors.error, size: 14),
+          Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 14),
           const SizedBox(width: 6),
           Expanded(
             child: Column(
@@ -972,9 +963,7 @@ class _MethodTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.5)
-                  : AppColors.border,
+              color: selected ? color.withValues(alpha: 0.5) : AppColors.border,
               width: selected ? 1.4 : 1,
             ),
           ),
@@ -1094,10 +1083,12 @@ class _PartialField extends StatelessWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'sheets.overpay_becomes_credit'.tr(namedArgs: {'amt': '${formatIQD((row.partialAmount - price).round())} ${'common.currency'.tr()}'}),
+                    'sheets.overpay_becomes_credit'.tr(namedArgs: {
+                      'amt':
+                          '${formatIQD((row.partialAmount - price).round())} ${'common.currency'.tr()}'
+                    }),
                     style:
-                        AppType.muted(color: const Color(0xFF14B8A6))
-                            .copyWith(
+                        AppType.muted(color: const Color(0xFF14B8A6)).copyWith(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1162,8 +1153,7 @@ class _PartialTextFieldState extends State<_PartialTextField> {
           borderSide: BorderSide(color: AppColors.border),
         ),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         suffixText: 'common.currency'.tr(),
       ),
     );
@@ -1199,7 +1189,9 @@ class _AfterRow extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            isDebt ? '${'subscribers.debt_short'.tr()} ' : '${'subscribers.balance_short'.tr()} ',
+            isDebt
+                ? '${'subscribers.debt_short'.tr()} '
+                : '${'subscribers.balance_short'.tr()} ',
             style: AppType.muted(color: color).copyWith(
               fontSize: 9,
               fontWeight: FontWeight.w700,
@@ -1219,139 +1211,3 @@ class _AfterRow extends StatelessWidget {
 }
 
 // ───────── shared sheet chrome (copy of activate_sheet's) ─────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback? onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitBar extends StatelessWidget {
-  const _SubmitBar({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.enabled,
-    required this.busy,
-    required this.onPressed,
-  });
-  final String label;
-  final Color color;
-  final IconData icon;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              disabledBackgroundColor: color.withValues(alpha: 0.35),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-            ),
-            onPressed: enabled ? onPressed : null,
-            icon: busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(icon, size: 16),
-            label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -53,24 +53,26 @@ class SubscriberDetailScreen extends StatefulWidget {
   final Subscriber sub;
 
   @override
-  State<SubscriberDetailScreen> createState() =>
-      _SubscriberDetailScreenState();
+  State<SubscriberDetailScreen> createState() => _SubscriberDetailScreenState();
 }
 
 class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   late Subscriber sub = widget.sub;
   bool _disconnecting = false;
   bool _toggling = false;
+
   /// Currently in-flight template send, or null. Drives the tile
   /// 'جاري...' label so the admin sees activity for the right chip
   /// (the operations grid has 3 template chips — debt reminder /
   /// expiry warning / subscriber info).
   String? _sendingTemplate;
+
   /// True while the generate-info-link round-trip + WhatsApp send
   /// are in flight. Same single-flight pattern as the toggle and
   /// disconnect — the chip label flips and the busy guard locks
   /// the rest of the grid.
   bool _generatingLink = false;
+
   /// True while the DELETE round-trip is in flight.
   bool _deleting = false;
 
@@ -140,8 +142,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // stale بلا مؤشّر بصري.
     List<Subscriber>? list;
     try {
-      list = await SubscribersApi.loadAll()
-          .timeout(const Duration(seconds: 20));
+      list =
+          await SubscribersApi.loadAll().timeout(const Duration(seconds: 20));
     } catch (_) {
       list = null;
     }
@@ -227,9 +229,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // ما نعرض له كارت فارغ.
                   if (sub.isOnline &&
                       ((sub.ipAddress ?? '').isNotEmpty ||
-                       (sub.sessionTime ?? 0) > 0 ||
-                       (sub.downloadBytes ?? 0) > 0 ||
-                       (sub.uploadBytes ?? 0) > 0)) ...[
+                          (sub.sessionTime ?? 0) > 0 ||
+                          (sub.downloadBytes ?? 0) > 0 ||
+                          (sub.uploadBytes ?? 0) > 0)) ...[
                     _LiveSessionCard(sub: sub),
                     const SizedBox(height: Sp.sm),
                   ],
@@ -285,7 +287,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         content: Text(
-          'subscribers.disconnect_session_body'.tr(namedArgs: {'name': sub.fullName}),
+          'subscribers.disconnect_session_body'
+              .tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
@@ -320,14 +323,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // 2026-08-18: overlay بدل ScaffoldMessenger → يظهر فوق أي modal مفتوح.
     showSheetSnack(
       context,
-      success ? 'subscribers.disconnect_ok_user'.tr() : 'subscribers.disconnect_failed'.tr(),
+      success
+          ? 'subscribers.disconnect_ok_user'.tr()
+          : 'subscribers.disconnect_failed'.tr(),
       isError: !success,
     );
   }
 
   Future<void> _confirmToggleEnabled() async {
     final wantEnable = sub.isDisabled;
-    final action = wantEnable ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr();
+    final action =
+        wantEnable ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr();
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -339,7 +345,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         content: Text(
           wantEnable
               ? 'subscribers.enable_body'.tr(namedArgs: {'name': sub.fullName})
-              : 'subscribers.disable_body'.tr(namedArgs: {'name': sub.fullName}),
+              : 'subscribers.disable_body'
+                  .tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
@@ -371,7 +378,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (sub.hasDebt) {
       showSheetSnack(
         context,
-        'subscribers.delete_debt_block'.tr(namedArgs: {'amt': formatIQD(sub.debtAbs.round())}),
+        'subscribers.delete_debt_block'
+            .tr(namedArgs: {'amt': formatIQD(sub.debtAbs.round())}),
         isError: true,
       );
       return;
@@ -385,7 +393,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               .copyWith(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         content: Text(
-          'subscribers.delete_confirm_body'.tr(namedArgs: {'name': sub.fullName}),
+          'subscribers.delete_confirm_body'
+              .tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
@@ -394,8 +403,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.delete'.tr()),
           ),
@@ -456,8 +464,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         sub.fullName.trim().isNotEmpty ? sub.fullName.trim() : sub.username;
     // ملاحظة: نص رسالة الواتساب يبقى دائماً عربي — يذهب لعميل المشترك،
     // لا يتأثر بلغة تطبيق الأدمن.
-    final body =
-        'مرحباً $greetName 👋\n\n'
+    final body = 'مرحباً $greetName 👋\n\n'
         'يمكنك الاطلاع على معلومات اشتراكك من خلال الرابط التالي:\n\n'
         '${linkResult.url}\n\n'
         '⚠️ ملاحظة: هذا الرابط صالح لمدة ساعة واحدة فقط.\n'
@@ -483,9 +490,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       if (!mounted) return;
       showSheetSnack(
         context,
-        ok
-            ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة'
-            : 'تعذّر فتح واتساب',
+        ok ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة' : 'تعذّر فتح واتساب',
         isError: !ok,
       );
       return;
@@ -562,8 +567,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     showSheetSnack(
       context,
       success
-          ? (wantEnable ? 'subscribers.enable_ok'.tr() : 'subscribers.disable_ok'.tr())
-          : (wantEnable ? 'subscribers.enable_failed'.tr() : 'subscribers.disable_failed'.tr()),
+          ? (wantEnable
+              ? 'subscribers.enable_ok'.tr()
+              : 'subscribers.disable_ok'.tr())
+          : (wantEnable
+              ? 'subscribers.enable_failed'.tr()
+              : 'subscribers.disable_failed'.tr()),
       isError: !success,
     );
   }
@@ -627,9 +636,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             color: AppColors.warningFill,
             onTap: () => showAddDebtSheet(context, sub),
           ),
-        // 2026-08-29: بلا شرط `hasDebt`. الرصيد الدائن مدعوم صراحةً في
-        // pay_debt_sheet، وإخفاء المدخل يقطع الطريق الوحيد إليه.
-        if (Perms.has('subscribers.pay_debt'))
+        // 2026-08-29: الشرط صار `balanceAmount != 0` بدل `hasDebt` —
+        // صاحب الرصيد الدائن يحتاج المدخل أيضاً، ومَن رصيده صفر لا
+        // يستفيد من فتح شيت يقول له «لا يوجد دين».
+        if (sub.balanceAmount != 0 && Perms.has('subscribers.pay_debt'))
           SubAction(
             icon: LucideIcons.banknote,
             label: 'subscribers.op_pay_debt'.tr(),
@@ -695,8 +705,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             icon: LucideIcons.messageCircle,
             label: 'subscribers.op_whatsapp'.tr(),
             color: AppColors.success,
-            onTap: () => _launchUri(
-                Uri.parse('https://wa.me/${_digits(phone)}')),
+            onTap: () =>
+                _launchUri(Uri.parse('https://wa.me/${_digits(phone)}')),
           ),
       ]),
       SubActionGroup('subscribers.group_records'.tr(), [
@@ -722,9 +732,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   username: sub.username,
                   // firstname/lastname غير قابلين للـnull في الموديل —
                   // نمرّر null فقط حين يكونان فارغين معاً.
-                  displayName: sub.fullName.trim().isEmpty
-                      ? null
-                      : sub.fullName.trim(),
+                  displayName:
+                      sub.fullName.trim().isEmpty ? null : sub.fullName.trim(),
                   phone: sub.phone,
                 ),
               ),
@@ -1568,9 +1577,8 @@ class _HeroPasswordState extends State<_HeroPassword> {
 
   @override
   Widget build(BuildContext context) {
-    final shown = _visible
-        ? widget.password
-        : '•' * widget.password.length.clamp(4, 12);
+    final shown =
+        _visible ? widget.password : '•' * widget.password.length.clamp(4, 12);
     return Row(
       children: [
         Flexible(
@@ -1608,6 +1616,7 @@ class _HeroPasswordState extends State<_HeroPassword> {
     );
   }
 }
+
 class _CopyChip extends StatefulWidget {
   const _CopyChip({required this.value, required this.context});
   final String value;
@@ -1696,13 +1705,14 @@ class _PasswordRowState extends State<_PasswordRow> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    final display = _visible ? widget.password : '•' * widget.password.length.clamp(4, 12);
+    final display =
+        _visible ? widget.password : '•' * widget.password.length.clamp(4, 12);
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(LucideIcons.lock, size: 11,
-            color: Colors.white.withValues(alpha: 0.7)),
+        Icon(LucideIcons.lock,
+            size: 11, color: Colors.white.withValues(alpha: 0.7)),
         const SizedBox(width: 4),
         Flexible(
           child: Text(

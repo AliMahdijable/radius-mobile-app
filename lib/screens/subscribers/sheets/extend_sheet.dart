@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
@@ -30,6 +31,7 @@ Future<bool?> showExtendSheet(BuildContext context, Subscriber sub) {
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => _ExtendSheet(sub: sub),
@@ -104,10 +106,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       _data?['current_profile_name']?.toString() ?? '';
 
   num get _selectedPrice => _read(_selectedPkg, 'price');
-  num get _selectedPoints =>
-      _read(_selectedPkg, 'reward_points_required');
-  String? get _selectedDuration =>
-      _selectedPkg?['duration']?.toString();
+  num get _selectedPoints => _read(_selectedPkg, 'reward_points_required');
+  String? get _selectedDuration => _selectedPkg?['duration']?.toString();
 
   bool get _canSubmit {
     if (_loading || _submitting || _data == null || _selectedPkg == null) {
@@ -123,10 +123,12 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (_selectedPkg == null) return null;
     if (_method == _Method.points) {
       if (_selectedPoints <= 0) return 'sheets.no_points_support'.tr();
-      if (_pointsBalance < _selectedPoints) return 'sheets.insufficient_points'.tr();
+      if (_pointsBalance < _selectedPoints)
+        return 'sheets.insufficient_points'.tr();
     } else {
       if (_selectedPrice <= 0) return 'sheets.no_price'.tr();
-      if (_managerBalance < _selectedPrice) return 'sheets.insufficient_balance'.tr();
+      if (_managerBalance < _selectedPrice)
+        return 'sheets.insufficient_balance'.tr();
     }
     return null;
   }
@@ -150,7 +152,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!result.ok) {
-      showSheetSnack(context, result.message ?? 'common.error'.tr(), isError: true);
+      showSheetSnack(context, result.message ?? 'common.error'.tr(),
+          isError: true);
       return;
     }
     SubscriberEvents.notifyChange();
@@ -158,8 +161,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       final price = _method == _Method.points ? 0 : _selectedPrice;
-      final durationDays =
-          int.tryParse(pkg['duration_days']?.toString() ?? '');
+      final durationDays = int.tryParse(pkg['duration_days']?.toString() ?? '');
       await ReceiptService.printActivationReceipt(
         sub: widget.sub,
         packagePrice: price,
@@ -181,7 +183,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       } else {
         final reason = result.wa?.reason;
         if (reason == 'no_phone') {
-          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك', isError: true);
+          showSheetSnack(context, 'لم يُبنَ preview: لا رقم هاتف للمشترك',
+              isError: true);
         }
         // تمديد يستعمل literalMessage — بلا قالب فما نحصل no_template.
       }
@@ -192,59 +195,29 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
-          ),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.repeat,
-                title: 'sheets.extend_subscriber'.tr(),
-                subtitle: widget.sub.fullName,
-                color: const Color(0xFF3B82F6),
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.sm, Sp.lg, Sp.huge),
-                  children: _buildBody(),
-                ),
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
-                child: PrintReceiptCheckbox(
-                  value: _printReceiptChecked,
-                  onChanged: (v) =>
-                      setState(() => _printReceiptChecked = v),
-                ),
-              ),
-              _SubmitBar(
-                label: _submitting
-                    ? 'جاري التمديد...'
-                    : (_disabledReason ?? 'تمديد الآن'),
-                color: const Color(0xFF3B82F6),
-                icon: LucideIcons.repeat,
-                enabled: _canSubmit,
-                busy: _submitting,
-                onPressed: _submit,
-              ),
-            ],
-          ),
-        );
-      },
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.calendarPlus,
+        title: 'sheets.extend_subscriber'.tr(),
+        subtitle: widget.sub.fullName,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label:
+            _submitting ? 'جاري التمديد...' : (_disabledReason ?? 'تمديد الآن'),
+        icon: LucideIcons.calendarPlus,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _submit,
+        above: PrintReceiptCheckbox(
+          value: _printReceiptChecked,
+          onChanged: (v) => setState(() => _printReceiptChecked = v),
+        ),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _buildBody(),
+      ),
     );
   }
 
@@ -265,15 +238,11 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           padding: const EdgeInsets.symmetric(vertical: Sp.huge),
           child: Column(
             children: [
-              Icon(LucideIcons.triangleAlert,
-                  color: AppColors.error, size: 32),
+              Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
               const SizedBox(height: Sp.sm),
-              Text(_loadError!,
-                  style: AppType.label(color: AppColors.error)),
+              Text(_loadError!, style: AppType.label(color: AppColors.error)),
               const SizedBox(height: Sp.sm),
-              TextButton(
-                  onPressed: _load,
-                  child: const Text('إعادة المحاولة')),
+              TextButton(onPressed: _load, child: const Text('إعادة المحاولة')),
             ],
           ),
         ),
@@ -286,8 +255,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           padding: const EdgeInsets.symmetric(vertical: Sp.huge),
           child: Column(
             children: [
-              Icon(LucideIcons.inbox,
-                  color: AppColors.textLow, size: 32),
+              Icon(LucideIcons.inbox, color: AppColors.textLow, size: 32),
               const SizedBox(height: Sp.sm),
               Text('لا توجد باقات متاحة للتمديد',
                   style: AppType.label(color: AppColors.textMid)),
@@ -306,7 +274,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       _SectionTitle('اختر باقة التمديد'),
       const SizedBox(height: Sp.xs),
       _PackagePicker(
-        packages: pkgs.cast<Map>().map((e) => e.cast<String, dynamic>()).toList(),
+        packages:
+            pkgs.cast<Map>().map((e) => e.cast<String, dynamic>()).toList(),
         selected: _selectedPkg,
         onSelect: (p) => setState(() => _selectedPkg = p),
       ),
@@ -467,9 +436,7 @@ class _PackageRow extends StatelessWidget {
         : int.tryParse(pkg['price']?.toString() ?? '') ?? 0;
     final points = pkg['reward_points_required'] is num
         ? (pkg['reward_points_required'] as num).toInt()
-        : int.tryParse(
-                pkg['reward_points_required']?.toString() ?? '') ??
-            0;
+        : int.tryParse(pkg['reward_points_required']?.toString() ?? '') ?? 0;
     return Material(
       color: selected
           ? const Color(0xFF3B82F6).withValues(alpha: 0.08)
@@ -484,40 +451,33 @@ class _PackageRow extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
-              color: selected
-                  ? const Color(0xFF3B82F6)
-                  : AppColors.border,
+              color: selected ? const Color(0xFF3B82F6) : AppColors.border,
               width: selected ? 1.5 : 1,
             ),
           ),
           child: Row(
             children: [
               Icon(
-                selected
-                    ? LucideIcons.circleCheck
-                    : LucideIcons.circle,
-                color: selected
-                    ? const Color(0xFF3B82F6)
-                    : AppColors.textLow,
+                selected ? LucideIcons.circleCheck : LucideIcons.circle,
+                color: selected ? const Color(0xFF3B82F6) : AppColors.textLow,
                 size: 16,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   name,
-                  style: AppType.label(color: AppColors.textHi).copyWith(
-                      fontSize: 12, fontWeight: FontWeight.w700),
+                  style: AppType.label(color: AppColors.textHi)
+                      .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (points > 0) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCD8B00)
-                        .withValues(alpha: 0.1),
+                    color: const Color(0xFFCD8B00).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
                   child: Row(
@@ -528,8 +488,7 @@ class _PackageRow extends StatelessWidget {
                       const SizedBox(width: 3),
                       Text(
                         formatIQD(points),
-                        style: AppType.muted(
-                                color: const Color(0xFFCD8B00))
+                        style: AppType.muted(color: const Color(0xFFCD8B00))
                             .copyWith(
                                 fontSize: 10, fontWeight: FontWeight.w700),
                       ),
@@ -602,8 +561,7 @@ class _SelectedSummary extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip(
-      {required this.icon, required this.text, required this.color});
+  const _Chip({required this.icon, required this.text, required this.color});
   final IconData icon;
   final String text;
   final Color color;
@@ -657,9 +615,7 @@ class _MethodPicker extends StatelessWidget {
             color: const Color(0xFFCD8B00),
             selected: current == _Method.points,
             enabled: pointsAvailable,
-            onTap: pointsAvailable
-                ? () => onSelect(_Method.points)
-                : null,
+            onTap: pointsAvailable ? () => onSelect(_Method.points) : null,
           ),
         ),
       ],
@@ -708,9 +664,7 @@ class _MethodBtn extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.5)
-                  : AppColors.border,
+              color: selected ? color.withValues(alpha: 0.5) : AppColors.border,
               width: selected ? 1.4 : 1,
             ),
             boxShadow: [
@@ -751,139 +705,3 @@ class _MethodBtn extends StatelessWidget {
 }
 
 // ───────── shared sheet chrome (copy of activate_sheet's) ─────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitBar extends StatelessWidget {
-  const _SubmitBar({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.enabled,
-    required this.busy,
-    required this.onPressed,
-  });
-  final String label;
-  final Color color;
-  final IconData icon;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              disabledBackgroundColor: color.withValues(alpha: 0.35),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-            ),
-            onPressed: enabled ? onPressed : null,
-            icon: busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(icon, size: 16),
-            label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-  }
-}

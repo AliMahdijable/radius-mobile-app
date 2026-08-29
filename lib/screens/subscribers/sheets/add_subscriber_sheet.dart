@@ -7,6 +7,7 @@ import '../../../core/util/contact_picker.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/auth_storage.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -28,6 +29,7 @@ Future<bool?> showAddSubscriberSheet(BuildContext context) {
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => const _AddSheet(),
@@ -51,6 +53,7 @@ class _AddSheetState extends State<_AddSheet> {
   Map<String, PackageInfo>? _packages;
   bool _loadingPackages = true;
   bool _saving = false;
+
   /// Permission gates — mirror v1's add_subscriber_sheet:
   ///   canPickParent     = canAccessManagers (super OR
   ///                       prm_managers_create)
@@ -138,7 +141,8 @@ class _AddSheetState extends State<_AddSheet> {
         ? _parentId
         : int.tryParse(adminId ?? '');
     if (parentId == null) {
-      showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول', isError: true);
+      showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول',
+          isError: true);
       return;
     }
     setState(() => _saving = true);
@@ -153,7 +157,7 @@ class _AddSheetState extends State<_AddSheet> {
       username: _username.text.trim(),
       password: _password.text,
       profileId: _profileId!,
-      parentId: parentId!,
+      parentId: parentId,
       firstname: _firstname.text.trim(),
       lastname: _lastname.text.trim(),
       phone: _phone.text.trim(),
@@ -162,198 +166,171 @@ class _AddSheetState extends State<_AddSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (result.ok) SubscriberEvents.notifyChange();
-    showSheetSnack(context, result.ok
-              ? 'تم إضافة المشترك بنجاح'
-              : (result.message ?? 'تعذّر الإضافة'), isError: (result.ok) ? false : true);
+    showSheetSnack(
+        context,
+        result.ok
+            ? 'تم إضافة المشترك بنجاح'
+            : (result.message ?? 'تعذّر الإضافة'),
+        isError: (result.ok) ? false : true);
     if (result.ok) Navigator.of(context).pop(true);
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // iOS keyboard-avoidance: push the sheet up so the text fields +
-    // add button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+    // حشوة لوحة المفاتيح صارت داخل DesignSheet.
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.userPlus,
+        title: 'مشترك جديد',
+        subtitle: 'أدخل بيانات المشترك',
+        onClose: _saving ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _saving ? 'جاري الحفظ...' : 'إضافة المشترك',
+        icon: LucideIcons.userPlus,
+        enabled: !_saving,
+        busy: _saving,
+        onPressed: _submit,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          _Lbl('اسم المستخدم *'),
+          _Field(
+            controller: _username,
+            hint: 'مثال: ahmed@rezz',
+            enabled: !_saving,
+            icon: LucideIcons.user,
           ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
+          const SizedBox(height: Sp.md),
+          _Lbl('كلمة السر *'),
+          _Field(
+            controller: _password,
+            hint: '••••••••',
+            enabled: !_saving,
+            icon: LucideIcons.lock,
+            obscure: true,
+          ),
+          const SizedBox(height: Sp.md),
+          Row(
             children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.userPlus,
-                title: 'مشترك جديد',
-                subtitle: 'أدخل بيانات المشترك',
-                color: AppColors.brand,
-                onClose:
-                    _saving ? null : () => Navigator.of(context).pop(),
-              ),
               Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      Sp.lg, Sp.md, Sp.lg, Sp.huge),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Lbl('اسم المستخدم *'),
+                    _Lbl('الاسم'),
                     _Field(
-                      controller: _username,
-                      hint: 'مثال: ahmed@rezz',
+                      controller: _firstname,
+                      hint: 'الاسم',
                       enabled: !_saving,
                       icon: LucideIcons.user,
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _Lbl('كلمة السر *'),
-                    _Field(
-                      controller: _password,
-                      hint: '••••••••',
-                      enabled: !_saving,
-                      icon: LucideIcons.lock,
-                      obscure: true,
-                    ),
-                    const SizedBox(height: Sp.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _Lbl('الاسم'),
-                              _Field(
-                                controller: _firstname,
-                                hint: 'الاسم',
-                                enabled: !_saving,
-                                icon: LucideIcons.user,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: Sp.sm),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _Lbl('الكنية'),
-                              _Field(
-                                controller: _lastname,
-                                hint: 'الكنية',
-                                enabled: !_saving,
-                                icon: LucideIcons.user,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _Lbl('رقم الهاتف'),
-                    _Field(
-                      controller: _phone,
-                      hint: '07XX XXX XXXX',
-                      enabled: !_saving,
-                      icon: LucideIcons.phone,
-                      keyboardType: TextInputType.phone,
-                      suffix: IconButton(
-                        icon: const Icon(LucideIcons.contact, size: 18),
-                        color: AppColors.brand,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'اختر من دليل الأسماء',
-                        onPressed: _saving
-                            ? null
-                            : () async {
-                                final r = await ContactPicker.pickPhone();
-                                if (!mounted) return;
-                                if (r.phone != null) {
-                                  setState(() => _phone.text = r.phone!);
-                                } else if (r.error != null) {
-                                  showSheetSnack(context, r.error!, isError: true);
-                                }
-                              },
-                      ),
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _Lbl('الباقة *'),
-                    _PackagePicker(
-                      packages: _packages,
-                      loading: _loadingPackages,
-                      selectedId: _profileId,
-                      enabled: !_saving,
-                      onSelect: (id) => setState(() => _profileId = id),
-                    ),
-                    if (_canEditExpiration) ...[
-                      const SizedBox(height: Sp.md),
-                      _Lbl('تاريخ الانتهاء (اختياري)'),
-                      _ExpirationPicker(
-                        value: _expiration,
-                        enabled: !_saving,
-                        onPick: (d) => setState(() => _expiration = d),
-                      ),
-                    ],
-                    if (_canPickParent) ...[
-                      const SizedBox(height: Sp.md),
-                      _Lbl('تابع إلى (المدير)'),
-                      _ManagerPicker(
-                        managers: _managers,
-                        loading: _loadingManagers,
-                        selectedId: _parentId,
-                        enabled: !_saving,
-                        onSelect: (id) =>
-                            setState(() => _parentId = id),
-                      ),
-                    ],
-                    const SizedBox(height: Sp.md),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.brand.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(R.sm),
-                        border: Border.all(
-                          color: AppColors.brand.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(LucideIcons.info,
-                              size: 14, color: AppColors.brand),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'سيُضاف المشترك بدون تفعيل. فعّله من شاشة التفاصيل بعد الإنشاء.',
-                              style: AppType.muted(color: AppColors.textMid)
-                                  .copyWith(
-                                fontSize: 11,
-                                height: 1.45,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
               ),
-              _SubmitBar(
-                label: _saving ? 'جاري الحفظ...' : 'إضافة المشترك',
-                color: AppColors.brand,
-                icon: LucideIcons.userPlus,
-                enabled: !_saving,
-                busy: _saving,
-                onPressed: _submit,
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Lbl('الكنية'),
+                    _Field(
+                      controller: _lastname,
+                      hint: 'الكنية',
+                      enabled: !_saving,
+                      icon: LucideIcons.user,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: Sp.md),
+          _Lbl('رقم الهاتف'),
+          _Field(
+            controller: _phone,
+            hint: '07XX XXX XXXX',
+            enabled: !_saving,
+            icon: LucideIcons.phone,
+            keyboardType: TextInputType.phone,
+            suffix: IconButton(
+              icon: const Icon(LucideIcons.contact, size: 18),
+              color: AppColors.brand,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'اختر من دليل الأسماء',
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      final r = await ContactPicker.pickPhone();
+                      if (!mounted) return;
+                      if (r.phone != null) {
+                        setState(() => _phone.text = r.phone!);
+                      } else if (r.error != null) {
+                        showSheetSnack(context, r.error!, isError: true);
+                      }
+                    },
+            ),
+          ),
+          const SizedBox(height: Sp.md),
+          _Lbl('الباقة *'),
+          _PackagePicker(
+            packages: _packages,
+            loading: _loadingPackages,
+            selectedId: _profileId,
+            enabled: !_saving,
+            onSelect: (id) => setState(() => _profileId = id),
+          ),
+          if (_canEditExpiration) ...[
+            const SizedBox(height: Sp.md),
+            _Lbl('تاريخ الانتهاء (اختياري)'),
+            _ExpirationPicker(
+              value: _expiration,
+              enabled: !_saving,
+              onPick: (d) => setState(() => _expiration = d),
+            ),
+          ],
+          if (_canPickParent) ...[
+            const SizedBox(height: Sp.md),
+            _Lbl('تابع إلى (المدير)'),
+            _ManagerPicker(
+              managers: _managers,
+              loading: _loadingManagers,
+              selectedId: _parentId,
+              enabled: !_saving,
+              onSelect: (id) => setState(() => _parentId = id),
+            ),
+          ],
+          const SizedBox(height: Sp.md),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.brand.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(R.sm),
+              border: Border.all(
+                color: AppColors.brand.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.info, size: 14, color: AppColors.brand),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'سيُضاف المشترك بدون تفعيل. فعّله من شاشة التفاصيل بعد الإنشاء.',
+                    style: AppType.muted(color: AppColors.textMid).copyWith(
+                      fontSize: 11,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -394,6 +371,7 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final bool obscure;
   final TextInputType? keyboardType;
+
   /// Optional trailing widget — used by the phone field for the
   /// contact-picker icon.
   final Widget? suffix;
@@ -461,8 +439,7 @@ class _PackagePicker extends StatelessWidget {
     final pkgs = packages;
     if (pkgs == null || pkgs.isEmpty) {
       return Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(R.sm),
@@ -491,8 +468,8 @@ class _PackagePicker extends StatelessWidget {
             style: AppType.input(color: AppColors.textLow),
           ),
           isExpanded: true,
-          icon: Icon(LucideIcons.chevronDown,
-              size: 16, color: AppColors.textMid),
+          icon:
+              Icon(LucideIcons.chevronDown, size: 16, color: AppColors.textMid),
           onChanged: enabled
               ? (v) {
                   if (v != null) onSelect(v);
@@ -516,8 +493,7 @@ class _PackagePicker extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         '${e.value.price!.round()} د.ع',
-                        style: AppType.muted(
-                                color: const Color(0xFFE08F2D))
+                        style: AppType.muted(color: const Color(0xFFE08F2D))
                             .copyWith(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -598,29 +574,24 @@ class _ExpirationPicker extends StatelessWidget {
             : null,
         borderRadius: BorderRadius.circular(R.sm),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 10, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(color: AppColors.border),
           ),
           child: Row(
             children: [
-              Icon(LucideIcons.calendar,
-                  size: 16, color: AppColors.textMid),
+              Icon(LucideIcons.calendar, size: 16, color: AppColors.textMid),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   label,
                   style: AppType.input(
-                    color: value == null
-                        ? AppColors.textLow
-                        : AppColors.textHi,
+                    color: value == null ? AppColors.textLow : AppColors.textHi,
                   ),
                 ),
               ),
-              Icon(LucideIcons.chevronDown,
-                  size: 14, color: AppColors.textLow),
+              Icon(LucideIcons.chevronDown, size: 14, color: AppColors.textLow),
             ],
           ),
         ),
@@ -665,8 +636,7 @@ class _ManagerPicker extends StatelessWidget {
     final list = managers;
     if (list == null || list.isEmpty) {
       return Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(R.sm),
@@ -693,8 +663,8 @@ class _ManagerPicker extends StatelessWidget {
             style: AppType.input(color: AppColors.textLow),
           ),
           isExpanded: true,
-          icon: Icon(LucideIcons.chevronDown,
-              size: 16, color: AppColors.textMid),
+          icon:
+              Icon(LucideIcons.chevronDown, size: 16, color: AppColors.textMid),
           onChanged: enabled
               ? (v) {
                   if (v != null) onSelect(v);
@@ -732,10 +702,8 @@ class _ManagerItemLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final full = [firstname, lastname]
-        .where((s) => s.isNotEmpty)
-        .join(' ')
-        .trim();
+    final full =
+        [firstname, lastname].where((s) => s.isNotEmpty).join(' ').trim();
     final primary = full.isNotEmpty ? full : username;
     final showSecondary = full.isNotEmpty && full != username;
     return Row(
@@ -765,143 +733,3 @@ class _ManagerItemLabel extends StatelessWidget {
 }
 
 // ───────── shared sheet chrome (copy of activate_sheet's) ─────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onClose,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback? onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2)),
-                const SizedBox(height: 3),
-                Text(subtitle,
-                    style: AppType.muted(color: AppColors.textMid).copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        height: 1.2),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitBar extends StatelessWidget {
-  const _SubmitBar({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.enabled,
-    required this.busy,
-    required this.onPressed,
-  });
-  final String label;
-  final Color color;
-  final IconData icon;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              disabledBackgroundColor: color.withValues(alpha: 0.35),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-            ),
-            onPressed: enabled ? onPressed : null,
-            icon: busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(icon, size: 16),
-            label: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-        ),
-      ),
-    );
-  }
-}

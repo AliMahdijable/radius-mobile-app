@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -26,6 +27,7 @@ Future<void> showMovementsSheet(BuildContext context, Subscriber sub) {
   return showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (_) => _MovementsSheet(sub: sub),
@@ -76,49 +78,36 @@ class _MovementsSheetState extends State<_MovementsSheet> {
     if (_typeFilter == 'all') return _all;
     return _all
         .where((t) =>
-            (t['action_type'] ?? '').toString().toUpperCase() ==
-            _typeFilter)
+            (t['action_type'] ?? '').toString().toUpperCase() == _typeFilter)
         .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(R.xl)),
+    return DesignSheet(
+      header: _Header(
+        sub: widget.sub,
+        loading: _loading,
+        onRefresh: _loading ? null : _load,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          _FilterChips(
+            current: _typeFilter,
+            onChange: (v) => setState(() => _typeFilter = v),
           ),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _Header(
-                sub: widget.sub,
-                loading: _loading,
-                onRefresh: _loading ? null : _load,
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              _FilterChips(
-                current: _typeFilter,
-                onChange: (v) => setState(() => _typeFilter = v),
-              ),
-              Divider(height: 1, color: AppColors.border),
-              Expanded(child: _buildBody(controller)),
-            ],
-          ),
-        );
-      },
+          Divider(height: 1, color: AppColors.divider),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
-  Widget _buildBody(ScrollController controller) {
+  Widget _buildBody() {
     if (_loading) {
       return Center(
         child: CircularProgressIndicator(color: AppColors.brand),
@@ -131,8 +120,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.circleAlert,
-                  size: 36, color: AppColors.error),
+              Icon(LucideIcons.circleAlert, size: 36, color: AppColors.error),
               const SizedBox(height: Sp.sm),
               Text(
                 _error!,
@@ -158,8 +146,7 @@ class _MovementsSheetState extends State<_MovementsSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.inbox,
-                  size: 40, color: AppColors.textLow),
+              Icon(LucideIcons.inbox, size: 40, color: AppColors.textLow),
               const SizedBox(height: Sp.sm),
               Text(
                 _typeFilter == 'all'
@@ -186,10 +173,9 @@ class _MovementsSheetState extends State<_MovementsSheet> {
     }
 
     return ListView.builder(
-      controller: controller,
       padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.huge),
-      itemCount: order.fold<int>(
-          0, (sum, key) => sum + 1 + grouped[key]!.length),
+      itemCount:
+          order.fold<int>(0, (sum, key) => sum + 1 + grouped[key]!.length),
       itemBuilder: (_, index) {
         var i = index;
         for (final key in order) {
@@ -251,8 +237,7 @@ class _Header extends StatelessWidget {
               color: AppColors.brand.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(R.sm),
             ),
-            child: Icon(LucideIcons.history,
-                color: AppColors.brand, size: 18),
+            child: Icon(LucideIcons.history, color: AppColors.brand, size: 18),
           ),
           const SizedBox(width: Sp.sm),
           Expanded(
@@ -349,8 +334,7 @@ class _FilterChips extends StatelessWidget {
             },
             borderRadius: BorderRadius.circular(R.pill),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: selected
                     ? AppColors.brand.withValues(alpha: 0.12)
@@ -370,8 +354,7 @@ class _FilterChips extends StatelessWidget {
                 ).copyWith(
                   fontSize: 12,
                   height: 1.2,
-                  fontWeight:
-                      selected ? FontWeight.w800 : FontWeight.w600,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 ),
               ),
             ),
@@ -424,10 +407,7 @@ class _MovementTile extends StatelessWidget {
     final type = (txn['action_type'] ?? '').toString().toUpperCase();
     final desc =
         (txn['description'] ?? txn['action_description'] ?? '').toString();
-    final admin = (txn['admin_name'] ??
-            txn['admin_username'] ??
-            '')
-        .toString();
+    final admin = (txn['admin_name'] ?? txn['admin_username'] ?? '').toString();
     final createdAt = txn['created_at']?.toString() ?? '';
     final rawAmt = txn['amount'];
     final amount = _readAmount(rawAmt);
@@ -496,8 +476,7 @@ class _MovementTile extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         timeStr,
-                        style: AppType.muted(color: AppColors.textLow)
-                            .copyWith(
+                        style: AppType.muted(color: AppColors.textLow).copyWith(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                         ),
@@ -533,8 +512,7 @@ class _MovementTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         admin,
-                        style: AppType.muted(color: AppColors.textLow)
-                            .copyWith(
+                        style: AppType.muted(color: AppColors.textLow).copyWith(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
@@ -566,11 +544,7 @@ class _MovementTile extends StatelessWidget {
       case 'DEBT_PAY':
         return (LucideIcons.banknote, const Color(0xFF14B8A6), 'تسديد دين');
       case 'BALANCE_ADD':
-        return (
-          LucideIcons.plus,
-          const Color(0xFFE08F2D),
-          'إضافة دين'
-        );
+        return (LucideIcons.plus, const Color(0xFFE08F2D), 'إضافة دين');
       case 'PAYMENT_ADD':
         return (LucideIcons.wallet, AppColors.brand, 'إيراد');
       default:
@@ -585,19 +559,4 @@ class _MovementTile extends StatelessWidget {
     final v = double.tryParse(s);
     return v?.abs() ?? 0;
   }
-}
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 6),
-        child: Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
 }
