@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -196,6 +198,22 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 children: [
                   // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
                   _SubscriberHero(sub: sub, password: _subscriberPassword),
+                  // بلوك الدين مباشرةً تحت بطاقة الهويّة كما في المخطّط
+                  // (كان أسفل الصفحة بعد كارت الجهاز).
+                  if (sub.balanceAmount != 0) ...[
+                    const SizedBox(height: Sp.md),
+                    _BalanceCard(
+                      sub: sub,
+                      onRemind: sub.hasDebt &&
+                              _sendingTemplate == null &&
+                              sub.displayPhone.isNotEmpty
+                          ? () => _sendTemplate('debt_reminder')
+                          : null,
+                      onPay: Perms.has('subscribers.pay_debt')
+                          ? () => showPayDebtSheet(context, sub)
+                          : null,
+                    ),
+                  ],
                   const SizedBox(height: Sp.md),
                   // معلومات الجلسة الحية (IP + مدّة + DL/UL) فقط عند الاتصال
                   // النشط الفعلي — أي RADIUS session قائم. مشترك online في
@@ -229,10 +247,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
                   // صارت داخل _SubscriberHero. كرت الرصيد لا يزال يظهر
                   // مستقلاً لما الـbalance != 0.
-                  if (sub.balanceAmount != 0) ...[
-                    const SizedBox(height: Sp.sm),
-                    _BalanceCard(sub: sub),
-                  ],
                   const SizedBox(height: Sp.md),
                   _OperationsCard(
                     sub: sub,
@@ -935,63 +949,145 @@ class _SubscriptionCard extends StatelessWidget {
 /// render a single inline row: icon + label on the leading edge, the
 /// amount as a colored chip on the trailing edge. Reads at-a-glance
 /// without dominating the screen like the previous hero number did.
+/// بلوك «الدين المستحقّ» — البلوك الثاني في المخطّط، مباشرةً تحت بطاقة
+/// الهويّة. كارت أبيض r20 بحدّ أحمر خافت، فيه مربّع أيقونة 40×40 والمبلغ
+/// بارزاً، ومقابله زرّان: «تذكير» شبحي كهرماني و«تسديد» مملوء أحمر.
+///
+/// يظهر أيضاً للرصيد الدائن (بلغة خضراء) لأنّ `pay_debt_sheet` يدعمه
+/// صراحةً — والمخطّط لا يوفّر مدخلاً آخر للتسديد خارج هذا البلوك.
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.sub});
+  const _BalanceCard({required this.sub, this.onRemind, this.onPay});
   final Subscriber sub;
+
+  /// null = الزرّ يختفي (لا صلاحيّة أو لا رقم هاتف أو إرسال جارٍ).
+  final VoidCallback? onRemind;
+  final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final isDebt = sub.hasDebt;
-    final color = isDebt ? AppColors.error : AppColors.brand;
-    final label = isDebt ? 'subscribers.label_debt_on_sub'.tr() : 'subscribers.label_balance_credit'.tr();
+    final accent = isDebt ? AppColors.error : AppColors.success;
+    final softBg = isDebt ? AppColors.dangerSoftBg : AppColors.successSoftBg;
+    final borderCol =
+        isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: borderCol),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(4),
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(R.sm),
+              color: softBg,
+              borderRadius: BorderRadius.circular(R.icon),
             ),
             child: Icon(
-              isDebt ? LucideIcons.creditCard : LucideIcons.wallet,
-              color: color,
-              size: 13,
+              isDebt ? Icons.credit_card_rounded : Icons.savings_rounded,
+              size: 21,
+              color: accent,
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isDebt
+                      ? 'subscribers.label_debt_on_sub'.tr()
+                      : 'subscribers.label_balance_credit'.tr(),
+                  style: AppType.body(color: AppColors.textLabel),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${formatIQD(sub.debtAbs.round())} د.ع',
+                  textDirection: ui.TextDirection.ltr,
+                  style: AppType.statValue(color: accent),
+                ),
+              ],
             ),
           ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(R.pill),
-              border: Border.all(color: color.withValues(alpha: 0.25)),
+          if (onRemind != null) ...[
+            _DebtButton(
+              label: 'تذكير',
+              icon: Icons.notifications_active_rounded,
+              filled: false,
+              color: AppColors.warning,
+              borderColor: AppColors.warningSoftBorder,
+              onTap: onRemind!,
             ),
-            child: Text(
-              '${formatIQD(sub.debtAbs.round())} د.ع',
-              style: AppType.label(color: color).copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.2,
-              ),
+            const SizedBox(width: 7),
+          ],
+          if (onPay != null)
+            _DebtButton(
+              label: 'تسديد',
+              icon: Icons.payments_rounded,
+              filled: true,
+              color: isDebt ? AppColors.errorFill : AppColors.successFill,
+              onTap: onPay!,
             ),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+/// زرّ داخل بلوك الدين — height 36 · r12 · font 12.5/w600 · أيقونة 16.
+class _DebtButton extends StatelessWidget {
+  const _DebtButton({
+    required this.label,
+    required this.icon,
+    required this.filled,
+    required this.color,
+    required this.onTap,
+    this.borderColor,
+  });
+  final String label;
+  final IconData icon;
+  final bool filled;
+  final Color color;
+  final VoidCallback onTap;
+  final Color? borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: filled ? color : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          height: H.chip,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: filled
+                ? null
+                : Border.all(color: borderColor ?? AppColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: filled ? AppColors.onBrand : color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: AppType.bodyStrong(
+                  color: filled ? AppColors.onBrand : color,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1606,390 +1702,440 @@ class _SimpleAppBar extends StatelessWidget {
 /// صفحة المشترك. يعرض: أيقونة دائرة بيضاء كبيرة مع حرف/رقم الباقة
 /// + الاسم الكامل + username + 3 إحصاءات بالأسفل (الدين / الباقة
 /// / الأيام المتبقية).
+/// بطاقة الهويّة — البلوك الأوّل في صفحة المشترك حسب المخطّط.
+///
+/// بطاقة داكنة واحدة `#103D2E` بنصف قطر 26 تجمع خمس طبقات كانت مبعثرة:
+/// الاسم وشارة الاتصال · صفّ بيانات الدخول · شبكة إحصاءات ثلاثيّة ·
+/// صفّ الهاتف · تذييل التابعيّة والانتهاء.
+///
+/// الطبقات مبنيّة على أبيض شفّاف فوق الأخضر (`onBrandFill1` = .09
+/// للأسطح، `.14` للحبّات والفواصل) — وهذا هو سبب عدم حاجتها لأيّ تعديل
+/// في الوضع الداكن: سطحها داكن أصلاً في الحالتين.
+///
+/// ⚠️ فرق مقصود عن المخطّط: المخطّط يلوّن البطاقة أخضر ثابتاً دائماً،
+/// بينما التنفيذ السابق كان يلوّنها حسب الحالة (طلب المستخدم 2026-07-16:
+/// «تمييز فوري للحالة»). حَفِظنا القصد داخل لغة المخطّط: البطاقة تبقى
+/// خضراء، وحالة المشترك تُقرأ من **حبّة الحالة** أعلى اليسار (نقطة
+/// نعناعيّة + تسمية) ومن لون بلاطة الأيّام.
 class _SubscriberHero extends StatelessWidget {
   const _SubscriberHero({required this.sub, this.password});
   final Subscriber sub;
-  /// كلمة مرور المشترك — تُمرَّر من الـState لعرضها في صفّ Password.
-  /// null = لسّه ما وصلت من backend (أو ما عنده الصلاحيّة).
+
+  /// null = لم تصل بعد من الـbackend. الباسورد **بلا بوّابة صلاحيّات**
+  /// (قرار 2026-08-25): هو بيانات خدمة يحتاجها الدعم لمساعدة المشترك.
   final String? password;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // 2026-07-16: لون الكرت يتغيّر حسب حالة المشترك بدل الأخضر الثابت.
-    // الألوان داكنة كافياً لتباين واضح مع النصّ الأبيض في الوضعَين
-    // (الفاتح والداكن). طلب المستخدم — تمييز فوري للحالة عند فتح الكرت.
-    final accent = _heroColor(sub);
-    // 2026-08-18: احسب الأيام من parsedExpiration مباشرةً بدل الاعتماد
-    // على sub.remainingDays (SAS4 يُقرّبها لأعلى فيصير 31 يوم لباقة 30).
-    // نفس منطق v1 (subscriber_details_screen.dart:1656+): floor(diff/day).
-    final exp = sub.parsedExpiration;
-    String remainingTop = '—';
-    String remainingSub = 'الأيام المتبقية';
-    if (exp != null) {
-      final diff = exp.difference(DateTime.now());
-      if (diff.isNegative) {
-        remainingTop = '—';
-        remainingSub = 'منتهي';
-      } else {
-        final d = diff.inDays;
-        final h = diff.inHours.remainder(24);
-        final m = diff.inMinutes.remainder(60);
-        remainingTop = d > 0 ? '$d يوم' : (h > 0 ? '${h}س' : '${m}د');
-        if (d > 0 && (h > 0 || m > 0)) {
-          remainingSub = '${h}س ${m}د';
-        } else if (d > 0) {
-          remainingSub = 'الأيام المتبقية';
-        } else if (h > 0) {
-          remainingSub = '${m}د';
-        } else {
-          remainingSub = 'أقل من دقيقة';
-        }
-      }
-    } else {
-      // fallback على remainingDays من SAS4 حين لا يوجد تاريخ نصّي مفصّل
-      final r = sub.remainingDays;
-      if (r != null && r > 0) {
-        remainingTop = '$r يوم';
-        remainingSub = 'الأيام المتبقية';
-      } else if (r != null && r <= 0) {
-        remainingTop = '—';
-        remainingSub = 'منتهي';
-      }
-    }
-    final hasDebt = sub.balanceAmount < 0;
-    // مطلب 2026-06-12: شيلنا الـicon الرقمي اللي كان جوه الهيرو.
-    // الاسم والـusername يظهرون مباشرة بأعلى الهيرو. كل معلومات
-    // الاشتراك (الباقة/السعر/الانتهاء/التابع/الهاتف) منقولة لأسفل
-    // الـhero بـ rows صغيرة بدل _SubscriptionCard المنفصل.
+    final phone = sub.displayPhone;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      padding: const EdgeInsets.all(Sp.xl),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [accent, accent.withValues(alpha: 0.78)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: 0.25),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: AppColors.brand,
+        borderRadius: BorderRadius.circular(R.hero),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // العنوان: اسم عربي كبير + username تحته
-          Text(
-            sub.fullName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 3),
-          // مطلب 2026-06-12: اليوزر نيم قابل للنسخ — نلفّه في Row
-          // مع _CopyChip بنفس النمط المستعمل في rows المعلومات.
-          Builder(
-            builder: (ctx) => Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    sub.username,
-                    // 2026-07-16: أبيض شفاف بدل الأخضر الفاتح — يشتغل مع
-                    // كل ألوان الكرت الجديدة (blue/red/purple/amber/slate).
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _CopyChip(value: sub.username, context: ctx),
-              ],
-            ),
-          ),
-          // 2026-08-18: صفّ الباسورد — copy مباشر بدون فتح شاشة التعديل.
-          // password يُحمَّل asynchronously من /api/v2/subscribers/:idx/password
-          // (SAS4 يحجبه في list endpoint). null = لسّه قيد التحميل →
-          // الصفّ مخفي مؤقّتاً ثم يظهر عند وصول الاستجابة.
-          if ((password ?? '').isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: _PasswordRow(password: password!),
-            ),
-          const SizedBox(height: 14),
-          // 3-stat strip (الدين / الباقة / الأيام)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _heroStat(
-                  big: hasDebt ? formatIQD(sub.balanceAmount.abs()) : 'لا يوجد',
-                  small: 'الدين',
-                ),
-              ),
-              _heroDivider(),
-              Expanded(
-                child: _heroStat(
-                  big: (sub.profileName ?? '—'),
-                  small: 'الباقة',
-                  bigSize: 13,
-                ),
-              ),
-              _heroDivider(),
-              Expanded(
-                child: _heroStat(
-                  big: remainingTop,
-                  small: remainingSub,
-                  // 2026-08-18: bigSize=15 (بدل 18 الافتراضي) — أضفنا "يوم"
-                  // بجنب الرقم فاحتاج فسحة أفقيّة أكبر لتفادي ellipsis.
-                  bigSize: 15,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // فاصل أبيض شفاف ثم rows تفصيلية
-          Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.2),
-          ),
-          const SizedBox(height: 10),
-          // مطلب 2026-06-12: عرض الـrows بعرض ثابت للـlabel + value
-          // يلتزم بحاشية مستقيمة. الـicon والـlabel في عمود واحد
-          // عرضه 105dp فالقيم كلها تبدأ من نفس النقطة.
-          if ((sub.price ?? 0) > 0)
-            _infoRow(
-              icon: LucideIcons.dollarSign,
-              label: 'subscribers.label_price'.tr(),
-              value: '${formatIQD(sub.price!)} د.ع',
-            ),
-          if ((sub.expiration ?? '').isNotEmpty)
-            _infoRow(
-              icon: LucideIcons.calendar,
-              label: 'subscribers.label_expiration'.tr(),
-              value: _formatExpiration(sub.expiration),
-            ),
-          if ((sub.parentUsername ?? '').isNotEmpty)
-            _infoRow(
-              icon: LucideIcons.shield,
-              label: 'subscribers.label_parent_admin'.tr(),
-              value: sub.parentUsername!,
-            ),
-          if (sub.displayPhone.isNotEmpty)
-            _infoRow(
-              icon: LucideIcons.phone,
-              label: 'subscribers.label_phone'.tr(),
-              value: sub.displayPhone,
-              copyable: true,
-              context: context,
-            ),
-          // 2026-07-16: آخر اتصال في الكرت الأخضر للأوف لاين فقط
-          // (المتّصلون عندهم "نشط الآن" وليس بحاجة). value = SAS4
-          // last_online مباشرة إن وُجد، وإلا التقدير من expiration.
-          if (!sub.isOnline)
-            _infoRow(
-              icon: LucideIcons.history,
-              label: 'آخر اتصال',
-              value: _lastSeenText(sub),
-            ),
+          _titleRow(),
+          const SizedBox(height: Sp.md),
+          _credentialsRow(context),
+          const SizedBox(height: Sp.lg),
+          _statsGrid(),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(height: Sp.md),
+            _phoneRow(context, phone),
+          ],
+          const SizedBox(height: Sp.md),
+          _footer(),
         ],
       ),
     );
   }
 
-  static String _lastSeenText(Subscriber s) {
-    final lastRaw = s.lastOnline?.trim();
-    if (lastRaw != null && lastRaw.isNotEmpty) {
-      final rel = _formatLastOnline(lastRaw);
-      final exact = _formatExpiration(lastRaw);
-      return exact == '—' || exact == lastRaw ? rel : '$rel · $exact';
-    }
-    if (!s.isExpired) return 'subscribers.ago_not_available'.tr();
-    final raw = s.expiration?.trim();
-    if (raw == null || raw.isEmpty) return 'subscribers.ago_unknown'.tr();
-    final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
-    if (t == null) return raw.split(' ').first;
-    final diff = DateTime.now().difference(t);
-    if (diff.inDays > 365) return 'subscribers.ago_over_year'.tr();
-    if (diff.inDays > 30) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
-    if (diff.inDays > 0) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
-    if (diff.inHours > 0) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
-    return 'subscribers.ago_minutes'.tr();
+  // ───────── الاسم + حبّة الحالة ─────────
+
+  Widget _titleRow() {
+    final st = _statusPill();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                normalizeDigits(sub.fullName) ?? sub.username,
+                style: AppType.heroName(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'بيانات الدخول',
+                style: AppType.muted(color: AppColors.onBrandTertiary)
+                    .copyWith(fontSize: 11.5),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: Sp.sm),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.onBrandFill2,
+            borderRadius: BorderRadius.circular(R.pill),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: st.$2, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                st.$1,
+                style: AppType.body(color: AppColors.onBrand)
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  static String _formatLastOnline(String raw) {
-    final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
-    if (t == null) return raw.split(' ').first;
-    final diff = DateTime.now().difference(t);
-    if (diff.inMinutes < 1) return 'subscribers.ago_now'.tr();
-    if (diff.inMinutes < 60) return 'subscribers.ago_minutes_n'.tr(namedArgs: {'n': '${diff.inMinutes}'});
-    if (diff.inHours < 24) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
-    if (diff.inDays < 30) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
-    if (diff.inDays < 365) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
-    return 'subscribers.ago_over_year'.tr();
+  /// (التسمية، لون النقطة). الحالة تُقرأ من هنا بدل تلوين البطاقة كلّها.
+  (String, Color) _statusPill() {
+    if (sub.isDisabled) return ('معطّل', AppColors.onBrandDanger);
+    if (sub.isExpired) return ('منتهي', AppColors.onBrandDanger);
+    if (sub.isOnline) return ('متصل', AppColors.onBrandMint);
+    return ('غير متصل', AppColors.onBrandTertiary);
   }
 
-  static String _formatExpiration(String? raw) {
-    if (raw == null || raw.isEmpty) return '—';
-    final dt = DateTime.tryParse(raw);
-    if (dt == null) return raw;
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${dt.year}/${two(dt.month)}/${two(dt.day)} '
-        '${two(dt.hour)}:${two(dt.minute)}';
+  // ───────── بيانات الدخول ─────────
+
+  Widget _credentialsRow(BuildContext context) {
+    final pass = password;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.onBrandFill1,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              sub.username,
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.body(color: AppColors.onBrand)
+                  .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _OnBrandIcon(
+            icon: Icons.content_copy_rounded,
+            size: 16,
+            onTap: () => _copy(context, sub.username, 'تمّ نسخ اسم المستخدم'),
+          ),
+          Container(
+            width: 1,
+            height: 16,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            color: AppColors.onBrandFill3,
+          ),
+          if (pass == null)
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.6,
+                color: AppColors.onBrandTertiary,
+              ),
+            )
+          else
+            Expanded(child: _HeroPassword(password: pass)),
+        ],
+      ),
+    );
   }
 
-  /// 2026-07-16: يرجّع لون خلفيّة الكرت الرئيسي حسب حالة المشترك.
-  /// يطابق ألوان شريط قائمة المشتركين لكن بتدرّج أغمق (700-level)
-  /// عشان يوفّر تباين كافٍ مع النصّ الأبيض في الوضعَين. الترتيب
-  /// حسب الأولوية — الأشد يلغي الأخف:
-  ///   1. معطّل     → slate-600 (رمادي)
-  ///   2. متصل + منتهي → purple-700 (بنفسجي)
-  ///   3. متصل     → blue-700 (أزرق)
-  ///   4. منتهي    → red-700 (أحمر)
-  ///   5. قارب     → amber-700 (كهرماني)
-  ///   6. نشط (offline + فعّال) → emerald-700 (أخضر — مطابق لسلوك v1)
-  static Color _heroColor(Subscriber s) {
-    if (s.isDisabled) return const Color(0xFF475569); // slate-600
-    if (s.isOnline) {
-      if (s.isExpired) return const Color(0xFF6D28D9); // purple-700
-      if (s.isNearExpiry) return const Color(0xFFB45309); // amber-700
-      return const Color(0xFF1D4ED8); // blue-700
-    }
-    if (s.isExpired) return const Color(0xFFB91C1C); // red-700
-    if (s.isNearExpiry) return const Color(0xFFB45309); // amber-700
-    return const Color(0xFF047857); // emerald-700
+  // ───────── شبكة الإحصاءات الثلاثيّة ─────────
+
+  Widget _statsGrid() {
+    final debt = sub.balanceAmount;
+    final price = sub.price;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.onBrandFill1,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _stat(
+              value: debt == 0 ? '—' : formatIQD(debt.abs()),
+              label: debt > 0 ? 'رصيد دائن' : 'الدين',
+              color: debt < 0 ? AppColors.onBrandDanger : AppColors.onBrand,
+            ),
+          ),
+          _divider(),
+          Expanded(
+            child: _stat(
+              value: sub.profileName ?? '—',
+              label: price != null && price > 0
+                  ? 'الباقة · ${formatIQD(price)}'
+                  : 'الباقة',
+              valueSize: 15,
+            ),
+          ),
+          _divider(),
+          Expanded(
+            child: _stat(
+              value: _remaining().$1,
+              label: _remaining().$2,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _heroStat({
-    required String big,
-    required String small,
-    double bigSize = 18,
+  Widget _divider() => Container(
+        width: 1,
+        height: 30,
+        color: AppColors.onBrandFill2,
+      );
+
+  Widget _stat({
+    required String value,
+    required String label,
+    Color? color,
+    double valueSize = 17,
   }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          big,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: bigSize,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.3,
-          ),
+          value,
+          textDirection: ui.TextDirection.ltr,
+          style: AppType.statValue(color: color ?? AppColors.onBrand)
+              .copyWith(fontSize: valueSize),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 3),
         Text(
-          small,
-          // 2026-07-16: أبيض شفاف بدل الأخضر الفاتح — الكرت الآن يتلوّن
-          // حسب الحالة (blue/red/purple/amber/slate)، فاللون العام
-          // يشتغل على كل الحالات.
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.75),
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
+          label,
+          style: AppType.muted(color: AppColors.onBrandSecondary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  Widget _heroDivider() {
-    return Container(
-      width: 1,
-      height: 36,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      color: Colors.white.withValues(alpha: 0.25),
-    );
+  /// (القيمة الكبيرة، التسمية). محسوبة من `parsedExpiration` — لا من
+  /// `remainingDays` (SAS4 يقرّب لأعلى فيعطي 31 لباقة 30).
+  (String, String) _remaining() {
+    final exp = sub.parsedExpiration;
+    if (exp == null) return ('—', 'الأيام المتبقية');
+    final diff = exp.difference(DateTime.now());
+    if (diff.isNegative) return ('0', 'منتهي');
+    final d = diff.inDays;
+    final h = diff.inHours.remainder(24);
+    final m = diff.inMinutes.remainder(60);
+    if (d > 0) return ('$d يوم', '${h}س ${m}د');
+    if (h > 0) return ('${h}س', '${m}د');
+    return ('${m}د', 'أقل من ساعة');
   }
 
-  Widget _infoRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    bool copyable = false,
-    BuildContext? context,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+  // ───────── الهاتف ─────────
+
+  Widget _phoneRow(BuildContext context, String phone) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.onBrandFill1,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
       child: Row(
         children: [
-          // label column (fixed width = 110dp) — icon + label محاذيان
-          // على اليمين، فالقيم كلها تبدأ بعدها بحاشية ثابتة.
-          SizedBox(
-            width: 110,
-            child: Row(
-              children: [
-                // 2026-07-16: أبيض شفاف بدل الأخضر الفاتح — يتناسب مع
-                // كل ألوان الكرت الجديدة (blue/red/purple/amber/slate).
-                Icon(icon, color: Colors.white.withValues(alpha: 0.75), size: 14),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+          Icon(Icons.call_rounded, size: 17, color: AppColors.onBrandSecondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => _openUri(context, Uri.parse('tel:$phone')),
+              child: Text(
+                phone,
+                textDirection: ui.TextDirection.ltr,
+                style: AppType.body(color: AppColors.onBrand)
+                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
-          // value column — يأخذ بقية العرض، نص نهاية ثم زر النسخ
-          // (إن وجد) ملتصق به.
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Flexible(
-                  child: Text(
-                    value,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                  ),
-                ),
-                if (copyable && context != null) ...[
-                  const SizedBox(width: 6),
-                  _CopyChip(value: value, context: context),
-                ],
-              ],
+          _OnBrandIcon(
+            icon: Icons.content_copy_rounded,
+            size: 16,
+            onTap: () => _copy(context, phone, 'تمّ نسخ الرقم'),
+          ),
+          const SizedBox(width: 12),
+          _OnBrandIcon(
+            icon: Icons.chat_rounded,
+            size: 17,
+            color: AppColors.onBrandMint,
+            onTap: () => _openUri(
+              context,
+              Uri.parse(
+                  'https://wa.me/${phone.replaceAll(RegExp(r"[^0-9]"), "")}'),
             ),
           ),
         ],
       ),
     );
   }
+
+  // ───────── التذييل ─────────
+
+  Widget _footer() {
+    final parent = sub.parentUsername;
+    final exp = sub.parsedExpiration;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return Row(
+      children: [
+        if (parent != null && parent.isNotEmpty) ...[
+          Icon(Icons.shield_rounded,
+              size: 15, color: AppColors.onBrandSecondary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              'تابع إلى $parent',
+              style: AppType.muted(color: AppColors.onBrandSecondary)
+                  .copyWith(fontSize: 11.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+        const Spacer(),
+        if (exp != null)
+          Text(
+            '${exp.year}/${two(exp.month)}/${two(exp.day)} '
+            '${two(exp.hour)}:${two(exp.minute)}',
+            textDirection: ui.TextDirection.ltr,
+            style: AppType.muted(color: AppColors.onBrandSecondary)
+                .copyWith(fontSize: 11.5),
+          ),
+      ],
+    );
+  }
+
+  static Future<void> _openUri(BuildContext ctx, Uri uri) async {
+    if (!await canLaunchUrl(uri)) {
+      if (!ctx.mounted) return;
+      showSheetSnack(ctx, 'لا يمكن فتح الرابط', isError: true);
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  static Future<void> _copy(
+      BuildContext context, String value, String msg) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!context.mounted) return;
+    showSheetSnack(context, msg, duration: const Duration(seconds: 2));
+  }
 }
 
-/// زر نسخ صغير دائري — يستعمل ضمن الـhero لأي قيمة قابلة للنسخ
-/// (الهاتف / IP / username). يعرض ✓ لحظياً بعد النسخ.
+/// أيقونة تفاعليّة فوق البطاقة الداكنة — بلا خلفيّة، بلون أبيض شفّاف
+/// كما في المخطّط (لا كبسولة دائريّة كالنسخة السابقة).
+class _OnBrandIcon extends StatelessWidget {
+  const _OnBrandIcon({
+    required this.icon,
+    required this.onTap,
+    this.size = 16,
+    this.color,
+  });
+  final IconData icon;
+  final VoidCallback onTap;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkResponse(
+      onTap: onTap,
+      radius: 18,
+      child: Icon(icon, size: size, color: color ?? AppColors.onBrandSecondary),
+    );
+  }
+}
+
+/// نقاط كلمة السرّ + عين الإظهار + النسخ. النسخ يعمل والباس مخفي.
+/// `letterSpacing: 2.7` مطلوب وإلّا التصقت النقاط (المخطّط: 0.2em).
+class _HeroPassword extends StatefulWidget {
+  const _HeroPassword({required this.password});
+  final String password;
+
+  @override
+  State<_HeroPassword> createState() => _HeroPasswordState();
+}
+
+class _HeroPasswordState extends State<_HeroPassword> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = _visible
+        ? widget.password
+        : '•' * widget.password.length.clamp(4, 12);
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            shown,
+            textDirection: ui.TextDirection.ltr,
+            style: _visible
+                ? AppType.body(color: AppColors.onBrandStrong)
+                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600)
+                : AppType.password(color: AppColors.onBrandStrong),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        _OnBrandIcon(
+          icon: _visible
+              ? Icons.visibility_off_rounded
+              : Icons.visibility_rounded,
+          size: 17,
+          onTap: () => setState(() => _visible = !_visible),
+        ),
+        const SizedBox(width: 10),
+        _OnBrandIcon(
+          icon: Icons.content_copy_rounded,
+          size: 17,
+          onTap: () async {
+            await Clipboard.setData(ClipboardData(text: widget.password));
+            if (!context.mounted) return;
+            showSheetSnack(context, 'تمّ نسخ كلمة المرور',
+                duration: const Duration(seconds: 2));
+          },
+        ),
+      ],
+    );
+  }
+}
 class _CopyChip extends StatefulWidget {
   const _CopyChip({required this.value, required this.context});
   final String value;
