@@ -9,20 +9,30 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// Probes the subscriber's IP on first build and renders a section
-/// card with the relevant metric rows. Matches v1's device-health
-/// card: ONT shows RX/TX power + voltage + temp; Ubiquiti shows
-/// signal/CCQ/LAN + peer.
+/// كارت «معلومات الجهاز» — يفحص IP المشترك عند أوّل بناء ويعرض قياسات
+/// الجهاز. الشريحة 4 من إعادة التصميم (2026-08-29).
 ///
-/// Two-button header:
-///   • gear → opens DeviceConfigSheet (IP / kind / user / pass / notes)
-///   • refresh → forces a re-probe ignoring the 5-min cache.
+/// المخطّط يبني الكارت من ثلاث طبقات ثابتة:
+///   1. **رأس**: أيقونة 18 بلون الـaccent + عنوان 14/w600 + حبّة حالة
+///      ملوّنة دلاليّاً + زرّا `settings` و`sync` في الطرف.
+///   2. **جسم القياسات**: بلاطات غاطسة (#F7F8F5 · r14) — ثلاث بالعرض
+///      لـUbiquiti (الإشارة · SNR · CCQ)، وشبكة 2×2 لـONT (RX · TX ·
+///      الفولتيّة · الحرارة).
+///   3. **صفوف التفاصيل**: تسمية خافتة يمين وقيمة `ltr` يسار.
+///
+/// حالة الفحص لها رسم خاصّ في المخطّط (سطر «جارٍ فحص الجهاز تلقائيّاً…»
+/// + هياكل نابضة) بدل الدوّارة الوسطى — تُشعر المدير أنّ الكارت سيمتلئ
+/// لا أنّه عالق.
+///
+/// ⚠️ زرّا الرأس هما المدخل الوحيد لـ`DeviceConfigSheet` وللفحص اليدوي
+/// — لا يُسقطان مهما تغيّر التصميم.
 class DeviceProbeCard extends StatefulWidget {
   const DeviceProbeCard({
     super.key,
     this.ip = '',
     required this.username,
   });
+
   /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
   /// يجرّب customIp من DeviceConfig أوّلاً، فحتى المشتركون بلا session
   /// نشط يحصلون على فحص لو المدير خزّن customIp في إعدادات الجهاز.
@@ -71,6 +81,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
       builder: (_) => DeviceConfigSheet(username: widget.username),
     );
     if (changed == true && mounted) {
@@ -82,42 +93,40 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return _Card(
-      icon: LucideIcons.router,
-      title: 'معلومات الجهاز',
-      accent: const Color(0xFF7C3AED),
-      onRefresh: () => _run(force: true),
-      onConfig: _openConfig,
-      busy: _loading,
+    return Container(
+      padding: const EdgeInsets.all(Sp.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: AppColors.border),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _header(),
+          const SizedBox(height: 14),
           _body(),
           // مطلب 2026-06-11: سطر ملاحظة المدير من DeviceConfig.notes.
           // مخفي إذا فاضي حتى لا يضيف ارتفاع ع الكرت بدون فائدة.
           if ((_notes ?? '').isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: Sp.md),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Sp.md, vertical: Sp.sm),
               decoration: BoxDecoration(
-                color: const Color(0xFFE08F2D).withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(R.sm),
-                border: Border.all(
-                  color: const Color(0xFFE08F2D).withValues(alpha: 0.18),
-                ),
+                color: AppColors.warningSoftBg,
+                borderRadius: BorderRadius.circular(R.icon),
+                border: Border.all(color: AppColors.warningSoftBorder),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(LucideIcons.fileText,
-                      size: 11, color: Color(0xFFE08F2D)),
-                  const SizedBox(width: 5),
+                  Icon(LucideIcons.fileText,
+                      size: 13, color: AppColors.warningFill),
+                  const SizedBox(width: Sp.x6),
                   Expanded(
-                    child: Text(
-                      _notes!,
-                      style: AppType.muted(color: AppColors.textHi).copyWith(
-                          fontSize: 10.5, height: 1.4),
-                    ),
+                    child: Text(_notes!,
+                        style: AppType.body(color: AppColors.warningOnSoft)),
                   ),
                 ],
               ),
@@ -128,130 +137,304 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
     );
   }
 
-  Widget _body() {
+  /// رأس الكارت — أيقونة + عنوان + حبّة الحالة + زرّان.
+  Widget _header() {
+    final chip = _statusChip();
+    return Row(
+      children: [
+        Icon(LucideIcons.router, size: 18, color: AppColors.brandAccent),
+        const SizedBox(width: Sp.sm),
+        Text('معلومات الجهاز', style: AppType.cardTitle()),
+        const SizedBox(width: Sp.sm),
+        Flexible(child: chip),
+        const Spacer(),
+        _HeaderIcon(
+          icon: LucideIcons.settings,
+          onTap: _openConfig,
+        ),
+        const SizedBox(width: Sp.sm),
+        _HeaderIcon(
+          icon: LucideIcons.refreshCw,
+          busy: _loading,
+          onTap: _loading ? null : () => _run(force: true),
+        ),
+      ],
+    );
+  }
+
+  Widget _statusChip() {
+    late final String label;
+    late final Color fg, bg, border;
     if (_loading && _snap == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
+      label = 'جارٍ الفحص';
+      fg = AppColors.textMid;
+      bg = AppColors.surfaceSunken;
+      border = AppColors.border;
+    } else if (_snap == null) {
+      label = 'غير متاح';
+      fg = AppColors.dangerOnSoft;
+      bg = AppColors.dangerSoftBg;
+      border = AppColors.dangerSoftBorder;
+    } else {
+      label = switch (_snap!.kind) {
+        DeviceKind.ont => 'ONT',
+        DeviceKind.ubiquiti => 'UBNT',
+        _ => 'متصل',
+      };
+      fg = AppColors.brandOnSoft;
+      bg = AppColors.brandSoftBg;
+      border = AppColors.brandSoftBorder;
     }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(R.pill),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.pillLabel(color: fg).copyWith(letterSpacing: 0),
+      ),
+    );
+  }
+
+  Widget _body() {
+    if (_loading && _snap == null) return _scanning();
     final snap = _snap;
-    if (snap == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Icon(LucideIcons.signalLow, size: 14, color: AppColors.textLow),
-            const SizedBox(width: 6),
-            Text(
-              'لم يُتمكّن من الوصول للجهاز',
-              style: AppType.muted().copyWith(fontSize: 11),
-            ),
-          ],
-        ),
-      );
-    }
+    if (snap == null) return _unreachable();
     if (snap.kind == DeviceKind.ont) return _ontBody(snap.ont!);
     if (snap.kind == DeviceKind.ubiquiti) return _ubntBody(snap.ubnt!);
     return const SizedBox.shrink();
   }
 
-  Widget _ontBody(OntOpticalInfo o) {
+  /// حالة الفحص — سطر مطمئِن + هياكل نابضة، كما يرسمها المخطّط.
+  Widget _scanning() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _row('نوع الجهاز', 'Huawei ONT', LucideIcons.cable, color: AppColors.brand),
-        _row('RX Power', '${o.rxPower} dBm', LucideIcons.signalHigh,
-            color: _rxColor(o)),
-        _row('TX Power', '${o.txPower} dBm', LucideIcons.signal,
-            color: o.txOk ? AppColors.brand : AppColors.error),
-        _row('الفولتية', '${o.voltage} mV', LucideIcons.zap,
-            color: o.voltageOk ? AppColors.brand : const Color(0xFFE08F2D)),
-        _row('الحرارة', '${o.temperature} °C', LucideIcons.thermometer,
-            color: o.tempOk ? AppColors.brand : const Color(0xFFE08F2D)),
-        if (o.sendStatus.trim().isNotEmpty && o.sendStatus.trim() != '--')
-          _row('الحالة', o.sendStatus, LucideIcons.activity,
-              color: AppColors.textHi),
-      ],
-    );
-  }
-
-  Widget _ubntBody(UbiquitiStatus u) {
-    return Column(
-      children: [
-        _row('نوع الجهاز',
-            u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)',
-            LucideIcons.wifi,
-            color: AppColors.brand),
-        if (u.firmware.isNotEmpty)
-          _row('الإصدار', u.firmware, LucideIcons.cpu,
-              color: AppColors.textHi),
-        if (u.ssid.isNotEmpty)
-          _row('SSID', u.ssid, LucideIcons.wifi, color: AppColors.textHi),
-        if (u.signalDbm != null)
-          _row('قوة الإشارة', '${u.signalDbm} dBm', LucideIcons.signal,
-              color: _healthColor(u.signalHealth)),
-        if (u.snrDb != null)
-          _row('SNR', '${u.snrDb} dB', LucideIcons.activity,
-              color: AppColors.textHi),
-        if (u.ccqPercent != null)
-          _row('CCQ', '${u.ccqPercent}%', LucideIcons.gauge,
-              color: _healthColor(u.ccqHealth)),
-        // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
-        // eth interface بسطر منفصل مع plugged/speed وحدوده الخاصة.
-        if (u.lanPorts.isNotEmpty) _lanPortsBlock(u.lanPorts),
-        if ((u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0)
-          _row(
-            'الإرسال / الاستقبال',
-            '${_rate(u.txRateKbps)} / ${_rate(u.rxRateKbps)}',
-            LucideIcons.arrowLeftRight,
-            color: AppColors.textHi,
+        Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: Sp.lg, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(R.lg),
           ),
-        if (u.peerMac != null && u.peerMac!.isNotEmpty)
-          _row('Peer MAC', u.peerMac!, LucideIcons.link,
-              color: AppColors.textHi),
-        if (u.peerCount != null && u.peerCount! > 0)
-          _row('المتصلون', '${u.peerCount}', LucideIcons.users,
-              color: AppColors.textHi),
-      ],
-    );
-  }
-
-  static Color _rxColor(OntOpticalInfo o) {
-    if (o.rxOk) return AppColors.brand;
-    return AppColors.error;
-  }
-
-  /// Renders the LAN port grid for Ubiquiti devices — one chip per
-  /// eth interface. plugged ports show their speed colored by health
-  /// (1G good / 100M warn / 10M bad). unplugged ports use a grey
-  /// disabled style so the row still communicates port-presence.
-  Widget _lanPortsBlock(List<LanPort> ports) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          child: Row(
             children: [
-              Icon(LucideIcons.cable, size: 12, color: AppColors.textMid),
-              const SizedBox(width: 6),
-              Text(
-                'المنافذ',
-                style: AppType.muted().copyWith(fontSize: 10.5),
+              SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: AppColors.brandAccent,
+                  backgroundColor: AppColors.border,
+                ),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('جارٍ فحص الجهاز تلقائياً…',
+                        style: AppType.rowValue()),
+                    const SizedBox(height: Sp.xxs),
+                    Text('يتم تجربة Ubiquiti ثم ONT',
+                        style: AppType.muted()),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            children: [for (final p in ports) _lanChip(p)],
+        ),
+        const SizedBox(height: Sp.md),
+        Row(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: Sp.sm),
+              const Expanded(child: _SkeletonBox(height: 56)),
+            ],
+          ],
+        ),
+        const SizedBox(height: Sp.md),
+        const _SkeletonBar(widthFactor: 0.78),
+        const SizedBox(height: Sp.sm),
+        const _SkeletonBar(widthFactor: 0.60),
+        const SizedBox(height: Sp.sm),
+        const _SkeletonBar(widthFactor: 0.68),
+      ],
+    );
+  }
+
+  Widget _unreachable() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: Sp.lg, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.lg),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.plugZap, size: 20, color: AppColors.textHint),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('لم يُتمكّن من الوصول للجهاز',
+                    style: AppType.rowValue(color: AppColors.textMid)),
+                const SizedBox(height: Sp.xxs),
+                Text('اضبط الـIP وبيانات الدخول من زرّ الإعدادات',
+                    style: AppType.muted()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════ ONT ═══════════════
+
+  Widget _ontBody(OntOpticalInfo o) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // شبكة 2×2 كما في المخطّط — أربع قيم بصريّة قبل التفاصيل.
+        Row(
+          children: [
+            Expanded(
+              child: _MetricTile(
+                icon: LucideIcons.arrowDown,
+                label: 'RX Power',
+                value: '${o.rxPower} dBm',
+                color: o.rxOk ? AppColors.brandAccent : AppColors.error,
+              ),
+            ),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: _MetricTile(
+                icon: LucideIcons.arrowUp,
+                label: 'TX Power',
+                value: '${o.txPower} dBm',
+                color: o.txOk ? AppColors.textHi : AppColors.error,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Sp.sm),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricTile(
+                icon: LucideIcons.zap,
+                label: 'الفولتية',
+                value: '${o.voltage} mV',
+                color:
+                    o.voltageOk ? AppColors.textHi : AppColors.warningFill,
+              ),
+            ),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: _MetricTile(
+                icon: LucideIcons.thermometer,
+                label: 'الحرارة',
+                value: '${o.temperature} °C',
+                color: o.tempOk ? AppColors.textHi : AppColors.warningFill,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _DetailRow(label: 'نوع الجهاز', value: 'Huawei ONT', strong: true),
+        if (o.sendStatus.trim().isNotEmpty && o.sendStatus.trim() != '--')
+          _DetailRow(label: 'حالة الليف', value: o.sendStatus),
+      ],
+    );
+  }
+
+  // ═══════════════ Ubiquiti ═══════════════
+
+  Widget _ubntBody(UbiquitiStatus u) {
+    final tiles = <Widget>[
+      if (u.signalDbm != null)
+        _MetricTile(
+          label: 'الإشارة',
+          value: '${u.signalDbm} dBm',
+          color: _healthColor(u.signalHealth),
+        ),
+      if (u.snrDb != null)
+        _MetricTile(
+          label: 'SNR',
+          value: '${u.snrDb} dB',
+          color: AppColors.textHi,
+        ),
+      if (u.ccqPercent != null)
+        _MetricTile(
+          label: 'CCQ',
+          value: '${u.ccqPercent}%',
+          color: _healthColor(u.ccqHealth),
+        ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (tiles.isNotEmpty) ...[
+          Row(
+            children: [
+              for (var i = 0; i < tiles.length; i++) ...[
+                if (i > 0) const SizedBox(width: Sp.sm),
+                Expanded(child: tiles[i]),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+        ],
+        _DetailRow(
+          label: 'نوع الجهاز',
+          value: u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)',
+          strong: true,
+        ),
+        if (u.firmware.isNotEmpty)
+          _DetailRow(label: 'الإصدار', value: u.firmware, small: true),
+        if (u.ssid.isNotEmpty)
+          _DetailRow(label: 'SSID', value: u.ssid, small: true),
+        if ((u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0)
+          _DetailRow(
+            label: 'الإرسال / الاستقبال',
+            value: '${_rate(u.txRateKbps)} / ${_rate(u.rxRateKbps)}',
+          ),
+        if (u.peerMac != null && u.peerMac!.isNotEmpty)
+          _DetailRow(label: 'Peer MAC', value: u.peerMac!, small: true),
+        if (u.peerCount != null && u.peerCount! > 0)
+          _DetailRow(label: 'المتصلون', value: '${u.peerCount}'),
+        // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
+        // eth interface بحبّة منفصلة مع plugged/speed.
+        if (u.lanPorts.isNotEmpty) _lanPortsRow(u.lanPorts),
+      ],
+    );
+  }
+
+  /// صفّ المنافذ — تسمية يمين وحبّات المنافذ يسار، كما في المخطّط
+  /// («ETH0 · 100M» بلون البراند و«ETH1 · مفصول» رماديّة).
+  Widget _lanPortsRow(List<LanPort> ports) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('المنافذ', style: AppType.body(color: AppColors.textLabel)),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: Sp.x6,
+              runSpacing: Sp.x6,
+              children: [for (final p in ports) _lanChip(p)],
+            ),
           ),
         ],
       ),
@@ -261,60 +444,37 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
   Widget _lanChip(LanPort p) {
     final unplugged = !p.plugged;
     final speed = p.displaySpeed;
-    Color color;
-    if (unplugged) {
-      color = AppColors.textLow;
-    } else if (speed.contains('Gbps')) {
-      color = AppColors.brand;
-    } else {
-      final m = RegExp(r'(\d+)\s*Mbps').firstMatch(speed);
-      final mbps = m == null ? null : int.tryParse(m.group(1)!);
-      if (mbps == null) {
-        color = AppColors.textMid;
-      } else if (mbps >= 100) {
-        color = AppColors.brand;
-      } else {
-        color = const Color(0xFFE08F2D);
-      }
-    }
+    final Color fg = unplugged ? AppColors.textLow : _speedColor(speed);
+    final Color bg =
+        unplugged ? AppColors.bg : AppColors.brandSoftBg;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: Sp.xs),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: bg,
         borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            unplugged ? LucideIcons.unplug : LucideIcons.cable,
-            size: 9.5,
-            color: color,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            p.label,
-            style: AppType.label(color: color)
-                .copyWith(fontSize: 10, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            unplugged ? 'مفصول' : speed,
-            style: AppType.muted(color: color)
-                .copyWith(fontSize: 9.5, fontWeight: FontWeight.w600),
-          ),
-        ],
+      child: Text(
+        '${p.label} · ${unplugged ? 'مفصول' : speed}',
+        textDirection: TextDirection.ltr,
+        style: AppType.pillLabel(color: fg).copyWith(letterSpacing: 0),
       ),
     );
+  }
+
+  static Color _speedColor(String speed) {
+    if (speed.contains('Gbps')) return AppColors.brandAccent;
+    final m = RegExp(r'(\d+)\s*Mbps').firstMatch(speed);
+    final mbps = m == null ? null : int.tryParse(m.group(1)!);
+    if (mbps == null) return AppColors.textMid;
+    return mbps >= 100 ? AppColors.brandAccent : AppColors.warningFill;
   }
 
   static Color _healthColor(String h) {
     switch (h) {
       case 'good':
-        return AppColors.brand;
+        return AppColors.brandAccent;
       case 'warn':
-        return const Color(0xFFE08F2D);
+        return AppColors.warningFill;
       case 'bad':
         return AppColors.error;
       default:
@@ -327,24 +487,85 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
     if (kbps >= 1000) return '${(kbps / 1000).toStringAsFixed(1)} Mbps';
     return '$kbps Kbps';
   }
+}
 
-  Widget _row(String label, String value, IconData icon, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+/// زرّ أيقوني في رأس الكارت — 18dp بلا خلفيّة، كما في المخطّط.
+class _HeaderIcon extends StatelessWidget {
+  const _HeaderIcon({required this.icon, this.onTap, this.busy = false});
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(R.sm),
+      child: Padding(
+        padding: const EdgeInsets.all(Sp.xs),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: busy
+              ? Padding(
+                  padding: const EdgeInsets.all(1.5),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.textLow),
+                )
+              : Icon(icon, size: 18, color: AppColors.textLow),
+        ),
+      ),
+    );
+  }
+}
+
+/// البلاطة الغاطسة للقياس — تسمية 10.5 فوق قيمة 14/w700 ملوّنة دلاليّاً.
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.icon,
+  });
+  final String label;
+  final String value;
+  final Color color;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color ?? AppColors.textMid),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              label,
-              style: AppType.muted().copyWith(fontSize: 10.5),
-            ),
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: AppColors.textLabel),
+                const SizedBox(width: Sp.xs),
+              ],
+              Flexible(
+                child: Text(label,
+                    style: AppType.micro(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
           ),
+          const SizedBox(height: Sp.xxs),
           Text(
             value,
-            style: AppType.label(color: color ?? AppColors.textHi)
-                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+            textDirection: TextDirection.ltr,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.cardTitle(color: color)
+                .copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -352,86 +573,87 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
   }
 }
 
-class _Card extends StatelessWidget {
-  const _Card({
-    required this.icon,
-    required this.title,
-    required this.accent,
-    required this.child,
-    required this.onRefresh,
-    required this.onConfig,
-    required this.busy,
+/// صفّ تفصيل — تسمية خافتة يمين وقيمة `ltr` يسار.
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.strong = false,
+    this.small = false,
   });
-  final IconData icon;
-  final String title;
-  final Color accent;
-  final Widget child;
-  final VoidCallback onRefresh;
-  final VoidCallback onConfig;
-  final bool busy;
+  final String label;
+  final String value;
+
+  /// أوّل صفّ في المجموعة (نوع الجهاز) بلون نصّ عالٍ.
+  final bool strong;
+
+  /// القيم الطويلة (firmware / SSID / MAC) بدرجة أصغر حتى لا تلتفّ.
+  final bool small;
 
   @override
   Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final style = small
+        ? AppType.body(color: AppColors.textBody).copyWith(fontSize: 11.5)
+        : AppType.body(
+            color: strong ? AppColors.textHi : AppColors.textBody,
+          );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(icon, color: accent, size: 11),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                title,
-                style: AppType.label(color: AppColors.textHi).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              InkWell(
-                onTap: onConfig,
-                borderRadius: BorderRadius.circular(R.sm),
-                child: Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(LucideIcons.settings,
-                      size: 12, color: AppColors.textMid),
-                ),
-              ),
-              const SizedBox(width: 2),
-              InkWell(
-                onTap: busy ? null : onRefresh,
-                borderRadius: BorderRadius.circular(R.sm),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: busy
-                      ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 1.5),
-                        )
-                      : Icon(LucideIcons.refreshCw,
-                          size: 12, color: AppColors.textMid),
-                ),
-              ),
-            ],
+          Text(label, style: AppType.body(color: AppColors.textLabel)),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              textDirection: TextDirection.ltr,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
           ),
-          const SizedBox(height: 3),
-          child,
         ],
+      ),
+    );
+  }
+}
+
+/// هيكل نابض — بلاطة القياس أثناء الفحص.
+class _SkeletonBox extends StatelessWidget {
+  const _SkeletonBox({required this.height});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
+    );
+  }
+}
+
+/// هيكل نابض — سطر تفصيل أثناء الفحص.
+class _SkeletonBar extends StatelessWidget {
+  const _SkeletonBar({required this.widthFactor});
+  final double widthFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: FractionallySizedBox(
+        widthFactor: widthFactor,
+        child: Container(
+          height: 12,
+          decoration: BoxDecoration(
+            color: AppColors.bg,
+            borderRadius: BorderRadius.circular(R.pill),
+          ),
+        ),
       ),
     );
   }

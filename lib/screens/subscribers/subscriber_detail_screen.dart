@@ -31,6 +31,7 @@ import 'sheets/pay_debt_sheet.dart';
 import 'sheets/qr_login_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
 import 'widgets/device_probe_card.dart';
+import 'widgets/subscriber_actions.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -184,7 +185,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           children: [
             // مطلب 2026-06-12: AppBar نظيف بالاسم العربي (مطابق screenshot v1)
             _SimpleAppBar(
-              title: sub.fullName,
+              title: 'subscribers.detail_title'.tr(),
               onClose: () => Navigator.of(context).pop(),
             ),
             Expanded(
@@ -214,6 +215,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                           : null,
                     ),
                   ],
+                  // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
+                  // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
+                  // «إجراءات أخرى» خلف بلاطة «المزيد».
+                  const SizedBox(height: Sp.md),
+                  SubscriberActionTiles(actions: _quickActions()),
                   const SizedBox(height: Sp.md),
                   // معلومات الجلسة الحية (IP + مدّة + DL/UL) فقط عند الاتصال
                   // النشط الفعلي — أي RADIUS session قائم. مشترك online في
@@ -247,25 +253,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
                   // صارت داخل _SubscriberHero. كرت الرصيد لا يزال يظهر
                   // مستقلاً لما الـbalance != 0.
-                  const SizedBox(height: Sp.md),
-                  _OperationsCard(
-                    sub: sub,
-                    disconnecting: _disconnecting,
-                    onDisconnect: sub.isOnline && sub.idx != null
-                        ? _confirmDisconnect
-                        : null,
-                    toggling: _toggling,
-                    onToggleEnabled:
-                        sub.idx != null ? _confirmToggleEnabled : null,
-                    sendingTemplate: _sendingTemplate,
-                    onSendTemplate: _sendTemplate,
-                    generatingLink: _generatingLink,
-                    onGenerateLink: _generateInfoLink,
-                    onQrLogin: () => showQrLoginSheet(context, sub),
-                    deleting: _deleting,
-                    onDelete: sub.idx != null ? _confirmDelete : null,
-                    busy: _isBusy,
-                  ),
+                  //
+                  // 2026-08-29 (S4): شبكة العمليّات ذات الـ18 بلاطة
+                  // أُلغيت. المخطّط يوزّعها على ثلاث طبقات: أربع بلاطات
+                  // فوق · زرّ تجديد أساسي هنا · والباقي في شيت «المزيد».
+                  if (Perms.has('subscribers.activate')) ...[
+                    const SizedBox(height: Sp.md),
+                    SubscriberPrimaryAction(
+                      icon: LucideIcons.refreshCw,
+                      label: 'subscribers.renew_subscription'.tr(),
+                      busy: _isBusy,
+                      onTap: () => showActivateSheet(context, sub),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -567,150 +567,223 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       isError: !success,
     );
   }
-}
 
-class _Header extends StatelessWidget {
-  const _Header({required this.sub, required this.onClose});
-  final Subscriber sub;
-  final VoidCallback onClose;
+  // ═══════════ الشريحة 4 — بناء الإجراءات ═══════════
+  //
+  // الشبكة القديمة كانت تبني `List<_Op>` واحدة بـ18 عنصراً وتعرضها
+  // دفعةً واحدة. المخطّط يوزّعها: أربع بلاطات + زرّ تجديد + شيت.
+  // البوّابات (`Perms.has`) نُقلت كما هي حرفيّاً — لا إجراء يظهر لمن
+  // لا يملكه، ولا إجراء سقط في النقل.
 
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final statusColor = _statusColor(sub);
-    final statusLabel = _statusLabel(sub);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.sm, Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+  /// البلاطات الأربع: تمديد · تعديل · تعطيل/تفعيل · المزيد.
+  /// «المزيد» حاضرة دائماً — هي المدخل الوحيد لباقي العمليّات.
+  List<SubAction> _quickActions() {
+    return <SubAction>[
+      if (Perms.has('subscribers.extend'))
+        SubAction(
+          icon: LucideIcons.calendarPlus,
+          label: 'subscribers.op_extend'.tr(),
+          onTap: _isBusy ? null : () => showExtendSheet(context, sub),
+        ),
+      if (Perms.has('subscribers.edit'))
+        SubAction(
+          icon: LucideIcons.pencil,
+          label: 'subscribers.op_edit'.tr(),
+          onTap: _isBusy ? null : () => showEditSubscriberSheet(context, sub),
+        ),
+      if (Perms.has('subscribers.toggle'))
+        SubAction(
+          icon: sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
+          label: sub.isDisabled
+              ? 'subscribers.enable'.tr()
+              : 'subscribers.disable'.tr(),
+          color: sub.isDisabled ? AppColors.success : AppColors.warningFill,
+          busy: _toggling,
+          onTap: (sub.idx == null || _isBusy) ? null : _confirmToggleEnabled,
+        ),
+      SubAction(
+        icon: LucideIcons.ellipsis,
+        label: 'subscribers.more_actions'.tr(),
+        color: AppColors.textMid,
+        onTap: () => showMoreActionsSheet(
+          context,
+          subtitle: sub.username,
+          groups: _moreGroups(),
+        ),
       ),
-      child: Row(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: statusColor.withValues(alpha: 0.3)),
-                ),
-                alignment: Alignment.center,
-                child: Icon(_statusIcon(sub), color: statusColor, size: 22),
-              ),
-              if (sub.isOnline)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: AppColors.brand,
-                      shape: BoxShape.circle,
-                      border:
-                          Border.all(color: AppColors.surface, width: 2),
-                    ),
-                  ),
-                ),
-            ],
+    ];
+  }
+
+  /// مجموعات شيت «إجراءات أخرى». ما ظهر كبلاطة أعلاه (تمديد/تعديل/
+  /// تعطيل) وما ظهر كزرّ أساسي (تجديد) لا يتكرّر هنا.
+  List<SubActionGroup> _moreGroups() {
+    final phone = sub.displayPhone;
+    return <SubActionGroup>[
+      SubActionGroup('subscribers.group_money'.tr(), [
+        if (Perms.has('subscribers.add_debt'))
+          SubAction(
+            icon: LucideIcons.plus,
+            label: 'subscribers.op_add_debt'.tr(),
+            color: AppColors.warningFill,
+            onTap: () => showAddDebtSheet(context, sub),
           ),
-          const SizedBox(width: Sp.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  sub.fullName,
-                  style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        // 2026-08-29: بلا شرط `hasDebt`. الرصيد الدائن مدعوم صراحةً في
+        // pay_debt_sheet، وإخفاء المدخل يقطع الطريق الوحيد إليه.
+        if (Perms.has('subscribers.pay_debt'))
+          SubAction(
+            icon: LucideIcons.banknote,
+            label: 'subscribers.op_pay_debt'.tr(),
+            color: AppColors.brandAccent,
+            meta: sub.balanceAmount != 0
+                ? formatIQD(sub.balanceAmount.abs())
+                : null,
+            onTap: () => showPayDebtSheet(context, sub),
+          ),
+        if (Perms.has('discounts.manage'))
+          SubAction(
+            icon: LucideIcons.tag,
+            label: 'subscribers.op_quick_discount'.tr(),
+            onTap: () => showQuickDiscountSheet(context, sub),
+          ),
+      ]),
+      SubActionGroup('subscribers.group_contact'.tr(), [
+        if (sub.hasDebt && Perms.has('subscribers.send_whatsapp'))
+          SubAction(
+            icon: LucideIcons.bellRing,
+            label: 'subscribers.op_debt_reminder'.tr(),
+            color: AppColors.warningFill,
+            busy: _sendingTemplate == 'debt_reminder',
+            onTap: () => _sendTemplate('debt_reminder'),
+          ),
+        if (sub.isNearExpiry && Perms.has('subscribers.send_whatsapp'))
+          SubAction(
+            icon: LucideIcons.alarmClock,
+            label: 'subscribers.op_expiry_warning'.tr(),
+            color: AppColors.warningFill,
+            busy: _sendingTemplate == 'expiry_warning',
+            onTap: () => _sendTemplate('expiry_warning'),
+          ),
+        if (Perms.has('subscribers.send_whatsapp'))
+          SubAction(
+            icon: LucideIcons.info,
+            label: 'subscribers.op_send_info'.tr(),
+            busy: _sendingTemplate == 'subscriber_info',
+            onTap: () => _sendTemplate('subscriber_info'),
+          ),
+        if (Perms.has('subscribers.generate_link'))
+          SubAction(
+            icon: LucideIcons.link,
+            label: 'subscribers.op_gen_link'.tr(),
+            busy: _generatingLink,
+            onTap: _generateInfoLink,
+          ),
+        if (Perms.has('subscribers.send_whatsapp'))
+          SubAction(
+            icon: LucideIcons.qrCode,
+            label: 'subscribers.op_qr_login'.tr(),
+            onTap: () => showQrLoginSheet(context, sub),
+          ),
+        if (phone.isNotEmpty)
+          SubAction(
+            icon: LucideIcons.phone,
+            label: 'subscribers.call'.tr(),
+            meta: phone,
+            onTap: () => _launchUri(Uri.parse('tel:$phone')),
+          ),
+        if (phone.isNotEmpty)
+          SubAction(
+            icon: LucideIcons.messageCircle,
+            label: 'subscribers.op_whatsapp'.tr(),
+            color: AppColors.success,
+            onTap: () => _launchUri(
+                Uri.parse('https://wa.me/${_digits(phone)}')),
+          ),
+      ]),
+      SubActionGroup('subscribers.group_records'.tr(), [
+        if (sub.isOnline)
+          SubAction(
+            icon: LucideIcons.chartLine,
+            label: 'subscribers.op_consumption'.tr(),
+            onTap: () => showConsumptionSheet(context, sub),
+          ),
+        if (Perms.has('subscribers.view_activity'))
+          SubAction(
+            icon: LucideIcons.history,
+            label: 'subscribers.op_movements'.tr(),
+            onTap: () => showMovementsSheet(context, sub),
+          ),
+        if (Perms.has('reports.account_statement'))
+          SubAction(
+            icon: LucideIcons.fileText,
+            label: 'subscribers.account_statement'.tr(),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AccountStatementScreen(
+                  username: sub.username,
+                  // firstname/lastname غير قابلين للـnull في الموديل —
+                  // نمرّر null فقط حين يكونان فارغين معاً.
+                  displayName: sub.fullName.trim().isEmpty
+                      ? null
+                      : sub.fullName.trim(),
+                  phone: sub.phone,
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.pill),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: AppType.muted(color: statusColor).copyWith(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        sub.username,
-                        style: AppType.muted(color: AppColors.textLow)
-                            .copyWith(
-                                fontSize: 11, fontWeight: FontWeight.w500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 20),
-            color: AppColors.textMid,
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
+        // 2026-08-26: يظهر إذا الموقع مُعيَّن (أيّ موظّف يفتحه بالخرائط)
+        // أو الموظّف يملك صلاحيّة تعديله.
+        if (sub.hasLocation || Perms.has('subscribers.edit_location'))
+          SubAction(
+            icon: LucideIcons.mapPin,
+            label: sub.hasLocation
+                ? 'subscribers.op_location'.tr()
+                : 'subscribers.op_location_add'.tr(),
+            onTap: () async {
+              if (!sub.hasLocation) {
+                await showLocationEditSheet(context, sub: sub);
+                return;
+              }
+              await showLocationSheet(context, sub: sub);
+            },
           ),
-        ],
-      ),
-    );
+      ]),
+      SubActionGroup('subscribers.group_danger'.tr(), [
+        if (sub.isOnline && sub.idx != null)
+          SubAction(
+            icon: LucideIcons.power,
+            label: 'subscribers.disconnect_user'.tr(),
+            color: AppColors.error,
+            busy: _disconnecting,
+            onTap: _confirmDisconnect,
+          ),
+        if (Perms.has('subscribers.delete'))
+          SubAction(
+            icon: LucideIcons.trash2,
+            label: 'common.delete'.tr(),
+            color: AppColors.error,
+            busy: _deleting,
+            onTap: sub.idx == null ? null : _confirmDelete,
+          ),
+      ]),
+    ];
   }
 
-  // Same 7-state visual matrix as the list card —
-  // mobile-app/lib/widgets/subscriber_card.dart:478-520.
-  static Color _statusColor(Subscriber s) {
-    if (s.isDisabled) return const Color(0xFF94A3B8);
-    if (s.isOnline) {
-      if (s.isExpired) return const Color(0xFF8B5CF6); // purple
-      if (s.isNearExpiry) return const Color(0xFFF59E0B);
-      return const Color(0xFF2563EB);
+  static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
+
+  Future<void> _launchUri(Uri uri) async {
+    final ok = await canLaunchUrl(uri);
+    if (!mounted) return;
+    if (!ok) {
+      showSheetSnack(context, 'لا يمكن فتح الرابط', isError: true);
+      return;
     }
-    if (s.isExpired) return const Color(0xFFEF4444);
-    if (s.isNearExpiry) return const Color(0xFFF59E0B);
-    return const Color(0xFF10B981);
-  }
-
-  static String _statusLabel(Subscriber s) {
-    if (s.isDisabled) return 'subscribers.status_disabled'.tr();
-    if (s.isOnline) {
-      if (s.isExpired) return 'subscribers.status_online_expired'.tr();
-      if (s.isNearExpiry) return 'subscribers.status_online_near'.tr();
-      return 'subscribers.status_online'.tr();
-    }
-    if (s.isExpired) return 'subscribers.status_expired'.tr();
-    if (s.isNearExpiry) return 'subscribers.status_near_expiry'.tr();
-    return 'subscribers.status_active'.tr();
-  }
-
-  static IconData _statusIcon(Subscriber s) {
-    if (s.isDisabled) return LucideIcons.ban;
-    return s.isOnline ? LucideIcons.wifi : LucideIcons.wifiOff;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 
+/// كارت «معلومات الاتصال» — كارت أبيض r20 بحدّ 1px وبلا ظلّ، رأسه
+/// أيقونة 18 بلون الـaccent + عنوان 14/w600 وحبّة «متصل منذ …» في
+/// الطرف، وجسمه ثلاث بلاطات غاطسة (#F7F8F5 / r14): تحميل · رفع · IP.
 class _LiveSessionCard extends StatelessWidget {
   const _LiveSessionCard({required this.sub});
   final Subscriber sub;
@@ -718,229 +791,177 @@ class _LiveSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return _SectionCard(
-      icon: LucideIcons.wifi,
-      title: 'subscribers.section_connection'.tr(),
-      accent: const Color(0xFF3B82F6),
-      children: [
-        if ((sub.ipAddress ?? '').isNotEmpty)
-          _InfoRow(
-            icon: LucideIcons.network,
-            label: 'IP',
-            value: sub.ipAddress!,
-            valueColor: const Color(0xFF3B82F6),
-            onTap: () => launchUrl(
-              Uri.parse('http://${sub.ipAddress}'),
-              mode: LaunchMode.externalApplication,
-            ),
-            trailing: LucideIcons.externalLink,
+    final ip = sub.ipAddress ?? '';
+    final secs = sub.sessionTime ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(Sp.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.wifi_rounded, size: 18, color: AppColors.brandAccent),
+              const SizedBox(width: Sp.sm),
+              Text('subscribers.section_connection'.tr(),
+                  style: AppType.cardTitle()),
+              const Spacer(),
+              if (secs > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoftBg,
+                    borderRadius: BorderRadius.circular(R.pill),
+                    border: Border.all(color: AppColors.brandSoftBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: AppColors.successDot,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'متصل منذ ${_formatDuration(secs)}',
+                        style: AppType.bodyStrong(color: AppColors.brandOnSoft)
+                            .copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
-        if (sub.sessionTime != null && sub.sessionTime! > 0)
-          _InfoRow(
-            icon: LucideIcons.timer,
-            label: 'subscribers.label_session_time'.tr(),
-            value: _formatDuration(sub.sessionTime!),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _SunkenTile(
+                  icon: Icons.south_rounded,
+                  label: 'subscribers.label_download'.tr(),
+                  value: _formatBytes(sub.downloadBytes ?? 0),
+                  color: AppColors.success,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _SunkenTile(
+                  icon: Icons.north_rounded,
+                  label: 'subscribers.label_upload'.tr(),
+                  value: _formatBytes(sub.uploadBytes ?? 0),
+                  color: AppColors.info,
+                ),
+              ),
+              if (ip.isNotEmpty) ...[
+                const SizedBox(width: 9),
+                Expanded(
+                  child: _SunkenTile(
+                    icon: Icons.open_in_new_rounded,
+                    label: 'IP',
+                    value: ip,
+                    color: AppColors.textHi,
+                    onTap: () => launchUrl(
+                      Uri.parse('http://$ip'),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Expanded(
-              child: _BytesCard(
-                icon: LucideIcons.download,
-                label: 'subscribers.label_download'.tr(),
-                bytes: sub.downloadBytes ?? 0,
-                color: AppColors.brand,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _BytesCard(
-                icon: LucideIcons.upload,
-                label: 'subscribers.label_upload'.tr(),
-                bytes: sub.uploadBytes ?? 0,
-                color: const Color(0xFF3B82F6),
-              ),
-            ),
-          ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
+  /// «11 يوم 6س 28د». النسخة السابقة كانت ساعات فقط فتعرض «270س».
   static String _formatDuration(int seconds) {
-    final h = seconds ~/ 3600;
+    final d = seconds ~/ 86400;
+    final h = (seconds % 86400) ~/ 3600;
     final m = (seconds % 3600) ~/ 60;
+    if (d > 0) return '$d يوم ${h}س ${m}د';
     if (h > 0) return '${h}س ${m}د';
     return '${m}د';
   }
+
+  static String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 MB';
+    const gb = 1024 * 1024 * 1024;
+    const mb = 1024 * 1024;
+    if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(1)} GB';
+    return '${(bytes / mb).toStringAsFixed(1)} MB';
+  }
 }
 
-class _SubscriptionCard extends StatelessWidget {
-  const _SubscriptionCard({required this.sub});
-  final Subscriber sub;
+/// البلاطة الغاطسة — تسمية 10.5 فوق قيمة 14/w700 ملوّنة دلاليّاً.
+class _SunkenTile extends StatelessWidget {
+  const _SunkenTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return _SectionCard(
-      icon: LucideIcons.package,
-      title: 'subscribers.section_subscription'.tr(),
-      accent: AppColors.brand,
-      children: [
-        _InfoRow(
-          icon: LucideIcons.idCard,
-          label: 'subscribers.label_package'.tr(),
-          value: (sub.profileName?.isNotEmpty ?? false)
-              ? sub.profileName!
-              : 'subscribers.label_no_package'.tr(),
-        ),
-        if (sub.price != null)
-          _InfoRow(
-            icon: LucideIcons.tag,
-            label: 'subscribers.label_price'.tr(),
-            value: '${formatIQD(sub.price!.round())} د.ع',
-            valueColor: const Color(0xFFE08F2D),
+    final body = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: AppColors.textLabel),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: AppType.micro(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-        // Show the active discount as its own row so it reads cleanly
-        // alongside السعر — admin sees: السعر (X), الخصم (-Y), السعر
-        // بعد الخصم (X-Y). Renders only when a discount is set;
-        // refreshes live via the dataChanged listener above.
-        if ((sub.discount ?? 0) > 0) ...[
-          _InfoRow(
-            icon: LucideIcons.percent,
-            label: 'subscribers.label_discount'.tr(),
-            value: '-${formatIQD(sub.discount!.round())} د.ع',
-            valueColor: const Color(0xFF14B8A6),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            textDirection: ui.TextDirection.ltr,
+            style: AppType.cardTitle(color: color)
+                .copyWith(fontWeight: FontWeight.w700),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          if (sub.price != null)
-            _InfoRow(
-              icon: LucideIcons.banknote,
-              label: 'subscribers.label_price_after_discount'.tr(),
-              value: '${formatIQD((sub.price! - sub.discount!).round())} د.ع',
-              valueColor: AppColors.brand,
-            ),
         ],
-        _InfoRow(
-          icon: LucideIcons.calendar,
-          label: 'subscribers.label_expiration'.tr(),
-          value: _expirationText(sub.expiration),
-        ),
-        // 2026-08-18: استعمل نفس منطق الهيرو (parsedExpiration - now, inDays floor)
-        // بدل sub.remainingDays (SAS4 يقرّبه لأعلى فيعطي 31 بدل 30).
-        _InfoRow(
-          icon: LucideIcons.clock,
-          label: 'subscribers.label_remaining_days'.tr(),
-          value: _remainingDaysText(sub),
-          valueColor: sub.isExpired
-              ? AppColors.error
-              : sub.isNearExpiry
-                  ? const Color(0xFFE08F2D)
-                  : AppColors.brand,
-        ),
-        if ((sub.parentUsername ?? '').isNotEmpty)
-          _InfoRow(
-            icon: LucideIcons.userCog,
-            label: 'subscribers.label_parent_admin'.tr(),
-            value: sub.parentUsername!,
-          ),
-        if (sub.displayPhone.isNotEmpty)
-          _InfoRow(
-            icon: LucideIcons.phone,
-            label: 'subscribers.label_phone'.tr(),
-            value: sub.displayPhone,
-            onTap: () =>
-                Clipboard.setData(ClipboardData(text: sub.displayPhone)),
-            trailing: LucideIcons.copy,
-          ),
-        // 'آخر اتصال' for offline subscribers. v1 fetches the precise
-        // last-session timestamp from SAS4's encrypted /index/UserSessions
-        // endpoint — without client-side encryption in v2, the best we
-        // can do until a backend wrapper lands is fall back to the
-        // expiry-derived signal. Shown only for offline rows so the
-        // live session block doesn't have a redundant 'آخر اتصال'.
-        if (!sub.isOnline)
-          _InfoRow(
-            icon: LucideIcons.history,
-            label: 'آخر اتصال',
-            value: _lastSeenText(sub),
-            valueColor: AppColors.textMid,
-          ),
-      ],
+      ),
     );
-  }
-
-  static String _lastSeenText(Subscriber s) {
-    // 2026-07-16: نستخدم SAS4 last_online إذا كان موجوداً (تاريخ ووقت
-    // دقيقان). backend يمرّرها في /api/v2/subscribers منذ 2026-07-13.
-    // نعرض الاثنين: تقدير نسبيّ + التاريخ الدقيق (زي الويب) —
-    // "قبل 3 أيام · 2026/07/13 14:32".
-    final lastRaw = s.lastOnline?.trim();
-    if (lastRaw != null && lastRaw.isNotEmpty) {
-      final rel = _formatLastOnline(lastRaw);
-      final exact = _expirationText(lastRaw); // نفس صيغة تاريخ الانتهاء
-      return exact == '—' || exact == lastRaw ? rel : '$rel · $exact';
-    }
-    // Fallback القديم:
-    if (!s.isExpired) return 'subscribers.ago_not_available'.tr();
-    final raw = s.expiration?.trim();
-    if (raw == null || raw.isEmpty) return 'subscribers.ago_unknown'.tr();
-    final t = DateTime.tryParse(raw) ??
-        DateTime.tryParse(raw.split(' ').first);
-    if (t == null) return raw.split(' ').first;
-    final diff = DateTime.now().difference(t);
-    if (diff.inDays > 365) return 'subscribers.ago_over_year'.tr();
-    if (diff.inDays > 30) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
-    if (diff.inDays > 0) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
-    if (diff.inHours > 0) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
-    return 'subscribers.ago_minutes'.tr();
-  }
-
-  /// 2026-07-16: تنسيق last_online كـ"قبل X" بأسلوب طبيعي. يحوّل SAS4
-  /// timestamp إلى تعبير نسبيّ (منذ 5 دقائق / 3 ساعات / يومين...).
-  static String _formatLastOnline(String raw) {
-    final t = DateTime.tryParse(raw) ?? DateTime.tryParse(raw.split(' ').first);
-    if (t == null) return raw.split(' ').first;
-    final diff = DateTime.now().difference(t);
-    if (diff.inMinutes < 1) return 'subscribers.ago_now'.tr();
-    if (diff.inMinutes < 60) return 'subscribers.ago_minutes_n'.tr(namedArgs: {'n': '${diff.inMinutes}'});
-    if (diff.inHours < 24) return 'subscribers.ago_hours'.tr(namedArgs: {'n': '${diff.inHours}'});
-    if (diff.inDays < 30) return 'subscribers.ago_days'.tr(namedArgs: {'n': '${diff.inDays}'});
-    if (diff.inDays < 365) return 'subscribers.ago_months'.tr(namedArgs: {'n': '${(diff.inDays / 30).round()}'});
-    return 'subscribers.ago_over_year'.tr();
-  }
-
-  static String _expirationText(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return '—';
-    final s = raw.trim();
-    final t = DateTime.tryParse(s) ?? DateTime.tryParse(s.split(' ').first);
-    if (t == null) return s.split(' ').first;
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${t.year}/${two(t.month)}/${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
-  }
-
-  /// حساب "الأيام المتبقيّة" لصف الـinfo (تحت "تاريخ الانتهاء").
-  /// 2026-08-18: نفس منطق الهيرو — يستعمل parsedExpiration - now للحصول
-  /// على floor(diff/day) بدل sub.remainingDays الذي يقرّبه SAS4 لأعلى.
-  /// يعرض "Nيوم Hس" لو أقل من يوم كامل، أو "منتهي" لو مضى الوقت.
-  static String _remainingDaysText(Subscriber sub) {
-    final exp = sub.parsedExpiration;
-    if (exp != null) {
-      final diff = exp.difference(DateTime.now());
-      if (diff.isNegative) return 'subscribers.label_expired_short'.tr();
-      final d = diff.inDays;
-      final h = diff.inHours.remainder(24);
-      if (d > 0 && h > 0) return '$d يوم و $h ساعة';
-      if (d > 0) return '$d يوم';
-      if (h > 0) return '$h ساعة';
-      final m = diff.inMinutes.remainder(60);
-      if (m > 0) return '$m دقيقة';
-      return 'أقل من دقيقة';
-    }
-    // fallback على remainingDays حين لا يوجد تاريخ نصّي
-    final r = sub.remainingDays;
-    if (r == null) return '—';
-    if (sub.isExpired) return 'subscribers.label_expired_short'.tr();
-    return '$r يوم';
+    if (onTap == null) return body;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(R.icon),
+      child: body,
+    );
   }
 }
 
@@ -1093,575 +1114,14 @@ class _DebtButton extends StatelessWidget {
   }
 }
 
-/// Dedicated operations card at the bottom — every action v1 surfaces
-/// in its FAB sheet, rendered as a 3-column grid of small tinted
-/// chips. Stubbed actions snack 'قيد التطوير' until the matching
-/// sheet/dialog is built in the later phases; live actions (call,
-/// WhatsApp, disconnect) are wired now.
-class _OperationsCard extends StatelessWidget {
-  const _OperationsCard({
-    required this.sub,
-    required this.disconnecting,
-    required this.onDisconnect,
-    required this.toggling,
-    required this.onToggleEnabled,
-    required this.sendingTemplate,
-    required this.onSendTemplate,
-    required this.generatingLink,
-    required this.onGenerateLink,
-    this.onQrLogin,
-    required this.deleting,
-    required this.onDelete,
-    required this.busy,
-  });
-
-  final Subscriber sub;
-  final bool disconnecting;
-  final VoidCallback? onDisconnect;
-  /// True while the toggle (تعطيل/تفعيل) round-trip is in flight —
-  /// the tile label flips to 'جاري...' so the admin sees activity.
-  final bool toggling;
-  /// null when sub.idx is missing — the chip stays in the grid but
-  /// taps no-op. Otherwise shows the confirm dialog + runs the
-  /// toggle through SubscribersApi (backend also kicks any live
-  /// session on disable, see toggle-enabled endpoint).
-  final VoidCallback? onToggleEnabled;
-  /// Which template send is in flight ('debt_reminder' /
-  /// 'expiry_warning' / 'subscriber_info'), or null. Drives the
-  /// matching chip's 'جاري الإرسال…' label.
-  final String? sendingTemplate;
-  final ValueChanged<String> onSendTemplate;
-  /// True while the generate-info-link round-trip + WhatsApp send
-  /// are in flight. Flips the link chip's label to 'جاري التوليد…'.
-  final bool generatingLink;
-  final VoidCallback onGenerateLink;
-  final VoidCallback? onQrLogin;
-  /// True while the DELETE round-trip is in flight. Flips the
-  /// chip to 'جاري الحذف…'.
-  final bool deleting;
-  /// null when sub.idx is missing — chip stays in the grid but
-  /// taps no-op. Otherwise opens the confirm dialog + runs the
-  /// delete. Front-line guard against deleting subs in debt.
-  final VoidCallback? onDelete;
-  /// True when ANY async operation owned by this card is pending —
-  /// togglesa, disconnect, or a template send. While busy the card
-  /// shows a thin progress strip + dims every tile and intercepts
-  /// taps so the admin can't queue a second action mid-flight (the
-  /// network round-trip is ~1-3s and v1 had the same lock-out).
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final phone = sub.displayPhone;
-    // مطلب 2026-06-11: كل زر يختفي إذا الموظف ما عنده الصلاحية.
-    // الـactions كثيرة، فنبني list مع شرط لكل عنصر بدل nested if.
-    final ops = <_Op>[
-      if (Perms.has('subscribers.edit'))
-        _Op(LucideIcons.pencil, 'subscribers.op_edit'.tr(), const Color(0xFF2D5F47),
-            () => showEditSubscriberSheet(context, sub)),
-      if (Perms.has('subscribers.activate'))
-        _Op(LucideIcons.zap, 'subscribers.op_activate_sub'.tr(), const Color(0xFF14B8A6),
-            () => showActivateSheet(context, sub)),
-      if (Perms.has('subscribers.extend'))
-        _Op(LucideIcons.repeat, 'subscribers.op_extend'.tr(), const Color(0xFF3B82F6),
-            () => showExtendSheet(context, sub)),
-      if (Perms.has('subscribers.add_debt'))
-        _Op(LucideIcons.plus, 'subscribers.op_add_debt'.tr(), const Color(0xFFE08F2D),
-            () => showAddDebtSheet(context, sub)),
-      if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
-        _Op(LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(), const Color(0xFF14B8A6),
-            () => showPayDebtSheet(context, sub)),
-      // 2026-08-29: انتقل من كارت القائمة (المخطّط الجديد لا يضع
-      // أزراراً في الكارت). الشريحة 3 تدمجه inline في كارت «معلومات
-      // الاتصال» كما يفعل المخطّط، ويُحذف من هنا حينها.
-      if (sub.isOnline)
-        _Op(LucideIcons.chartLine, 'الاستهلاك', const Color(0xFF14B8A6),
-            () => showConsumptionSheet(context, sub)),
-      // 2026-08-26: الموقع — يظهر إذا:
-      //  - الموقع مُعيَّن (يقدر أيّ موظّف يفتحه بالخرائط)، أو
-      //  - الموظّف/المدير يقدر يعدّله (subscribers.edit_location).
-      if (sub.hasLocation || Perms.has('subscribers.edit_location'))
-        _Op(
-          LucideIcons.mapPin,
-          sub.hasLocation ? 'الموقع' : 'إضافة موقع',
-          const Color(0xFF14B8A6),
-          () async {
-            if (!sub.hasLocation) {
-              await showLocationEditSheet(context, sub: sub);
-              return;
-            }
-            // الموقع مُعيَّن → chooser (يعرض خيار "تعديل" لو الصلاحية).
-            await showLocationSheet(context, sub: sub);
-          },
-        ),
-      if (Perms.has('discounts.manage'))
-        _Op(LucideIcons.tag, 'subscribers.op_quick_discount'.tr(), const Color(0xFF14B8A6),
-            () => showQuickDiscountSheet(context, sub)),
-      if (Perms.has('subscribers.view_activity'))
-        _Op(LucideIcons.history, 'subscribers.op_movements'.tr(), const Color(0xFF26A69A),
-            () => showMovementsSheet(context, sub)),
-      if (Perms.has('reports.account_statement'))
-        _Op(LucideIcons.fileText, 'subscribers.account_statement'.tr(), const Color(0xFF0EA5E9),
-            () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => AccountStatementScreen(
-                      username: sub.username,
-                      displayName: (sub.firstname == null && sub.lastname == null)
-                          ? null
-                          : [sub.firstname, sub.lastname]
-                              .where((s) => s != null && s.isNotEmpty)
-                              .join(' ')
-                              .trim(),
-                      phone: sub.phone,
-                    ),
-                  ),
-                )),
-      if (sub.hasDebt && Perms.has('subscribers.send_whatsapp'))
-        _Op(
-          LucideIcons.bellRing,
-          sendingTemplate == 'debt_reminder'
-              ? 'subscribers.op_sending'.tr()
-              : 'subscribers.op_debt_reminder'.tr(),
-          Colors.orange,
-          () => onSendTemplate('debt_reminder'),
-        ),
-      if (sub.isNearExpiry && Perms.has('subscribers.send_whatsapp'))
-        _Op(
-          LucideIcons.alarmClock,
-          sendingTemplate == 'expiry_warning'
-              ? 'subscribers.op_sending'.tr()
-              : 'subscribers.op_expiry_warning'.tr(),
-          Colors.deepOrange,
-          () => onSendTemplate('expiry_warning'),
-        ),
-      if (Perms.has('subscribers.generate_link'))
-        _Op(
-          LucideIcons.link,
-          generatingLink ? 'subscribers.op_generating'.tr() : 'subscribers.op_gen_link'.tr(),
-          Colors.indigo,
-          onGenerateLink,
-        ),
-      // 2026-07-13: QR دخول 30 يوم — يُعرض للأدمن ليعطي المشترك رمز
-      // دخول سريع للتطبيق البورتال بلا كتابة username/password.
-      if (Perms.has('subscribers.send_whatsapp') && onQrLogin != null)
-        _Op(
-          LucideIcons.qrCode,
-          'subscribers.op_qr_login'.tr(),
-          const Color(0xFF7C3AED),
-          onQrLogin!,
-        ),
-      if (Perms.has('subscribers.send_whatsapp'))
-        _Op(
-          LucideIcons.info,
-          sendingTemplate == 'subscriber_info'
-              ? 'subscribers.op_sending'.tr()
-              : 'subscribers.op_send_info'.tr(),
-          Colors.blueAccent,
-          () => onSendTemplate('subscriber_info'),
-        ),
-      if (Perms.has('subscribers.toggle'))
-        _Op(
-          sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
-          toggling
-              ? 'subscribers.op_busy'.tr()
-              : (sub.isDisabled ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr()),
-          sub.isDisabled ? Colors.green : const Color(0xFFE08F2D),
-          onToggleEnabled ?? () {},
-        ),
-      if (Perms.has('subscribers.delete'))
-        _Op(
-          LucideIcons.trash2,
-          deleting ? 'subscribers.op_deleting'.tr() : 'common.delete'.tr(),
-          AppColors.error,
-          onDelete ?? () {},
-        ),
-      if (phone.isNotEmpty)
-        _Op(LucideIcons.phone, 'subscribers.call'.tr(), const Color(0xFF14B8A6),
-            () => _launchUri(context, Uri.parse('tel:$phone'))),
-      if (phone.isNotEmpty)
-        _Op(
-          LucideIcons.messageCircle,
-          'subscribers.op_whatsapp'.tr(),
-          const Color(0xFF25D366),
-          () => _launchUri(
-              context, Uri.parse('https://wa.me/${_digits(phone)}')),
-        ),
-      if (sub.isOnline && sub.idx != null)
-        _Op(LucideIcons.power, disconnecting ? 'subscribers.op_disconnecting'.tr() : 'subscribers.disconnect_user'.tr(),
-            AppColors.error, onDisconnect ?? () {}),
-    ];
-
-    return _SectionCard(
-      icon: LucideIcons.layers,
-      title: 'subscribers.actions'.tr(),
-      accent: AppColors.brand,
-      children: [
-        // Thin progress strip while busy — gives the admin an
-        // immediate signal that the tap registered and a request is
-        // mid-flight, instead of the previous silent freeze.
-        if (busy) ...[
-          const SizedBox(height: 2),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(R.pill),
-            child: LinearProgressIndicator(
-              minHeight: 2,
-              color: AppColors.brand,
-              backgroundColor: AppColors.border,
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
-        // Card-style tiles — white surface, border + soft shadow, tinted
-        // icon-box on top, label underneath. Same visual language as
-        // the section cards above so the whole screen reads as one
-        // family. 3-column grid keeps tiles tappable on mid-size phones.
-        //
-        // IgnorePointer + Opacity wrap so the whole grid blocks taps
-        // while busy without re-laying-out (children just dim, no
-        // shifting/repaint chains).
-        IgnorePointer(
-          ignoring: busy,
-          child: Opacity(
-            opacity: busy ? 0.55 : 1,
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              // 2026-08-26: مسافات مضغوطة أكثر — صفر بين الأزرار
-              // (crossAxisSpacing=0) + طول childAspect أقصر (1.05)
-              // ليقارب الشبكة عمودياً. طلب المستخدم "قلّص المسافات".
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                mainAxisSpacing: 0,
-                crossAxisSpacing: 0,
-                childAspectRatio: 1.05,
-              ),
-              itemCount: ops.length,
-              itemBuilder: (_, i) => _OpCard(op: ops[i]),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
-
-  static void _todo(BuildContext ctx, String msg) {
-    showSheetSnack(ctx, msg);
-  }
-
-  static Future<void> _launchUri(BuildContext ctx, Uri uri) async {
-    final ok = await canLaunchUrl(uri);
-    if (!ok) {
-      if (!ctx.mounted) return;
-      showSheetSnack(ctx, 'لا يمكن فتح الرابط', isError: true);
-      return;
-    }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-}
-
-class _Op {
-  const _Op(this.icon, this.label, this.color, this.onTap);
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-}
-
-/// مطلب 2026-06-12 (screenshots reference): زر دائري ملوّن مع
-/// أيقونة بيضاء + label تحت الزر بلون نصّ عادي. مطابق v1
-/// (operations grid screenshot). الـcircle 56dp، الـicon white 22dp،
-/// ظل ناعم بلون الزر يعطي توهّج خفيف.
-class _OpCard extends StatelessWidget {
-  const _OpCard({required this.op});
-  final _Op op;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    // 2026-08-26: أيقونات مربّعة (rounded 12dp) بدل دائريّة + مسافات
-    // مضغوطة. المستخدم فضّل الشبكة المسطّحة الأصليّة مع لمسة modern.
-    return InkResponse(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        op.onTap();
-      },
-      radius: 34,
-      containedInkWell: true,
-      highlightShape: BoxShape.rectangle,
-      customBorder: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: op.color,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: op.color.withValues(alpha: 0.28),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: Icon(op.icon, color: Colors.white, size: 21),
-          ),
-          const SizedBox(height: 1),
-          Flexible(
-            child: Text(
-              op.label,
-              style: AppType.label(color: AppColors.textHi).copyWith(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// مطلب 2026-06-11: كرت قابل للطي/التوسيع.
-///  • فونتات +1 درجة على القيم والعناوين والأيقونات (كانت صغيرة).
-///  • سهم chevron في الـheader يقلب الطيّ. تأثير AnimatedCrossFade
-///    ينعّم الانتقال بين الحالتين.
-///  • الـheader وحده قابل للنقر — التفاعل مع الصفوف بالداخل
-///    لا يقلب الطي بالخطأ.
-class _SectionCard extends StatefulWidget {
-  const _SectionCard({
-    required this.icon,
-    required this.title,
-    required this.accent,
-    required this.children,
-  });
-
-  final IconData icon;
-  final String title;
-  final Color accent;
-  final List<Widget> children;
-
-  @override
-  State<_SectionCard> createState() => _SectionCardState();
-}
-
-class _SectionCardState extends State<_SectionCard> {
-  bool _expanded = true;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(R.sm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: widget.accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(R.sm),
-                    ),
-                    child: Icon(widget.icon, color: widget.accent, size: 13),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      style: AppType.label(color: AppColors.textHi).copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0 : -0.25,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.textMid,
-                      size: 22,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 220),
-            firstCurve: Curves.easeOut,
-            secondCurve: Curves.easeIn,
-            crossFadeState: _expanded
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: widget.children,
-              ),
-            ),
-            secondChild: const SizedBox(width: double.infinity),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-    this.onTap,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-  final VoidCallback? onTap;
-  final IconData? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    // مطلب 2026-06-11: فونت/icon +1 على كل قيمة وعنوان في صفوف
-    // كروت التفاصيل — كان 11/12/13 ضعيف الوضوح، صار 12/13/14.
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.textMid, size: 14),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: AppType.muted(color: AppColors.textMid)
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              value,
-              style: AppType.label(
-                color: valueColor ?? AppColors.textHi,
-              ).copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-            ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: 4),
-            Icon(trailing, color: AppColors.textLow, size: 13),
-          ],
-        ],
-      ),
-    );
-    if (onTap == null) return row;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(R.sm),
-      child: row,
-    );
-  }
-}
-
-class _BytesCard extends StatelessWidget {
-  const _BytesCard({
-    required this.icon,
-    required this.label,
-    required this.bytes,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final int bytes;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 13),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            _formatBytes(bytes),
-            style: AppType.title(color: color).copyWith(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatBytes(int bytes) {
-    if (bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var i = 0;
-    var v = bytes.toDouble();
-    while (v >= 1024 && i < units.length - 1) {
-      v /= 1024;
-      i++;
-    }
-    return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
-  }
-}
-
 /// مطلب 2026-06-12: AppBar نظيف مطابق screenshot v1 — الاسم العربي
 /// مركزي + سهم رجوع يميني (RTL يعكس). بدون ظل.
+/// ترويسة صفحة المشترك — المخطّط يجعلها خفيفة عمداً: زرّ رجوع 38×38
+/// أبيض بحدّ و r14، وعنوان عامّ 14/w600 في الوسط، ومساحة مكافئة يساراً
+/// ليبقى العنوان متمركزاً بصريّاً.
+///
+/// العنوان **عامّ** («تفاصيل المشترك») لا اسم المشترك: الاسم يظهر
+/// بحجم 20/w700 في بطاقة الهويّة تحته مباشرةً، وتكراره يزاحمها.
 class _SimpleAppBar extends StatelessWidget {
   const _SimpleAppBar({required this.title, required this.onClose});
   final String title;
@@ -1671,27 +1131,39 @@ class _SimpleAppBar extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.x6, Sp.lg, Sp.x6),
       color: AppColors.bg,
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(LucideIcons.chevronRight, size: 22),
-            color: AppColors.textHi,
-            onPressed: onClose,
+          Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.icon),
+            child: InkWell(
+              onTap: onClose,
+              borderRadius: BorderRadius.circular(R.icon),
+              child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.icon),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                width: H.iconBtn,
+                height: H.iconBtn,
+                child: Icon(LucideIcons.arrowRight,
+                    size: 20, color: AppColors.textBody),
+              ),
+            ),
           ),
           Expanded(
             child: Center(
               child: Text(
                 title,
-                style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 17, letterSpacing: -0.3),
+                style: AppType.cardTitle(color: AppColors.textBody),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
-          const SizedBox(width: 48),
+          const SizedBox(width: H.iconBtn),
         ],
       ),
     );
