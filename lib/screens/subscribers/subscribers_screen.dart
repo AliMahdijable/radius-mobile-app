@@ -99,7 +99,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   int _probeTotal = 0;
 
   /// مطلب 2026-06-11: زر تكويل عام — true يخفي قسم الاتصال على
-  /// كل البطاقات المعروضة. الـSubscriberCardV2 يلتقط الـprop عبر
+  /// كل البطاقات المعروضة. الـSubscriberCardV3 يلتقط الـprop عبر
   /// didUpdateWidget فيتزامن الكل لحظياً.
 
   String _query = '';
