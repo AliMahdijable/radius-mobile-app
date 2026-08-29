@@ -624,7 +624,7 @@ class _SkeletonBox extends StatelessWidget {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(R.icon),
       ),
     );
@@ -645,7 +645,7 @@ class _SkeletonBar extends StatelessWidget {
         child: Container(
           height: 12,
           decoration: BoxDecoration(
-            color: AppColors.bg,
+            color: AppColors.surfaceSunken,
             borderRadius: BorderRadius.circular(R.pill),
           ),
         ),

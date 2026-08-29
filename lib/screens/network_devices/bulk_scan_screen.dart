@@ -144,7 +144,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
             'صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 4),
       ));
@@ -196,7 +196,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         setState(() => _scanning = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('فشل: $e'),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ));
       }

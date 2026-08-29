@@ -390,13 +390,6 @@ class _PayRowCard extends StatelessWidget {
           color: _statusBorderColor(row),
           width: row.ok != null ? 1.4 : 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

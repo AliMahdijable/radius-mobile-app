@@ -59,7 +59,7 @@ class _NotificationsSettingsScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(r.message ?? 'notifs.save_failed'.tr()),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );

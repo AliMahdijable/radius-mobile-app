@@ -131,13 +131,6 @@ class _BannerCardState extends State<_BannerCard>
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(R.md),
                       border: Border.all(color: AppColors.border),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -239,7 +239,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: AppColors.bg,
+            color: AppColors.surfaceSunken,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: AppColors.border),
           ),
@@ -317,7 +317,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -365,7 +365,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children: [

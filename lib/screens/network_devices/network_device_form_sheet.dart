@@ -222,7 +222,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       expand: false,
       builder: (context, scrollController) => Container(
         decoration: BoxDecoration(
-          color: AppColors.bg,
+          color: AppColors.surfaceSunken,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: EdgeInsets.only(bottom: bottomInset),

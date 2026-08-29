@@ -86,7 +86,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             child: const Text('حذف'),
           ),
         ],
@@ -110,7 +110,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('فشل الحذف: $e'),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
     }
@@ -316,7 +316,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('اسم المنطقة مطلوب'),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
       return;
@@ -335,7 +335,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('فشل: $e'),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
     }

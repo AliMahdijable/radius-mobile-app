@@ -729,7 +729,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -795,7 +795,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -847,7 +847,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -916,7 +916,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       margin: const EdgeInsets.all(Sp.md),
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
@@ -1123,7 +1123,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(children: [
@@ -1237,7 +1237,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1340,7 +1340,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(children: [

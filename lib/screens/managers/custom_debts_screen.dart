@@ -75,7 +75,7 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('إلغاء')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('حذف'),
           ),

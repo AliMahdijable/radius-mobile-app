@@ -741,7 +741,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             child: Text('حذف $count'),
           ),
         ],

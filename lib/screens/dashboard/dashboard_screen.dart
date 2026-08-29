@@ -721,7 +721,7 @@ class _IconChip extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
               padding: const EdgeInsets.symmetric(horizontal: 5),
               decoration: BoxDecoration(
-                color: AppColors.error,
+                color: AppColors.errorFill,
                 borderRadius: BorderRadius.circular(R.pill),
                 border: Border.all(color: AppColors.bg, width: 2),
               ),

@@ -715,7 +715,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('subscribers.disconnect'.tr()),
           ),

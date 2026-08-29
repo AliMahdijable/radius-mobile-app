@@ -86,7 +86,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('فصل',
                 style: TextStyle(

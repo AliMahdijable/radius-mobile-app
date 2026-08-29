@@ -128,7 +128,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(r.reason ?? 'perms.enable_failed'.tr()),
-            backgroundColor: AppColors.error,
+            backgroundColor: AppColors.errorFill,
             behavior: SnackBarBehavior.floating,
           ),
         );

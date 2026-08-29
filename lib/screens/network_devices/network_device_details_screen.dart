@@ -178,7 +178,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             icon: const Icon(LucideIcons.trash2, size: 16),
             label: const Text('حذف نهائي'),
           ),
@@ -296,7 +296,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           const SizedBox(width: 8),
           Expanded(child: Text('فشل reboot: $msg')),
         ]),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         duration: const Duration(seconds: 6),
         behavior: SnackBarBehavior.floating,
       ));

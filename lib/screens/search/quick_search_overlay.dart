@@ -266,7 +266,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: AppType.button(color: Colors.white)),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(Sp.lg),
         shape: RoundedRectangleBorder(

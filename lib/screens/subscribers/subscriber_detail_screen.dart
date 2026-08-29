@@ -297,7 +297,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('subscribers.disconnect'.tr()),
           ),
@@ -402,7 +402,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.delete'.tr()),
           ),

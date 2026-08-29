@@ -611,7 +611,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -667,7 +667,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),
@@ -834,7 +834,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       child: Container(
         padding: const EdgeInsets.all(Sp.md),
         decoration: BoxDecoration(
-          color: AppColors.bg,
+          color: AppColors.surfaceSunken,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border),
         ),
@@ -921,7 +921,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children: [
@@ -1005,7 +1005,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.bg,
+        color: AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children: [

@@ -66,7 +66,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(r.message ?? 'فشل الحفظ'),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );

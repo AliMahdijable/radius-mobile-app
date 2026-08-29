@@ -87,7 +87,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             child: const Text('إلغاء'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('حذف'),
           ),
@@ -119,7 +119,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     if (res.password == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res.message ?? 'تعذّر جلب كلمة السر'),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
       return;

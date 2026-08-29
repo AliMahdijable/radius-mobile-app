@@ -314,7 +314,9 @@ class _CloseCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.bg,
+      // سطح غاطس لا خلفيّة الشاشة: `bg` داخل شيت سطحه
+      // `surfaceSheet` يبدو ثقباً ليلاً لا زرّاً.
+      color: AppColors.surfaceSunken,
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,

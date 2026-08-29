@@ -436,7 +436,7 @@ class _PackagesTabState extends State<_PackagesTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('portal.save_failed'.tr()),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -683,7 +683,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('portal.save_failed'.tr()),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -726,7 +726,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('portal.save_failed'.tr()),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );

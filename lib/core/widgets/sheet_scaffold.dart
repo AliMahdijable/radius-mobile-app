@@ -23,7 +23,7 @@ import '../../theme/colors.dart';
 ///
 /// Usage — replace:
 ///   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-///     content: Text(msg), backgroundColor: AppColors.error));
+///     content: Text(msg), backgroundColor: AppColors.errorFill));
 ///
 /// with:
 ///   showSheetSnack(context, msg, isError: true);

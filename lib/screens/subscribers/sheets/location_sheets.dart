@@ -329,7 +329,7 @@ class _EditSheetState extends State<_EditSheet> {
             child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('حذف',
                 style: TextStyle(

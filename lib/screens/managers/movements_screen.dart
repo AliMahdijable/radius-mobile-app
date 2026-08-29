@@ -130,7 +130,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
             child: const Text('إلغاء'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('حذف'),
           ),

@@ -520,13 +520,6 @@ class _FormCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.xl),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 60,
-            offset: const Offset(0, 20),
-          ),
-        ],
       ),
       padding: const EdgeInsets.all(Sp.xl),
       child: Column(

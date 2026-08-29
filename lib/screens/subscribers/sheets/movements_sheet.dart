@@ -427,13 +427,6 @@ class _MovementTile extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -212,7 +212,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
     if (res.password == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res.message ?? 'تعذّر جلب كلمة السر'),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
       return;
@@ -252,7 +252,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.delete'.tr()),
           ),

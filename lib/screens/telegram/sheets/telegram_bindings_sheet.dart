@@ -91,7 +91,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
             child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('فكّ',
                 style: TextStyle(
@@ -116,7 +116,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content:
             const Text('فشل فكّ الربط', style: TextStyle(fontFamily: 'Cairo')),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
     }

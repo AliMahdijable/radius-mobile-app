@@ -197,7 +197,7 @@ class SheetCloseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: AppColors.bg,
+      color: AppColors.surfaceSunken,
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,

@@ -125,7 +125,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res.message ?? 'فشل الإرسال',
             style: const TextStyle(fontFamily: 'Cairo')),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
     }

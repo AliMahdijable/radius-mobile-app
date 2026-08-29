@@ -107,7 +107,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('common.delete'.tr()),
           ),

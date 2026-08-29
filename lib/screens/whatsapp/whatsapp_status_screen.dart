@@ -141,7 +141,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('wa.enter_phone_intl'.tr()),
-            backgroundColor: AppColors.error,
+            backgroundColor: AppColors.errorFill,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -159,7 +159,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(ss.message ?? 'common.error'.tr()),
-            backgroundColor: AppColors.error,
+            backgroundColor: AppColors.errorFill,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -210,7 +210,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(ss.message ?? 'common.error'.tr()),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -238,7 +238,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('wa.pair_timeout'.tr()),
-            backgroundColor: AppColors.error,
+            backgroundColor: AppColors.errorFill,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -269,7 +269,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('wa.qr_timeout'.tr()),
-            backgroundColor: AppColors.error,
+            backgroundColor: AppColors.errorFill,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -309,7 +309,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('wa.disconnect_btn'.tr()),
           ),
@@ -381,7 +381,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(r.message ?? 'devices.save_failed'.tr()),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -921,7 +921,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
-              color: AppColors.bg,
+              color: AppColors.surfaceSunken,
               borderRadius: BorderRadius.circular(R.md),
               border: Border.all(color: accent.withValues(alpha: 0.3)),
             ),
