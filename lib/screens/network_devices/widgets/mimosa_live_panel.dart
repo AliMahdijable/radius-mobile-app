@@ -484,7 +484,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           height: 26,
           decoration: BoxDecoration(
             color: AppColors.warning.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Center(
             child: Text('${c.index}',
@@ -543,7 +543,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
             color: AppColors.success.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(R.pill),
           ),
           child: Text('$online online',
               style: TextStyle(
@@ -601,7 +601,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration: BoxDecoration(
                     color: rssiColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(R.pill),
                     border: Border.all(color: rssiColor.withValues(alpha: 0.3)),
                   ),
                   child: Text('${c.rssiDbm} dBm',

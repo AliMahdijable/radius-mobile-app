@@ -384,7 +384,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   color: checked
                                       ? AppColors.brand
                                       : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(3),
+                                  borderRadius: BorderRadius.circular(R.pill),
                                   border: Border.all(
                                     color: checked
                                         ? AppColors.brand

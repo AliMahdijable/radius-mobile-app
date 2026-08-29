@@ -321,7 +321,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: AppColors.brandAccent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text('60 GHz',
                 style: TextStyle(
@@ -435,7 +435,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             height: 8,
             decoration: BoxDecoration(
               color: AppColors.borderSoft,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
           ),
           AnimatedContainer(
@@ -448,7 +448,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                 color.withValues(alpha: 0.6),
                 color,
               ]),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(R.sm),
               boxShadow: [
                 BoxShadow(
                     color: color.withValues(alpha: 0.4),
@@ -582,7 +582,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           ]),
           const SizedBox(height: 4),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(R.pill),
             child: LinearProgressIndicator(
               value: (utilization / 100).clamp(0.0, 1.0),
               minHeight: 6,
@@ -805,7 +805,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       ),
       Expanded(
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(R.pill),
           child: LinearProgressIndicator(
             value: (percent / 100).clamp(0.0, 1.0),
             minHeight: 6,
@@ -849,7 +849,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(R.pill),
               ),
               child: Text(s.lanSpeed!,
                   textDirection: TextDirection.ltr,
@@ -890,7 +890,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             decoration: BoxDecoration(
               color: AppColors.brandSoftBg,
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text('${iface.speed}M',
                 style: TextStyle(

@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../services/manual_wa_prefs.dart';
 import '../theme/colors.dart';
+import '../theme/spacing.dart';
 
 /// 2026-08-26: Chip يعرض وضع إرسال الواتساب الحالي (تلقائي/يدوي).
 /// النقر عليه يبدّل الوضع لهذه العمليّة فقط (override محلّي).
@@ -37,7 +38,7 @@ class ManualWaChip extends StatelessWidget {
         : AppColors.success; // تيّل — تلقائي (الطبيعيّ)
     return Material(
       color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
@@ -50,7 +51,7 @@ class ManualWaChip extends StatelessWidget {
             vertical: compact ? 6 : 8,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
               color: color.withValues(alpha: 0.3),
               width: 0.6,
@@ -177,7 +178,7 @@ class _WaPreviewSheet extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(R.card),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Column(
@@ -190,7 +191,7 @@ class _WaPreviewSheet extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),
@@ -202,7 +203,7 @@ class _WaPreviewSheet extends StatelessWidget {
                     height: 40,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(11),
+                      borderRadius: BorderRadius.circular(R.chip),
                     ),
                     alignment: Alignment.center,
                     child: Icon(LucideIcons.messageCircle,
@@ -245,7 +246,7 @@ class _WaPreviewSheet extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceInput,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(R.sm),
                   border: Border.all(color: AppColors.border, width: 0.5),
                 ),
                 child: Text(
@@ -301,7 +302,7 @@ class _WaPreviewSheet extends StatelessWidget {
                           backgroundColor:
                               manualMode ? AppColors.brandAccent : accent,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(R.md)),
                         ),
                       ),
                     ),

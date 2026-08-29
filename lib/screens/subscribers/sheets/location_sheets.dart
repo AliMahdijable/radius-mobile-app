@@ -12,6 +12,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import 'location_picker_screen.dart';
+import '../../../theme/spacing.dart';
 
 /// 2026-08-26: chooser الصغير — نقرة على أيقونة الموقع تفتح قائمة
 /// خيارات فتح (Google Maps / Waze / نسخ). يتعامل مع فتح روابط
@@ -159,7 +160,7 @@ class _ChooserSheet extends StatelessWidget {
   }) {
     return Material(
       color: AppColors.surfaceInput,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(R.md),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -373,7 +374,7 @@ class _EditSheetState extends State<_EditSheet> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.surfaceInput,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(R.sm),
               ),
               child: SelectableText(
                 existing,
@@ -439,7 +440,7 @@ class _EditSheetState extends State<_EditSheet> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.dangerSoftBg,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(R.sm),
                 border: Border.all(
                   color: AppColors.dangerSoftBorder,
                   width: 0.5,
@@ -487,7 +488,7 @@ class _EditSheetState extends State<_EditSheet> {
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.success,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(R.md)),
                 ),
               ),
             ),
@@ -539,17 +540,17 @@ class _EditSheetState extends State<_EditSheet> {
                     filled: true,
                     fillColor: AppColors.surfaceInput,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(R.sm),
                       borderSide:
                           BorderSide(color: AppColors.border, width: 0.5),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(R.sm),
                       borderSide:
                           BorderSide(color: AppColors.border, width: 0.5),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(R.sm),
                       borderSide:
                           BorderSide(color: AppColors.success, width: 1),
                     ),
@@ -586,7 +587,7 @@ class _EditSheetState extends State<_EditSheet> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(R.sm),
                 border: Border.all(
                   color: AppColors.success.withValues(alpha: 0.3),
                   width: 0.5,

@@ -294,7 +294,7 @@ class _CompactHeader extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
                 child: Text(
                   '$count عملية',
@@ -310,12 +310,12 @@ class _CompactHeader extends StatelessWidget {
           const SizedBox(height: 12),
           InkWell(
             onTap: onPickRange,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(R.sm),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.surfaceInput,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(R.sm),
               ),
               child: Row(
                 children: [
@@ -381,7 +381,7 @@ class _ExpenseTile extends StatelessWidget {
                 height: 32,
                 decoration: BoxDecoration(
                   color: AppColors.error.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(width: 12),

@@ -476,7 +476,7 @@ class SheetSummaryBox extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 14),
       decoration: BoxDecoration(
         color: background ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(R.card),
         border: Border.all(color: borderColor ?? AppColors.border),
       ),
       child: Row(
@@ -742,7 +742,7 @@ class SheetBrandResultCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: Sp.lg),
       decoration: BoxDecoration(
         color: AppColors.brandSurface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(R.card),
       ),
       child: Row(
         children: [
@@ -873,13 +873,13 @@ class SheetChoiceTiles extends StatelessWidget {
       children.add(Expanded(
         child: Material(
           color: on ? AppColors.brand : AppColors.surface,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(R.lg),
           child: InkWell(
             onTap: enabled ? () => onSelect(i) : null,
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(R.lg),
             child: Ink(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(R.lg),
                 border: Border.all(
                   color: on ? AppColors.brand : AppColors.border,
                   width: on ? BW.selected : BW.normal,

@@ -667,7 +667,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border, width: 1),
       ),
       alignment: AlignmentDirectional.centerStart,

@@ -643,17 +643,17 @@ class _MiniButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: filled ? color : AppColors.surface,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(R.sm),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(R.sm),
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: filled ? 12 : 10,
             vertical: filled ? 5 : 4,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(R.sm),
             border: filled
                 ? null
                 : Border.all(color: borderColor ?? AppColors.border),

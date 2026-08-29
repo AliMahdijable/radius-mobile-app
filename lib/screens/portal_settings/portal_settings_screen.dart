@@ -587,7 +587,7 @@ class _PackageRow extends StatelessWidget {
                             height: 3,
                             decoration: BoxDecoration(
                               color: AppColors.textMid,
-                              borderRadius: BorderRadius.circular(3),
+                              borderRadius: BorderRadius.circular(R.pill),
                             ),
                           ),
                           const SizedBox(width: Sp.sm),
@@ -758,7 +758,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.textMid.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),

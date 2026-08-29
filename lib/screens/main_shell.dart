@@ -410,12 +410,12 @@ class _FabSlot extends StatelessWidget {
         width: H.fab,
         height: H.fab,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(R.card),
           boxShadow: Sh.fab,
         ),
         child: Material(
           color: AppColors.brand,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(R.card),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {

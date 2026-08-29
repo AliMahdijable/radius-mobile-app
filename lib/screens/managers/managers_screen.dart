@@ -386,7 +386,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Text(
               '$_total مدير',
@@ -589,7 +589,7 @@ class _ManagerTile extends StatelessWidget {
                     decoration: BoxDecoration(
                       color:
                           manager.isActive ? AppColors.brand : AppColors.error,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(R.pill),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -599,7 +599,7 @@ class _ManagerTile extends StatelessWidget {
                     height: 36,
                     decoration: BoxDecoration(
                       color: AppColors.brandAccent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(R.card),
                     ),
                     alignment: Alignment.center,
                     child: Icon(LucideIcons.shield,
@@ -633,7 +633,7 @@ class _ManagerTile extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color:
                                       AppColors.error.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(R.pill),
                                 ),
                                 child: Text(
                                   'معطّل',
@@ -766,7 +766,7 @@ class _ManagerTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -797,7 +797,7 @@ class _ManagerTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

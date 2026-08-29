@@ -439,7 +439,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Column(
@@ -495,14 +495,14 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(R.sm),
       child: Container(
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           color:
               selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
             color: selected ? color : AppColors.border,
             width: selected ? 1 : 0.5,
@@ -629,7 +629,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                     height: 4,
                     decoration: BoxDecoration(
                       color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(R.pill),
                     ),
                   ),
                 ),

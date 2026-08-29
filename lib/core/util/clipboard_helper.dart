@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/colors.dart';
+import '../../theme/spacing.dart';
 
 /// 2026-08-26: نسخ نصّ للحافظة مع haptic خفيف + toast تأكيد.
 /// helper مشترك حتى لا نكرّر الـpattern في كل tile/card.
@@ -25,7 +26,7 @@ Future<void> copyToClipboard(
     backgroundColor: AppColors.brand,
     behavior: SnackBarBehavior.floating,
     duration: const Duration(seconds: 2),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
   ));
 }

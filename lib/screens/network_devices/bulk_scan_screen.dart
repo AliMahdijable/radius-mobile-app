@@ -468,7 +468,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         ]),
         const SizedBox(height: 4),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(R.pill),
           child: LinearProgressIndicator(
             value: _scanning ? pct : (pct == 1.0 ? 1.0 : 0.0),
             minHeight: 4,
@@ -576,7 +576,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceInput,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(R.pill),
                         ),
                         child: Text('${r.responseMs}ms',
                             style: TextStyle(
@@ -589,7 +589,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppColors.success.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(R.pill),
                             border: Border.all(
                               color: AppColors.success.withValues(alpha: 0.4),
                             ),

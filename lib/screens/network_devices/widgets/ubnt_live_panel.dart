@@ -549,7 +549,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: AppColors.brandAccent.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(LucideIcons.clock, size: 9, color: AppColors.brandAccent),
@@ -644,7 +644,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(R.pill),
           child: LinearProgressIndicator(
             value: (percent / 100).clamp(0.0, 1.0),
             minHeight: 4,
@@ -932,7 +932,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
               color: _speedColor(iface.speed!).withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text(_speedLabel(iface.speed!),
                 style: TextStyle(
@@ -1044,7 +1044,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 decoration: BoxDecoration(
                   color:
                       _percentColor(s.ccq.toDouble()).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
                 child: Text('${s.ccq}%',
                     textDirection: TextDirection.ltr,
@@ -1382,7 +1382,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text('$arrow $value',
           style: TextStyle(

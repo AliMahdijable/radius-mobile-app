@@ -897,7 +897,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: meta.color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(R.pill),
                         ),
                         child: Text(
                           meta.label,
@@ -1000,7 +1000,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                               horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
                             color: AppColors.surfaceInput,
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: BorderRadius.circular(R.pill),
                           ),
                           child: Text(
                             e.movement.source == MovementSource.sas4

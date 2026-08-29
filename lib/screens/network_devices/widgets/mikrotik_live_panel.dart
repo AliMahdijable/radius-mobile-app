@@ -557,7 +557,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: AppColors.brand.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(LucideIcons.clock, size: 9, color: AppColors.brand),
@@ -575,7 +575,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: AppColors.success.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Text('PPP: ${s.pppActiveCount}',
                 style: TextStyle(
@@ -816,7 +816,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(R.pill),
           child: LinearProgressIndicator(
             value: (percent / 100).clamp(0.0, 1.0),
             minHeight: 4,
@@ -1031,7 +1031,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text('$arrow $value',
           style: TextStyle(
@@ -1092,7 +1092,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text(text,
           style: TextStyle(
@@ -1137,7 +1137,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               decoration: BoxDecoration(
                 color:
                     _linkSpeedColor(iface.linkSpeed!).withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(R.pill),
               ),
               child: Text(
                 _shortLinkSpeed(iface.linkSpeed!),
@@ -1246,7 +1246,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text(_modeLabel(w.mode),
                 style: TextStyle(
@@ -1332,7 +1332,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(children: [
         Container(
@@ -1399,7 +1399,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: ccqColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
                 child: Text('$ccq%',
                     textDirection: TextDirection.ltr,

@@ -248,7 +248,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.brandSurface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(R.xl),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

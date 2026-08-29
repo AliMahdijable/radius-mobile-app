@@ -194,7 +194,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
                     height: 4,
                     decoration: BoxDecoration(
                       color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(R.pill),
                     ),
                   ),
                 ),

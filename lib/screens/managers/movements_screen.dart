@@ -288,7 +288,7 @@ class _MovementCard extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               color: style.color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
             alignment: Alignment.center,
             child: Icon(style.icon, color: style.color, size: 18),

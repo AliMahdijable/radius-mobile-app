@@ -1203,7 +1203,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                       height: 40,
                       decoration: BoxDecoration(
                         color: purple.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: BorderRadius.circular(R.chip),
                       ),
                       alignment: Alignment.center,
                       child: Icon(LucideIcons.shieldCheck,

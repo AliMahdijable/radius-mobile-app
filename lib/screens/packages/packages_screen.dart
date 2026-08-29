@@ -462,7 +462,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
             builder: (_) => Material(
               color: AppColors.surface,
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
+                  const BorderRadius.vertical(top: Radius.circular(R.card)),
               clipBehavior: Clip.antiAlias,
               child: SafeArea(
                 top: false,
@@ -475,7 +475,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: AppColors.border,
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(R.pill),
                       ),
                     ),
                     Padding(

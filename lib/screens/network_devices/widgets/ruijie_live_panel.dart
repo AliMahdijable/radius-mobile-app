@@ -241,7 +241,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: AppColors.surfaceSunken,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(color: AppColors.border),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -340,7 +340,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           ]),
           const SizedBox(height: 6),
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(R.pill),
             child: LinearProgressIndicator(
               value: value == null ? null : percent,
               minHeight: 4,
@@ -399,7 +399,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(R.pill),
           ),
           child: Text(speedText,
               style: TextStyle(

@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/telegram_api.dart';
 import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
 
 /// telegramBroadcastSheet — إرسال رسالة عبر تلغرام لكل المرتبطين.
 /// Dry-run (يعرض عدد المستقبلين) ثم Send.
@@ -120,7 +121,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(R.card),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Column(
@@ -131,7 +132,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(height: 16),
@@ -142,7 +143,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     height: 42,
                     decoration: BoxDecoration(
                       color: AppColors.brandAccent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,
                     child: Icon(LucideIcons.messageCircle,
@@ -186,7 +187,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceInput,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(R.sm),
                   border: Border.all(color: AppColors.border, width: 0.5),
                 ),
                 child: TextField(
@@ -226,7 +227,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.success.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(R.sm),
                     border: Border.all(
                         color: AppColors.success.withValues(alpha: 0.3),
                         width: 0.5),
@@ -291,7 +292,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                           foregroundColor: AppColors.textHi,
                           side: BorderSide(color: AppColors.border, width: 1),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(R.md)),
                         ),
                       ),
                     ),
@@ -323,7 +324,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.brandAccent,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(R.md)),
                         ),
                       ),
                     ),

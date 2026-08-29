@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/telegram_api.dart';
 import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
 
 /// telegramBulkLinksSheet — إرسال رابط الربط لكل مشترك عبر واتساب.
 /// Dry-run أوّلاً (يعرض عدد المؤهّلين)، ثم confirm للإرسال الفعلي.
@@ -113,7 +114,7 @@ class _BulkSheetState extends State<_BulkSheet> {
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(R.card),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Column(
@@ -124,7 +125,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(height: 16),
@@ -135,7 +136,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                     height: 42,
                     decoration: BoxDecoration(
                       color: AppColors.warning.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(R.md),
                     ),
                     alignment: Alignment.center,
                     child: Icon(LucideIcons.megaphone,
@@ -210,7 +211,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.warning,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(R.md)),
                     ),
                   ),
                 )
@@ -233,7 +234,7 @@ class _BulkSheetState extends State<_BulkSheet> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surfaceInput,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Column(

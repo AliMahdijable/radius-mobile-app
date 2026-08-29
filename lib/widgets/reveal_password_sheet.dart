@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/colors.dart';
+import '../theme/spacing.dart';
 
 /// كشف كلمة السرّ — bottom sheet احترافي (2026-08-26).
 ///
@@ -102,7 +103,7 @@ class _RevealSheetState extends State<_RevealSheet>
       backgroundColor: AppColors.brand,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
     ));
   }
 
@@ -125,7 +126,7 @@ class _RevealSheetState extends State<_RevealSheet>
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(R.xl),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -136,7 +137,7 @@ class _RevealSheetState extends State<_RevealSheet>
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(height: 16),
@@ -155,7 +156,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(R.icon),
                       boxShadow: [
                         BoxShadow(
                           color: widget.accent.withValues(alpha: 0.28),
@@ -247,7 +248,7 @@ class _RevealSheetState extends State<_RevealSheet>
                             width: 1,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(R.md),
                           ),
                         ),
                       ),
@@ -271,7 +272,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         style: FilledButton.styleFrom(
                           backgroundColor: widget.accent,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(R.md),
                           ),
                         ),
                       ),
@@ -324,7 +325,7 @@ class _PasswordDisplay extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       decoration: BoxDecoration(
         color: AppColors.surfaceInput,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(R.icon),
         border: Border.all(
           color: AppColors.border,
           width: 0.5,
@@ -351,7 +352,7 @@ class _PasswordDisplay extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                   child: Text(
                     'يُخفى بعد ${remaining}s',

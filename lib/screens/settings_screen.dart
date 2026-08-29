@@ -489,7 +489,7 @@ class _LanguagePickerSheet extends StatelessWidget {
     final current = context.locale;
     return Material(
       color: AppColors.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.card)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -505,7 +505,7 @@ class _LanguagePickerSheet extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),
@@ -561,7 +561,7 @@ class _ThemePickerSheet extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.card)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -577,7 +577,7 @@ class _ThemePickerSheet extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),
@@ -651,7 +651,7 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
       color: AppColors.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.card)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -667,7 +667,7 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
               ),
@@ -765,7 +765,7 @@ class _ThemeOptionTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: (selected ? AppColors.brand : AppColors.textMid)
                       .withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
                 alignment: Alignment.center,
                 child: Icon(

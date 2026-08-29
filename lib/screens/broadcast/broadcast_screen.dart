@@ -988,7 +988,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         height: 3,
                         decoration: BoxDecoration(
                           color: AppColors.textLow,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(R.pill),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -1150,7 +1150,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       child: Row(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(R.sm),
             child: Image.memory(
               _imageBytes!,
               width: 56,

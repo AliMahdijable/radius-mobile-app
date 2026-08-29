@@ -376,7 +376,7 @@ class _ProfileChipsState extends State<_ProfileChips> {
                   return GestureDetector(
                     onLongPress: () => _confirmRemove(p),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(R.xl),
                       onTap: () {
                         HapticFeedback.selectionClick();
                         widget.onPick(p);
@@ -386,7 +386,7 @@ class _ProfileChipsState extends State<_ProfileChips> {
                             horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.brandSoftBg,
-                          borderRadius: BorderRadius.circular(22),
+                          borderRadius: BorderRadius.circular(R.xl),
                           border: Border.all(
                             color: AppColors.brandSoftBorder,
                             width: 1,
@@ -662,7 +662,7 @@ class _RememberToggle extends StatelessWidget {
                 height: 20,
                 decoration: BoxDecoration(
                   color: value ? AppColors.brand : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(R.sm),
                   border: Border.all(
                     color: value ? AppColors.brand : AppColors.borderStrong,
                     width: 1.5,

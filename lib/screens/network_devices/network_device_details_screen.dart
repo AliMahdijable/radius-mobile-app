@@ -539,7 +539,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(R.pill),
                         border:
                             Border.all(color: color.withValues(alpha: 0.35)),
                       ),
@@ -576,7 +576,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.brandSoftBg,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(R.pill),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(_protocolIcon(_d.protocol!),

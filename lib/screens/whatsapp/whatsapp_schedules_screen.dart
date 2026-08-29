@@ -371,7 +371,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Icon(icon, color: color, size: 22),
         ),
@@ -406,12 +406,12 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
     final display = time.length >= 5 ? time.substring(0, 5) : time;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(R.sm),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(color: AppColors.border),
         ),
         child: Row(
@@ -468,7 +468,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           selectedColor: color,
           checkmarkColor: AppColors.onBrand,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(R.card),
             side: BorderSide(
               color: isSelected ? color : AppColors.border,
             ),
@@ -491,7 +491,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           backgroundColor: color,
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(R.sm),
           ),
         ),
         child: saving
@@ -556,15 +556,15 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(R.sm),
                 borderSide: BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(R.sm),
                 borderSide: BorderSide(color: AppColors.border),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(R.sm),
                 borderSide: BorderSide(color: color, width: 1.6),
               ),
             ),
@@ -624,7 +624,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: AppColors.surfaceInput,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(color: AppColors.border),
             ),
             child: Row(
@@ -691,13 +691,13 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(R.sm),
       child: Container(
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(R.sm),
         ),
         child: Text(
           label,
@@ -751,7 +751,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           selectedColor: color,
           checkmarkColor: AppColors.onBrand,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(R.card),
             side: BorderSide(
               color: selected ? color : AppColors.border,
             ),
@@ -795,7 +795,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Column(
@@ -850,14 +850,14 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(R.sm),
       child: Container(
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           color:
               selected ? color.withValues(alpha: 0.14) : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(
             color: selected ? color : AppColors.border,
             width: selected ? 1 : 0.5,

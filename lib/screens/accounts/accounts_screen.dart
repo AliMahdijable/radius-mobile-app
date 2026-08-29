@@ -12,6 +12,7 @@ import '../../services/saved_profiles_store.dart';
 import '../../services/session_manager.dart';
 import '../../theme/colors.dart';
 import '../main_shell.dart';
+import '../../theme/spacing.dart';
 
 /// شاشة "الصفحات" — التبديل السريع بين حسابات المدراء الفرعيّين
 /// (2026-08-26). طلب المستخدم:
@@ -313,7 +314,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
       backgroundColor: error ? AppColors.error : AppColors.brand,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
       duration: const Duration(seconds: 3),
     ));
   }
@@ -398,7 +399,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             height: 36,
             decoration: BoxDecoration(
               color: AppColors.brand.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
             ),
             alignment: Alignment.center,
             child: Icon(LucideIcons.repeat2, size: 18, color: AppColors.brand),
@@ -453,7 +454,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(R.icon),
         boxShadow: [
           BoxShadow(
             color: AppColors.brand.withValues(alpha: 0.28),
@@ -465,7 +466,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(R.icon),
           onTap: _returningToOriginal ? null : _returnToOriginal,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -476,7 +477,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   height: 44,
                   decoration: BoxDecoration(
                     color: AppColors.onBrand.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(R.md),
                   ),
                   alignment: Alignment.center,
                   child: const Icon(
@@ -533,7 +534,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     height: 34,
                     decoration: BoxDecoration(
                       color: AppColors.onBrand.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(R.sm),
                     ),
                     alignment: Alignment.center,
                     child: const Icon(
@@ -573,7 +574,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 height: 36,
                 decoration: BoxDecoration(
                   color: row.isActive ? AppColors.brand : AppColors.textLow,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(width: 10),
@@ -582,7 +583,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 height: 36,
                 decoration: BoxDecoration(
                   color: AppColors.brandAccent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(R.card),
                 ),
                 alignment: Alignment.center,
                 child: Icon(LucideIcons.shield,
@@ -620,7 +621,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
                               color: AppColors.brandSoftBg,
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(R.pill),
                             ),
                             child: Text(
                               'أنت',
@@ -640,7 +641,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
                               color: AppColors.dangerSoftBg,
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(R.pill),
                             ),
                             child: Text(
                               'معطّل',
@@ -715,7 +716,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       backgroundColor: AppColors.brand,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(R.sm),
                       ),
                     ),
                   ),

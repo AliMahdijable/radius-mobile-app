@@ -1358,7 +1358,7 @@ class _SubscriberHero extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.onBrandFill1,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(R.card),
       ),
       child: Row(
         children: [

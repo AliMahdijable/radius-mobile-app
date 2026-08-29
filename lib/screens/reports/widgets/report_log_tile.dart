@@ -74,7 +74,7 @@ class ReportLogTile extends StatelessWidget {
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: meta.color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(R.pill),
                       ),
                       child: Text(
                         meta.label,

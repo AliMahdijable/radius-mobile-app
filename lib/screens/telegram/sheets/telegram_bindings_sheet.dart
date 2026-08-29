@@ -7,6 +7,7 @@ import '../../../api/subscribers_api.dart';
 import '../../../api/telegram_api.dart';
 import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
 
 /// telegramBindingsSheet — قائمة المشتركين المربوطين ببوت تلغرام.
 /// - بحث نصّي (اسم / يوزر / phone)
@@ -152,7 +153,8 @@ class _BindingsSheetState extends State<_BindingsSheet> {
         builder: (_, scrollCtrl) => Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(R.card)),
           ),
           child: Column(
             children: [
@@ -162,7 +164,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(height: 12),
@@ -176,7 +178,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                       height: 40,
                       decoration: BoxDecoration(
                         color: AppColors.success.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: BorderRadius.circular(R.chip),
                       ),
                       alignment: Alignment.center,
                       child: Icon(LucideIcons.users,
@@ -227,7 +229,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceInput,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(R.sm),
                   ),
                   child: Row(
                     children: [
@@ -331,7 +333,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                 height: 36,
                 decoration: BoxDecoration(
                   color: b.isBlocked ? AppColors.error : AppColors.success,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(width: 10),
@@ -340,7 +342,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                 height: 34,
                 decoration: BoxDecoration(
                   color: const Color(0xFF229ED9).withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(17),
+                  borderRadius: BorderRadius.circular(R.button),
                 ),
                 alignment: Alignment.center,
                 child: const Icon(LucideIcons.send,
@@ -372,7 +374,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
                               color: AppColors.dangerSoftBg,
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(R.pill),
                             ),
                             child: Text('محظور',
                                 style: TextStyle(

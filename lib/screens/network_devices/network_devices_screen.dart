@@ -1166,7 +1166,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceInput,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(R.pill),
                         ),
                         child: Text(
                           NetworkDeviceLabels.brandLabel(d.brand),
@@ -1184,7 +1184,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                               horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
                             color: AppColors.brandSoftBg,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(R.pill),
                           ),
                           child: Text(
                             d.protocol!.toUpperCase(),
@@ -1213,7 +1213,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                                 horizontal: 6, vertical: 1),
                             decoration: BoxDecoration(
                               color: color.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(R.pill),
                               border: Border.all(
                                   color: color.withValues(alpha: 0.3)),
                             ),

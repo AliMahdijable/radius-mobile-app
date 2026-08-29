@@ -155,7 +155,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       useSafeArea: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
       ),
       builder: (_) => _MessageDetailSheet(message: m, onRetry: _retry),
     );
@@ -706,7 +706,7 @@ class _MessageDetailSheet extends StatelessWidget {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.borderStrong,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
             ),

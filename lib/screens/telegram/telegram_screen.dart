@@ -112,7 +112,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
       content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
       backgroundColor: error ? AppColors.error : AppColors.brand,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
     ));
   }
 
@@ -184,7 +184,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppColors.dangerSoftBg,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(
                 color: AppColors.dangerSoftBorder,
                 width: 0.5,
@@ -252,7 +252,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(R.md),
           border: Border.all(color: AppColors.border, width: 0.5),
         ),
         child: Column(
@@ -335,14 +335,14 @@ class _TelegramScreenState extends State<TelegramScreen> {
   Widget _actionTile(_TgAction a) {
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         onTap: a.onTap,
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(R.md),
             border: Border.all(color: AppColors.border, width: 0.5),
           ),
           child: Row(
@@ -352,7 +352,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                 height: 40,
                 decoration: BoxDecoration(
                   color: a.color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(R.chip),
                 ),
                 alignment: Alignment.center,
                 child: Icon(a.icon, color: a.color, size: 18),
@@ -413,8 +413,8 @@ class _TelegramScreenState extends State<TelegramScreen> {
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.error,
             side: BorderSide(color: AppColors.dangerSoftBorder, width: 1),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(R.md)),
           ),
         ),
       ),
@@ -442,7 +442,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             height: 42,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(R.md),
             ),
             alignment: Alignment.center,
             child: Icon(icon, color: color, size: 20),
@@ -526,7 +526,7 @@ class _StepsCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(R.icon),
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Column(
@@ -606,7 +606,7 @@ class _StepsCard extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(horizontal: 2),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceInput,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(R.pill),
                     ),
                     child: Text(code,
                         style: TextStyle(
@@ -702,7 +702,8 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
             style: const TextStyle(fontFamily: 'Cairo')),
         backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
       ));
       widget.onConnected();
     } else {
@@ -717,7 +718,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(R.icon),
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Column(
@@ -737,7 +738,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: AppColors.surfaceInput,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(
                 color: _err != null ? AppColors.error : AppColors.border,
                 width: _err != null ? 1 : 0.5,
@@ -814,7 +815,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
               style: FilledButton.styleFrom(
                 backgroundColor: widget.tgBlue,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(R.md)),
               ),
             ),
           ),

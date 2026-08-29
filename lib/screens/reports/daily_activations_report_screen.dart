@@ -421,7 +421,7 @@ class _DailyActivationsReportScreenState
                     decoration: BoxDecoration(
                       color: (selected ? c.$4 : AppColors.textLow)
                           .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3),
+                      borderRadius: BorderRadius.circular(R.pill),
                     ),
                     child: Text(
                       '${c.$3}',

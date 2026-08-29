@@ -7,6 +7,7 @@ import '../../../api/telegram_api.dart';
 import '../../../core/util/clipboard_helper.dart';
 import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
 
 /// telegramLinkGeneratorSheet — يبحث المدير عن مشترك بالاسم، يولّد
 /// deep link، وينسخه/يرسله عبر واتساب. يستدعي:
@@ -154,7 +155,8 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
         builder: (_, scrollCtrl) => Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(R.card)),
           ),
           child: Column(
             children: [
@@ -164,7 +166,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(height: 12),
@@ -177,7 +179,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                       height: 40,
                       decoration: BoxDecoration(
                         color: const Color(0xFF229ED9).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: BorderRadius.circular(R.chip),
                       ),
                       alignment: Alignment.center,
                       child: const Icon(LucideIcons.link,
@@ -224,7 +226,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceInput,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(R.sm),
                   ),
                   child: Row(
                     children: [
@@ -398,7 +400,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppColors.surfaceInput,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(R.md),
               border: Border.all(color: AppColors.border, width: 0.5),
             ),
             child: Column(
@@ -436,7 +438,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppColors.surfaceInput,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(R.md),
               border: Border.all(color: AppColors.border, width: 0.5),
             ),
             child: Column(
@@ -456,7 +458,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                     // 2026-08-26: toggle QR — للمشتركين اللي بلا واتساب.
                     InkWell(
                       onTap: () => setState(() => _showQr = !_showQr),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(R.sm),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
@@ -464,7 +466,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                           color: _showQr
                               ? const Color(0xFF229ED9).withValues(alpha: 0.14)
                               : AppColors.surface,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(R.sm),
                           border: Border.all(
                             color: _showQr
                                 ? const Color(0xFF229ED9)
@@ -516,7 +518,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(R.md),
                 border: Border.all(color: AppColors.border, width: 0.5),
               ),
               child: Column(
@@ -594,7 +596,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                         color: const Color(0xFF229ED9).withValues(alpha: 0.5),
                         width: 1),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(R.md)),
                   ),
                 ),
               ),
@@ -622,7 +624,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF25D366),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(R.md)),
                   ),
                 ),
               ),

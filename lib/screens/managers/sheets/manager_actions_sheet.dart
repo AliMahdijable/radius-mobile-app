@@ -117,7 +117,7 @@ class _ActionsSheet extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -128,7 +128,7 @@ class _ActionsSheet extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(
                 color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(R.pill),
               ),
             ),
             // Header — name + quick summary

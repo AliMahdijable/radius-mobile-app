@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/colors.dart';
+import '../theme/spacing.dart';
 
 /// Skeleton placeholder بـshimmer animation ناعم — بديل لطيف لـ
 /// CircularProgressIndicator أثناء تحميل قوائم/كارتات.
@@ -94,7 +95,7 @@ class SkeletonDeviceCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [
@@ -150,7 +151,7 @@ class SkeletonRegionCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [

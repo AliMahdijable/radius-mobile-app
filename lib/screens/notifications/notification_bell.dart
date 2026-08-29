@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../services/inbox_service.dart';
 import '../../theme/colors.dart';
 import 'inbox_screen.dart';
+import '../../theme/spacing.dart';
 
 /// أيقونة الإشعارات — تُوضع في AppBar لأي شاشة (Dashboard/MainShell).
 /// * أيقونة bell قياسية.
@@ -55,7 +56,7 @@ class NotificationBell extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color: AppColors.error,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(R.sm),
                       border: Border.all(color: AppColors.surface, width: 1.5),
                     ),
                     constraints:

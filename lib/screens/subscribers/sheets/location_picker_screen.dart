@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
 
 /// شاشة اختيار موقع GPS للمشترك على خريطة تفاعليّة.
 /// نسخة مطابقة لآليّة drdounat/app/lib/widgets/location_picker.dart —
@@ -199,7 +200,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(R.sm),
                         border: Border.all(color: AppColors.error, width: 1),
                       ),
                       child: Row(
@@ -267,7 +268,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.success,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(R.md)),
                     ),
                   ),
                 ),
@@ -294,7 +295,7 @@ class _Pin extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: Color(0x33000000),
-              borderRadius: BorderRadius.all(Radius.circular(4)),
+              borderRadius: BorderRadius.all(Radius.circular(R.pill)),
             ),
           ),
         ),

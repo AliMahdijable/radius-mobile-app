@@ -256,7 +256,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -385,7 +385,7 @@ class _EmployeeTile extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   color: accentColor,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),
               const SizedBox(width: 12),
@@ -395,7 +395,7 @@ class _EmployeeTile extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(R.card),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -435,7 +435,7 @@ class _EmployeeTile extends StatelessWidget {
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
                               color: AppColors.textLow.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(R.pill),
                             ),
                             child: Text(
                               'معطّل',
