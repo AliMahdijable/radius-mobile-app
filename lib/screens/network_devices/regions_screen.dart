@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
 import '../../models/device_region.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
@@ -57,7 +58,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
       ),
@@ -346,84 +347,56 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.initial != null;
-    final inset = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: inset),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.mapPin,
+        title: isEdit ? 'تعديل منطقة' : 'إضافة منطقة',
+        subtitle: '',
+        onClose: _saving ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: isEdit ? 'حفظ التعديلات' : 'إضافة',
+        icon: LucideIcons.save,
+        busy: _saving,
+        onPressed: _save,
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameCtrl,
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.right,
+            autofocus: !isEdit,
+            decoration: InputDecoration(
+              labelText: 'اسم المنطقة',
+              hintText: 'مثال: كرخ، رصافة، الجادرية…',
+              filled: true,
+              fillColor: AppColors.surfaceInput,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text('اللون (اختياري)',
+              style: TextStyle(
+                  color: AppColors.textMid,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              // مقبض السحب
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
-              ),
-              Text(isEdit ? 'تعديل منطقة' : 'إضافة منطقة',
-                  style: TextStyle(
-                      color: AppColors.textHi,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _nameCtrl,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
-                autofocus: !isEdit,
-                decoration: InputDecoration(
-                  labelText: 'اسم المنطقة',
-                  hintText: 'مثال: كرخ، رصافة، الجادرية…',
-                  filled: true,
-                  fillColor: AppColors.surfaceInput,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(R.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text('اللون (اختياري)',
-                  style: TextStyle(
-                      color: AppColors.textMid,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _colorSwatch(null),
-                  for (final c in _presetColors) _colorSwatch(c),
-                ],
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.onBrand))
-                    : Text(isEdit ? 'حفظ التعديلات' : 'إضافة',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
+              _colorSwatch(null),
+              for (final c in _presetColors) _colorSwatch(c),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

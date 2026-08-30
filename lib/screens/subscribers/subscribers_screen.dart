@@ -17,6 +17,7 @@ import '../../models/subscriber.dart';
 import '../../services/auth_storage.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -680,7 +681,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final picked = await showModalBottomSheet<Object?>(
       barrierColor: AppColors.scrim,
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet)),
@@ -1426,70 +1427,37 @@ class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.md, Sp.xl, 26),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: H.grabber,
-                decoration: BoxDecoration(
-                  color: AppColors.grabber,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
-              ),
-            ),
-            const SizedBox(height: Sp.lg),
-            Row(
-              children: [
-                Icon(Icons.tune_rounded, size: 18, color: AppColors.brand),
-                const SizedBox(width: Sp.sm),
-                Text('تصفية القائمة',
-                    style: AppType.cardTitle()
-                        .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
-                const Spacer(),
-                InkWell(
-                  onTap: () => setState(() => _picked = null),
-                  child: Text(
-                    'إعادة تعيين',
-                    style: AppType.body(color: AppColors.textLabel),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: Sp.lg),
-            Text('المدير الفرعي', style: AppType.pillLabel()),
-            const SizedBox(height: Sp.sm),
-            Wrap(
-              spacing: Sp.sm,
-              runSpacing: Sp.sm,
-              children: [
-                _chip(label: 'الكل', value: null),
-                for (final m in widget.managers) _chip(label: m, value: m),
-              ],
-            ),
-            const SizedBox(height: Sp.xl),
-            SizedBox(
-              height: H.button,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(R.button),
-                  ),
-                ),
-                onPressed: () => Navigator.pop(context, _picked ?? ''),
-                child: Text('تطبيق',
-                    style: AppType.button(color: AppColors.onBrand)),
-              ),
-            ),
-          ],
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: Icons.tune_rounded,
+        title: 'تصفية القائمة',
+        subtitle: '',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: 'تطبيق',
+        icon: Icons.check_rounded,
+        onPressed: () => Navigator.pop(context, _picked ?? ''),
+        leading: _ResetFilterButton(
+          onTap: () => setState(() => _picked = null),
         ),
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: Sp.lg),
+          Text('المدير الفرعي', style: AppType.pillLabel()),
+          const SizedBox(height: Sp.sm),
+          Wrap(
+            spacing: Sp.sm,
+            runSpacing: Sp.sm,
+            children: [
+              _chip(label: 'الكل', value: null),
+              for (final m in widget.managers) _chip(label: m, value: m),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -2034,6 +2002,40 @@ class _DebtSummaryCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// زرّ «إعادة تعيين» في شريط شيت التصفية — كان رابطاً نصّيّاً في الرأس،
+/// وهو إجراء لا عنوان فمكانه مع أزرار التنفيذ.
+class _ResetFilterButton extends StatelessWidget {
+  const _ResetFilterButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return SizedBox(
+      height: H.button,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.button),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.button),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.button),
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+            child: Center(
+              child: Text('إعادة تعيين',
+                  style: AppType.button(color: AppColors.textBody)),
+            ),
+          ),
         ),
       ),
     );
