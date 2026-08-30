@@ -769,21 +769,20 @@ class _RenewRowCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
-          // 3-way picker
-          Row(
-            children: [
-              for (final m in _PayMethod.values) ...[
-                Expanded(
-                  child: _MethodTile(
-                    method: m,
-                    selected: row.method == m,
-                    enabled: enabled,
-                    onTap: () => onMethod(m),
-                  ),
-                ),
-                if (m != _PayMethod.values.last) const SizedBox(width: 5),
-              ],
+          // ⚠️ `SheetChoiceTiles` نفسها التي يستعملها شيت التفعيل المفرد
+          // لا بلاطات خاصّة: نفس العمليّة بواجهتين تُربك، والخاصّة كانت
+          // تُلوّن الحدّ بلون الطريقة فيبدو الصفّ ثلاثة تنبيهات متجاورة.
+          // الطقم يُبرز المختار وحده ويُبقي الباقي محايداً.
+          SheetChoiceTiles(
+            labels: [
+              for (final m in _PayMethod.values) m.label,
             ],
+            icons: [
+              for (final m in _PayMethod.values) m.icon,
+            ],
+            selectedIndex: _PayMethod.values.indexOf(row.method),
+            enabled: enabled,
+            onSelect: (i) => onMethod(_PayMethod.values[i]),
           ),
           if (row.method == _PayMethod.partial) ...[
             const SizedBox(height: 8),
@@ -919,63 +918,6 @@ class _PriceChip extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _MethodTile extends StatelessWidget {
-  const _MethodTile({
-    required this.method,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-  final _PayMethod method;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final color = method.color;
-    return Material(
-      color: selected ? color.withValues(alpha: 0.08) : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.sm),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: enabled
-            ? () {
-                HapticFeedback.selectionClick();
-                onTap();
-              }
-            : null,
-        borderRadius: BorderRadius.circular(R.sm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(
-              color: selected ? color.withValues(alpha: 0.5) : AppColors.border,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(method.icon, color: color, size: 13),
-              const SizedBox(width: 4),
-              Text(
-                method.label,
-                style: AppType.label(color: color).copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

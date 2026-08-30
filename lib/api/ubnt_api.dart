@@ -825,17 +825,35 @@ class UbntApi {
     map[key] = s;
   }
 
+  /// مكشوفة للاختبار — العيّنة الحقيقيّة كشفت أنّ السطر الأوّل مضغوط.
+  static Map<String, String> parseMcaStatusForTest(String o) =>
+      _parseMcaStatus(o);
+
   /// mca-status output: أسطر key=value، بعض القيم متعدّدة (station1_ip=...)
   static Map<String, String> _parseMcaStatus(String output) {
     final map = <String, String>{};
     for (final line in output.split('\n')) {
       final trimmed = line.trim();
       if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-      final eq = trimmed.indexOf('=');
-      if (eq <= 0) continue;
-      final key = trimmed.substring(0, eq).trim();
-      final val = trimmed.substring(eq + 1).trim();
-      map[key] = val;
+      // ⚠️ السطر الأوّل في `mca-status` **مضغوط بفواصل**:
+      //   deviceName=…,deviceId=…,firmwareVersion=…,platform=NanoStation M5,deviceIp=…
+      // وقسمةُ السطر على أوّل `=` وحدها تجعله مفتاحاً واحداً قيمتُه
+      // الباقي كلّه — فيضيع `platform` وهو الطراز الذي تُطابَق به
+      // صورة الجهاز. (بلاغ المستخدم: صور UBNT لا تظهر)
+      //
+      // القسمة على الفواصل آمنة هنا: كلّ جزء `k=v` ولا قيمة تحوي فاصلة
+      // في هذا السطر. والأسطر الأخرى بلا فواصل فتمرّ كما هي.
+      for (final part in trimmed.split(',')) {
+        final p = part.trim();
+        final eq = p.indexOf('=');
+        if (eq <= 0) continue;
+        final key = p.substring(0, eq).trim();
+        final val = p.substring(eq + 1).trim();
+        if (key.isEmpty) continue;
+        // لا نطمس قيمةً موجودة: بعض المفاتيح تتكرّر عبر الأسطر،
+        // والأوّل أدقّ (السطر المضغوط يسبق التفاصيل).
+        map.putIfAbsent(key, () => val);
+      }
     }
     return map;
   }
@@ -1716,15 +1734,16 @@ extension UbntBoardName on UbntTrafficSession {
     if (out == null || out.trim().isEmpty) return null;
     final map = <String, String>{};
     for (final line in out.split(RegExp(r'[\r\n]+'))) {
-      final i = line.indexOf('=');
-      if (i <= 0) continue;
-      final k = line.substring(0, i).trim().toLowerCase();
-      // `mca-status` يضع السطر الأوّل حقولاً مفصولة بفواصل — نأخذ ما
-      // قبل أوّل فاصلة كي لا يلتصق الحقل التالي بالقيمة.
-      var v = line.substring(i + 1).trim();
-      final c = v.indexOf(',');
-      if (c > 0) v = v.substring(0, c).trim();
-      if (v.isNotEmpty) map[k] = v;
+      // ⚠️ القسمة على الفواصل أوّلاً: السطر الأوّل في `mca-status`
+      // مضغوط (`deviceName=…,platform=…,deviceIp=…`)، وقسمُه على أوّل
+      // `=` وحده يجعله مفتاحاً واحداً فيضيع `platform`.
+      for (final part in line.split(',')) {
+        final i = part.indexOf('=');
+        if (i <= 0) continue;
+        final k = part.substring(0, i).trim().toLowerCase();
+        final v = part.substring(i + 1).trim();
+        if (k.isNotEmpty && v.isNotEmpty) map.putIfAbsent(k, () => v);
+      }
     }
     for (final k in keys) {
       final v = map[k.toLowerCase()];

@@ -108,6 +108,18 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.online),
                     ),
+                    const SizedBox(height: 9),
+                    // صفٌّ رابع لا حبّة: أربع حبّات في سطر تُنتج ازدحاماً
+                    // وتسميات مقصوصة، وثلاث تتّسع بأريحيّة. (بلاغ 2026-08-30)
+                    _RingStatRow(
+                      tone: AppTone.info,
+                      icon: LucideIcons.wifiOff,
+                      label: 'dashboard.offline'.tr(),
+                      value: s.offline,
+                      onTap: onOpen == null
+                          ? null
+                          : () => onOpen!(SubscriberFilter.offline),
+                    ),
                   ],
                 ),
               ),
@@ -124,54 +136,50 @@ class SubscribersCard extends StatelessWidget {
           // لكلٍّ، فتُجبر «قربوا الانتهاء» على سطرين. الحبّة هنا سطر
           // واحد بعرض محتواها — 30px بدل 53، وبلا قصّ ولا التفاف.
           //
-          // ⚠️ `Wrap` لا تمريراً أفقيّاً: مجموع عروض الأربع يتجاوز عرض
-          // البطاقة، والتمرير كان يقصّ الحبّة الأخيرة عند الحافّة —
-          // والقصّ يُقرأ عطلاً لا دعوةً للتمرير. (بلاغ المستخدم)
+          // ثلاث بلاطات متساوية العرض — بعد نقل «غير متصل» إلى الصفوف.
           //
-          // والالتفاف يتكيّف: على شاشة عريضة تصطفّ الأربع، وعلى ضيّقة
-          // تنزل حبّتان إلى سطر ثانٍ — بلا قصّ في الحالين.
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          // بأربع كان نصيب كلٍّ رُبع العرض، فتُقصّ «قربوا الانتهاء» أو
+          // تلتفّ إلى سطر ثانٍ. بثلاث يبلغ نصيبها الثلث فتتّسع التسمية
+          // كاملةً في سطر واحد بلا قصّ ولا التفاف.
+          Row(
             children: [
-              _StatPill(
-                tone: AppTone.warning,
-                icon: LucideIcons.triangleAlert,
-                label: 'dashboard.near_expiry'.tr(),
-                value: s.nearExpiry,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.nearExpiry),
+              Expanded(
+                child: _StatPill(
+                  tone: AppTone.warning,
+                  icon: LucideIcons.triangleAlert,
+                  label: 'dashboard.near_expiry'.tr(),
+                  value: s.nearExpiry,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.nearExpiry),
+                ),
               ),
-              _StatPill(
-                tone: AppTone.neutral,
-                icon: LucideIcons.userX,
-                label: 'dashboard.disabled'.tr(),
-                value: s.disabled,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.disabled),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatPill(
+                  tone: AppTone.neutral,
+                  icon: LucideIcons.userX,
+                  label: 'dashboard.disabled'.tr(),
+                  value: s.disabled,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.disabled),
+                ),
               ),
-              _StatPill(
-                // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
-                // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
-                // لأنّ اتّصالهم **هو** موضع الشذوذ.
-                tone: AppTone.anomaly,
-                icon: LucideIcons.wifi,
-                label: 'dashboard.online_no_plan'.tr(),
-                value: s.onlineNoPlan,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.onlineNoPlan),
-              ),
-              _StatPill(
-                tone: AppTone.info,
-                icon: LucideIcons.wifiOff,
-                label: 'dashboard.offline'.tr(),
-                value: s.offline,
-                onTap: onOpen == null
-                    ? null
-                    : () => onOpen!(SubscriberFilter.offline),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatPill(
+                  // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
+                  // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
+                  // لأنّ اتّصالهم **هو** موضع الشذوذ.
+                  tone: AppTone.anomaly,
+                  icon: LucideIcons.wifi,
+                  label: 'dashboard.online_no_plan'.tr(),
+                  value: s.onlineNoPlan,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.onlineNoPlan),
+                ),
               ),
             ],
           ),
@@ -439,45 +447,45 @@ class _StatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      // ⚠️ بلا خلفيّة ملوّنة (طلب المستخدم): أربع خلفيّات مصمتة متجاورة
+      // ⚠️ بلا خلفيّة ملوّنة (طلب المستخدم): ثلاث خلفيّات مصمتة متجاورة
       // تجعل الصفّ كتلاً متنافسة على الانتباه بدل أن يُقرأ بلمحة.
+      // اللون في الأيقونة والرقم والحدّ يكفي للتمييز.
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.pill),
+      borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(R.pill),
+        borderRadius: BorderRadius.circular(R.md),
         child: Container(
-          // ضيّقة عمداً: أربع حبّات بتسمياتها تتجاوز عرض البطاقة على
-          // هاتف 360، فكلّ بكسل في الحشوة يقرّب اصطفافها في سطر واحد.
-          padding: const EdgeInsets.symmetric(horizontal: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.pill),
+            borderRadius: BorderRadius.circular(R.md),
             // `fill` لا `softBorder`: الأخير مُعايَر ليقع على خلفيّته
             // الناعمة، وعلى سطح محايد يُقرأ رماديّاً فيضيع التمييز.
             border: Border.all(color: tone.fill),
           ),
-          // ⚠️ سقف عرض + قصّ للتسمية: الحبّة داخل `Wrap` تأخذ قيوداً
-          // رخوة، فتسمية طويلة (لغة أطول، أو ترجمة غير محمَّلة) تُفيض
-          // الصفّ بدل أن تلتفّ. السقف يضمن الالتفاف دائماً.
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 150),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 12, color: tone.fill),
-                const SizedBox(width: 4),
-                Text('$value', style: AppType.pillBold(color: tone.fill)),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.micro(color: AppColors.textMid),
-                  ),
-                ),
-              ],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 14, color: tone.fill),
+                  const SizedBox(width: 6),
+                  Text('$value',
+                      style: AppType.cardTitleBold(color: tone.fill)),
+                ],
+              ),
+              const SizedBox(height: 3),
+              // سطر واحد: بثلث العرض تتّسع أطول تسمية («قربوا الانتهاء»)
+              // كاملةً. القصّ حارسٌ للغات أطول لا للحالة العاديّة.
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppType.micro(color: AppColors.textMid),
+              ),
+            ],
           ),
         ),
       ),
