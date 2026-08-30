@@ -456,15 +456,28 @@ class _StatPill extends StatelessWidget {
             // الناعمة، وعلى سطح محايد يُقرأ رماديّاً فيضيع التمييز.
             border: Border.all(color: tone.fill),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 12, color: tone.fill),
-              const SizedBox(width: 4),
-              Text('\$value', style: AppType.pillBold(color: tone.fill)),
-              const SizedBox(width: 4),
-              Text(label, style: AppType.micro(color: AppColors.textMid)),
-            ],
+          // ⚠️ سقف عرض + قصّ للتسمية: الحبّة داخل `Wrap` تأخذ قيوداً
+          // رخوة، فتسمية طويلة (لغة أطول، أو ترجمة غير محمَّلة) تُفيض
+          // الصفّ بدل أن تلتفّ. السقف يضمن الالتفاف دائماً.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 12, color: tone.fill),
+                const SizedBox(width: 4),
+                Text('$value', style: AppType.pillBold(color: tone.fill)),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.micro(color: AppColors.textMid),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
