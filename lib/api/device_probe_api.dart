@@ -29,6 +29,10 @@ class DeviceProbeApi {
   static final _snapByUser = <String, _Cached>{};
   static final _kindByIp = <String, DeviceKind>{};
   static final _deadCache = <String, DateTime>{};
+
+  /// الفحوص الجارية الآن، مفهرسة بالعنوان الفعّال. تمنع فحصين
+  /// متوازيين لجهاز واحد حين تتزامن موجة القائمة مع فتح كارت.
+  static final _inFlight = <String, Future<DeviceHealthSnapshot?>>{};
   static Future<AdminDeviceDefaults>? _adminFetch;
 
   static const _ttl = Duration(minutes: 5);
@@ -111,6 +115,24 @@ class DeviceProbeApi {
     bool force = false,
   }) async {
     final ip = fallbackIp.trim();
+
+    // ⚠️ فحص كاش الـusername **قبل** `fetchConfig` لا بعده.
+    //
+    // كان الترتيب معكوساً: كلّ استدعاء يجلب DeviceConfig أوّلاً ثمّ
+    // يفحص الكاش. فمَن يملك نتيجة طازجة أصلاً كان يدفع رحلة شبكيّة
+    // قبل أن يُقال له «موجودة عندك». وهذا ما جعل فتح كارت مشترك يبدو
+    // فحصاً ثانياً بعد فحص القائمة.
+    //
+    // الكاش بالـusername وحده آمن للاختصار المبكّر: الكاش بالـIP
+    // مفهرس بالـIP **الفعّال** بعد تطبيق customIp، فقراءته بـfallbackIp
+    // قد تُرجع نتيجة جهاز آخر لمشترك له تجاوز عنوان.
+    if (!force && subscriberUsername != null && subscriberUsername.isNotEmpty) {
+      final byUser = _snapByUser[subscriberUsername];
+      if (byUser != null && DateTime.now().difference(byUser.at) < _ttl) {
+        return byUser.snap;
+      }
+    }
+
     DeviceConfig? cfg;
     String effectiveIp = ip;
 
@@ -141,6 +163,30 @@ class DeviceProbeApi {
       }
     }
 
+    // ⚠️ إلغاء ازدواج الفحوص الجارية على العنوان نفسه.
+    //
+    // بدونه: موجة القائمة تفحص جهازاً، وفي أثنائها يفتح المستخدم كارته
+    // — فينطلق فحص ثانٍ متوازٍ لنفس العنوان لأنّ الكاش لا يمتلئ إلّا
+    // بعد انتهاء الأوّل. جهاز واحد، فحصان، وضِعف الاستهلاك.
+    final pending = _inFlight[effectiveIp];
+    if (pending != null) return pending;
+
+    final future = _probeAndStore(effectiveIp, cfg, subscriberUsername);
+    _inFlight[effectiveIp] = future;
+    try {
+      return await future;
+    } finally {
+      _inFlight.remove(effectiveIp);
+    }
+  }
+
+  /// الفحص الفعلي + تخزين النتيجة. مفصولة عن `probe` ليتمكّن
+  /// `_inFlight` من مشاركة المستقبَل الواحد بين كلّ الطالبين.
+  static Future<DeviceHealthSnapshot?> _probeAndStore(
+    String effectiveIp,
+    DeviceConfig? cfg,
+    String? subscriberUsername,
+  ) async {
     final defaults = await _loadAdminDefaults();
     final snap = await _runProbe(effectiveIp, cfg, defaults)
         .timeout(_probeCap, onTimeout: () => null);
@@ -189,6 +235,24 @@ class DeviceProbeApi {
     if (c == null) return null;
     if (DateTime.now().difference(c.at) >= _ttl) return null;
     return c.snap;
+  }
+
+  /// Peek يتجاهل المهلة: يُرجع آخر نتيجة معروفة مهما قدُمت، مع عمرها.
+  ///
+  /// للواجهات التي تفضّل عرض نتيجة قديمة فوراً على إظهار دوّارة: الجهاز
+  /// الذي فُحص مرّة لا ينبغي أن يبدو مجهولاً بعدها أبداً. المتصل بها
+  /// يعرض القيمة ثمّ يُحدّث في الخلفيّة إن كانت `stale`.
+  static ({DeviceHealthSnapshot? snap, bool stale})? peek({
+    String? username,
+    String? ip,
+  }) {
+    _Cached? c;
+    if (username != null && username.isNotEmpty) c = _snapByUser[username];
+    if (c == null && ip != null && ip.trim().isNotEmpty) {
+      c = _snapCache[ip.trim()];
+    }
+    if (c == null) return null;
+    return (snap: c.snap, stale: DateTime.now().difference(c.at) >= _ttl);
   }
 
   /// Wave batched probe.

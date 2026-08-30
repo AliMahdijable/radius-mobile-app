@@ -51,7 +51,46 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
   @override
   void initState() {
     super.initState();
+    // ⚠️ اقرأ ما فحصته موجة القائمة قبل أن تفحص.
+    //
+    // كان الكارت يُطلق فحصاً كاملاً عند كل فتح بلا سؤال الكاش، بينما
+    // شريحة القائمة تقرأه قراءةً متزامنة ولا تفحص أبداً. فالنتيجة:
+    // جهاز يُفحص مرّة في القائمة ومرّة عند فتح كارته — ومعه دوّارة
+    // تحميل تُوحي بأنّ شيئاً يجري وهو معروف أصلاً.
+    //
+    // نقرأ بالـusername أوّلاً (لا يلتبس مع تجاوز العنوان) ثمّ بالـIP.
+    // النتيجة القديمة تُعرض أيضاً: الجهاز الذي فُحص مرّة لا ينبغي أن
+    // يبدو مجهولاً بعدها. إن كانت قديمة نُحدّثها في الخلفيّة بلا دوّارة.
+    final hit = DeviceProbeApi.peek(
+      username: widget.username,
+      ip: widget.ip.trim(),
+    );
+    if (hit != null) {
+      _snap = hit.snap;
+      _loading = false;
+      _loadNotesOnly();
+      if (hit.stale) _refreshQuietly();
+      return;
+    }
     _run();
+  }
+
+  /// الجهاز مفحوص أصلاً: نكمل بجلب الملاحظات بلا دوّارة ولا فحص.
+  Future<void> _loadNotesOnly() async {
+    final cfg = await DeviceConfigApi.fetchConfig(widget.username);
+    if (!mounted) return;
+    setState(() => _notes = cfg?.notes?.trim());
+  }
+
+  /// تحديث صامت لنتيجة قديمة: بلا `_loading` فلا دوّارة ولا وميض.
+  /// إن فشل الفحص تبقى النتيجة القديمة معروضة — أفضل من فراغ.
+  Future<void> _refreshQuietly() async {
+    final snap = await DeviceProbeApi.probe(
+      fallbackIp: widget.ip,
+      subscriberUsername: widget.username,
+    );
+    if (!mounted || snap == null) return;
+    setState(() => _snap = snap);
   }
 
   Future<void> _run({bool force = false}) async {

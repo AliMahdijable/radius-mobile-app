@@ -241,10 +241,24 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     //
     // تكلفة: ~1 GET /api/subscribers/:username/device لكل مشترك ما
     // له IP، يُنفَّذ merci وiplevel cache 5د بعد أول wave.
-    final targets = _all
+    var targets = _all
         .where((s) => s.username.isNotEmpty)
         .map((s) => (username: s.username, ip: (s.ipAddress ?? '').trim()))
         .toList();
+
+    // ⚠️ استثنِ ما هو مفحوص وطازج — إلّا حين يطلب المستخدم فحصاً صريحاً.
+    //
+    // بدون هذا الترشيح كانت الموجة تمرّ على الـ500 كلّهم عند كل دخول
+    // للشاشة وتُطلق 500 مستقبَلاً، ولو كانت كلّ النتائج في الكاش:
+    // شريط تقدّم يعدّ إلى 500 بلا عمل حقيقي، وإيحاء للمستخدم بأنّ
+    // الفحص يُعاد من الصفر في كل مرّة.
+    if (!force) {
+      targets = targets
+          .where((t) =>
+              DeviceProbeApi.peek(username: t.username, ip: t.ip) == null)
+          .toList();
+    }
+
     if (targets.isEmpty) {
       setState(() {
         _probing = false;
