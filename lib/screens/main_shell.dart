@@ -520,7 +520,14 @@ class _QuickAddSheet extends StatelessWidget {
               subtitle: 'dashboard.add_subscriber_hint'.tr(),
               onTap: () => showAddSubscriberSheet(rootContext),
             ),
-          if (Perms.hasAny(['subscribers.activate', 'subscribers.extend']))
+          // ⚠️ البوّابة `activate` وحدها لا `hasAny(activate, extend)`.
+          //
+          // كانت تسمح لمن يملك `extend` فقط، بينما الفعل يفتح شيت
+          // **التفعيل** — فيرى الزرّ ويُرفض بعد الضغط. والفرق ليس
+          // تسميةً: التفعيل يبدأ اشتراكاً بباقة وسعر، والتمديد يزيد
+          // أيّاماً على القائم. مَن يملك التمديد وحده يصل إليه من كارت
+          // المشترك، وهو موضعه الطبيعي لأنّه يحتاج اشتراكاً قائماً.
+          if (Perms.has('subscribers.activate'))
             _QuickItem(
               icon: Icons.bolt_rounded,
               color: AppColors.brand,

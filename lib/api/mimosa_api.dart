@@ -49,16 +49,19 @@ class MimosaApi {
   //     11 = mimosaPtmpStaDistance   (int, meters)
   //     12 = mimosaPtmpStaUptime     (int, seconds)
   //     13 = mimosaPtmpStaOnline     (int, 1=online 0=offline)
-  // ⚠️ هذه الثلاثة غير مستعملة بعد: جدول محطّات PtMP لم يُنفَّذ
-  // (بند مؤجَّل في خارطة الأجهزة). تبقى مكتوبةً لأنّ استخراج OIDs
-  // من MIB عمل مستقلّ، وحذفها يعني إعادته عند تنفيذ الميزة.
+  // جذر جدول محطّات PtMP. الجدول نفسه **منفَّذ** — `fetchClients()`
+  // أدناه تمشي على أعمدته عموداً عموداً. هذا الجذر محفوظ لتحويل
+  // مستقبلي إلى walk واحد على الجدول كلّه بدل عشرة: يوفّر تسع دورات
+  // GETBULK، لكنّ بعض الـfirmware يرفض المشي على الجذر ويقبل الأعمدة
+  // مفردة — فلا يُبدَّل قبل اختبار ميداني.
+  //
+  // (تصحيح 2026-08-30: التعليق السابق هنا زعم أنّ الجدول «لم يُنفَّذ»
+  //  وكان بائتاً منذ 6b9f6d6 — أضلّ مراجعةً كاملة.)
   // ignore: unused_field
   static const String _oidPtmpStaTable = '$_ptmp.2';
   static const String _oidPtmpStaIP = '$_ptmp.2.1.2';
   static const String _oidPtmpStaName = '$_ptmp.2.1.3';
-  // ignore: unused_field
   static const String _oidPtmpStaHw = '$_ptmp.2.1.4';
-  // ignore: unused_field
   static const String _oidPtmpStaFw = '$_ptmp.2.1.5';
   static const String _oidPtmpStaRssi = '$_ptmp.2.1.6';
   static const String _oidPtmpStaSnr = '$_ptmp.2.1.7';
@@ -151,6 +154,10 @@ class MimosaApi {
       _oidInternalTemp,
       _oidLongitude,
       _oidLatitude,
+      // ⚠️ كان غائباً عن الدفعتين رغم أنّ الـOID معرَّف (:92) ويُقرأ في
+      // `fromVarbinds` (:516) ويُعرض في اللوحة — فصفّ «Altitude» لم
+      // يُرسم قطّ. عطل صامت: لا خطأ، فقط سطر لا يظهر أبداً.
+      _oidAltitude,
       _oidGpsSats,
     ];
     // ═══ Tier 2 (~500ms إضافيّة): RF details ═══
@@ -287,6 +294,10 @@ class MimosaApi {
         snmp.walk(_oidPtmpStaDist, chunkSize: 20),
         snmp.walk(_oidPtmpStaUptime, chunkSize: 20),
         snmp.walk(_oidPtmpStaOnline, chunkSize: 20),
+        // الطراز والإصدار: عمودان في الجدول نفسه، وكانا معرَّفين
+        // وغير مقروءين. يميّزان جهاز العميل حين تتشابه الأسماء.
+        snmp.walk(_oidPtmpStaHw, chunkSize: 20),
+        snmp.walk(_oidPtmpStaFw, chunkSize: 20),
       ]);
 
       final ipsBySuffix = _byMacSuffix(futures[0], _oidPtmpStaIP);
@@ -299,6 +310,8 @@ class MimosaApi {
       final distBySuffix = _byMacSuffix(futures[7], _oidPtmpStaDist);
       final uptimeBySuffix = _byMacSuffix(futures[8], _oidPtmpStaUptime);
       final onlineBySuffix = _byMacSuffix(futures[9], _oidPtmpStaOnline);
+      final hwBySuffix = _byMacSuffix(futures[10], _oidPtmpStaHw);
+      final fwBySuffix = _byMacSuffix(futures[11], _oidPtmpStaFw);
 
       // كل الـMAC suffixes الي شفناها (union)
       final allSuffixes = <String>{
@@ -323,6 +336,8 @@ class MimosaApi {
           distanceMeters: distBySuffix[suffix]?.asInt,
           uptimeSec: uptimeBySuffix[suffix]?.asInt,
           online: (onlineBySuffix[suffix]?.asInt ?? 0) == 1,
+          hwModel: hwBySuffix[suffix]?.asString,
+          fwVersion: fwBySuffix[suffix]?.asString,
         ));
       }
       // ترتيب: online أوّلاً، ثم بأقوى signal (rssi أقرب للصفر أفضل)
@@ -567,6 +582,10 @@ class MimosaClient {
   final int? uptimeSec;
   final bool online;
 
+  /// طراز جهاز العميل وإصداره — يميّزانه حين تتشابه الأسماء.
+  final String? hwModel;
+  final String? fwVersion;
+
   const MimosaClient({
     required this.mac,
     this.ip,
@@ -579,6 +598,8 @@ class MimosaClient {
     this.distanceMeters,
     this.uptimeSec,
     required this.online,
+      this.hwModel,
+    this.fwVersion,
   });
 
   /// تصنيف جودة الـsignal حسب RSSI:

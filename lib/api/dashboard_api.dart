@@ -113,13 +113,38 @@ class WalletResult {
       );
 }
 
-class RevenueResult {
-  const RevenueResult({required this.amount});
+/// نقطة على منحنى الإيراد — يوم واحد ومجموعه.
+class RevenuePoint {
+  const RevenuePoint({required this.date, required this.amount});
+  final DateTime date;
   final int amount;
 
-  Map<String, dynamic> toJson() => {'amount': amount};
-  factory RevenueResult.fromJson(Map<String, dynamic> j) =>
-      RevenueResult(amount: (j['amount'] as num?)?.toInt() ?? 0);
+  Map<String, dynamic> toJson() =>
+      {'d': date.toIso8601String(), 'a': amount};
+  factory RevenuePoint.fromJson(Map<String, dynamic> j) => RevenuePoint(
+        date: DateTime.tryParse(j['d']?.toString() ?? '') ?? DateTime(2000),
+        amount: (j['a'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class RevenueResult {
+  const RevenueResult({required this.amount, this.series = const []});
+  final int amount;
+
+  /// سلسلة يوميّة للمدى نفسه. مجموعها = `amount` بالضبط: الخادم يجمع
+  /// الدلاء الأربعة ذاتها في الاثنين (أُصلح 2026-08-30 — كان يجمع
+  /// دلوين في السلسلة وأربعة في الرقم، فتظهر أعمدة صفريّة تحت ملايين).
+  final List<RevenuePoint> series;
+
+  Map<String, dynamic> toJson() =>
+      {'amount': amount, 'series': series.map((p) => p.toJson()).toList()};
+  factory RevenueResult.fromJson(Map<String, dynamic> j) => RevenueResult(
+        amount: (j['amount'] as num?)?.toInt() ?? 0,
+        series: ((j['series'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((e) => RevenuePoint.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
 }
 
 class DashboardApi {
@@ -276,7 +301,25 @@ class DashboardApi {
         return null;
       }
       final amount = v is num ? v.toInt() : (int.tryParse(v.toString()) ?? 0);
-      return RevenueResult(amount: amount);
+
+      // السلسلة اختياريّة: غيابها لا يمنع عرض الرقم — الخادم القديم
+      // (قبل إصلاح 2026-08-30) يُرجعها صفريّة، والأقدم لا يُرجعها.
+      final rawSeries = (body['data'] as Map?)?['timeseries'];
+      final series = <RevenuePoint>[];
+      if (rawSeries is List) {
+        for (final e in rawSeries) {
+          if (e is! Map) continue;
+          final d = DateTime.tryParse(e['date']?.toString() ?? '');
+          if (d == null) continue;
+          final a = e['payments_sum'];
+          series.add(RevenuePoint(
+            date: DateTime(d.year, d.month, d.day),
+            amount: a is num ? a.toInt() : (int.tryParse(a.toString()) ?? 0),
+          ));
+        }
+        series.sort((x, y) => x.date.compareTo(y.date));
+      }
+      return RevenueResult(amount: amount, series: series);
     } on DioException catch (e) {
       _logErr('reports/finance(${period.name}) from=$from to=$to', e);
       return null;

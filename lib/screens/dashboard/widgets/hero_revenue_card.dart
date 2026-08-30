@@ -34,6 +34,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     RevenuePeriod.week: null,
     RevenuePeriod.month: null,
   };
+  /// السلسلة اليوميّة لكلّ فترة — تُملأ مع الرقم من الاستجابة ذاتها.
+  final Map<RevenuePeriod, List<RevenuePoint>> _series = {};
+
   final Set<RevenuePeriod> _failed = {};
   RevenuePeriod? _loading;
 
@@ -63,8 +66,11 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     // period now — the others will re-fetch lazily when tapped.
     setState(() {
       _amounts[RevenuePeriod.day] = null;
+      _series[RevenuePeriod.day] = const [];
       _amounts[RevenuePeriod.week] = null;
+      _series[RevenuePeriod.week] = const [];
       _amounts[RevenuePeriod.month] = null;
+      _series[RevenuePeriod.month] = const [];
       _failed.clear();
     });
     _refresh(_period);
@@ -97,6 +103,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     setState(() {
       if (r != null) {
         _amounts[p] = r.amount;
+        _series[p] = r.series;
       } else {
         _failed.add(p);
       }
@@ -202,7 +209,85 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ],
             ],
           ),
+          // الرسم يُبنى فقط حين توجد سلسلة **وفيها قيمة**: خادم قبل
+          // إصلاح 2026-08-30 يُرجعها أصفاراً، وأعمدة صفريّة تحت رقم
+          // بالملايين أسوأ من غياب الرسم — تُقرأ كأنّ الدخل صفر.
+          if (_hasSeries) ...[
+            const SizedBox(height: Sp.md),
+            SizedBox(height: 58, child: _RevenueBars(points: _series[_period]!)),
+          ],
         ],
+      ),
+    );
+  }
+
+  bool get _hasSeries {
+    final s = _series[_period];
+    return s != null && s.length >= 2 && s.any((p) => p.amount > 0);
+  }
+}
+
+/// أعمدة الإيراد اليوميّ — رسم يدويّ لا مكتبة.
+///
+/// fl_chart موجودة لكنّها تخدم منحنيات لوحات الأجهزة؛ هذه أعمدة بلا
+/// محاور ولا تفاعل، ورسمها مباشرةً أرخص من تهيئة BarChart كاملاً في
+/// شاشة تُفتح أوّلاً في كلّ جلسة.
+class _RevenueBars extends StatelessWidget {
+  const _RevenueBars({required this.points});
+
+  final List<RevenuePoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    // آخر 14 يوماً على الأكثر — أضيق من ذلك تصير الأعمدة خيوطاً.
+    final shown =
+        points.length > 14 ? points.sublist(points.length - 14) : points;
+    final max = shown.fold<int>(0, (m, p) => p.amount > m ? p.amount : m);
+    final gap = shown.length > 8 ? 3.0 : 5.0;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) SizedBox(width: gap),
+          Expanded(
+            child: _Bar(
+              // الكسر من الأعلى لا من المجموع: العين تقارن الأيّام
+              // ببعضها لا بالإجمالي.
+              ratio: max > 0 ? shown[i].amount / max : 0,
+              last: i == shown.length - 1,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar({required this.ratio, required this.last});
+
+  final double ratio;
+
+  /// آخر يوم في المدى يُبرَز — هو الذي يقابل الرقم أعلاه حين تكون
+  /// الفترة «اليوم».
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Align(
+      alignment: AlignmentDirectional.bottomCenter,
+      child: FractionallySizedBox(
+        // حدّ أدنى مرئي: يوم بلا دخل يبقى خطّاً رفيعاً لا فراغاً —
+        // الفراغ يُقرأ كيوم غير موجود لا كيوم بلا حركة.
+        heightFactor: ratio <= 0 ? 0.04 : (0.08 + ratio * 0.92),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: last ? AppColors.brandAccent : AppColors.brandSoftBorder,
+            borderRadius: BorderRadius.circular(R.sm),
+          ),
+        ),
       ),
     );
   }
