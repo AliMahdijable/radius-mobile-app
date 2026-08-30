@@ -107,13 +107,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   SubscriberFilter _filter = SubscriberFilter.all;
   SortField _sortField = SortField.remainingDays;
   SortDirection _sortDir = SortDirection.desc;
-  int _page = 0;
-  int _pageSize = 25;
+  /// كم مشتركاً معروضاً الآن. يكبر بـ`_kPageStep` عند «تحميل المزيد»
+  /// بدل التنقّل بين صفحات مرقّمة: القائمة نتيجة بحث لا فهرس كتاب،
+  /// والمستخدم يبحث عن مشترك بعينه لا عن «الصفحة الرابعة».
+  int _visibleCount = _kPageStep;
 
   bool _selectionMode = false;
   final Set<String> _selected = {};
 
-  static const _pageSizeOptions = [10, 25, 50, 100, 250, 500];
+  static const int _kPageStep = 25;
 
   @override
   void initState() {
@@ -185,7 +187,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     setState(() {
       _filter = next;
       _applyDefaultSortFor(next);
-      _page = 0;
+      _visibleCount = _kPageStep;
     });
   }
 
@@ -296,10 +298,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // نستعمل _filteredAll اللي بيه الفلترة/الفرز مُطبّقة أصلاً.
     final visible = _filteredAll;
     if (visible.isEmpty) return const [];
-    final pageStart = (_page * _pageSize).clamp(0, visible.length);
-    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
-    if (pageStart >= pageEnd) return const [];
-    return visible.sublist(pageStart, pageEnd);
+    return visible.take(_visibleCount).toList();
   }
 
   Future<void> _refresh() async {
@@ -376,7 +375,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       if (!mounted) return;
       setState(() {
         _query = _searchCtrl.text.trim();
-        _page = 0;
+        _visibleCount = _kPageStep;
       });
     });
   }
@@ -667,7 +666,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       setState(() {
         _sortField = r.field;
         _sortDir = r.direction;
-        _page = 0;
+        _visibleCount = _kPageStep;
       });
     }
   }
@@ -694,7 +693,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (picked == null) return; // أُغلق بلا «تطبيق»
     setState(() {
       _managerFilter = picked is String ? picked : null;
-      _page = 0;
+      _visibleCount = _kPageStep;
     });
   }
 
@@ -893,10 +892,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final filtered = _filteredAll;
-    final totalPages = (filtered.length / _pageSize).ceil().clamp(1, 99999);
-    final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, filtered.length);
-    final page = filtered.sublist(pageStart, pageEnd);
+    final page = filtered.take(_visibleCount).toList();
+    final remaining = filtered.length - page.length;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -904,146 +901,158 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         bottom: false,
         child: Column(
           children: [
-            // Header (search or selection)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-              child: _selectionMode
-                  ? _SelectionHeader(
-                      count: _selected.length,
-                      total: page.length,
-                      onExit: _exitSelection,
-                      onSelectAll: () => _selectAllOnPage(page),
-                    )
-                  : _ListHeader(
-                      controller: _searchCtrl,
-                      total: _counts()[SubscriberFilter.all] ?? 0,
-                      online: _counts()[SubscriberFilter.online] ?? 0,
-                      sortActive: _sortField != SortField.remainingDays ||
-                          _sortDir != SortDirection.desc,
-                      filterActive: _managerFilter != null,
-                      sortLabel: _sortLabel(),
-                      onSort: _openSortSheet,
-                      onFilter: _availableManagers.isEmpty
-                          ? null
-                          : _openManagerFilterSheet,
-                      // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
-                      // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
-                      probing: _probing,
-                      onScanDevices:
-                          _probing ? null : () => _runProbeWave(force: true),
-                    ),
-            ),
-            // Sub-manager (parent) filter — sits right under the
-            // search bar like v1's "كل المدراء" dropdown. Shown
-            // whenever at least one subscriber has a parent_username
-            // set (مطلب 2026-06-10: discoverability — admins want
-            // to see the filter exists even with a single parent).
-            // Hidden only for tenants where NO subscriber has a
-            // parent (zero sub-managers, nothing to scope to).
-            // 2026-08-29 (إعادة التصميم): الصفّ المسطّح انتقل إلى
-            // «شيت التصفية» خلف زرّ tune في الهيدر — المخطّط لا يضع
-            // فلاتر مسطّحة تحت البحث. الاكتشافيّة محفوظة بنقطة خضراء
-            // على الزرّ عند وجود فلتر مطبَّق.
-            FilterChipsBar(
-              current: _filter,
-              counts: _counts(),
-              onSelect: (f) => setState(() {
-                _filter = f;
-                _applyDefaultSortFor(f);
-                _page = 0;
-              }),
-            ),
-            if (!_selectionMode)
-              _ResultSortBar(
-                count: _filteredAll.length,
-                sortLabel: _sortLabel(),
-                descending: _sortDir == SortDirection.desc,
-                onTap: _openSortSheet,
-              ),
-            // مطلب 2026-07-14: كارت "إجمالي الديون" (نظير v1 —
-            // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
-            // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
-            // _filteredAll الي بنفسه محكوم بـ_managerScoped.
-            if (_filter == SubscriberFilter.debtors && !_selectionMode)
-              _DebtSummaryCard(subscribers: _filteredAll),
-            // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
-            // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
-            // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.
-            if (_probing && _probeTotal > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 10,
-                      height: 10,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: AppColors.brandAccent,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'subscribers.probing_devices'.tr(namedArgs: {
-                        'done': '$_probeDone',
-                        'total': '$_probeTotal'
-                      }),
-                      style: AppType.muted().copyWith(fontSize: 10.5),
-                    ),
-                  ],
-                ),
-              ),
-            // 2026-08-29: شريط شرائح فرز الأجهزة (RX · إشارة · CCQ ·
-            // LAN) حُذف بطلب المستخدم — شيت «ترتيب القائمة» يغطّي
-            // الحاجة، والشريط كان يزاحم كلّ نتيجة بصفّ إضافي.
-            // Stats bar — keep the row tight; the page-size picker is a
-            // plain text link.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 4),
-              child: Row(
-                children: [
-                  Text(
-                    '${filtered.isEmpty ? 0 : pageStart + 1}-$pageEnd / ${filtered.length}',
-                    style: AppType.muted(color: AppColors.textLow)
-                        .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
-                  ),
-                  const Spacer(),
-                  _PageSizePicker(
-                    current: _pageSize,
-                    options: _pageSizeOptions,
-                    onChange: (s) => setState(() {
-                      _pageSize = s;
-                      _page = 0;
-                    }),
-                  ),
-                ],
-              ),
-            ),
+            // ⚠️ البنية هنا ليست تجميلاً: كانت أربعة صفوف ثابتة فوق
+            // القائمة (بحث · شرائح · فرز · ترقيم) تحجز نحو ثلث الشاشة
+            // قبل أن يُرى مشترك واحد. الآن الشرائح وحدها تثبت — وهي
+            // التنقّل الأساسي — والبحث وشريط الفرز يمشيان مع التمرير.
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.brand,
                 onRefresh: _refresh,
                 child: _loading
                     ? Center(
-                        child:
-                            CircularProgressIndicator(color: AppColors.brand))
-                    : page.isEmpty
-                        ? _EmptyState(filter: _filter, query: _query)
-                        : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              Sp.lg,
-                              0,
-                              Sp.lg,
-                              Sp.huge * 3 +
-                                  MediaQuery.paddingOf(context).bottom,
+                        child: CircularProgressIndicator(
+                            color: AppColors.brand))
+                    : CustomScrollView(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                                  child: _selectionMode
+                                      ? _SelectionHeader(
+                                          count: _selected.length,
+                                          total: page.length,
+                                          onExit: _exitSelection,
+                                          onSelectAll: () => _selectAllOnPage(page),
+                                        )
+                                      : _ListHeader(
+                                          controller: _searchCtrl,
+                                          total: _counts()[SubscriberFilter.all] ?? 0,
+                                          online: _counts()[SubscriberFilter.online] ?? 0,
+                                          sortActive: _sortField != SortField.remainingDays ||
+                                              _sortDir != SortDirection.desc,
+                                          filterActive: _managerFilter != null,
+                                          sortLabel: _sortLabel(),
+                                          onSort: _openSortSheet,
+                                          onFilter: _availableManagers.isEmpty
+                                              ? null
+                                              : _openManagerFilterSheet,
+                                          // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
+                                          // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
+                                          probing: _probing,
+                                          onScanDevices:
+                                              _probing ? null : () => _runProbeWave(force: true),
+                                        ),
+                                ),
+                              ],
                             ),
-                            itemCount: page.length,
+                          ),
+                          SliverPersistentHeader(
+                            pinned: true,
+                            delegate: _ChipsBarDelegate(
+                              child: ColoredBox(
+                                color: AppColors.bg,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    FilterChipsBar(
+                                      current: _filter,
+                                      counts: _counts(),
+                                      onSelect: (f) => setState(() {
+                                        _filter = f;
+                                        _applyDefaultSortFor(f);
+                                        _visibleCount = _kPageStep;
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          SliverToBoxAdapter(
+                            child: Column(
+                              children: [
+                                if (!_selectionMode)
+                                  _ResultSortBar(
+                                    count: _filteredAll.length,
+                                    sortLabel: _sortLabel(),
+                                    descending: _sortDir == SortDirection.desc,
+                                    onTap: _openSortSheet,
+                                  ),
+                                // مطلب 2026-07-14: كارت "إجمالي الديون" (نظير v1 —
+                                // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
+                                // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
+                                // _filteredAll الي بنفسه محكوم بـ_managerScoped.
+                                if (_filter == SubscriberFilter.debtors && !_selectionMode)
+                                  _DebtSummaryCard(subscribers: _filteredAll),
+                                // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
+                                // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
+                                // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.
+                                if (_probing && _probeTotal > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 10,
+                                          height: 10,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                            color: AppColors.brandAccent,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'subscribers.probing_devices'.tr(namedArgs: {
+                                            'done': '$_probeDone',
+                                            'total': '$_probeTotal'
+                                          }),
+                                          style: AppType.muted().copyWith(fontSize: 10.5),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                // 2026-08-29: شريط شرائح فرز الأجهزة (RX · إشارة · CCQ ·
+                                // LAN) حُذف بطلب المستخدم — شيت «ترتيب القائمة» يغطّي
+                                // الحاجة، والشريط كان يزاحم كلّ نتيجة بصفّ إضافي.
+                              ],
+                            ),
+                          ),
+                          if (page.isEmpty)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child:
+                                  _EmptyState(filter: _filter, query: _query),
+                            )
+                          else
+                            SliverPadding(
+                              padding: EdgeInsets.fromLTRB(
+                                Sp.lg,
+                                0,
+                                Sp.lg,
+                                Sp.huge * 3 +
+                                    MediaQuery.paddingOf(context).bottom,
+                              ),
+                              sliver: SliverList.separated(
+                            // صفّ إضافي في الذيل لزرّ «تحميل المزيد»:
+                            // داخل القائمة لا تحتها، فلا يحجز ارتفاعاً
+                            // ثابتاً ولا يظهر إلّا حين يبقى ما يُحمَّل.
+                            itemCount: page.length + (remaining > 0 ? 1 : 0),
                             // 2026-08-26: 8dp → 6dp بين الكارت والكارت.
                             // مع padding داخلي مخفَّض + borders أخف = تركيز
                             // بصري أعلى، صفوف أكثر مرئيّة.
                             separatorBuilder: (_, __) =>
                                 const SizedBox(height: 6),
                             itemBuilder: (_, i) {
+                              if (i == page.length) {
+                                return _LoadMoreButton(
+                                  remaining: remaining,
+                                  onTap: () => setState(
+                                      () => _visibleCount += _kPageStep),
+                                );
+                              }
                               final s = page[i];
                               final isSelected =
                                   s.idx != null && _selected.contains(s.idx);
@@ -1084,17 +1093,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     : null,
                               );
                             },
-                          ),
+                              ),
+                            ),
+                        ],
+                      ),
               ),
             ),
-            // Pagination footer
-            if (!_loading && totalPages > 1)
-              _Pager(
-                page: _page,
-                totalPages: totalPages,
-                onPrev: () => setState(() => _page--),
-                onNext: () => setState(() => _page++),
-              ),
             if (_refreshing)
               LinearProgressIndicator(
                 color: AppColors.brand,
@@ -1542,122 +1546,6 @@ class _SelectionHeader extends StatelessWidget {
   }
 }
 
-class _PageSizePicker extends StatelessWidget {
-  const _PageSizePicker({
-    required this.current,
-    required this.options,
-    required this.onChange,
-  });
-
-  final int current;
-  final List<int> options;
-  final ValueChanged<int> onChange;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return PopupMenuButton<int>(
-      tooltip: 'subscribers.page_size'.tr(),
-      onSelected: onChange,
-      itemBuilder: (_) => [
-        for (final o in options)
-          PopupMenuItem(value: o, child: Text('$o / صفحة')),
-      ],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$current/صفحة',
-              style: AppType.muted(color: AppColors.textLow)
-                  .copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
-          const SizedBox(width: 2),
-          Icon(LucideIcons.chevronDown, size: 11, color: AppColors.textLow),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pager extends StatelessWidget {
-  const _Pager({
-    required this.page,
-    required this.totalPages,
-    required this.onPrev,
-    required this.onNext,
-  });
-  final int page;
-  final int totalPages;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        Sp.lg,
-        Sp.sm,
-        Sp.lg,
-        Sp.sm + MediaQuery.paddingOf(context).bottom,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _ArrowBtn(
-            icon: LucideIcons.chevronRight,
-            enabled: page > 0,
-            onTap: onPrev,
-          ),
-          const SizedBox(width: Sp.md),
-          Text(
-            'subscribers.page_of'
-                .tr(namedArgs: {'page': '${page + 1}', 'total': '$totalPages'}),
-            style: AppType.label(color: AppColors.textHi).copyWith(
-              fontSize: 12.5, // Card title tier — secondary nav text
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: Sp.md),
-          _ArrowBtn(
-            icon: LucideIcons.chevronLeft,
-            enabled: page < totalPages - 1,
-            onTap: onNext,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ArrowBtn extends StatelessWidget {
-  const _ArrowBtn({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final color = enabled ? AppColors.brand : AppColors.textLow;
-    return Material(
-      color: enabled ? AppColors.brandSoftBg : AppColors.surfaceInput,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: enabled ? onTap : null,
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(icon, color: color, size: 18),
-        ),
-      ),
-    );
-  }
-}
-
 /// Sub-manager (parent) filter strip — horizontal chip row matching
 /// the FilterChipsBar visual language. Leading shield icon + 'كل
 /// المدراء' chip + one chip per parent_username found in the loaded
@@ -2037,3 +1925,94 @@ class _ResetFilterButton extends StatelessWidget {
     );
   }
 }
+
+/// ذيل القائمة: «تحميل المزيد» بدل شريط ترقيم الصفحات.
+///
+/// الترقيم يفترض أنّ المستخدم يتنقّل في فهرس مرتّب، وهو ليس كذلك هنا:
+/// القائمة نتيجة بحث وفرز يتغيّران باستمرار، و«الصفحة الرابعة» لا
+/// تعني شيئاً بعد تغيير الفرز. والزرّ داخل القائمة لا تحتها، فلا يحجز
+/// ارتفاعاً ثابتاً حين لا يبقى ما يُحمَّل.
+class _LoadMoreButton extends StatelessWidget {
+  const _LoadMoreButton({required this.remaining, required this.onTap});
+
+  final int remaining;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, Sp.md, 0, Sp.sm),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.card),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.card),
+          child: Container(
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.card),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(LucideIcons.chevronDown,
+                    size: 15, color: AppColors.brandAccent),
+                const SizedBox(width: 7),
+                Text(
+                  'تحميل المزيد',
+                  style: AppType.button(color: AppColors.brandAccent),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '($remaining)',
+                  style: AppType.muted(color: AppColors.textLow),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// مفوِّض شريط شرائح الفلتر المثبَّت.
+///
+/// الشرائح وحدها تثبت من بين صفوف الرأس الأربعة السابقة: هي التنقّل
+/// الأساسي في الشاشة، والبحث وشريط الفرز يُستعملان مرّة ثمّ يُنسيان
+/// فيمشيان مع التمرير.
+///
+/// ⚠️ `ColoredBox` بلون الخلفيّة داخل الطفل ضروريّ لا تجميليّ:
+/// الشريط المثبَّت يطفو فوق البطاقات وهي تمرّ تحته، وبلا خلفيّة
+/// معتمة تظهر البطاقات من خلاله.
+class _ChipsBarDelegate extends SliverPersistentHeaderDelegate {
+  _ChipsBarDelegate({required this.child}) : isDark = AppColors.isDark;
+
+  final Widget child;
+
+  /// لقطة من راية الوضع الليلي وقت الإنشاء. `shouldRebuild` تقارنها
+  /// حتى يُعاد رسم الشريط عند تبديل الثيم — بدونها يبقى بلوحته
+  /// القديمة بينما تنقلب بقيّة الشاشة (نفس فخّ ترويسة الداشبورد).
+  final bool isDark;
+
+  /// ارتفاع الشريحة + تنفّس فوقها وتحتها.
+  static const double _height = H.chipSm + 12;
+
+  @override
+  double get minExtent => _height;
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
+      SizedBox(height: _height, child: child);
+
+  @override
+  bool shouldRebuild(_ChipsBarDelegate old) =>
+      old.child != child || old.isDark != isDark;
+}
+
