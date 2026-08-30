@@ -174,4 +174,24 @@ void main() {
             'بـheight من سلّمه:\n${offenders.join('\n')}');
   });
 
+
+  test('كلّ مقبض شيت بمقاس الطقم — 42 × H.grabber', () {
+    // المقبض هو أوّل ما تلمسه العين حين يصعد الشيت. اختلاف عرضه بين
+    // شيت وآخر لا يُقرأ كتنوّع بل كعطل، لأنّ المستخدم يرى شيتين أو
+    // ثلاثة في الجلسة الواحدة ويقارنها لا شعوريّاً.
+    final decl = RegExp(r'width: (\d+),\s*\n\s*height: H\.grabber,');
+    final offenders = <String>[];
+    for (final f in dartFiles()) {
+      final path = f.path.replaceAll(r'\', '/');
+      final src = f.readAsStringSync();
+      for (final m in decl.allMatches(src)) {
+        if (m.group(1) == '42') continue;
+        final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
+        offenders.add('$path:$line — عرض ${m.group(1)}');
+      }
+    }
+    expect(offenders, isEmpty,
+        reason: 'مقابض بعرض مخالف:\n${offenders.join('\n')}');
+  });
+
 }

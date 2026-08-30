@@ -470,10 +470,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
                   children: [
                     const SizedBox(height: 8),
                     Container(
-                      width: 36,
-                      height: 4,
+                      width: 42,
+                      height: H.grabber,
                       decoration: BoxDecoration(
-                        color: AppColors.border,
+                        color: AppColors.grabber,
                         borderRadius: BorderRadius.circular(R.pill),
                       ),
                     ),

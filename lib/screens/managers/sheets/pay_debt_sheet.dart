@@ -434,10 +434,10 @@ class _SheetHandle extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8),
       child: Center(
         child: Container(
-          width: 36,
-          height: 4,
+          width: 42,
+          height: H.grabber,
           decoration: BoxDecoration(
-            color: AppColors.border,
+            color: AppColors.grabber,
             borderRadius: BorderRadius.circular(R.pill),
           ),
         ),
