@@ -561,7 +561,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                 // القصّ يطفو النصّ على ما تحته أثناء الطيّ.
                 ClipRect(
                   child: Align(
-                    alignment: Alignment.topLeft,
+                    alignment: AlignmentDirectional.topStart,
                     heightFactor: 1 - t,
                     child: Opacity(
                       opacity: 1 - t,
@@ -588,7 +588,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                 SizedBox(height: 6 * (1 - t)),
                 ClipRect(
                   child: Align(
-                    alignment: Alignment.topLeft,
+                    alignment: AlignmentDirectional.topStart,
                     heightFactor: 1 - t,
                     child: Opacity(
                       opacity: 1 - t,

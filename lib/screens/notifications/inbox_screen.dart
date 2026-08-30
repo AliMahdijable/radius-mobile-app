@@ -284,7 +284,10 @@ class _InboxScreenState extends State<InboxScreen> {
           direction: DismissDirection.endToStart,
           onDismissed: (_) => InboxService.remove(n.id),
           background: Container(
-            alignment: Alignment.centerLeft,
+            // `direction` أعلاه اتّجاهيّ (`endToStart`) فيجب أن تكون
+            // المحاذاة كذلك: أيقونة الحذف تظهر في الجهة التي تُسحب
+            // البطاقة نحوها، وهي تنعكس مع اللغة.
+            alignment: AlignmentDirectional.centerEnd,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: AppColors.dangerSoftBg,

@@ -194,4 +194,38 @@ void main() {
         reason: 'مقابض بعرض مخالف:\n${offenders.join('\n')}');
   });
 
+
+  test('لا محاذاة غير اتّجاهيّة على ويدجت — التطبيق عربيّ أوّلاً', () {
+    // بلاغ 2026-08-30: ترويسة الداشبورد بدت «مبعثرة» — التحيّة وشارة
+    // واتساب انزاحتا يساراً بينما اسم المدير بقي يميناً. السبب
+    // `Alignment.topLeft` داخل `Align`: غير اتّجاهيّ، أي اليسار
+    // **الحرفي** لا «البداية». في واجهة عربيّة هذا عكس المقصود تماماً،
+    // والمحلّل لا يراه لأنّه نوع صحيح تماماً.
+    //
+    // `begin`/`end` في التدرّجات مستثناة: اتّجاه التدرّج قرار بصريّ لا
+    // نصّي، ولا معنى لعكسه مع اللغة.
+    final bad = RegExp(r'alignment:\s*Alignment\.(top|center|bottom)(Left|Right)');
+    const allowed = <String, String>{
+      'lib/screens/subscribers/sheets/location_picker_screen.dart':
+          'طبقة فوق خريطة خارجيّة — تُوضع بإحداثيّات الخريطة لا بالنصّ',
+    };
+
+    final offenders = <String>[];
+    for (final f in dartFiles()) {
+      final path = f.path.replaceAll(r'\', '/');
+      if (allowed.containsKey(path)) continue;
+      final src = f.readAsStringSync();
+      for (final m in bad.allMatches(src)) {
+        // `pw.Alignment` من حزمة pdf نظام إحداثيّات آخر
+        final at = m.start;
+        if (at >= 3 && src.substring(at - 3, at).contains('pw.')) continue;
+        final line = '\n'.allMatches(src.substring(0, at)).length + 1;
+        offenders.add('$path:$line — ${m.group(0)}');
+      }
+    }
+    expect(offenders, isEmpty,
+        reason: 'استعمل AlignmentDirectional.*Start/*End:\n'
+            '${offenders.join('\n')}');
+  });
+
 }

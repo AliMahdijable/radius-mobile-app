@@ -383,7 +383,9 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         const SizedBox(height: 10),
         // MAC
         Align(
-          alignment: Alignment.centerRight,
+          // اتّجاهيّ: العنوان يلتصق ببداية السطر — يميناً عربيّاً ويساراً
+          // إنجليزيّاً. `centerRight` كان يثبّته يميناً في الحالتين.
+          alignment: AlignmentDirectional.centerStart,
           child: Text(peer.mac,
               textDirection: TextDirection.ltr,
               style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),

@@ -92,7 +92,9 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
     return Dismissible(
       key: ValueKey(a.id),
       background: Container(
-        alignment: Alignment.centerRight,
+        // بلا `direction` فالسحب في الجهتين، والخلفيّة تُقرأ من بداية
+        // السطر — تنعكس مع اللغة لا مع الشاشة.
+        alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           color: AppColors.dangerSoftBg,
