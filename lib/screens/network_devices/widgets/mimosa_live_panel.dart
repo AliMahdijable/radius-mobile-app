@@ -801,8 +801,12 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       child: Row(children: [
         Text(label,
             style: AppType.pillBold(color: AppColors.textMid)),
-        const Spacer(),
-        Flexible(
+        const SizedBox(width: Sp.sm),
+        // ⚠️ `Expanded` لا `Spacer()+Flexible`: لكليهما flex=1 فيتقاسمان
+        // الفراغ، و`Flexible` بالملاءمة الرخوة تأخذ مقاسها الطبيعي فقط
+        // فيضيع نصيبها بلا إعادة توزيع — وتبقى القيمة بعيدةً عن النهاية
+        // بفجوة. `Expanded` يبتلع الفراغ كلّه و`textAlign: end` يلصقها.
+        Expanded(
             child: Text(value,
                 textDirection: TextDirection.ltr,
                 style: AppType.pillBold(color: AppColors.textHi),

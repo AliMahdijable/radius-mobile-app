@@ -12,13 +12,11 @@ import '../../core/util/format.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/app_resumed_signal.dart';
-import '../../services/manual_wa_sender.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../../widgets/manual_wa_chip.dart';
 import '../reports/account_statement_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
@@ -42,7 +40,7 @@ import 'widgets/subscriber_actions.dart';
 ///   5. Operations card AT THE BOTTOM — every action v1 surfaces in
 ///      its FAB sheet, in a single 3-column grid: تعديل / تفعيل /
 ///      تمديد / إضافة دين / تسديد دين / خصم سريع / سجل الحركات /
-///      تذكير دين / تذكير انتهاء / توليد رابط / إرسال المعلومات /
+///      تذكير دين / تذكير انتهاء / إرسال المعلومات /
 ///      حذف / تعطيل-تفعيل حساب / اتصال / واتساب / فصل المستخدم.
 ///
 /// Info cards are intentionally tight (smaller padding, 4px row gaps)
@@ -71,7 +69,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// are in flight. Same single-flight pattern as the toggle and
   /// disconnect — the chip label flips and the busy guard locks
   /// the rest of the grid.
-  bool _generatingLink = false;
 
   /// True while the DELETE round-trip is in flight.
   bool _deleting = false;
@@ -91,7 +88,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       _disconnecting ||
       _toggling ||
       _sendingTemplate != null ||
-      _generatingLink ||
       _deleting;
 
   @override
@@ -435,85 +431,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     }
   }
 
-  Future<void> _generateInfoLink() async {
-    if (_generatingLink) return;
-    // Phone required — the user-info URL is delivered through
-    // WhatsApp. Without a phone we can't deliver it anywhere.
-    if (sub.displayPhone.isEmpty) {
-      showSheetSnack(context, 'subscribers.no_phone'.tr(), isError: true);
-      return;
-    }
-    setState(() => _generatingLink = true);
-    final linkResult = await SubscribersApi.generateInfoLink(sub: sub);
-    if (!mounted) return;
-    if (!linkResult.ok || linkResult.url == null) {
-      setState(() => _generatingLink = false);
-      showSheetSnack(
-        context,
-        linkResult.message ?? 'subscribers.wa_link_gen_failed'.tr(),
-        isError: true,
-      );
-      return;
-    }
-    // Build the message body locally — v1's text verbatim minus the
-    // greeting whitespace tweak. Falls back to username when the
-    // Arabic name is missing so admins with sparse name data still
-    // get a readable greeting.
-    final greetName =
-        sub.fullName.trim().isNotEmpty ? sub.fullName.trim() : sub.username;
-    // ملاحظة: نص رسالة الواتساب يبقى دائماً عربي — يذهب لعميل المشترك،
-    // لا يتأثر بلغة تطبيق الأدمن.
-    final body = 'مرحباً $greetName 👋\n\n'
-        'يمكنك الاطلاع على معلومات اشتراكك من خلال الرابط التالي:\n\n'
-        '${linkResult.url}\n\n'
-        '⚠️ ملاحظة: هذا الرابط صالح لمدة ساعة واحدة فقط.\n'
-        'في حال تجديد الاشتراك أو تسديد الدين، يرجى طلب رابط جديد للبيانات المحدثة.\n\n'
-        'شكراً لك 🙏';
-    // 2026-08-26: preview sheet + chip للـmanual mode.
-    setState(() => _generatingLink = false);
-    if (!mounted) return;
-    final choice = await showManualWaPreviewSheet(
-      context,
-      title: 'رابط بيانات المشترك',
-      phone: sub.displayPhone,
-      messagePreview: body,
-    );
-    if (!mounted || choice == null || !choice.confirmed) return;
-
-    if (choice.manualMode) {
-      final ok = await openManualWa(
-        phone: sub.displayPhone,
-        message: body,
-        context: context,
-      );
-      if (!mounted) return;
-      showSheetSnack(
-        context,
-        ok ? 'افتح واتساب واضغط "إرسال" لإتمام العمليّة' : 'تعذّر فتح واتساب',
-        isError: !ok,
-      );
-      return;
-    }
-
-    final sendResult = await WhatsAppApi.sendMessage(
-      to: sub.displayPhone,
-      message: body,
-      intent: 'subscriber_info',
-      sas4Idx: sub.idx,
-    );
-    if (!mounted) return;
-    final ok = sendResult.ok;
-    final okMsg = 'subscribers.wa_link_sent'.tr();
-    final chArabic = sendResult.channelArabic;
-    showSheetSnack(
-      context,
-      ok
-          ? (chArabic != null ? '$okMsg · عبر $chArabic' : okMsg)
-          : (sendResult.message ?? 'subscribers.wa_link_send_failed'.tr()),
-      isError: !ok,
-    );
-  }
-
   Future<void> _sendTemplate(String templateType) async {
     if (_sendingTemplate != null) return; // single flight per screen
     setState(() => _sendingTemplate = templateType);
@@ -678,13 +595,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'subscribers.op_send_info'.tr(),
             busy: _sendingTemplate == 'subscriber_info',
             onTap: () => _sendTemplate('subscriber_info'),
-          ),
-        if (Perms.has('subscribers.generate_link'))
-          SubAction(
-            icon: LucideIcons.link,
-            label: 'subscribers.op_gen_link'.tr(),
-            busy: _generatingLink,
-            onTap: _generateInfoLink,
           ),
         if (Perms.has('subscribers.send_whatsapp'))
           SubAction(

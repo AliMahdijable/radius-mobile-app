@@ -181,12 +181,32 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
     final chip = _statusChip();
     return Row(
       children: [
-        Icon(LucideIcons.router, size: 18, color: AppColors.brandAccent),
-        const SizedBox(width: Sp.sm),
-        Text('معلومات الجهاز', style: AppType.cardTitle()),
-        const SizedBox(width: Sp.sm),
-        Flexible(child: chip),
-        const Spacer(),
+        // ⚠️ `Flexible` و`Spacer` في صفّ واحد يتقاسمان الفراغ.
+        //
+        // كان الترتيب: … Flexible(chip) ثمّ Spacer() — ولكليهما
+        // flex=1، فيقتسمان الفراغ الحرّ نصفين. والحبّة بـ`FlexFit.loose`
+        // تأخذ مقاسها الطبيعي فقط، فيضيع نصيبها من الفراغ **بلا أن
+        // يُعاد توزيعه** — فتظهر فجوة قبل الزرّين ولا يبلغان حافّة
+        // الكارت. (بلاغ المستخدم بالصورة 2026-08-30)
+        //
+        // الحلّ: تجميع محتوى البداية في `Expanded` واحد يبتلع الفراغ
+        // كلّه، فينزاح الزرّان إلى النهاية فعلاً.
+        Expanded(
+          child: Row(
+            children: [
+              Icon(LucideIcons.router, size: 18, color: AppColors.brandAccent),
+              const SizedBox(width: Sp.sm),
+              Flexible(
+                child: Text('معلومات الجهاز',
+                    style: AppType.cardTitle(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: Sp.sm),
+              chip,
+            ],
+          ),
+        ),
         _HeaderIcon(
           icon: LucideIcons.settings,
           onTap: _openConfig,

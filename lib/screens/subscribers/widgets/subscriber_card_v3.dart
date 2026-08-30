@@ -49,6 +49,7 @@ class SubscriberCardV3 extends StatelessWidget {
     required this.onLongPress,
     this.onSendDebtReminder,
     this.onPayDebt,
+    this.onOpenLocation,
     this.hasTelegram = false,
   });
 
@@ -68,6 +69,10 @@ class SubscriberCardV3 extends StatelessWidget {
 
   /// زرّ «تسديد» في شريط الدين. null = الزرّ يختفي (صلاحيّات).
   final VoidCallback? onPayDebt;
+
+  /// فتح موقع المشترك في خرائط جوجل أو Waze. يُمرَّر فقط لمن له موقع
+  /// محفوظ — والزرّ لا يُبنى بدونه، فلا يشغل مكاناً في السطر.
+  final VoidCallback? onOpenLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -231,34 +236,56 @@ class SubscriberCardV3 extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.inventory_2_rounded, size: 15, color: AppColors.textHint),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              sub.profileName ?? '—',
-              style: AppType.body().copyWith(fontSize: 12.5),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          // ⚠️ محتوى البداية في `Expanded` واحد: كان `Flexible(الاسم)`
+          // و`Spacer()` أخوين في الصفّ نفسه، ولكليهما flex=1 فيتقاسمان
+          // الفراغ — ونصيب `Flexible` يضيع لأنّها بالملاءمة الرخوة تأخذ
+          // مقاسها الطبيعي. النتيجة: مقاييس الشبكة لا تبلغ نهاية الصفّ.
+          Expanded(
+            child: Row(children: [
+              Icon(Icons.inventory_2_rounded,
+                  size: 15, color: AppColors.textHint),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  sub.profileName ?? '—',
+                  style: AppType.body().copyWith(fontSize: 12.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (price != null && price > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  width: 3,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: AppColors.grabber,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${formatIQD(price)} د.ع',
+                  style: AppType.body(color: AppColors.textMid)
+                      .copyWith(fontSize: 12.5),
+                ),
+              ],
+            ]),
           ),
-          if (price != null && price > 0) ...[
-            const SizedBox(width: 8),
-            Container(
-              width: 3,
-              height: 3,
-              decoration: BoxDecoration(
-                color: AppColors.grabber,
-                shape: BoxShape.circle,
+          // زرّ الموقع: للوصول السريع من القائمة بلا فتح الكارت ثمّ
+          // «إجراءات أخرى». يظهر فقط حين يوجد موقع محفوظ.
+          if (onOpenLocation != null && sub.hasLocation) ...[
+            InkResponse(
+              radius: 18,
+              onTap: onOpenLocation,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Icon(Icons.location_on_rounded,
+                    size: 17, color: AppColors.info),
               ),
             ),
-            const SizedBox(width: 8),
-            Text(
-              '${formatIQD(price)} د.ع',
-              style: AppType.body(color: AppColors.textMid)
-                  .copyWith(fontSize: 12.5),
-            ),
+            const SizedBox(width: 4),
           ],
-          const Spacer(),
           _NetworkMetrics(sub: sub),
         ],
       ),

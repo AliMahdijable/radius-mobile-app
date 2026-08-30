@@ -29,6 +29,7 @@ import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
+import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
@@ -1151,6 +1152,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                             Perms.has('subscribers.pay_debt')
                                         ? () => _payDebtFromList(s)
                                         : null,
+                                    // الموقع من القائمة مباشرةً — كان
+                                    // يتطلّب فتح الكارت ثمّ «إجراءات
+                                    // أخرى». الشيت يعرض جوجل وWaze.
+                                    onOpenLocation: _selectionMode
+                                        ? null
+                                        : () =>
+                                            showLocationSheet(context, sub: s),
                                   );
                                 },
                               ),
