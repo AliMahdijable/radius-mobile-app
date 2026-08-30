@@ -3,34 +3,54 @@ import 'package:rad_mysvcs/api/ubnt_api.dart';
 
 /// تحليل `/proc/net/dev` — مصدر الترافيك اللحظي لجهاز المشترك.
 ///
-/// الصيغة ثابتة عبر كل نوى لينكس، لكنّ **فهارس الحقول** سهلة الخطأ:
-/// بايتات الاستقبال أوّل حقل بعد النقطتين، والإرسال التاسع — وبينهما
-/// سبعة حقول (حزم · أخطاء · إسقاط · fifo · إطارات · مضغوط · بثّ).
-/// خطأ فهرس واحد يعطي رقماً معقولاً تماماً لكنّه خاطئ — لا يكشفه إلّا
-/// اختبار بعيّنة حقيقيّة.
+/// ثلاثة أخطاء ممكنة هنا، وكلّها تُنتج **أرقاماً معقولة تماماً**:
+/// 1. فهرس الحقل: الإرسال التاسع لا الثاني — الثاني عدد الحزم.
+/// 2. جمع الواجهات: على CPE جسريّ ما يدخل من `ath0` يخرج من `eth0`،
+///    فالمجموعان متساويان حتماً — وهو ما ظهر للمستخدم فعلاً
+///    (تحميل ورفع بالقيمة نفسها دائماً).
+/// 3. اتّجاه الواجهة: `ath0` تواجه البرج و`eth0` تواجه المشترك،
+///    فاستقبالهما معكوسان. خلطهما يعطي رقمين مقلوبين.
 void main() {
-  const sample = '''
+  const wireless = '''
 Inter-|   Receive                                                |  Transmit
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
     lo:  999999   1000    0    0    0     0          0         0   888888    1000    0    0    0     0       0          0
-  eth0: 12345678  50000    0    0    0     0          0         0  8765432   40000    0    0    0     0       0          0
-  ath0:  1000000   4000    0    0    0     0          0         0   500000    3000    0    0    0     0       0          0
+  eth0: 2000000   9000    0    0    0     0          0         0  9000000   40000    0    0    0     0       0          0
+  ath0: 9000000  40000    0    0    0     0          0         0  2000000    9000    0    0    0     0       0          0
 ''';
 
-  test('يجمع واجهات البيانات ويستثني lo', () {
-    final r = UbntTrafficSession.parseProcNetDev(sample);
+  test('اللاسلكيّة تُقدَّم — واستقبالها هو تحميل المشترك', () {
+    final r = UbntTrafficSession.parseProcNetDev(wireless);
     expect(r, isNotNull);
-    // eth0 + ath0 — و`lo` مستثناة وإلّا تضاعفت الأرقام بحركة داخليّة
-    expect(r!.rx, 12345678 + 1000000);
-    expect(r.tx, 8765432 + 500000);
+    expect(r!.down, 9000000, reason: 'ath0 RX = ما يصل المشترك');
+    expect(r.up, 2000000, reason: 'ath0 TX = ما يرسله');
+  });
+
+  test('لا تُجمع الواجهات — الجمع يُساوي القيمتين حتماً', () {
+    final r = UbntTrafficSession.parseProcNetDev(wireless);
+    // المجموع كان سيعطي 11,000,000 للاتّجاهين — وهو العطل المُبلَّغ.
+    expect(r!.down, isNot(r.up));
+    expect(r.down + r.up, 11000000);
+  });
+
+  test('السلكيّة وحدها تُقلب — استقبالها رفع المشترك', () {
+    const wired = '  eth0: 2000000 9 0 0 0 0 0 0 9000000 40 0 0 0 0 0 0';
+    final r = UbntTrafficSession.parseProcNetDev(wired);
+    expect(r!.down, 9000000, reason: 'eth0 TX = ما يُرسَل للمشترك');
+    expect(r.up, 2000000, reason: 'eth0 RX = ما يرسله المشترك');
+  });
+
+  test('br0 تُعامَل كسلكيّة — الواجهة الوحيدة على بعض الأجهزة', () {
+    const bridged = '  br0: 700 1 0 0 0 0 0 0 300 1 0 0 0 0 0 0';
+    final r = UbntTrafficSession.parseProcNetDev(bridged);
+    expect(r!.down, 300);
+    expect(r.up, 700);
   });
 
   test('الإرسال من الحقل التاسع لا الثاني', () {
-    // لو أُخذ الحقل الخطأ لصار tx = عدد الحزم (50000+4000) — رقم
-    // معقول تماماً في الشكل وخاطئ تماماً في المعنى.
-    final r = UbntTrafficSession.parseProcNetDev(sample);
-    expect(r!.tx, isNot(50000 + 4000));
-    expect(r.tx, greaterThan(r.rx ~/ 2));
+    final r = UbntTrafficSession.parseProcNetDev(wireless);
+    // الحقل الثاني عدد الحزم (40000) — رقم معقول وخاطئ.
+    expect(r!.up, isNot(40000));
   });
 
   test('خرج فارغ أو بلا واجهات بيانات يُرجع null لا صفراً', () {
@@ -50,14 +70,7 @@ Inter-|   Receive                                                |  Transmit
 ''';
     final r = UbntTrafficSession.parseProcNetDev(partial);
     expect(r, isNotNull);
-    expect(r!.rx, 500);
-    expect(r.tx, 400);
-  });
-
-  test('br0 محسوبة — الواجهة الوحيدة على بعض الأجهزة', () {
-    const bridged = '  br0: 700 1 0 0 0 0 0 0 300 1 0 0 0 0 0 0';
-    final r = UbntTrafficSession.parseProcNetDev(bridged);
-    expect(r!.rx, 700);
-    expect(r.tx, 300);
+    expect(r!.down, 400);
+    expect(r.up, 500);
   });
 }

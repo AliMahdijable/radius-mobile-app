@@ -1600,7 +1600,7 @@ class UbntTrafficSession {
   }
 
   /// مجموع البايتات على واجهات البيانات لحظة القراءة — تراكميّ لا معدّل.
-  Future<({int rx, int tx})?> sample() async {
+  Future<({int down, int up})?> sample() async {
     if (_closed) return null;
     try {
       final out = utf8.decode(
@@ -1624,14 +1624,22 @@ class UbntTrafficSession {
     } catch (_) {}
   }
 
-  /// يحلّل `/proc/net/dev`. الصيغة:
-  /// `  eth0: <rxBytes> <rxPkts> ... <txBytes> <txPkts> ...`
-  /// أوّل حقل بعد النقطتين = بايتات الاستقبال، والتاسع = الإرسال.
+  /// يحلّل `/proc/net/dev` ويُرجع **تحميل ورفع المشترك**.
   ///
-  /// مكشوفة للاختبار — الصيغة ثابتة لكنّ فهارس الحقول سهلة الخطأ.
-  static ({int rx, int tx})? parseProcNetDev(String out) {
-    var rx = 0, tx = 0;
-    var seen = false;
+  /// ⚠️ واجهة واحدة لا مجموع الواجهات — وهذا جوهر الصحّة هنا:
+  ///
+  /// على CPE جسريّ، ما يدخل من الهواء على `ath0` يخرج على `eth0` إلى
+  /// المشترك، والعكس. فجمعُ الواجهتين يجعل مجموع الاستقبال يساوي
+  /// مجموع الإرسال **حتماً** — وهو ما ظهر للمستخدم: تحميل ورفع
+  /// بالقيمة نفسها دائماً. (بلاغ 2026-08-30)
+  ///
+  /// والاتّجاه ينقلب بحسب الواجهة:
+  /// · `ath0`/`wlan0` تواجه البرج → استقبالها = **تحميل** المشترك.
+  /// · `eth0`/`br0` تواجه المشترك → استقبالها = **رفعه** (يرسل إلينا).
+  ///
+  /// خلط الاثنين يعطي رقمين معقولين تماماً ومقلوبين تماماً.
+  static ({int down, int up})? parseProcNetDev(String out) {
+    final byIface = <String, ({int rx, int tx})>{};
     for (final line in out.split('\n')) {
       final i = line.indexOf(':');
       if (i <= 0) continue;
@@ -1642,11 +1650,26 @@ class UbntTrafficSession {
       final r = int.tryParse(f[0]);
       final t = int.tryParse(f[8]);
       if (r == null || t == null) continue;
-      rx += r;
-      tx += t;
-      seen = true;
+      byIface[name] = (rx: r, tx: t);
     }
-    return seen ? (rx: rx, tx: tx) : null;
+    if (byIface.isEmpty) return null;
+
+    // الأفضليّة للواجهة اللاسلكيّة: هي التي تحمل الحركة الحقيقيّة
+    // للمشترك، وقياسها لا يتأثّر بحركة محلّيّة داخل شبكته.
+    for (final n in byIface.keys) {
+      if (n.startsWith('ath') || n.startsWith('wlan')) {
+        final v = byIface[n]!;
+        return (down: v.rx, up: v.tx);
+      }
+    }
+    // وإلّا الواجهة السلكيّة — بالاتّجاه **مقلوباً**.
+    for (final n in byIface.keys) {
+      if (n.startsWith('eth') || n == 'br0') {
+        final v = byIface[n]!;
+        return (down: v.tx, up: v.rx);
+      }
+    }
+    return null;
   }
 
   /// واجهات تحمل حركة المشترك. `lo` مستثناة، والواجهات الافتراضيّة

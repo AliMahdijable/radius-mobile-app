@@ -176,13 +176,13 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       final now = DateTime.now();
       if (_lastRx != null && _lastSample != null) {
         final secs = now.difference(_lastSample!).inMilliseconds / 1000.0;
-        final dRx = read.rx - _lastRx!;
-        final dTx = read.tx - _lastTx!;
+        final dDown = read.down - _lastRx!;
+        final dUp = read.up - _lastTx!;
         // الفرق السالب يعني التفاف عدّاد أو إعادة إقلاع — يُتخطّى بدل
         // عرض قيمة سالبة أو قفزة كاذبة.
-        if (secs > 0.5 && dRx >= 0 && dTx >= 0) {
-          final r = (dRx * 8 / secs).round();
-          final t = (dTx * 8 / secs).round();
+        if (secs > 0.5 && dDown >= 0 && dUp >= 0) {
+          final r = (dDown * 8 / secs).round();
+          final t = (dUp * 8 / secs).round();
           // سقف عقلانيّة: قراءة شاذّة بعد التفاف 32-bit تمرّ بلا هذا.
           const sane = 10000000000;
           if (r <= sane && t <= sane && mounted) {
@@ -193,8 +193,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           }
         }
       }
-      _lastRx = read.rx;
-      _lastTx = read.tx;
+      _lastRx = read.down;
+      _lastTx = read.up;
       _lastSample = now;
     } catch (_) {
       // نبضة فاشلة: لا نمسّ المرجع، فالنبضة الناجحة التالية تحسب
