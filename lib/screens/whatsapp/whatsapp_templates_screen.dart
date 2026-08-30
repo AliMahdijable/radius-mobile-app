@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/whatsapp_api.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -606,239 +607,110 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     // بـHitTestBehavior.translucent يلتقط أي نقر فاضي ويخفي الكيبورد
     // (FocusScope.unfocus). الـTextField الداخلية تتلقى نقراتها أولاً
     // فما يتأثر تعديلها.
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: widget.def.icon,
+        title: widget.def.label,
+        subtitle: 'قالب رسالة واتساب',
+        tint: AppColors.channelWhatsApp,
+        tintBg: AppColors.channelWhatsAppSoftBg,
+        onClose: _saving ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _saving ? 'جارٍ الحفظ...' : 'حفظ',
+        icon: LucideIcons.save,
+        busy: _saving,
+        onPressed: _save,
+      ),
+      maxHeightFactor: 0.95,
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            activeColor: accent,
+            title: const Text(
+              'القالب مفعّل',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(R.pill),
-                    ),
+            subtitle: Text(
+              _isActive
+                  ? 'الـbackend سيستعمل هذا القالب لإرسال الإشعارات'
+                  : 'الـbackend سيتجاهل القالب حتى لو الـtoggle مفعّل',
+              style: AppType.muted().copyWith(fontSize: 11),
+            ),
+            value: _isActive,
+            onChanged: (v) => setState(() => _isActive = v),
+          ),
+          const SizedBox(height: Sp.sm),
+          // 2026-08-26: قناة افتراضيّة للقالب — auto / whatsapp / telegram.
+          _defaultChannelPicker(),
+          const SizedBox(height: Sp.md),
+          if (widget.def.placeholders.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4, right: 2),
+              child: Row(
+                children: [
+                  Text(
+                    'إضافة متغير',
+                    style: AppType.muted(color: AppColors.textMid)
+                        .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                        child: Icon(widget.def.icon, size: 16, color: accent),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.def.label,
-                              style: AppType.title(color: AppColors.textHi)
-                                  .copyWith(fontSize: 15),
-                            ),
-                            Text(
-                              widget.def.type,
-                              style: AppType.muted().copyWith(fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed:
-                            _saving ? null : () => Navigator.of(context).pop(),
-                        icon: const Icon(LucideIcons.x, size: 16),
-                        color: AppColors.textMid,
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    controller: controller,
-                    padding:
-                        const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-                    children: [
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        activeColor: accent,
-                        title: const Text(
-                          'القالب مفعّل',
-                          style: TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          _isActive
-                              ? 'الـbackend سيستعمل هذا القالب لإرسال الإشعارات'
-                              : 'الـbackend سيتجاهل القالب حتى لو الـtoggle مفعّل',
-                          style: AppType.muted().copyWith(fontSize: 11),
-                        ),
-                        value: _isActive,
-                        onChanged: (v) => setState(() => _isActive = v),
-                      ),
-                      const SizedBox(height: Sp.sm),
-                      // 2026-08-26: قناة افتراضيّة للقالب — auto / whatsapp / telegram.
-                      _defaultChannelPicker(),
-                      const SizedBox(height: Sp.md),
-                      if (widget.def.placeholders.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4, right: 2),
-                          child: Row(
-                            children: [
-                              Text(
-                                'إضافة متغير',
-                                style: AppType.muted(color: AppColors.textMid)
-                                    .copyWith(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(LucideIcons.arrowLeftRight,
-                                  size: 11, color: AppColors.textLow),
-                            ],
-                          ),
-                        ),
-                        // مطلب 2026-06-12: scroll أفقي قابل للسحب يمين/يسار،
-                        // الـchips تظهر مرتّبة في صف واحد بدون انتشار عمودي.
-                        SizedBox(
-                          // 52dp يضمن استيعاب 2 سطر نص + padding بلا
-                          // overflow على iPhone (الـtext rendering يأخذ
-                          // ~1dp إضافي بسبب الـArabic glyphs).
-                          height: 52,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: widget.def.placeholders.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 6),
-                            itemBuilder: (_, i) =>
-                                _phChip(widget.def.placeholders[i]),
-                          ),
-                        ),
-                        const SizedBox(height: Sp.md),
-                      ],
-                      Text(
-                        'نص الرسالة',
-                        style: AppType.muted(color: AppColors.textMid).copyWith(
-                            fontSize: 11, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: _bodyCtrl,
-                        maxLines: 14,
-                        minLines: 8,
-                        style: AppType.input(color: AppColors.textHi),
-                        decoration: InputDecoration(
-                          hintText: 'مثلاً: مرحباً {name}، باقتك {package}…',
-                          hintStyle: AppType.input(color: AppColors.textLow),
-                          filled: true,
-                          fillColor: AppColors.surface,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(R.sm),
-                            borderSide: BorderSide(color: AppColors.borderSoft),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(R.sm),
-                            borderSide: BorderSide(color: AppColors.borderSoft),
-                          ),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 10),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                    child: SizedBox(
-                      height: 50,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _saving ? null : _save,
-                              icon: _saving
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.onBrand,
-                                      ),
-                                    )
-                                  : const Icon(LucideIcons.save, size: 16),
-                              label: const Text(
-                                'حفظ',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 14),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: accent,
-                                foregroundColor: AppColors.onBrand,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(R.md),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (widget.existing != null) ...[
-                            const SizedBox(width: 8),
-                            Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _saving ? null : _delete,
-                                borderRadius: BorderRadius.circular(R.md),
-                                child: Container(
-                                  width: 50,
-                                  height: 50,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.dangerSoftBg,
-                                    borderRadius: BorderRadius.circular(R.md),
-                                    border: Border.all(
-                                      color: AppColors.error
-                                          .withValues(alpha: 0.4),
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    LucideIcons.trash2,
-                                    size: 18,
-                                    color: AppColors.error,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Icon(LucideIcons.arrowLeftRight,
+                      size: 11, color: AppColors.textLow),
+                ],
+              ),
+            ),
+            // مطلب 2026-06-12: scroll أفقي قابل للسحب يمين/يسار،
+            // الـchips تظهر مرتّبة في صف واحد بدون انتشار عمودي.
+            SizedBox(
+              // 52dp يضمن استيعاب 2 سطر نص + padding بلا
+              // overflow على iPhone (الـtext rendering يأخذ
+              // ~1dp إضافي بسبب الـArabic glyphs).
+              height: 52,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.def.placeholders.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                itemBuilder: (_, i) => _phChip(widget.def.placeholders[i]),
+              ),
+            ),
+            const SizedBox(height: Sp.md),
+          ],
+          Text(
+            'نص الرسالة',
+            style: AppType.muted(color: AppColors.textMid)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _bodyCtrl,
+            maxLines: 14,
+            minLines: 8,
+            style: AppType.input(color: AppColors.textHi),
+            decoration: InputDecoration(
+              hintText: 'مثلاً: مرحباً {name}، باقتك {package}…',
+              hintStyle: AppType.input(color: AppColors.textLow),
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(color: AppColors.borderSoft),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(color: AppColors.borderSoft),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
