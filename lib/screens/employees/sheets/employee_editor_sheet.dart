@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/employees_api.dart';
 import '../../../api/subscribers_api.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -198,173 +199,81 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final activeCount = _perms.values.where((v) => v).length;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: H.grabber,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    borderRadius: BorderRadius.circular(R.pill),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: _isEdit ? LucideIcons.userCog : LucideIcons.userPlus,
+        title: _isEdit ? 'تعديل موظف' : 'موظف جديد',
+        subtitle: '',
+        onClose: _saving ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _saving ? 'جاري الحفظ...' : 'حفظ',
+        icon: LucideIcons.save,
+        color: AppColors.brandAccent,
+        busy: _saving,
+        onPressed: _save,
+      ),
+      maxHeightFactor: 0.95,
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          if (_error != null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.dangerSoftBg,
+                borderRadius: BorderRadius.circular(R.md),
+                border: Border.all(color: AppColors.dangerSoftBorder),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(LucideIcons.circleAlert,
+                      size: 14, color: AppColors.error),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1.4,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandSoftBg,
-                        borderRadius: BorderRadius.circular(R.md),
-                      ),
-                      child: Icon(
-                        _isEdit ? LucideIcons.userCog : LucideIcons.userPlus,
-                        size: 16,
-                        color: AppColors.brandAccent,
-                      ),
+                  InkWell(
+                    onTap: () => setState(() => _error = null),
+                    borderRadius: BorderRadius.circular(R.pill),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child:
+                          Icon(LucideIcons.x, size: 14, color: AppColors.error),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _isEdit ? 'تعديل موظف' : 'موظف جديد',
-                        style: AppType.title(color: AppColors.textHi)
-                            .copyWith(fontSize: 16),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(LucideIcons.x, size: 18),
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.of(context).pop(false),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
-              TabBar(
-                controller: _tab,
-                labelColor: AppColors.brandAccent,
-                unselectedLabelColor: AppColors.textMid,
-                indicatorColor: AppColors.brandAccent,
-                tabs: [
-                  const Tab(text: 'المعلومات'),
-                  Tab(text: 'الصلاحيات ($activeCount)'),
+                  ),
                 ],
               ),
-              // مطلب 2026-06-11: banner أخطاء أعلى الـsheet (ما يطلع
-              // snackbar — الـadmin لازم يشوف السبب قبل الإضافة).
-              // يختفي تلقائياً مع أول حرف يكتبه أو عند إعادة المحاولة.
-              if (_error != null)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: Sp.md, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.dangerSoftBg,
-                    borderRadius: BorderRadius.circular(R.md),
-                    border: Border.all(color: AppColors.dangerSoftBorder),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(LucideIcons.circleAlert,
-                          size: 14, color: AppColors.error),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: AppColors.error,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () => setState(() => _error = null),
-                        borderRadius: BorderRadius.circular(R.pill),
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(LucideIcons.x,
-                              size: 14, color: AppColors.error),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tab,
-                  children: [
-                    _infoTab(controller),
-                    _permsTab(controller),
-                  ],
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _save,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.brandAccent,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                      ),
-                      icon: _saving
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.onBrand,
-                              ),
-                            )
-                          : const Icon(LucideIcons.save, size: 16),
-                      label: Text(_saving ? 'جاري الحفظ...' : 'حفظ',
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tab,
+              children: [
+                _infoTab(),
+                _permsTab(),
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _infoTab(ScrollController controller) {
+  Widget _infoTab() {
     return ListView(
-      controller: controller,
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
       children: [
         _field(
@@ -420,12 +329,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     );
   }
 
-  Widget _permsTab(ScrollController controller) {
+  Widget _permsTab() {
     final presets = widget.catalog.presets.values.toList();
     final byCat = widget.catalog.permsByCategory;
     final cats = widget.catalog.categories;
     return ListView(
-      controller: controller,
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
       children: [
         // Presets
