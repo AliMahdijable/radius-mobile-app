@@ -461,7 +461,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('$_done / $_total IP',
-              style: TextStyle(color: AppColors.textMid, fontSize: 11, height: 1.35)),
+              style: AppType.muted(color: AppColors.textMid)),
           Text('${_found.length} جهاز',
               style: AppType.pillBold(color: AppColors.brand)),
         ]),
@@ -488,7 +488,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           _scanning
               ? 'جاري الفحص… تظهر النتائج مباشرةً'
               : 'اضغط "ابدأ" لفحص الشبكة',
-          style: TextStyle(color: AppColors.textMid, fontSize: 13, height: 1.45),
+          style: AppType.subtitle(),
         ),
       ]),
     );
@@ -598,7 +598,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                     const SizedBox(height: 2),
                     Text('$label · port ${r.openPort} · ${r.guessProtocol}',
                         style:
-                            TextStyle(color: AppColors.textMid, fontSize: 11, height: 1.35)),
+                            AppType.muted(color: AppColors.textMid)),
                   ],
                 ),
               ),
@@ -661,7 +661,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                     size: 16,
                     color: AppColors.brand),
                 label: Text(allSelected ? 'إلغاء' : 'تحديد الكل',
-                    style: TextStyle(color: AppColors.brand, fontSize: 12.5, height: 1.4)),
+                    style: AppType.body(color: AppColors.brand)),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
@@ -857,8 +857,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                         child: Text(r.name, overflow: TextOverflow.ellipsis)),
                     if (r.deviceCount > 0)
                       Text(' (${r.deviceCount})',
-                          style: TextStyle(
-                              color: AppColors.textLow, fontSize: 11, height: 1.35)),
+                          style: AppType.muted()),
                   ]),
                 ),
             ],

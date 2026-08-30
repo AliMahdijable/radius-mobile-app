@@ -496,15 +496,15 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               Row(children: [
                 Text(
                   NetworkDeviceLabels.typeLabel(_d.type),
-                  style: TextStyle(fontSize: 13, height: 1.45, color: AppColors.textMid),
+                  style: AppType.subtitle(),
                 ),
                 if (_d.model != null && _d.model!.isNotEmpty) ...[
                   Text(' • ',
-                      style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textLow)),
+                      style: AppType.muted()),
                   Flexible(
                     child: Text(_d.model!,
                         style:
-                            TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid),
+                            AppType.body(color: AppColors.textMid),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ],
@@ -551,7 +551,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   Flexible(
                     child: Text(_d.location!,
                         style:
-                            TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid),
+                            AppType.muted(color: AppColors.textMid),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ]),

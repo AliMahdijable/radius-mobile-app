@@ -901,7 +901,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         style: const TextStyle(fontSize: 14, height: 1.3),
         decoration: InputDecoration(
           hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
-          hintStyle: TextStyle(fontSize: 13, height: 1.45, color: AppColors.textLow),
+          hintStyle: AppType.subtitle(color: AppColors.textLow),
           prefixIcon:
               Icon(LucideIcons.search, size: 18, color: AppColors.textMid),
           suffixIcon: _search.isEmpty
@@ -1145,10 +1145,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       const SizedBox(width: 3),
                       Text(
                         d.ip,
-                        style: TextStyle(
-                          fontSize: 11, height: 1.35,
-                          color: AppColors.textMid,
-                        ),
+                        style: AppType.muted(color: AppColors.textMid),
                       ),
                       const SizedBox(width: 8),
                       Container(
@@ -1297,7 +1294,7 @@ class _EmptyDevices extends StatelessWidget {
               hasActiveFilter
                   ? 'قد تكون كل الأجهزة مخفيّة — امسح الفلتر لرؤيتها'
                   : 'أضف أول جهاز شبكة من زرّ + أعلى الصفحة',
-              style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid),
+              style: AppType.body(color: AppColors.textMid),
               textAlign: TextAlign.center,
             ),
             if (hasActiveFilter && onClearFilter != null) ...[

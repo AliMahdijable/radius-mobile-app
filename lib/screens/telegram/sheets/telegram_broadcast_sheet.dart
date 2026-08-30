@@ -151,11 +151,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 border: InputBorder.none,
                 isCollapsed: true,
                 hintText: 'اكتب الرسالة هنا...',
-                hintStyle: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12.5, height: 1.4,
-                  color: AppColors.textLow,
-                ),
+                hintStyle: AppType.body(color: AppColors.textLow),
                 counterStyle: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 10.5, height: 1.3,

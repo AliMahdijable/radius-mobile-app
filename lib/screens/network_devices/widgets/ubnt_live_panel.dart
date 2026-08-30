@@ -286,7 +286,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 style: AppType.rowLabelBold()),
             const SizedBox(height: 2),
             Text(subtitle,
-                style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
+                style: AppType.muted(color: AppColors.textMid)),
           ],
         ),
       ),
@@ -424,7 +424,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 strokeWidth: 2, color: AppColors.brand)),
         const SizedBox(width: 10),
         Text('جاري الاتصال بـUBNT…',
-            style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid)),
+            style: AppType.body(color: AppColors.textMid)),
       ]),
     );
   }
@@ -673,7 +673,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
                 Text(unit,
-                    style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textLow)),
+                    style: AppType.muted()),
               ],
             ],
           ),

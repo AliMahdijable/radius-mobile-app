@@ -393,10 +393,7 @@ class _ExpenseTile extends StatelessWidget {
                         ),
                         if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
                           Text('  ·  ',
-                              style: TextStyle(
-                                fontSize: 11, height: 1.35,
-                                color: AppColors.textLow,
-                              )),
+                              style: AppType.muted()),
                           Icon(Icons.badge,
                               size: 11, color: AppColors.brandAccent),
                           const SizedBox(width: 3),

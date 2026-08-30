@@ -744,11 +744,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           const SizedBox(height: 10),
           Text(
             _error ?? 'خطأ',
-            style: TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 12.5, height: 1.4,
-              color: AppColors.textMid,
-            ),
+            style: AppType.body(color: AppColors.textMid),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),

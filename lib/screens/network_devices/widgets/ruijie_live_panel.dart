@@ -226,7 +226,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             const SizedBox(height: 2),
             Text(s.sysDescr?.split('\n').first ?? 'Ruijie / Reyee',
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
+                style: AppType.muted(color: AppColors.textMid)),
           ],
         ),
       ),
@@ -421,7 +421,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         const SizedBox(width: 6),
         Expanded(
           child: Text('آخر تحديث فشل — البيانات من آخر جولة ناجحة',
-              style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.error)),
+              style: AppType.muted(color: AppColors.error)),
         ),
       ]),
     );
@@ -443,7 +443,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         const SizedBox(height: 4),
         Text(_error ?? '',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
+            style: AppType.muted(color: AppColors.textMid)),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _fetch,

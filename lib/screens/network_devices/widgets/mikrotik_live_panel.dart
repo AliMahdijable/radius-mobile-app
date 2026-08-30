@@ -277,7 +277,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                     strokeWidth: 2, color: AppColors.brand)),
             const SizedBox(width: 10),
             Text('جاري الاتصال بـMikrotik…',
-                style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid)),
+                style: AppType.body(color: AppColors.textMid)),
           ]),
         ]),
       );
@@ -736,7 +736,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
                 Text(unit,
-                    style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textLow)),
+                    style: AppType.muted()),
               ],
             ],
           ),
@@ -1008,7 +1008,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       return Padding(
         padding: const EdgeInsets.all(Sp.md),
         child: Text('لا يوجد ethernet interfaces',
-            style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textLow)),
+            style: AppType.muted()),
       );
     }
     final up = ethers.where((i) => i.running && !i.disabled).length;

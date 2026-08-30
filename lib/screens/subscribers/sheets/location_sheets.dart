@@ -379,11 +379,7 @@ class _EditSheetState extends State<_EditSheet> {
               ),
               child: SelectableText(
                 existing,
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12.5, height: 1.4,
-                  color: AppColors.textHi,
-                ),
+                style: AppType.body(color: AppColors.textHi),
               ),
             ),
             const SizedBox(height: 12),
@@ -500,11 +496,7 @@ class _EditSheetState extends State<_EditSheet> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Text('أو',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 11, height: 1.35,
-                        color: AppColors.textMid,
-                      )),
+                      style: AppType.muted(color: AppColors.textMid)),
                 ),
                 Expanded(child: Divider(color: AppColors.border, height: 1)),
               ],
@@ -521,11 +513,7 @@ class _EditSheetState extends State<_EditSheet> {
                   controller: _inputCtrl,
                   onChanged: _onInputChanged,
                   textDirection: TextDirection.ltr,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12.5, height: 1.4,
-                    color: AppColors.textHi,
-                  ),
+                  style: AppType.body(color: AppColors.textHi),
                   decoration: InputDecoration(
                     hintText: 'https://maps.google.com/… أو 33.315,44.366',
                     hintStyle: TextStyle(

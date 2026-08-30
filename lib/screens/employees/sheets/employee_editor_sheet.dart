@@ -469,11 +469,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             ),
             const SizedBox(width: 8),
             Text('جارٍ تحميل المدراء...',
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12.5, height: 1.4,
-                  color: AppColors.textLow,
-                )),
+                style: AppType.body(color: AppColors.textLow)),
           ],
         ),
       );

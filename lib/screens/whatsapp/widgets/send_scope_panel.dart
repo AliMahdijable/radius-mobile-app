@@ -224,11 +224,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
               child: TextField(
                 controller: _searchCtrl,
                 onChanged: (v) => setState(() => _searchQuery = v.trim()),
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12.5, height: 1.4,
-                  color: AppColors.textHi,
-                ),
+                style: AppType.body(color: AppColors.textHi),
                 decoration: InputDecoration(
                   hintText: 'بحث في المدراء…',
                   hintStyle: TextStyle(

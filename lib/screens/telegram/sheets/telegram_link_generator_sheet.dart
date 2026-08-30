@@ -181,11 +181,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('ابدأ الكتابة للبحث بين ${_allSubs.length} مشترك',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12.5, height: 1.4,
-                color: AppColors.textLow,
-              ),
+              style: AppType.body(color: AppColors.textLow),
               textAlign: TextAlign.center),
         ),
       );
@@ -193,8 +189,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
     if (matches.isEmpty) {
       return Center(
         child: Text('لا نتائج',
-            style: TextStyle(
-                fontFamily: 'Cairo', fontSize: 12.5, height: 1.4, color: AppColors.textLow)),
+            style: AppType.body(color: AppColors.textLow)),
       );
     }
     return ListView.builder(
@@ -262,10 +257,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
             Icon(LucideIcons.circleAlert, size: 40, color: AppColors.error),
             const SizedBox(height: 10),
             Text(_err!,
-                style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12.5, height: 1.4,
-                    color: AppColors.textMid),
+                style: AppType.body(color: AppColors.textMid),
                 textAlign: TextAlign.center),
           ],
         ),

@@ -68,7 +68,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
               style: AppType.buttonBold()),
           const SizedBox(height: 4),
           Text('التنبيهات تظهر هنا لو جهاز فصل أو عاد للاتصال',
-              style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid),
+              style: AppType.body(color: AppColors.textMid),
               textAlign: TextAlign.center),
         ],
       ),

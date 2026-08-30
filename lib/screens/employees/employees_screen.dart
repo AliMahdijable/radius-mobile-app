@@ -451,10 +451,7 @@ class _EmployeeTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text('  ·  ',
-                            style: TextStyle(
-                              fontSize: 11, height: 1.35,
-                              color: AppColors.textLow,
-                            )),
+                            style: AppType.muted()),
                         Icon(LucideIcons.shield,
                             size: 10, color: AppColors.brand),
                         const SizedBox(width: 3),

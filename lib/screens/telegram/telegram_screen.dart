@@ -724,11 +724,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                       border: InputBorder.none,
                       isCollapsed: true,
                       hintText: '123456789:AAE...',
-                      hintStyle: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12.5, height: 1.4,
-                        color: AppColors.textLow,
-                      ),
+                      hintStyle: AppType.body(color: AppColors.textLow),
                     ),
                     onChanged: (_) {
                       if (_err != null) setState(() => _err = null);

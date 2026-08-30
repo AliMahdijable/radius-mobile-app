@@ -177,11 +177,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                     child: TextField(
                       controller: _searchCtrl,
                       onChanged: (_) => setState(() {}),
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13, height: 1.45,
-                        color: AppColors.textHi,
-                      ),
+                      style: AppType.subtitle(color: AppColors.textHi),
                       decoration: InputDecoration(
                         border: InputBorder.none,
                         isCollapsed: true,
@@ -217,11 +213,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                               padding: const EdgeInsets.all(24),
                               child: Text(
                                 'لا نتائج مطابقة للبحث',
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 13, height: 1.45,
-                                  color: AppColors.textMid,
-                                ),
+                                style: AppType.subtitle(),
                               ),
                             ),
                           )
@@ -351,11 +343,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
               style: AppType.bodyStrong(color: AppColors.textMid)),
           const SizedBox(height: 6),
           Text('استعمل "ربط مشترك" أو "بث روابط جماعي"',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11, height: 1.35,
-                color: AppColors.textLow,
-              )),
+              style: AppType.muted()),
         ],
       ),
     );

@@ -630,7 +630,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                       style: AppType.bodyBold()),
                   const SizedBox(height: 2),
                   Text('اضغط لإنشاء منطقة (مثل: كرخ / رصافة / ...)',
-                      style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
+                      style: AppType.muted(color: AppColors.textMid)),
                 ],
               ),
             ),
@@ -648,7 +648,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           Icon(LucideIcons.slash, size: 14, color: AppColors.textLow),
           const SizedBox(width: 6),
           Text('بدون منطقة',
-              style: TextStyle(color: AppColors.textMid, fontSize: 13, height: 1.45)),
+              style: AppType.subtitle()),
         ]),
       ),
       for (final r in _regions)
@@ -661,7 +661,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             Expanded(child: Text(r.name, overflow: TextOverflow.ellipsis)),
             if (r.deviceCount > 0)
               Text(' (${r.deviceCount})',
-                  style: TextStyle(color: AppColors.textLow, fontSize: 11, height: 1.35)),
+                  style: AppType.muted()),
           ]),
         ),
     ];
@@ -681,10 +681,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(width: 6),
           Text(
             _regionsLoaded ? 'منطقة محذوفة' : 'قيد التحميل...',
-            style: TextStyle(
-              color: _regionsLoaded ? AppColors.warning : AppColors.textLow,
-              fontSize: 13, height: 1.45,
-            ),
+            style: AppType.subtitle(color: _regionsLoaded ? AppColors.warning : AppColors.textLow),
           ),
         ]),
       ));
