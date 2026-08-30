@@ -226,7 +226,10 @@ class _ActionsSheet extends StatelessWidget {
                 crossAxisCount: 4,
                 crossAxisSpacing: Sp.sm,
                 mainAxisSpacing: Sp.sm,
-                childAspectRatio: 1.0,
+                // 2026-08-30: 1.0 ما زالت تترك فراغاً — الحشوة الرأسيّة
+                // Sp.md×2 كانت معايرة للدائرة. صارت Sp.sm×2 والنسبة
+                // 1.15، فالبلاطة تلتصق بمحتواها.
+                childAspectRatio: 1.15,
                 children: [
                   for (final a in actions) _actionTile(context, a),
                 ],
@@ -285,7 +288,7 @@ class _ActionsSheet extends StatelessWidget {
             children: [
               Icon(action.icon,
                   color: action.brandGlyph ?? tone.fill, size: 22),
-              const SizedBox(height: Sp.sm),
+              const SizedBox(height: Sp.x6),
               Text(
                 action.label,
                 style: AppType.muted(color: AppColors.textBody),

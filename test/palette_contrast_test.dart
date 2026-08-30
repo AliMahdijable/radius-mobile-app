@@ -16,15 +16,20 @@ import 'package:rad_mysvcs/theme/colors.dart';
 ///  • تعبئات الأزرار والأبيض فوقها → 4.5:1
 ///  • الحدود والمكوّنات غير النصّيّة → 3.0:1
 ///
-/// ⚠️ **فجوة معلنة لا صامتة**: WCAG تطلب 4.5:1 لكلّ نصّ صغير بلا استثناء،
-/// والرتب الثلاث الدنيا تقف عند 3:1 لأنّ رفعها إلى 4.5 يجعلها لوناً
-/// واحداً تقريباً فينهار سلّم النصّ من ستّ رتب إلى ثلاث. الشرط المقابل:
-/// **هذه الرتب لا تحمل معلومة جوهريّة** — تسميات حقول وعدّادات وتلميحات
-/// تُكرَّر قيمتها في مكان آخر. أيّ معلومة لا بديل عنها تُكتب بـ`textMid`
-/// فأعلى.
+/// ⚠️ **مقايضة معلنة، بقرار صاحب المنتج (2026-08-30)**
 ///
-/// كلّ رتبة تُقاس على **أسوأ سطح فاتح** (`bg` #F4F5F2) لا على الأبيض،
-/// لأنّ الأبيض يعطي أعلى تباين ويخفي الرسوب.
+/// رفعتُ الرتب الثلاث الدنيا أوّلاً لتبلغ 3:1 على `bg`. المستخدم فحص
+/// النتيجة وردّها: «التطبيق ألوانه صارت غامقة زيادة». القياس أنصفه —
+/// كلّ تسمية وعدّاد وتاريخ ثانوي صار أثقل بصريّاً بنحو 40%
+/// (textLow من 2.54 إلى 3.64 · textHint من 2.40 إلى 3.36).
+///
+/// فأُعيدت إلى قيم المخطّط تقريباً: **الوزن البصري للواجهة كلّها فاز
+/// على 0.3 نقطة تباين في نصّ لا يحمل معلومة**. العتبة هنا 2.7 على `bg`
+/// — أرضيّة تمنع الانحدار، لا ادّعاء بلوغ AA.
+///
+/// الشرط المقابل يبقى ملزماً: **هذه الرتب لا تحمل معلومة جوهريّة**.
+/// أيّ معلومة لا بديل عنها تُكتب بـ`textMid` فأعلى — و`textMid` وحدها
+/// تخضع لـAA بلا تفاوض (4.5:1 على `bg`).
 ///
 /// `textPlaceholder` مستثنى — WCAG تستثني نصّ الحقل النائب صراحةً.
 
@@ -124,25 +129,25 @@ void main() {
       name: 'textLabel على bg',
       fg: () => AppColors.textLabel,
       bg: () => AppColors.bg,
-      min: 3.0
+      min: 2.7
     ),
     (
       name: 'textLow على bg',
       fg: () => AppColors.textLow,
       bg: () => AppColors.bg,
-      min: 3.0
+      min: 2.6
     ),
     (
       name: 'textHint على bg',
       fg: () => AppColors.textHint,
       bg: () => AppColors.bg,
-      min: 3.0
+      min: 2.45
     ),
     (
       name: 'textLabel على surfaceSheet',
       fg: () => AppColors.textLabel,
       bg: () => AppColors.surfaceSheet,
-      min: 3.0
+      min: 2.9
     ),
     // ── نصوص على خلفيّة الشاشة ──
     (
@@ -186,13 +191,13 @@ void main() {
       name: 'textLabel على surfaceSunken',
       fg: () => AppColors.textLabel,
       bg: () => AppColors.surfaceSunken,
-      min: 3.0
+      min: 2.9
     ),
     (
       name: 'textLow على surfaceSunken',
       fg: () => AppColors.textLow,
       bg: () => AppColors.surfaceSunken,
-      min: 3.0
+      min: 2.7
     ),
     // ── تعبئات الأزرار: الأبيض فوقها ──
     (
@@ -367,6 +372,27 @@ void main() {
                       '(ΔE=${d.toStringAsFixed(1)}) فلا يُفرَّق بينهما');
             }
           }
+        }
+      });
+
+      test('خلفيّات مربّعات الحالة مرئيّة على سطح الكارت', () {
+        AppColors.setDarkMode(dark);
+        // بلاغ 2026-08-30: `successSoftBg` كانت #F2F7F4 — تباين 1.08 عن
+        // الأبيض، أي شبه بيضاء، فبدا المربّع «غير ملوّن» بينما نظائره
+        // ملوّنة. العتبة 1.10 تضمن أنّ المربّع يُرى مربّعاً.
+        final softs = <String, Color>{
+          'brandSoftBg': AppColors.brandSoftBg,
+          'successSoftBg': AppColors.successSoftBg,
+          'warningSoftBg': AppColors.warningSoftBg,
+          'dangerSoftBg': AppColors.dangerSoftBg,
+          'infoSoftBg': AppColors.infoSoftBg,
+          'anomalySoftBg': AppColors.anomalySoftBg,
+        };
+        for (final e in softs.entries) {
+          final r = contrast(e.value, AppColors.surface);
+          expect(r, greaterThanOrEqualTo(1.10),
+              reason: '$mode — ${e.key} لا تُرى على سطح الكارت '
+                  '(${r.toStringAsFixed(2)})');
         }
       });
 

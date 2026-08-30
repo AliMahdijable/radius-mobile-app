@@ -90,8 +90,11 @@ class AppColors {
       _isDark ? const Color(0xFF3FB37F) : const Color(0xFF16624A);
   static Color get successFill =>
       _isDark ? const Color(0xFF1E7A5B) : const Color(0xFF16624A);
+
+  /// ⚠️ عُمّقت 2026-08-30: #F2F7F4 كانت بتباين 1.08 عن الأبيض — أي
+  /// شبه بيضاء، فبدا مربّع الحالة «غير ملوّن» بينما نظائره ملوّنة.
   static Color get successSoftBg =>
-      _isDark ? const Color(0xFF152B25) : const Color(0xFFF2F7F4);
+      _isDark ? const Color(0xFF152B25) : const Color(0xFFE6F4EC);
   static Color get successSoftBorder =>
       _isDark ? const Color(0xFF22483C) : const Color(0xFFDFEBE5);
 
@@ -106,7 +109,7 @@ class AppColors {
       _isDark ? const Color(0xFFE0B457) : const Color(0xFF97650B);
   static const Color warningFill = Color(0xFF97650B);
   static Color get warningSoftBg =>
-      _isDark ? const Color(0xFF33280F) : const Color(0xFFFBF4E8);
+      _isDark ? const Color(0xFF33280F) : const Color(0xFFF8EFDD);
   static Color get warningSoftBorder =>
       _isDark ? const Color(0xFF4D3D18) : const Color(0xFFF0E1C4);
   static Color get warningOnSoft =>
@@ -123,7 +126,7 @@ class AppColors {
   static Color get errorFill =>
       _isDark ? const Color(0xFFC8382F) : const Color(0xFFB02A22);
   static Color get dangerSoftBg =>
-      _isDark ? const Color(0xFF351D1B) : const Color(0xFFFDF2F1);
+      _isDark ? const Color(0xFF3A1F1D) : const Color(0xFFFBEBE9);
   static Color get dangerSoftBorder =>
       _isDark ? const Color(0xFF4E2B27) : const Color(0xFFF6DDDA);
 
@@ -199,24 +202,29 @@ class AppColors {
   static Color get textBody =>
       _isDark ? const Color(0xFFCBD3CE) : const Color(0xFF3E4642);
 
-  // 2026-08-29: #6E766F رسب بـ4.28:1 على `bg` (المطلوب 4.5). عُتّم
-  // بأربع درجات على القنوات الثلاث فحافظ على الـhue وبلغ 4.60.
+  // #6E766F رسب بـ4.28:1 على `bg` (المطلوب 4.5). عُتّم بأربع درجات
+  // فحافظ على الـhue وبلغ 4.60. **هذه الرتبة تبقى معتّمة** — إنّها
+  // آخر رتبة تحمل معلومة تُقرأ، فتخضع لـAA بلا تفاوض.
   static const Color _lightTextMid = Color(0xFF69716A);
   static const Color _darkTextMid = Color(0xFFA9B3AD);
   static Color get textMid => _isDark ? _darkTextMid : _lightTextMid;
 
   /// تسمية الحقل — «طريقة الدفع»، «الدين الحالي»، الجهة اليمنى من
   /// صفوف المعلومات. مقصود أن يكون خافتاً؛ لا تستعمله لنصّ يُقرأ طويلاً.
+  /// ⚠️ 2026-08-30: أُعيدت إلى قيمة المخطّط بعد ملاحظة المستخدم أنّ
+  /// الواجهة «صارت غامقة». التعتيم السابق (#7A827C) كان لبلوغ 3:1 على
+  /// `bg`، وكلفته أنّ كلّ تسمية وعدّاد وتاريخ ثانوي صار أثقل بصريّاً
+  /// بنحو 40%. راجع رأس `palette_contrast_test.dart` للمقايضة كاملةً.
   static Color get textLabel =>
-      _isDark ? const Color(0xFF9BA5A0) : const Color(0xFF7A827C);
+      _isDark ? const Color(0xFF9BA5A0) : const Color(0xFF8A928C);
 
-  static const Color _lightTextLow = Color(0xFF808882);
+  static const Color _lightTextLow = Color(0xFF909892);
   static const Color _darkTextLow = Color(0xFF8B958F);
   static Color get textLow => _isDark ? _darkTextLow : _lightTextLow;
 
   /// أيقونات الحقول الساكنة ونصوص المساعدة الصغرى.
   static Color get textHint =>
-      _isDark ? const Color(0xFF7C867F) : const Color(0xFF878E88);
+      _isDark ? const Color(0xFF7C867F) : const Color(0xFF969D97);
 
   /// نصّ الحقل الفارغ فقط.
   static Color get textPlaceholder =>
@@ -260,11 +268,19 @@ class AppColors {
   static Color get anomaly =>
       _isDark ? const Color(0xFFC86BF5) : const Color(0xFF5B21B6);
   static Color get anomalySoftBg =>
-      _isDark ? const Color(0xFF261A33) : const Color(0xFFF1ECFB);
+      _isDark ? const Color(0xFF311F45) : const Color(0xFFF1ECFB);
 
   /// اللون الأزرق الوحيد في المخطّط (قيمة «رفع» فقط) — بلا عائلة.
   static Color get info =>
       _isDark ? const Color(0xFF8FAEE8) : const Color(0xFF3F5C99);
+
+  /// خلفيّة `info` الناعمة. لم تكن موجودة، فكان مربّع حالة «متصل»
+  /// يستعمل `brandSoftBg` الخضراء تحت أيقونة زرقاء — تناقض لاحظه
+  /// المستخدم فوراً: «المتصل ملوّن فقط إشارة الواي فاي لا المربّع».
+  static Color get infoSoftBg =>
+      _isDark ? const Color(0xFF1C2733) : const Color(0xFFE8EEF9);
+  static Color get infoSoftBorder =>
+      _isDark ? const Color(0xFF2B3A4E) : const Color(0xFFCFDCF0);
 }
 
 /// النغمة الدلاليّة — رباعيّة `fill · softBg · softBorder · onSoft`
@@ -284,6 +300,9 @@ enum AppTone {
   warning,
   danger,
   info,
+
+  /// الحالة الشاذّة: «منتهي لكنّه متصل» — لا تنتمي لأي عائلة.
+  anomaly,
   neutral;
 
   /// اللون الصلب — الأيقونة والقيمة والتعبئة.
@@ -293,6 +312,7 @@ enum AppTone {
         AppTone.warning => AppColors.warningFill,
         AppTone.danger => AppColors.error,
         AppTone.info => AppColors.info,
+        AppTone.anomaly => AppColors.anomaly,
         AppTone.neutral => AppColors.textMid,
       };
 
@@ -302,7 +322,8 @@ enum AppTone {
         AppTone.success => AppColors.successSoftBg,
         AppTone.warning => AppColors.warningSoftBg,
         AppTone.danger => AppColors.dangerSoftBg,
-        AppTone.info => AppColors.brandSoftBg,
+        AppTone.info => AppColors.infoSoftBg,
+        AppTone.anomaly => AppColors.anomalySoftBg,
         AppTone.neutral => AppColors.surfaceSunken,
       };
 
@@ -312,7 +333,8 @@ enum AppTone {
         AppTone.success => AppColors.successSoftBorder,
         AppTone.warning => AppColors.warningSoftBorder,
         AppTone.danger => AppColors.dangerSoftBorder,
-        AppTone.info => AppColors.brandSoftBorder,
+        AppTone.info => AppColors.infoSoftBorder,
+        AppTone.anomaly => AppColors.anomalySoftBg,
         AppTone.neutral => AppColors.border,
       };
 
@@ -322,7 +344,8 @@ enum AppTone {
         AppTone.success => AppColors.brandOnSoft,
         AppTone.warning => AppColors.warningOnSoft,
         AppTone.danger => AppColors.dangerOnSoft,
-        AppTone.info => AppColors.brandOnSoft,
+        AppTone.info => AppColors.info,
+        AppTone.anomaly => AppColors.anomaly,
         AppTone.neutral => AppColors.textBody,
       };
 }

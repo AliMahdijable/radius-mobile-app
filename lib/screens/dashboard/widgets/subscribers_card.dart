@@ -112,8 +112,12 @@ class SubscribersCard extends StatelessWidget {
                     // "بدون نت" — متصل + منتهي. لون بنفسجي مطابق
                     // للـchip في صفحة المشتركين والويب.
                     _RingStatRow(
-                      tone: AppTone.info,
-                      icon: LucideIcons.wifiOff,
+                      // «متصل بلا باقة» = نفس شذوذ «منتهي ومتصل» في
+                      // القائمة، فيأخذ لونه البنفسجي. والأيقونة `wifi`
+                      // لا `wifiOff`: هؤلاء **متصلون** فعلاً — وهذا
+                      // بالضبط ما يجعل الحالة شاذّة. (بلاغ 2026-08-30)
+                      tone: AppTone.anomaly,
+                      icon: LucideIcons.wifi,
                       label: 'dashboard.online_no_plan'.tr(),
                       value: s.onlineNoPlan,
                       onTap: onOpen == null

@@ -487,8 +487,10 @@ class SubscriberCardV3 extends StatelessWidget {
         return _StatusVisual('متصل', Icons.wifi_rounded, AppColors.warning,
             AppColors.warningSoftBg);
       }
+      // خلفيّة زرقاء لا خضراء: كانت `brandSoftBg` تحت أيقونة زرقاء
+      // فبدا المربّع «غير ملوّن» بينما نظائره ملوّنة (بلاغ 2026-08-30).
       return _StatusVisual(
-          'متصل', Icons.wifi_rounded, AppColors.info, AppColors.brandSoftBg);
+          'متصل', Icons.wifi_rounded, AppColors.info, AppColors.infoSoftBg);
     }
     if (sub.isExpired) {
       return _StatusVisual('منتهي', Icons.wifi_off_rounded, AppColors.error,
