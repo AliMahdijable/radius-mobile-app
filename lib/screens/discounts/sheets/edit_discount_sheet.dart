@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/discounts_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -95,214 +96,110 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.success;
     final d = widget.discount;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.4,
-      maxChildSize: 0.85,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: H.grabber,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.tag,
+        title: 'تعديل الخصم',
+        subtitle: '',
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'جاري التعديل...' : 'حفظ التعديل',
+        icon: LucideIcons.save,
+        enabled: !_submitting && _amount >= 0,
+        busy: _submitting,
+        onPressed: _submit,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          if (d.packagePrice != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceInput,
+                borderRadius: BorderRadius.circular(R.md),
+                border: Border.all(color: AppColors.border),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
+              child: Row(
+                children: [
+                  Icon(LucideIcons.tag, size: 13, color: AppColors.textMid),
+                  const SizedBox(width: 6),
+                  Text(
+                    'السعر الأصلي ',
+                    style: AppType.muted().copyWith(fontSize: 11),
+                  ),
+                  Text(
+                    '${formatIQD(d.packagePrice!)} د.ع',
+                    style: AppType.label(color: AppColors.textHi)
+                        .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  if (_amount > 0)
                     Container(
-                      padding: const EdgeInsets.all(7),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.md),
+                        color: AppColors.brandSoftBg,
+                        borderRadius: BorderRadius.circular(R.sm),
+                        border: Border.all(
+                            color: AppColors.brand.withValues(alpha: 0.3)),
                       ),
-                      child: Icon(LucideIcons.percent, size: 16, color: accent),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'تعديل خصم',
-                            style: AppType.title(color: AppColors.textHi)
-                                .copyWith(fontSize: 15),
-                          ),
-                          Text(
-                            d.subscriberUsername,
-                            style: AppType.muted().copyWith(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-                  children: [
-                    if (d.packagePrice != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceInput,
-                          borderRadius: BorderRadius.circular(R.md),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.tag,
-                                size: 13, color: AppColors.textMid),
-                            const SizedBox(width: 6),
-                            Text(
-                              'السعر الأصلي ',
-                              style: AppType.muted().copyWith(fontSize: 11),
-                            ),
-                            Text(
-                              '${formatIQD(d.packagePrice!)} د.ع',
-                              style: AppType.label(color: AppColors.textHi)
-                                  .copyWith(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700),
-                            ),
-                            const Spacer(),
-                            if (_amount > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.brandSoftBg,
-                                  borderRadius: BorderRadius.circular(R.sm),
-                                  border: Border.all(
-                                      color: AppColors.brand
-                                          .withValues(alpha: 0.3)),
-                                ),
-                                child: Text(
-                                  'بعد الخصم ${formatIQD((d.packagePrice! - _amount).clamp(0, double.infinity))}',
-                                  style: AppType.label(color: AppColors.brand)
-                                      .copyWith(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: Sp.md),
-                    ],
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4, right: 2),
                       child: Text(
-                        'قيمة الخصم *',
-                        style: AppType.muted(color: AppColors.textMid).copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        'بعد الخصم ${formatIQD((d.packagePrice! - _amount).clamp(0, double.infinity))}',
+                        style: AppType.label(color: AppColors.brand).copyWith(
+                            fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                     ),
-                    AmountShorthandBox(
-                        controller: _amountCtrl,
-                        child: TextField(
-                          controller: _amountCtrl,
-                          keyboardType: TextInputType.number,
-                          style: AppType.input(color: AppColors.textHi),
-                          decoration: InputDecoration(
-                            hintText: 'مثلاً 5,000',
-                            hintStyle: AppType.input(color: AppColors.textLow),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(R.sm),
-                              borderSide: BorderSide(color: AppColors.border),
-                            ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 10),
-                            suffixText: 'د.ع',
-                          ),
-                        )),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final v in const [1000, 2500, 5000, 10000])
-                          _quick(v, accent),
-                      ],
-                    ),
-                  ],
-                ),
+                ],
               ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _submitting || _amount < 0 ? null : _submit,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.onBrand,
-                              ),
-                            )
-                          : const Icon(LucideIcons.save, size: 16),
-                      label: Text(
-                        _submitting
-                            ? 'جاري الحفظ...'
-                            : (_amount == 0
-                                ? 'إزالة الخصم'
-                                : 'حفظ ${formatIQD(_amount)}'),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _amount == 0 ? AppColors.error : accent,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                      ),
-                    ),
+            ),
+            const SizedBox(height: Sp.md),
+          ],
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4, right: 2),
+            child: Text(
+              'قيمة الخصم *',
+              style: AppType.muted(color: AppColors.textMid).copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          AmountShorthandBox(
+              controller: _amountCtrl,
+              child: TextField(
+                controller: _amountCtrl,
+                keyboardType: TextInputType.number,
+                style: AppType.input(color: AppColors.textHi),
+                decoration: InputDecoration(
+                  hintText: 'مثلاً 5,000',
+                  hintStyle: AppType.input(color: AppColors.textLow),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide(color: AppColors.border),
                   ),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  suffixText: 'د.ع',
                 ),
-              ),
+              )),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final v in const [1000, 2500, 5000, 10000])
+                _quick(v, accent),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
