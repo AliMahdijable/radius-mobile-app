@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/network_devices_api.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 
@@ -239,7 +240,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
       ),
@@ -791,211 +792,180 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final inset = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: inset),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
-              ),
-              Row(children: [
-                Icon(LucideIcons.circlePlus, color: AppColors.brand, size: 22),
-                const SizedBox(width: 8),
-                Text('إضافة ${widget.count} جهاز',
-                    style: TextStyle(
-                        color: AppColors.textHi,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 4),
-              Text('كل الحقول اختياريّة — اتركها فارغة وسيُملأ تلقائياً',
-                  style: TextStyle(color: AppColors.textMid, fontSize: 11)),
-              const SizedBox(height: 16),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.plus,
+        title: 'إضافة ${widget.count} جهاز',
+        subtitle: 'اضبط الاسم والمنطقة وبيانات الدخول قبل الإضافة',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: 'تأكيد إضافة ${widget.count} جهاز',
+        icon: LucideIcons.check,
+        onPressed: _submit,
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
 
-              // 1. بادئة الاسم
-              TextField(
-                controller: _prefixCtrl,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
-                decoration: InputDecoration(
-                  labelText: 'بادئة الاسم',
-                  hintText: 'مثال: "جهاز" → جهاز 5، جهاز 88',
-                  prefixIcon:
-                      Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
-                  filled: true,
-                  fillColor: AppColors.surfaceInput,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(R.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
+          // 1. بادئة الاسم
+          TextField(
+            controller: _prefixCtrl,
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.right,
+            decoration: InputDecoration(
+              labelText: 'بادئة الاسم',
+              hintText: 'مثال: "جهاز" → جهاز 5، جهاز 88',
+              prefixIcon:
+                  Icon(LucideIcons.tag, size: 16, color: AppColors.textMid),
+              filled: true,
+              fillColor: AppColors.surfaceInput,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide.none,
               ),
-              const SizedBox(height: 10),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 10),
 
-              // 2. المنطقة (dropdown)
-              DropdownButtonFormField<int?>(
-                value: _regionId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'المنطقة',
-                  prefixIcon: Icon(LucideIcons.mapPin,
-                      size: 16, color: AppColors.textMid),
-                  filled: true,
-                  fillColor: AppColors.surfaceInput,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(R.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-                items: [
-                  DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('بدون منطقة',
-                        style: TextStyle(color: AppColors.textMid)),
-                  ),
-                  for (final r in widget.regions)
-                    DropdownMenuItem<int?>(
-                      value: r.id,
-                      child: Row(children: [
-                        Icon(LucideIcons.mapPin,
-                            size: 12,
-                            color:
-                                _parseRegionColor(r.color) ?? AppColors.brand),
-                        const SizedBox(width: 6),
-                        Expanded(
-                            child:
-                                Text(r.name, overflow: TextOverflow.ellipsis)),
-                        if (r.deviceCount > 0)
-                          Text(' (${r.deviceCount})',
-                              style: TextStyle(
-                                  color: AppColors.textLow, fontSize: 11)),
-                      ]),
-                    ),
-                ],
-                onChanged: (v) => setState(() => _regionId = v),
+          // 2. المنطقة (dropdown)
+          DropdownButtonFormField<int?>(
+            value: _regionId,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'المنطقة',
+              prefixIcon:
+                  Icon(LucideIcons.mapPin, size: 16, color: AppColors.textMid),
+              filled: true,
+              fillColor: AppColors.surfaceInput,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide.none,
               ),
-              const SizedBox(height: 10),
-
-              // 3. Advanced — user/pass/community (طيّ افتراضي)
-              InkWell(
-                onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            items: [
+              DropdownMenuItem<int?>(
+                value: null,
+                child: Text('بدون منطقة',
+                    style: TextStyle(color: AppColors.textMid)),
+              ),
+              for (final r in widget.regions)
+                DropdownMenuItem<int?>(
+                  value: r.id,
                   child: Row(children: [
-                    Icon(
-                        _showAdvanced
-                            ? LucideIcons.chevronDown
-                            : LucideIcons.chevronLeft,
-                        size: 16,
-                        color: AppColors.brand),
-                    const SizedBox(width: 4),
-                    Text('بيانات الدخول المشتركة (اختياريّة)',
-                        style: TextStyle(
-                            color: AppColors.brand,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700)),
+                    Icon(LucideIcons.mapPin,
+                        size: 12,
+                        color: _parseRegionColor(r.color) ?? AppColors.brand),
+                    const SizedBox(width: 6),
+                    Expanded(
+                        child: Text(r.name, overflow: TextOverflow.ellipsis)),
+                    if (r.deviceCount > 0)
+                      Text(' (${r.deviceCount})',
+                          style: TextStyle(
+                              color: AppColors.textLow, fontSize: 11)),
                   ]),
                 ),
-              ),
-              if (_showAdvanced) ...[
-                const SizedBox(height: 6),
-                Text(
-                    'تُطبَّق على كل الأجهزة — Mikrotik/UBNT (user+pass) و Mimosa (community)',
+            ],
+            onChanged: (v) => setState(() => _regionId = v),
+          ),
+          const SizedBox(height: 10),
+
+          // 3. Advanced — user/pass/community (طيّ افتراضي)
+          InkWell(
+            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(children: [
+                Icon(
+                    _showAdvanced
+                        ? LucideIcons.chevronDown
+                        : LucideIcons.chevronLeft,
+                    size: 16,
+                    color: AppColors.brand),
+                const SizedBox(width: 4),
+                Text('بيانات الدخول المشتركة (اختياريّة)',
                     style: TextStyle(
-                        color: AppColors.textLow, fontSize: 10.5, height: 1.4)),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(
-                      child: TextField(
-                    controller: _userCtrl,
-                    textDirection: TextDirection.ltr,
-                    decoration: InputDecoration(
-                      labelText: 'User',
-                      hintText: 'admin / ubnt',
-                      filled: true,
-                      fillColor: AppColors.surfaceInput,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(R.sm),
-                        borderSide: BorderSide.none,
-                      ),
-                      isDense: true,
-                    ),
-                  )),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: TextField(
-                    controller: _passCtrl,
-                    obscureText: _obscurePass,
-                    textDirection: TextDirection.ltr,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      filled: true,
-                      fillColor: AppColors.surfaceInput,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(R.sm),
-                        borderSide: BorderSide.none,
-                      ),
-                      isDense: true,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                            _obscurePass ? LucideIcons.eye : LucideIcons.eyeOff,
-                            size: 16),
-                        onPressed: () =>
-                            setState(() => _obscurePass = !_obscurePass),
-                      ),
-                    ),
-                  )),
-                ]),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _communityCtrl,
-                  textDirection: TextDirection.ltr,
-                  decoration: InputDecoration(
-                    labelText: 'SNMP Community (لأجهزة Mimosa)',
-                    hintText: 'public',
-                    filled: true,
-                    fillColor: AppColors.surfaceInput,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(R.sm),
-                      borderSide: BorderSide.none,
-                    ),
-                    isDense: true,
+                        color: AppColors.brand,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+          if (_showAdvanced) ...[
+            const SizedBox(height: 6),
+            Text(
+                'تُطبَّق على كل الأجهزة — Mikrotik/UBNT (user+pass) و Mimosa (community)',
+                style: TextStyle(
+                    color: AppColors.textLow, fontSize: 10.5, height: 1.4)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                controller: _userCtrl,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                  labelText: 'User',
+                  hintText: 'admin / ubnt',
+                  filled: true,
+                  fillColor: AppColors.surfaceInput,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide.none,
+                  ),
+                  isDense: true,
+                ),
+              )),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: TextField(
+                controller: _passCtrl,
+                obscureText: _obscurePass,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  filled: true,
+                  fillColor: AppColors.surfaceInput,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide.none,
+                  ),
+                  isDense: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                        _obscurePass ? LucideIcons.eye : LucideIcons.eyeOff,
+                        size: 16),
+                    onPressed: () =>
+                        setState(() => _obscurePass = !_obscurePass),
                   ),
                 ),
-              ],
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+              )),
+            ]),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _communityCtrl,
+              textDirection: TextDirection.ltr,
+              decoration: InputDecoration(
+                labelText: 'SNMP Community (لأجهزة Mimosa)',
+                hintText: 'public',
+                filled: true,
+                fillColor: AppColors.surfaceInput,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  borderSide: BorderSide.none,
                 ),
-                icon: const Icon(LucideIcons.check, size: 16),
-                label: Text('تأكيد إضافة ${widget.count} جهاز'),
+                isDense: true,
               ),
-            ],
-          ),
-        ),
+            ),
+          ],
+        ],
       ),
     );
   }
