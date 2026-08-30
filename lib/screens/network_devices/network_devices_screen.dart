@@ -20,6 +20,7 @@ import 'regions_screen.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/device_image.dart';
 import '../../theme/typography.dart';
+import 'detected_model.dart';
 import 'model_detector.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
@@ -166,26 +167,28 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     setState(() => _detecting = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final updated = await ModelDetector.run(
-        _all,
-        isCanceled: () => !mounted,
-      );
+      final r = await ModelDetector.run(_all, isCanceled: () => !mounted);
       if (!mounted) return;
-      if (updated.isEmpty) {
-        messenger.showSnackBar(const SnackBar(
-          content: Text('لا طُرُز جديدة — كلّ جهاز مكشوف أو غير متّصل'),
-          behavior: SnackBarBehavior.floating,
-        ));
-      } else {
+      if (r.updated.isNotEmpty) {
         // نُحدّث القائمة من الخادم: الكشف كتب فيها، والصور تُبنى من
         // الطراز المخزَّن.
         await _refresh();
         if (!mounted) return;
-        messenger.showSnackBar(SnackBar(
-          content: Text('كُشف طراز ${updated.length} جهاز'),
-          behavior: SnackBarBehavior.floating,
-        ));
       }
+      final parts = <String>[];
+      if (r.updated.isNotEmpty) parts.add('كُشف ${r.updated.length} طراز');
+      if (r.unmatched.isNotEmpty) {
+        // ⚠️ الجزء المهمّ: طراز مكشوف بلا صورة يبقى بشارته، فيظنّ
+        // المستخدم أنّ الكشف فشل. نقول له بالضبط أيّ صور ينقصه.
+        parts.add('بلا صورة: ${r.unmatched.join(' · ')}');
+      }
+      messenger.showSnackBar(SnackBar(
+        content: Text(parts.isEmpty
+            ? 'لا جديد — كلّ جهاز مكشوف أو غير متّصل'
+            : parts.join('  •  ')),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: r.unmatched.isEmpty ? 3 : 8),
+      ));
     } finally {
       if (mounted) setState(() => _detecting = false);
     }
@@ -578,12 +581,26 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               : IconButton(
                   icon: const Icon(LucideIcons.refreshCw, size: 20),
                   onPressed: _refresh,
-                  // ضغطة مطوّلة = كشف الطُرُز. لا يُشغَّل تلقائيّاً:
-                  // يفتح جلسة مصادَقة على كلّ جهاز، وذلك قرار المستخدم
-                  // لا سلوك خفيّ يتّصل بأجهزته دون علمه.
-                  onLongPress: _detecting ? null : _detectModels,
-                  tooltip: 'تحديث فوري · ضغطة مطوّلة: كشف الطُرُز',
+                  tooltip: 'تحديث فوري',
                 ),
+          // زرّ كشف الطُرُز — **ظاهر** لا ضغطة مخفيّة: لا يظهر إلّا حين
+          // يوجد جهاز يحتاجه، ويختفي حين تكتمل الطُرُز. لا يُشغَّل
+          // تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ جهاز، وذلك قرار
+          // المستخدم لا سلوك خفيّ يتّصل بأجهزته دون علمه.
+          if (_all.any(DetectedModel.needsDetection))
+            _detecting
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                : IconButton(
+                    icon: const Icon(LucideIcons.scanSearch, size: 20),
+                    onPressed: _detectModels,
+                    tooltip: 'كشف طُرُز الأجهزة',
+                  ),
           // زر "+" إضافة جهاز — manage tier فقط
           if (Perms.has('devices.manage'))
             Padding(

@@ -6,6 +6,7 @@ import '../../api/ubnt_api.dart';
 import '../../api/snmp_client.dart';
 import '../../models/network_device.dart';
 import 'detected_model.dart';
+import 'widgets/device_image.dart';
 
 /// كشف طُرُز الأجهزة دفعةً واحدة.
 ///
@@ -33,8 +34,12 @@ class ModelDetector {
 
   /// يمرّ على الأجهزة المؤهَّلة ويحفظ ما يُبلّغ به كلّ جهاز.
   ///
-  /// يُرجع الأجهزة المُحدَّثة. `onProgress` يُستدعى بعد كلّ جهاز.
-  static Future<List<NetworkDevice>> run(
+  /// يُرجع الأجهزة المُحدَّثة والطُرُز المكشوفة التي لا صورة لها.
+  ///
+  /// الثانية أهمّ ممّا تبدو: حين يُكشف «BaseBox 5» ولا صورة بهذا الاسم
+  /// يبقى الجهاز بشارته، ويظنّ المستخدم أنّ الكشف فشل. القائمة تقول
+  /// له بالضبط أيّ صور ينقصه.
+  static Future<({List<NetworkDevice> updated, Set<String> unmatched})> run(
     List<NetworkDevice> devices, {
     void Function(int done, int total)? onProgress,
     bool Function()? isCanceled,
@@ -50,10 +55,11 @@ class ModelDetector {
 
     if (targets.isEmpty) {
       onProgress?.call(0, 0);
-      return const [];
+      return (updated: const <NetworkDevice>[], unmatched: <String>{});
     }
 
     final updated = <NetworkDevice>[];
+    final unmatched = <String>{};
     var done = 0;
     final total = targets.length;
 
@@ -64,6 +70,9 @@ class ModelDetector {
         if (reported != null) {
           final u = await DetectedModel.save(d, reported);
           if (u != null) updated.add(u);
+          if (DeviceImage.assetFor(reported, brand: d.brand) == null) {
+            unmatched.add(reported);
+          }
         }
       } catch (_) {
         // جهاز واحد يفشل لا يُسقط المرور.
@@ -86,7 +95,7 @@ class ModelDetector {
         await Future.wait(e.value.skip(i).take(e.key).map(one));
       }
     }));
-    return updated;
+    return (updated: updated, unmatched: unmatched);
   }
 
   static Future<String?> _detect(NetworkDevice d) async {
