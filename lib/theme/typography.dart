@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'colors.dart';
+import 'typography.dart';
 
 /// سلّم الخطّ — Cairo دائماً، بقياسات مخطّط إعادة التصميم (2026-08-29).
 ///
@@ -214,5 +215,83 @@ class AppType {
         height: 1.35,
         letterSpacing: 2.7,
         color: color ?? AppColors.textHi,
+      );
+
+  // ══════════════ الرتبة العريضة (w700 على المقاسات الصغيرة) ══════════════
+  //
+  // مسح 2026-08-30 وجد 196 نمطاً خاماً بوزن w700 على مقاسات 9.5-13،
+  // كلّها عناوين أقسام وحالات فارغة وقيم لوحات. السلّم لم يكن يعرّف
+  // هذه الرتبة فبقيت خارجه — لا لأنّها خطأ، بل لأنّ المخطّط الأصلي
+  // لم يصل إلى هذه الشاشات. تعريفها هنا يُدخل 196 موقعاً تحت السلّم
+  // بلا تغيير بكسل واحد.
+  //
+  // ⚠️ بلا `letterSpacing` عمداً، خلافاً لنظيراتها الخفيفة
+  // (`micro` و`pillLabel` بـ0.22): التتبّع وسيلة إبراز للأوزان
+  // الخفيفة عند المقاسات الصغيرة، والوزن العريض يؤدّي الدور نفسه.
+  // جمعهما إبرازٌ مضاعف يُنهك السطر — وفي الشاشات المزدحمة كلوحات
+  // الأجهزة يزيد العرض أيضاً فيُفيض الصفوف الضيّقة.
+
+  /// عنوان قسم داخل شيت · عنوان حالة فارغة. (12.5/700)
+  static TextStyle bodyBold({Color? color}) => _s(
+        size: 12.5,
+        weight: FontWeight.w700,
+        height: 1.4,
+        color: color ?? AppColors.textHi,
+      );
+
+  /// تسمية قيمة في لوحة مراقبة — أصغر ما يُقرأ مُبرَزاً. (10.5/700)
+  static TextStyle microBold({Color? color}) => _s(
+        size: 10.5,
+        weight: FontWeight.w700,
+        height: 1.3,
+        color: color ?? AppColors.textLabel,
+      );
+
+  /// نصّ حبّة أو شارة حالة مُبرَزة. (11/700)
+  static TextStyle pillBold({Color? color}) => _s(
+        size: 11,
+        weight: FontWeight.w700,
+        height: 1.25,
+        color: color ?? AppColors.textLow,
+      );
+
+  /// أصغر تسمية مُبرَزة — وحدات وزوائد الأرقام. (9.5/700)
+  static TextStyle daysWordBold({Color? color}) => _s(
+        size: 9.5,
+        weight: FontWeight.w700,
+        height: 1.2,
+        color: color ?? AppColors.textLabel,
+      );
+
+  /// عنوان صفّ أو مفتاح بارز في قائمة. (13/700)
+  static TextStyle rowLabelBold({Color? color}) => _s(
+        size: 13,
+        weight: FontWeight.w700,
+        height: 1.35,
+        color: color ?? AppColors.textHi,
+      );
+
+  /// عنوان بطاقة مُبرَز. (14/700)
+  static TextStyle cardTitleBold({Color? color}) => _s(
+        size: 14,
+        weight: FontWeight.w700,
+        height: 1.3,
+        color: color ?? AppColors.textHi,
+      );
+
+  /// زرّ أو إجراء مُبرَز. (15/700)
+  static TextStyle buttonBold({Color? color}) => _s(
+        size: 15,
+        weight: FontWeight.w700,
+        height: 1.2,
+        color: color ?? AppColors.textHi,
+      );
+
+  /// تسمية مُبرَزة بمقاس الحقول الصغيرة. (11.5/700)
+  static TextStyle labelBold({Color? color}) => _s(
+        size: 11.5,
+        weight: FontWeight.w700,
+        height: 1.35,
+        color: color ?? AppColors.textLabel,
       );
 }

@@ -448,11 +448,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         final isSelected = selected.contains(i);
         return FilterChip(
           label: Text(labels[i],
-              style: TextStyle(
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? AppColors.onBrand : AppColors.textMid,
-              )),
+              style: AppType.bodyStrong(color: isSelected ? AppColors.onBrand : AppColors.textMid)),
           selected: isSelected,
           onSelected: (_) {
             final next = List<int>.from(selected);
@@ -505,11 +501,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               )
             : Text(
                 'wa_schedules.save'.tr(),
-                style: const TextStyle(
-                  color: AppColors.onBrand,
-                  fontSize: 14, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.cardTitleBold(color: AppColors.onBrand),
               ),
       ),
     );
@@ -701,11 +693,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 13, height: 1.35,
-            fontWeight: FontWeight.w700,
-            color: selected ? AppColors.onBrand : AppColors.textMid,
-          ),
+          style: AppType.rowLabelBold(color: selected ? AppColors.onBrand : AppColors.textMid),
         ),
       ),
     );
@@ -728,11 +716,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         final selected = _debtMonthDays.contains(day);
         return FilterChip(
           label: Text(label,
-              style: TextStyle(
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w600,
-                color: selected ? AppColors.onBrand : AppColors.textMid,
-              )),
+              style: AppType.bodyStrong(color: selected ? AppColors.onBrand : AppColors.textMid)),
           selected: selected,
           onSelected: (_) {
             setState(() {
@@ -802,12 +786,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('قناة الإرسال',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi,
-              )),
+              style: AppType.bodyBold()),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -870,12 +849,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
             const SizedBox(width: 4),
             Flexible(
               child: Text(label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? color : AppColors.textMid,
-                  ),
+                  style: AppType.pillBold(color: selected ? color : AppColors.textMid),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ),

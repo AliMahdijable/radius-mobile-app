@@ -226,11 +226,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
           ),
           child: Text(
             '+${_fmt(v)}',
-            style: TextStyle(
-              color: accent,
-              fontSize: 11, height: 1.25,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.pillBold(color: accent),
           ),
         ),
       ),

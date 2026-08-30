@@ -10,6 +10,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'regions_screen.dart';
+import '../../theme/typography.dart';
 
 /// bottom sheet لإضافة/تعديل جهاز شبكة — مع اختيار protocol + credentials.
 class NetworkDeviceFormSheet extends StatefulWidget {
@@ -339,10 +340,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             )),
         const SizedBox(width: 8),
         Text(text,
-            style: TextStyle(
-                fontSize: 13, height: 1.35,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi)),
+            style: AppType.rowLabelBold()),
       ]);
 
   Widget _protocolSelector() {
@@ -378,11 +376,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               size: 14, color: active ? AppColors.onBrand : AppColors.textMid),
           const SizedBox(width: 6),
           Text(label,
-              style: TextStyle(
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w600,
-                color: active ? AppColors.onBrand : AppColors.textHi,
-              )),
+              style: AppType.bodyStrong(color: active ? AppColors.onBrand : AppColors.textHi)),
         ]),
       ),
     );
@@ -402,10 +396,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(width: 6),
           Text(
             'بيانات الاتصال (${NetworkDeviceLabels.protocolLabel(_protocol!)})',
-            style: TextStyle(
-                fontSize: 11, height: 1.25,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi),
+            style: AppType.pillBold(color: AppColors.textHi),
           ),
         ]),
         const SizedBox(height: 10),
@@ -636,10 +627,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('لا توجد مناطق بعد',
-                      style: TextStyle(
-                          fontSize: 12.5, height: 1.4,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textHi)),
+                      style: AppType.bodyBold()),
                   const SizedBox(height: 2),
                   Text('اضغط لإنشاء منطقة (مثل: كرخ / رصافة / ...)',
                       style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),

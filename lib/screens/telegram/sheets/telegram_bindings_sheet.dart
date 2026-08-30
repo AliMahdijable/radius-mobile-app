@@ -9,6 +9,7 @@ import '../../../models/subscriber.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
 
 /// telegramBindingsSheet — قائمة المشتركين المربوطين ببوت تلغرام.
 /// - بحث نصّي (اسم / يوزر / phone)
@@ -185,12 +186,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                         border: InputBorder.none,
                         isCollapsed: true,
                         hintText: 'بحث بالاسم / اليوزر / الرقم',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 12.5, height: 1.4,
-                          color: AppColors.textLow,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        hintStyle: AppType.body(color: AppColors.textLow),
                       ),
                     ),
                   ),
@@ -290,12 +286,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                       children: [
                         Flexible(
                           child: Text(display,
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14, height: 1.3,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textHi,
-                              ),
+                              style: AppType.cardTitleBold(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis),
                         ),
@@ -309,12 +300,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                               borderRadius: BorderRadius.circular(R.pill),
                             ),
                             child: Text('محظور',
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 9.5, height: 1.2,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.error,
-                                )),
+                                style: AppType.daysWordBold(color: AppColors.error)),
                           ),
                         ],
                       ],
@@ -362,12 +348,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
           Icon(LucideIcons.userX, size: 40, color: AppColors.textLow),
           const SizedBox(height: 10),
           Text('لا يوجد مشتركون مربوطون بعد',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textMid,
-              )),
+              style: AppType.bodyStrong(color: AppColors.textMid)),
           const SizedBox(height: 6),
           Text('استعمل "ربط مشترك" أو "بث روابط جماعي"',
               style: TextStyle(

@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
+import '../../../theme/typography.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -282,10 +283,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
-                style: TextStyle(
-                    fontSize: 13, height: 1.35,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.rowLabelBold()),
             const SizedBox(height: 2),
             Text(subtitle,
                 style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
@@ -300,10 +298,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             borderRadius: BorderRadius.circular(R.sm),
           ),
           child: Text(count,
-              style: const TextStyle(
-                  color: AppColors.onBrand,
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700)),
+              style: AppType.pillBold(color: AppColors.onBrand)),
         ),
     ]);
   }
@@ -342,10 +337,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 Icon(LucideIcons.wifi, size: 14, color: AppColors.brandAccent),
                 const SizedBox(width: 6),
                 Text('تفاصيل Wireless',
-                    style: TextStyle(
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi)),
+                    style: AppType.bodyBold()),
               ]),
               content: _wirelessDetails(s.wireless!),
             ),
@@ -366,10 +358,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                   isAp
                       ? 'العملاء المتّصلون (${_stickyStations.length})'
                       : 'الطرف الآخر (peer)',
-                  style: TextStyle(
-                      fontSize: 12.5, height: 1.4,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textHi),
+                  style: AppType.bodyBold(),
                 ),
               ]),
               content: Column(children: [
@@ -396,10 +385,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                     size: 14, color: AppColors.brandAccent),
                 const SizedBox(width: 6),
                 Text('Interfaces (${s.interfaces.where(_isDataIface).length})',
-                    style: TextStyle(
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi)),
+                    style: AppType.bodyBold()),
               ]),
               content: Column(children: [
                 for (final iface in s.interfaces.where(_isDataIface))
@@ -460,10 +446,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('مراقبة حيّة (UBNT via SSH)',
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.bodyBold()),
           const SizedBox(height: 2),
           Row(children: [
             if (_monitoring) ...[
@@ -555,10 +538,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Icon(LucideIcons.clock, size: 9, color: AppColors.brandAccent),
             const SizedBox(width: 3),
             Text(_formatUptime(h.uptime),
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.brandAccent)),
+                style: AppType.microBold(color: AppColors.brandAccent)),
           ]),
         ),
       ]),
@@ -621,10 +601,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(label,
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMid)),
+              style: AppType.microBold(color: AppColors.textMid)),
         ]),
         const SizedBox(height: 6),
         Row(
@@ -681,10 +658,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
             Text(label,
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMid)),
+                style: AppType.microBold(color: AppColors.textMid)),
           ]),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -758,10 +732,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                         height: 1)),
                 const SizedBox(height: 2),
                 Text('dBm',
-                    style: TextStyle(
-                        fontSize: 10.5, height: 1.3,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textMid)),
+                    style: AppType.microBold(color: AppColors.textMid)),
               ]),
             ),
           )),
@@ -772,10 +743,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('جودة الإشارة',
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMid)),
+                style: AppType.microBold(color: AppColors.textMid)),
             const SizedBox(height: 4),
             Text(_signalLabel(w.signal),
                 style: TextStyle(
@@ -810,8 +778,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           child: Text(label,
               style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow))),
       Text(value,
-          style: TextStyle(
-              fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w700, color: color)),
+          style: AppType.bodyBold(color: color)),
       const SizedBox(width: 2),
       Text(unit, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
     ]);
@@ -869,10 +836,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         Text(label, style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
         const Spacer(),
         Text(value,
-            style: TextStyle(
-                fontSize: 11, height: 1.25,
-                fontWeight: FontWeight.w700,
-                color: color ?? AppColors.textHi)),
+            style: AppType.pillBold(color: color ?? AppColors.textHi)),
         if (suffix != null) ...[
           const SizedBox(width: 3),
           Text(suffix,
@@ -895,10 +859,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Icon(LucideIcons.network, size: 14, color: AppColors.brandAccent),
           const SizedBox(width: 6),
           Text('Ethernet (${ethers.length})',
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 8),
         for (final iface in ethers) _interfaceRow(iface),
@@ -935,10 +896,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text(_speedLabel(iface.speed!),
-                style: TextStyle(
-                    fontSize: 9.5, height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: _speedColor(iface.speed!))),
+                style: AppType.daysWordBold(color: _speedColor(iface.speed!))),
           ),
         ],
         const Spacer(),
@@ -946,18 +904,12 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Icon(LucideIcons.arrowDown, size: 9, color: AppColors.success),
           const SizedBox(width: 2),
           Text(_formatBps(rate.rxBps),
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.microBold(color: AppColors.textHi)),
           const SizedBox(width: 8),
           Icon(LucideIcons.arrowUp, size: 9, color: AppColors.brandAccent),
           const SizedBox(width: 2),
           Text(_formatBps(rate.txBps),
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.microBold(color: AppColors.textHi)),
         ],
       ]),
     );
@@ -975,10 +927,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Icon(LucideIcons.users, size: 14, color: AppColors.brandAccent),
           const SizedBox(width: 6),
           Text('العملاء المتّصلون (${ss.length})',
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 8),
         for (final s in ss.take(20)) _stationRow(s),
@@ -1015,10 +964,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(s.hostname ?? s.ip ?? s.mac,
-                style: TextStyle(
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi),
+                style: AppType.pillBold(color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis),
             if (s.ip != null || s.mac.isNotEmpty)
               Text(
@@ -1033,10 +979,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text('${s.signalDisplay} dBm',
                 textDirection: TextDirection.ltr,
-                style: TextStyle(
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: signalColor)),
+                style: AppType.pillBold(color: signalColor)),
             if (s.ccq > 0) ...[
               const SizedBox(width: 6),
               Container(
@@ -1048,10 +991,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 ),
                 child: Text('${s.ccq}%',
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(
-                        fontSize: 11, height: 1.25,
-                        fontWeight: FontWeight.w700,
-                        color: _percentColor(s.ccq.toDouble()))),
+                    style: AppType.pillBold(color: _percentColor(s.ccq.toDouble()))),
               ),
             ],
           ]),
@@ -1275,10 +1215,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
           Icon(LucideIcons.chartLine, size: 14, color: AppColors.brandAccent),
           const SizedBox(width: 6),
           Text('أعلى interface (سير الترفك)',
-              style: TextStyle(
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.pillBold(color: AppColors.textHi)),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
           const SizedBox(width: 6),
@@ -1338,11 +1275,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
                     final isTx = s.barIndex == 0;
                     return LineTooltipItem(
                       '${isTx ? "↑" : "↓"} ${_formatBps(s.y.toInt())}',
-                      TextStyle(
-                        color: isTx ? txColor : rxColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10.5, height: 1.3,
-                      ),
+                      AppType.microBold(color: isTx ? txColor : rxColor),
                     );
                   }).toList(),
                 ),
@@ -1385,8 +1318,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
         borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text('$arrow $value',
-          style: TextStyle(
-              fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w700, color: color)),
+          style: AppType.microBold(color: color)),
     );
   }
 

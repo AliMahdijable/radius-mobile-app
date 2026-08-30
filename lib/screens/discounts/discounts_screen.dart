@@ -524,11 +524,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           ),
           child: Text(
             '+${_fmt(v)}',
-            style: TextStyle(
-              color: accent,
-              fontSize: 11, height: 1.25,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.pillBold(color: accent),
           ),
         ),
       ),
@@ -620,11 +616,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               const SizedBox(width: 4),
               Text(
                 label,
-                style: TextStyle(
-                  color: disabled ? AppColors.textLow : color,
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.microBold(color: disabled ? AppColors.textLow : color),
               ),
             ],
           ),
@@ -832,11 +824,7 @@ class _SubscriberCard extends StatelessWidget {
                       ),
                       child: Text(
                         '-${formatIQD(existingDiscount!)}',
-                        style: TextStyle(
-                          color: AppColors.warning,
-                          fontSize: 9.5, height: 1.2,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppType.daysWordBold(color: AppColors.warning),
                       ),
                     ),
                 ],

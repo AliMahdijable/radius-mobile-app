@@ -13,6 +13,7 @@ import '../../services/session_manager.dart';
 import '../../theme/colors.dart';
 import '../main_shell.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// شاشة "الصفحات" — التبديل السريع بين حسابات المدراء الفرعيّين
 /// (2026-08-26). طلب المستخدم:
@@ -625,12 +626,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             ),
                             child: Text(
                               'أنت',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 9.5, height: 1.2,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.brand,
-                              ),
+                              style: AppType.daysWordBold(color: AppColors.brand),
                             ),
                           ),
                         ],
@@ -645,12 +641,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             ),
                             child: Text(
                               'معطّل',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 9.5, height: 1.2,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.error,
-                              ),
+                              style: AppType.daysWordBold(color: AppColors.error),
                             ),
                           ),
                         ],
@@ -681,12 +672,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   child: Text(
                     'الحالي',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12.5, height: 1.4,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textLow,
-                    ),
+                    style: AppType.bodyBold(color: AppColors.textLow),
                   ),
                 )
               else

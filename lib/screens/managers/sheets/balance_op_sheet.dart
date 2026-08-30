@@ -529,11 +529,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               const SizedBox(width: 5),
               Text(
                 op.label,
-                style: TextStyle(
-                  color: selected ? op.color : AppColors.textMid,
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.bodyBold(color: selected ? op.color : AppColors.textMid),
               ),
             ],
           ),
@@ -565,11 +561,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           ),
           child: Text(
             '+${_fmt(v)}',
-            style: TextStyle(
-              color: _op.color,
-              fontSize: 11, height: 1.25,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.pillBold(color: _op.color),
           ),
         ),
       ),

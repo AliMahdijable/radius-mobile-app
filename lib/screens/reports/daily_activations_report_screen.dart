@@ -259,11 +259,7 @@ class _DailyActivationsReportScreenState
         Icon(icon, size: 18, color: color),
         const SizedBox(height: 4),
         Text(value,
-            style: TextStyle(
-              color: AppColors.textHi,
-              fontSize: 14, height: 1.3,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.cardTitleBold(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
         Text(label,
@@ -290,11 +286,7 @@ class _DailyActivationsReportScreenState
             ),
             child: Text(
               r.day,
-              style: TextStyle(
-                color: AppColors.brand,
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppType.bodyBold(color: AppColors.brand),
             ),
           ),
           const SizedBox(width: Sp.md),
@@ -408,11 +400,7 @@ class _DailyActivationsReportScreenState
                 children: [
                   Text(
                     c.$2,
-                    style: TextStyle(
-                      fontSize: 11, height: 1.25,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? c.$4 : AppColors.textMid,
-                    ),
+                    style: AppType.pillBold(color: selected ? c.$4 : AppColors.textMid),
                   ),
                   const SizedBox(width: 5),
                   Container(
@@ -425,11 +413,7 @@ class _DailyActivationsReportScreenState
                     ),
                     child: Text(
                       '${c.$3}',
-                      style: TextStyle(
-                        fontSize: 10.5, height: 1.3,
-                        fontWeight: FontWeight.w700,
-                        color: selected ? c.$4 : AppColors.textMid,
-                      ),
+                      style: AppType.microBold(color: selected ? c.$4 : AppColors.textMid),
                     ),
                   ),
                 ],

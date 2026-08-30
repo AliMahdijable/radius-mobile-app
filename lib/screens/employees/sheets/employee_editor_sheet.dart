@@ -238,12 +238,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                   Expanded(
                     child: Text(
                       _error!,
-                      style: TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        height: 1.4,
-                      ),
+                      style: AppType.bodyBold(color: AppColors.error),
                     ),
                   ),
                   InkWell(
@@ -502,12 +497,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                         size: 16, color: AppColors.textMid),
                     hint: Text(
                       'مقيَّد بمدير فرعي (بلا قيد)',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13, height: 1.45,
-                        color: AppColors.textLow,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: AppType.subtitle(color: AppColors.textLow),
                     ),
                     items: [
                       DropdownMenuItem<String?>(
@@ -659,11 +649,7 @@ class _PresetChip extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 preset.label,
-                style: TextStyle(
-                  color: AppColors.brandAccent,
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.pillBold(color: AppColors.brandAccent),
               ),
             ],
           ),
@@ -707,11 +693,7 @@ class _ActionChip extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.pillBold(color: color),
               ),
             ],
           ),

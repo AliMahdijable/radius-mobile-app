@@ -273,11 +273,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 11, height: 1.25,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+            style: AppType.pillBold(color: color),
           ),
         ],
       ),
@@ -400,11 +396,7 @@ class _EmployeeTile extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Text(
                   display.characters.isEmpty ? '?' : display.characters.first,
-                  style: TextStyle(
-                    fontSize: 15, height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: accentColor,
-                  ),
+                  style: AppType.buttonBold(color: accentColor),
                 ),
               ),
               const SizedBox(width: 10),
@@ -439,11 +431,7 @@ class _EmployeeTile extends StatelessWidget {
                             ),
                             child: Text(
                               'معطّل',
-                              style: TextStyle(
-                                fontSize: 9.5, height: 1.2,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textLow,
-                              ),
+                              style: AppType.daysWordBold(color: AppColors.textLow),
                             ),
                           ),
                         ],
@@ -472,11 +460,7 @@ class _EmployeeTile extends StatelessWidget {
                         const SizedBox(width: 3),
                         Text(
                           '${emp.activePermsCount} صلاحية',
-                          style: TextStyle(
-                            fontSize: 11, height: 1.25,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.brand,
-                          ),
+                          style: AppType.pillBold(color: AppColors.brand),
                         ),
                       ],
                     ),
@@ -491,12 +475,7 @@ class _EmployeeTile extends StatelessWidget {
                           Flexible(
                             child: Text(
                               'مقيَّد بـ@${emp.scopeAdminUsername ?? emp.scopeAdminId}',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 10.5, height: 1.3,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.brandAccent,
-                              ),
+                              style: AppType.microBold(color: AppColors.brandAccent),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

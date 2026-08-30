@@ -296,11 +296,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                       .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600)),
               Text(
                 value,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 13, height: 1.35,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.rowLabelBold(color: color),
                 overflow: TextOverflow.ellipsis,
               ),
             ],

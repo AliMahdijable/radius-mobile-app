@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../services/device_alerts_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// شاشة تنبيهات الأجهزة — تاريخ الـalerts + تحديد كمقروء + حذف.
 ///
@@ -64,10 +65,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
           ),
           const SizedBox(height: Sp.md),
           Text('لا توجد تنبيهات',
-              style: TextStyle(
-                  fontSize: 15, height: 1.2,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.buttonBold()),
           const SizedBox(height: 4),
           Text('التنبيهات تظهر هنا لو جهاز فصل أو عاد للاتصال',
               style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid),
@@ -131,10 +129,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
               Row(children: [
                 Expanded(
                   child: Text(a.deviceName,
-                      style: TextStyle(
-                          fontSize: 13, height: 1.35,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textHi),
+                      style: AppType.rowLabelBold(),
                       overflow: TextOverflow.ellipsis),
                 ),
                 Text(_formatTime(a.at),
@@ -142,8 +137,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
               ]),
               const SizedBox(height: 2),
               Text('$label · ${a.deviceIp}',
-                  style: TextStyle(
-                      fontSize: 11, height: 1.25, fontWeight: FontWeight.w700, color: color)),
+                  style: AppType.pillBold(color: color)),
             ]),
           ),
         ]),

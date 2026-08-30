@@ -5,6 +5,7 @@ import '../../../api/telegram_api.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
 
 /// telegramBroadcastSheet — إرسال رسالة عبر تلغرام لكل المرتبطين.
 /// Dry-run (يعرض عدد المستقبلين) ثم Send.
@@ -183,13 +184,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                       _preview!.outOfScope > 0
                           ? '🎯 سيصل: ${_preview!.eligible} · مرتبطون: ${_preview!.totalBound} · محظورون: ${_preview!.blocked} · خارج النطاق: ${_preview!.outOfScope}'
                           : '🎯 سيصل: ${_preview!.eligible} مشترك · مرتبطون: ${_preview!.totalBound} · محظورون: ${_preview!.blocked}',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                        height: 1.4,
-                      ),
+                      style: AppType.bodyBold(),
                     ),
                   ),
                 ],

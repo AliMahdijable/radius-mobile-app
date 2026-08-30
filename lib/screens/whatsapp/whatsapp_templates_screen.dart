@@ -366,11 +366,7 @@ class _TemplateTile extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontSize: 9.5, height: 1.2,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppType.daysWordBold(color: color),
       ),
     );
   }
@@ -447,12 +443,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('قناة الإرسال',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi,
-              )),
+              style: AppType.bodyBold()),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -516,12 +507,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
             const SizedBox(width: 4),
             Flexible(
               child: Text(label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? color : AppColors.textMid,
-                  ),
+                  style: AppType.pillBold(color: selected ? color : AppColors.textMid),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ),
@@ -738,22 +724,13 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               if (arabicLabel != null) ...[
                 Text(
                   arabicLabel,
-                  style: TextStyle(
-                    color: AppColors.successFill,
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppType.microBold(color: AppColors.successFill),
                 ),
                 const SizedBox(height: 1),
               ],
               Text(
                 ph,
-                style: const TextStyle(
-                  color: Color(0xFF25D366),
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Cairo',
-                ),
+                style: AppType.microBold(color: Color(0xFF25D366)),
               ),
             ],
           ),

@@ -78,11 +78,7 @@ class ReportLogTile extends StatelessWidget {
                       ),
                       child: Text(
                         meta.label,
-                        style: TextStyle(
-                          color: meta.color,
-                          fontSize: 10.5, height: 1.3,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppType.microBold(color: meta.color),
                       ),
                     ),
                     const Spacer(),

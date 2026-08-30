@@ -219,11 +219,7 @@ class _WebOnlyBanner extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'rad.mysvcs.net/v2',
-                      style: TextStyle(
-                        fontSize: 12.5, height: 1.4,
-                        color: AppColors.brand,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: AppType.bodyBold(color: AppColors.brand),
                     ),
                   ),
                   Icon(LucideIcons.copy,

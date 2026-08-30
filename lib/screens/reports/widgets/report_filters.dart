@@ -242,10 +242,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   size: 12, color: AppColors.error),
                               const SizedBox(width: 3),
                               Text('common.clear'.tr(),
-                                  style: TextStyle(
-                                      color: AppColors.error,
-                                      fontSize: 10.5, height: 1.3,
-                                      fontWeight: FontWeight.w700)),
+                                  style: AppType.microBold(color: AppColors.error)),
                             ],
                           ),
                         ),
@@ -346,10 +343,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4)),
                           child: Text('common.clear'.tr(),
-                              style: TextStyle(
-                                  color: AppColors.error,
-                                  fontSize: 11, height: 1.25,
-                                  fontWeight: FontWeight.w700)),
+                              style: AppType.pillBold(color: AppColors.error)),
                         ),
                     ],
                   ),
@@ -644,11 +638,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: active ? AppColors.brand : AppColors.textMid,
-                  fontSize: 11.5, height: 1.35,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.labelBold(color: active ? AppColors.brand : AppColors.textMid),
               ),
             ),
             Icon(LucideIcons.chevronDown, size: 13, color: AppColors.textLow),

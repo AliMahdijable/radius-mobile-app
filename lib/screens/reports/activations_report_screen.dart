@@ -320,11 +320,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         Icon(icon, size: 16, color: color),
         const SizedBox(height: 4),
         Text(value,
-            style: TextStyle(
-              color: AppColors.textHi,
-              fontSize: 13, height: 1.35,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.rowLabelBold(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
         Text(label,

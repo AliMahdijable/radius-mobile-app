@@ -308,12 +308,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
               const SizedBox(width: 3),
               Text(
                 label,
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: disabled ? AppColors.textLow : AppColors.textMid,
-                ),
+                style: AppType.microBold(color: disabled ? AppColors.textLow : AppColors.textMid),
               ),
             ],
           ),

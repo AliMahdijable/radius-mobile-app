@@ -8,6 +8,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
+import '../../theme/typography.dart';
 
 /// شاشة إدارة مناطق الأجهزة — قائمة + إضافة + تعديل + حذف.
 /// راجع [[project_devices_monitoring_plan]].
@@ -233,10 +234,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(r.name,
-                        style: TextStyle(
-                            color: AppColors.textHi,
-                            fontSize: 15, height: 1.2,
-                            fontWeight: FontWeight.w700)),
+                        style: AppType.buttonBold()),
                     const SizedBox(height: 2),
                     Text(
                       r.deviceCount == 0
@@ -383,10 +381,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
           ),
           const SizedBox(height: 14),
           Text('اللون (اختياري)',
-              style: TextStyle(
-                  color: AppColors.textMid,
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w600)),
+              style: AppType.bodyStrong(color: AppColors.textMid)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
+import '../theme/typography.dart';
 
 /// كشف كلمة السرّ — bottom sheet احترافي (2026-08-26).
 ///
@@ -197,11 +198,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         const SizedBox(height: 3),
                         Text(
                           widget.subtitle,
-                          style: TextStyle(
-                            fontSize: 11.5, height: 1.35,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textMid,
-                          ),
+                          style: AppType.label(color: AppColors.textMid),
                         ),
                       ],
                     ),

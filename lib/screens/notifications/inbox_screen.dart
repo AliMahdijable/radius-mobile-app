@@ -173,11 +173,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     size: 16, color: AppColors.brand),
                 label: Text(
                   'notifications.mark_all_read'.tr(),
-                  style: TextStyle(
-                    color: AppColors.brand,
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppType.bodyBold(color: AppColors.brand),
                 ),
               );
             },

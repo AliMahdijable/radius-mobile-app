@@ -196,12 +196,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                 Expanded(
                   child: Text(
                     'آخر محاولة فشلت: ${_status!.lastError}',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11.5, height: 1.35,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.error,
-                    ),
+                    style: AppType.label(color: AppColors.error),
                   ),
                 ),
               ],
@@ -271,12 +266,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11, height: 1.25,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textMid,
-              ),
+              style: AppType.pillBold(color: AppColors.textMid),
             ),
           ],
         ),
@@ -374,12 +364,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                     const SizedBox(height: 3),
                     Text(
                       a.subtitle,
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 11, height: 1.35,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMid,
-                      ),
+                      style: AppType.muted(color: AppColors.textMid),
                     ),
                   ],
                 ),
@@ -466,12 +451,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 11.5, height: 1.35,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMid,
-                  ),
+                  style: AppType.label(color: AppColors.textMid),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -608,29 +588,14 @@ class _StepsCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(R.pill),
                     ),
                     child: Text(code,
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11.5, height: 1.35,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textHi,
-                        )),
+                        style: AppType.labelBold(color: AppColors.textHi)),
                   ),
                 if (codeBold != null)
                   Text('"$codeBold"',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                      )),
+                      style: AppType.bodyBold()),
                 if (suffix != null)
                   Text(suffix,
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMid,
-                      )),
+                      style: AppType.body(color: AppColors.textMid)),
               ],
             ),
           ),
@@ -786,12 +751,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
           if (_err != null) ...[
             const SizedBox(height: 6),
             Text(_err!,
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.error,
-                )),
+                style: AppType.pillBold(color: AppColors.error)),
           ],
           const SizedBox(height: 12),
           SizedBox(

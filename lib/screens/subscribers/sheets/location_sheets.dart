@@ -13,6 +13,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import 'location_picker_screen.dart';
 import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
 
 /// 2026-08-26: chooser الصغير — نقرة على أيقونة الموقع تفتح قائمة
 /// خيارات فتح (Google Maps / Waze / نسخ). يتعامل مع فتح روابط
@@ -511,12 +512,7 @@ class _EditSheetState extends State<_EditSheet> {
             const SizedBox(height: 12),
           ],
           Text('الصق رابط Google Maps أو "lat,lng"',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textMid,
-              )),
+              style: AppType.bodyBold(color: AppColors.textMid)),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -601,12 +597,7 @@ class _EditSheetState extends State<_EditSheet> {
                   Expanded(
                     child: Text(
                       'تمّ استخراج: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                      ),
+                      style: AppType.bodyBold(),
                       textDirection: TextDirection.ltr,
                     ),
                   ),

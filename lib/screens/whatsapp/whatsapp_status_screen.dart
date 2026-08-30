@@ -880,11 +880,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               const SizedBox(width: 6),
               Text(
                 label,
-                style: TextStyle(
-                  color: active ? accent : AppColors.textMid,
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.bodyBold(color: active ? accent : AppColors.textMid),
               ),
             ],
           ),
@@ -970,11 +966,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                 ),
                 child: Text(
                   'common.cancel'.tr(),
-                  style: TextStyle(
-                    color: AppColors.textLow,
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppType.pillBold(),
                 ),
               ),
             ],
@@ -1053,11 +1045,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
               const SizedBox(width: 5),
               Text(
                 label,
-                style: TextStyle(
-                  color: disabled ? AppColors.textLow : color,
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.bodyBold(color: disabled ? AppColors.textLow : color),
               ),
             ],
           ),
@@ -1218,24 +1206,14 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                         children: [
                           Text(
                             'الوضع اليدوي للواتساب',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 15, height: 1.2,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textHi,
-                            ),
+                            style: AppType.buttonBold(),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             isManual
                                 ? 'مفعّل — يفتح واتسابك'
                                 : 'مطفأ — الإرسال تلقائي',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 11, height: 1.25,
-                              fontWeight: FontWeight.w700,
-                              color: isManual ? purple : AppColors.textMid,
-                            ),
+                            style: AppType.pillBold(color: isManual ? purple : AppColors.textMid),
                           ),
                         ],
                       ),

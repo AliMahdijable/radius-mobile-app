@@ -546,12 +546,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             Flexible(
               child: Text(
                 label,
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11.5, height: 1.35,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? color : AppColors.textMid,
-                ),
+                style: AppType.labelBold(color: selected ? color : AppColors.textMid),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

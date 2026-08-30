@@ -21,6 +21,7 @@ import 'widgets/mimosa_live_panel.dart';
 import 'widgets/ruijie_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 import '../../api/network_devices_api.dart';
+import '../../theme/typography.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -487,11 +488,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                   online
                       ? 'متّصل'
                       : (_d.lastStatus == 'offline' ? 'غير متّصل' : 'لم يُفحص'),
-                  style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: _statusColor,
-                  ),
+                  style: AppType.bodyBold(color: _statusColor),
                 ),
               ]),
               const SizedBox(height: 4),
@@ -518,11 +515,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 Icon(LucideIcons.globe, size: 12, color: AppColors.textLow),
                 const SizedBox(width: 4),
                 Text(_d.ip,
-                    style: TextStyle(
-                      fontSize: 12.5, height: 1.4,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textHi,
-                    )),
+                    style: AppType.bodyStrong(color: AppColors.textHi)),
               ]),
               // Region (لو مُسند لواحدة) — 2026-08-18
               if (_region != null) ...[
@@ -543,10 +536,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                             Border.all(color: color.withValues(alpha: 0.35)),
                       ),
                       child: Text(_region!.name,
-                          style: TextStyle(
-                              fontSize: 10.5, height: 1.3,
-                              fontWeight: FontWeight.w700,
-                              color: color)),
+                          style: AppType.microBold(color: color)),
                     ),
                   ]);
                 }),
@@ -583,10 +573,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                       const SizedBox(width: 3),
                       Text(
                         '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}${_d.apiPort != null ? ":${_d.apiPort}" : ""}',
-                        style: TextStyle(
-                            fontSize: 9.5, height: 1.2,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.brand),
+                        style: AppType.daysWordBold(color: AppColors.brand),
                       ),
                       if (_d.hasCredentials) ...[
                         const SizedBox(width: 4),
@@ -635,11 +622,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                         Icon(LucideIcons.zap, size: 11, color: AppColors.brand),
                         const SizedBox(width: 3),
                         Text('ping',
-                            style: TextStyle(
-                              fontSize: 10.5, height: 1.3,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.brand,
-                            )),
+                            style: AppType.microBold(color: AppColors.brand)),
                       ]),
               ),
             ),
@@ -746,10 +729,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                  fontSize: 9.5, height: 1.2,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textMid),
+              style: AppType.daysWord(color: AppColors.textMid),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -795,11 +775,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           Icon(LucideIcons.stickyNote, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('ملاحظات',
-              style: TextStyle(
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi,
-              )),
+              style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 8),
         Text(_d.notes!,
@@ -872,10 +848,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة UBNT airOS متوفّرة',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
             const SizedBox(height: 4),
             Text(msg,
                 style: TextStyle(
@@ -915,10 +888,7 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('المراقبة الحيّة مقفلة',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
             const SizedBox(height: 4),
             Text('تحتاج صلاحيّة "مراقبة Live" — راجع المدير.',
                 style: TextStyle(
@@ -961,10 +931,7 @@ extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة حيّة متوفّرة لـMikrotik',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
             const SizedBox(height: 4),
             Text(msg,
                 style: TextStyle(
@@ -1009,10 +976,7 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
           ),
           child: Center(
             child: Text('M',
-                style: TextStyle(
-                    fontSize: 17, height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.warning)),
+                style: AppType.statValue(color: AppColors.warning)),
           ),
         ),
         const SizedBox(width: 12),
@@ -1020,10 +984,7 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة Mimosa عبر SNMP',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
             const SizedBox(height: 4),
             Text(msg,
                 style: TextStyle(
@@ -1067,10 +1028,7 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
           ),
           child: Center(
             child: Text('R',
-                style: TextStyle(
-                    fontSize: 17, height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.brandAccent)),
+                style: AppType.statValue(color: AppColors.brandAccent)),
           ),
         ),
         const SizedBox(width: 12),
@@ -1078,10 +1036,7 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة Ruijie / Reyee عبر SNMP',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
             const SizedBox(height: 4),
             Text(msg,
                 style: TextStyle(

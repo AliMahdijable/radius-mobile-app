@@ -1993,11 +1993,7 @@ class _DebtSummaryCard extends StatelessWidget {
                 alignment: AlignmentDirectional.centerStart,
                 child: Text(
                   '${formatIQD(total)} د.ع  •  $count مشترك',
-                  style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.warning,
-                  ),
+                  style: AppType.bodyBold(color: AppColors.warning),
                 ),
               ),
             ),

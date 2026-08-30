@@ -548,11 +548,7 @@ class _SourceBadge extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 '${formatIQD(amount)} د.ع',
-                style: TextStyle(
-                  color: color,
-                  fontSize: 14, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.cardTitleBold(color: color),
               ),
             ],
           ),
@@ -587,11 +583,7 @@ class _Chip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
             label,
-            style: TextStyle(
-              color: emphasized ? accent : AppColors.textHi,
-              fontSize: 12.5, height: 1.4,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.bodyBold(color: emphasized ? accent : AppColors.textHi),
           ),
         ),
       ),
@@ -625,11 +617,7 @@ class _PayPreview extends StatelessWidget {
           ),
           Text(
             '${formatIQD(after)} د.ع',
-            style: TextStyle(
-              color: after == 0 ? AppColors.success : AppColors.textHi,
-              fontSize: 14, height: 1.3,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.cardTitleBold(color: after == 0 ? AppColors.success : AppColors.textHi),
           ),
         ],
       ),

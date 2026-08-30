@@ -10,6 +10,7 @@ import '../../models/network_device.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// Bulk scanner — يفحص /24 subnet بالتوازي على 6 ports شائعة،
 /// يعرض النتائج live، ويسمح للمستخدم يختار أجهزة يضيفها دفعة واحدة.
@@ -462,10 +463,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           Text('$_done / $_total IP',
               style: TextStyle(color: AppColors.textMid, fontSize: 11, height: 1.35)),
           Text('${_found.length} جهاز',
-              style: TextStyle(
-                  color: AppColors.brand,
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700)),
+              style: AppType.pillBold(color: AppColors.brand)),
         ]),
         const SizedBox(height: 4),
         ClipRRect(
@@ -567,10 +565,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   children: [
                     Row(children: [
                       Text(r.ip,
-                          style: TextStyle(
-                              color: AppColors.textHi,
-                              fontSize: 14, height: 1.3,
-                              fontWeight: FontWeight.w700)),
+                          style: AppType.cardTitleBold()),
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -596,11 +591,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                             ),
                           ),
                           child: Text('مضاف مسبقاً',
-                              style: TextStyle(
-                                color: AppColors.success,
-                                fontSize: 9.5, height: 1.2,
-                                fontWeight: FontWeight.w700,
-                              )),
+                              style: AppType.daysWordBold(color: AppColors.success)),
                         ),
                       ],
                     ]),
@@ -681,10 +672,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
             Expanded(
               child: Text(
                 'محدَّد: ${_selected.length}',
-                style: TextStyle(
-                    color: AppColors.textHi,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13, height: 1.35),
+                style: AppType.rowLabelBold(),
               ),
             ),
             FilledButton.icon(
@@ -892,10 +880,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     color: AppColors.brand),
                 const SizedBox(width: 4),
                 Text('بيانات الدخول المشتركة (اختياريّة)',
-                    style: TextStyle(
-                        color: AppColors.brand,
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700)),
+                    style: AppType.bodyBold(color: AppColors.brand)),
               ]),
             ),
           ),

@@ -900,24 +900,16 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                         ),
                         child: Text(
                           meta.label,
-                          style: TextStyle(
-                            color: meta.color,
-                            fontSize: 10.5, height: 1.3,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: AppType.microBold(color: meta.color),
                         ),
                       ),
                       const Spacer(),
                       if (e.amount != 0)
                         Text(
                           '${meta.debit ? '-' : '+'}${formatIQD(e.amount.abs().round())} د.ع',
-                          style: TextStyle(
-                            color: meta.debit
+                          style: AppType.bodyBold(color: meta.debit
                                 ? AppColors.error
-                                : AppColors.success,
-                            fontSize: 12.5, height: 1.4,
-                            fontWeight: FontWeight.w700,
-                          ),
+                                : AppColors.success),
                         ),
                     ],
                   ),

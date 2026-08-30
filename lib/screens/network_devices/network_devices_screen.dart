@@ -18,6 +18,7 @@ import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'regions_screen.dart';
 import 'widgets/brand_badge.dart';
+import '../../theme/typography.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -502,10 +503,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                           const BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Text(
                         count > 99 ? '99+' : '$count',
-                        style: const TextStyle(
-                            color: AppColors.onBrand,
-                            fontSize: 9.5, height: 1.2,
-                            fontWeight: FontWeight.w700),
+                        style: AppType.daysWordBold(color: AppColors.onBrand),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -976,11 +974,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           const SizedBox(width: 5),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12.5, height: 1.4,
-              fontWeight: FontWeight.w600,
-              color: active ? AppColors.onBrand : AppColors.textHi,
-            ),
+            style: AppType.bodyStrong(color: active ? AppColors.onBrand : AppColors.textHi),
           ),
           if (count > 0) ...[
             const SizedBox(width: 5),
@@ -1141,11 +1135,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   children: [
                     Text(
                       d.name,
-                      style: TextStyle(
-                        fontSize: 14, height: 1.3,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                      ),
+                      style: AppType.cardTitleBold(),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 3),
@@ -1170,11 +1160,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         ),
                         child: Text(
                           NetworkDeviceLabels.brandLabel(d.brand),
-                          style: TextStyle(
-                            fontSize: 9.5, height: 1.2,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textMid,
-                          ),
+                          style: AppType.daysWord(color: AppColors.textMid),
                         ),
                       ),
                       if (d.protocol != null) ...[
@@ -1188,11 +1174,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                           ),
                           child: Text(
                             d.protocol!.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9.5, height: 1.2,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.brand,
-                            ),
+                            style: AppType.daysWordBold(color: AppColors.brand),
                           ),
                         ),
                       ],
@@ -1219,11 +1201,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             ),
                             child: Text(
                               region.name,
-                              style: TextStyle(
-                                fontSize: 9.5, height: 1.2,
-                                fontWeight: FontWeight.w700,
-                                color: color,
-                              ),
+                              style: AppType.daysWordBold(color: color),
                             ),
                           ),
                         ]);
@@ -1255,11 +1233,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   if (d.lastResponseMs != null && d.lastStatus == 'online')
                     Text(
                       '${d.lastResponseMs} ms',
-                      style: TextStyle(
-                        fontSize: 10.5, height: 1.3,
-                        fontWeight: FontWeight.w700,
-                        color: statusCol,
-                      ),
+                      style: AppType.microBold(color: statusCol),
                     ),
                   const SizedBox(height: 4),
                   Icon(LucideIcons.chevronLeft,

@@ -298,11 +298,7 @@ class _CompactHeader extends StatelessWidget {
                 ),
                 child: Text(
                   '$count عملية',
-                  style: TextStyle(
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: accent,
-                  ),
+                  style: AppType.pillBold(color: accent),
                 ),
               ),
             ],
@@ -325,11 +321,7 @@ class _CompactHeader extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${_fmt(from)}  →  ${_fmt(to)}',
-                      style: TextStyle(
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textHi,
-                      ),
+                      style: AppType.bodyBold(),
                     ),
                   ),
                   Icon(LucideIcons.chevronDown,
@@ -397,11 +389,7 @@ class _ExpenseTile extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           row.expenseDate,
-                          style: TextStyle(
-                            fontSize: 11.5, height: 1.35,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textHi,
-                          ),
+                          style: AppType.labelBold(color: AppColors.textHi),
                         ),
                         if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
                           Text('  ·  ',
@@ -415,11 +403,7 @@ class _ExpenseTile extends StatelessWidget {
                           Flexible(
                             child: Text(
                               row.actingEmployeeUsername!,
-                              style: TextStyle(
-                                fontSize: 11, height: 1.25,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.brandAccent,
-                              ),
+                              style: AppType.pillBold(color: AppColors.brandAccent),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -431,12 +415,7 @@ class _ExpenseTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         row.note!.trim(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textMid,
-                          height: 1.35,
-                        ),
+                        style: AppType.muted(color: AppColors.textMid),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),

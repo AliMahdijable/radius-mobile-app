@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
 
 /// شاشة اختيار موقع GPS للمشترك على خريطة تفاعليّة.
 /// نسخة مطابقة لآليّة drdounat/app/lib/widgets/location_picker.dart —
@@ -117,12 +118,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         title: Text('اختر موقع المشترك',
-            style: TextStyle(
-              fontFamily: 'Cairo',
-              fontWeight: FontWeight.w700,
-              fontSize: 15, height: 1.2,
-              color: AppColors.textHi,
-            )),
+            style: AppType.buttonBold()),
         iconTheme: IconThemeData(color: AppColors.textHi),
         actions: [
           IconButton(

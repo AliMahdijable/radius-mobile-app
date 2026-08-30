@@ -349,11 +349,7 @@ class _Tile extends StatelessWidget {
               ),
               Text(
                 '-${formatIQD(discount.discountAmount)}',
-                style: TextStyle(
-                  color: AppColors.warning,
-                  fontSize: 14, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.cardTitleBold(color: AppColors.warning),
               ),
               const SizedBox(width: 6),
               IconButton(

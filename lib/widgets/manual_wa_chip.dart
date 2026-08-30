@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../services/manual_wa_prefs.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
+import '../theme/typography.dart';
 
 /// 2026-08-26: Chip يعرض وضع إرسال الواتساب الحالي (تلقائي/يدوي).
 /// النقر عليه يبدّل الوضع لهذه العمليّة فقط (override محلّي).
@@ -218,12 +219,7 @@ class _WaPreviewSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(title,
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 15, height: 1.2,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textHi,
-                            )),
+                            style: AppType.buttonBold()),
                         const SizedBox(height: 2),
                         Text('إلى: $phone',
                             style: TextStyle(

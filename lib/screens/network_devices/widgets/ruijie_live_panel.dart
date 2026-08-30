@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
+import '../../../theme/typography.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Ruijie / Reyee (SNMP v2c فقط).
 ///
@@ -189,10 +190,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
               Icon(LucideIcons.network, size: 14, color: AppColors.brand),
               const SizedBox(width: 6),
               Text('Interfaces (${s.ifaces.length})',
-                  style: TextStyle(
-                      fontSize: 12.5, height: 1.4,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textHi)),
+                  style: AppType.bodyBold()),
             ]),
             content: Column(children: [
               for (final iface in s.ifaces) _interfaceRow(iface),
@@ -224,10 +222,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           children: [
             Text(name,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 13, height: 1.35,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.rowLabelBold()),
             const SizedBox(height: 2),
             Text(s.sysDescr?.split('\n').first ?? 'Ruijie / Reyee',
                 overflow: TextOverflow.ellipsis,
@@ -334,8 +329,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
                     color: AppColors.textMid)),
             const Spacer(),
             Text(display,
-                style: TextStyle(
-                    fontSize: 13, height: 1.35, fontWeight: FontWeight.w700, color: color)),
+                style: AppType.rowLabelBold(color: color)),
           ]),
           const SizedBox(height: 6),
           ClipRRect(
@@ -382,10 +376,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(iface.name,
-                style: TextStyle(
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi),
+                style: AppType.pillBold(color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis),
             Text(iface.operUp ? 'up' : 'down',
                 style: TextStyle(
@@ -401,25 +392,16 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             borderRadius: BorderRadius.circular(R.pill),
           ),
           child: Text(speedText,
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMid)),
+              style: AppType.microBold(color: AppColors.textMid)),
         ),
         const SizedBox(width: 8),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('↓${_bpsShort(rxBps)}',
               textDirection: TextDirection.ltr,
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.success)),
+              style: AppType.microBold(color: AppColors.success)),
           Text('↑${_bpsShort(txBps)}',
               textDirection: TextDirection.ltr,
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.brandAccent)),
+              style: AppType.microBold(color: AppColors.brandAccent)),
         ]),
       ]),
     );
@@ -457,10 +439,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         Icon(LucideIcons.triangleAlert, color: AppColors.error, size: 32),
         const SizedBox(height: 8),
         Text('تعذّرت مراقبة الجهاز',
-            style: TextStyle(
-                fontSize: 13, height: 1.35,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi)),
+            style: AppType.rowLabelBold()),
         const SizedBox(height: 4),
         Text(_error ?? '',
             textAlign: TextAlign.center,

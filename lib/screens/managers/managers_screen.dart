@@ -390,11 +390,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             ),
             child: Text(
               '$_total مدير',
-              style: TextStyle(
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w700,
-                color: accent,
-              ),
+              style: AppType.bodyBold(color: accent),
             ),
           ),
         ],
@@ -490,11 +486,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               const SizedBox(width: 4),
               Text(
                 s.label,
-                style: TextStyle(
-                  color: active ? accent : AppColors.textMid,
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppType.pillBold(color: active ? accent : AppColors.textMid),
               ),
               if (active) ...[
                 const SizedBox(width: 3),
@@ -636,11 +628,7 @@ class _ManagerTile extends StatelessWidget {
                                 ),
                                 child: Text(
                                   'معطّل',
-                                  style: TextStyle(
-                                    fontSize: 9.5, height: 1.2,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.error,
-                                  ),
+                                  style: AppType.daysWordBold(color: AppColors.error),
                                 ),
                               ),
                             ],
@@ -774,11 +762,7 @@ class _ManagerTile extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10.5, height: 1.3,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.microBold(color: color),
           ),
         ],
       ),

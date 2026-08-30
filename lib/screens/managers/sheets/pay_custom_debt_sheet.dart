@@ -239,11 +239,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                         ),
                         child: Text(
                           'تسديد كامل المتبقي',
-                          style: TextStyle(
-                            color: accent,
-                            fontSize: 12.5, height: 1.4,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: AppType.bodyBold(color: accent),
                         ),
                       ),
                     ),

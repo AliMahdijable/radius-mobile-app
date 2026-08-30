@@ -9,6 +9,7 @@ import '../../../models/subscriber.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
 
 /// telegramLinkGeneratorSheet — يبحث المدير عن مشترك بالاسم، يولّد
 /// deep link، وينسخه/يرسله عبر واتساب. يستدعي:
@@ -232,12 +233,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                             '@${s.username}',
                             if (s.displayPhone.isNotEmpty) s.displayPhone,
                           ].join(' · '),
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11, height: 1.35,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textMid,
-                          ),
+                          style: AppType.muted(color: AppColors.textMid),
                         ),
                       ],
                     ),
@@ -300,12 +296,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                     )),
                 const SizedBox(height: 4),
                 Text(_selected!.fullName,
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 15, height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textHi,
-                    )),
+                    style: AppType.buttonBold()),
                 const SizedBox(height: 2),
                 Text('@${_selected!.username}',
                     style: TextStyle(
@@ -368,14 +359,9 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                                     : AppColors.textMid),
                             const SizedBox(width: 4),
                             Text(_showQr ? 'إخفاء QR' : 'عرض QR',
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 11, height: 1.25,
-                                  fontWeight: FontWeight.w700,
-                                  color: _showQr
+                                style: AppType.pillBold(color: _showQr
                                       ? const Color(0xFF229ED9)
-                                      : AppColors.textMid,
-                                )),
+                                      : AppColors.textMid)),
                           ],
                         ),
                       ),
@@ -386,12 +372,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 SelectableText(
                   _generatedLink!,
                   textDirection: TextDirection.ltr,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textHi,
-                  ),
+                  style: AppType.bodyStrong(color: AppColors.textHi),
                 ),
               ],
             ),

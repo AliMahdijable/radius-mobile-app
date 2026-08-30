@@ -12,6 +12,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
+import '../../../theme/typography.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -325,10 +326,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.network, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
             Text('Ethernet Interfaces (${ethers.length})',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
           ]),
           // RepaintBoundary → عزل الـinterface list عن باقي rebuilds
           content: RepaintBoundary(child: _interfacesContent(ethers)),
@@ -343,10 +341,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
             Text('Wireless (${s.wirelessInterfaces.length})',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
           ]),
           content: Column(children: [
             for (final w in s.wirelessInterfaces) _wirelessCard(w),
@@ -366,10 +361,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.users, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
             Text('العملاء المتّصلون (${_stickyClients.length})',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
           ]),
           content: RepaintBoundary(
             child: _stickyClients.isEmpty
@@ -403,11 +395,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               size: 22, color: AppColors.textLow.withValues(alpha: 0.6)),
           const SizedBox(height: 6),
           Text('لا يوجد عملاء متصلون حالياً',
-              style: TextStyle(
-                fontSize: 12.5, height: 1.4,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textMid,
-              )),
+              style: AppType.bodyStrong(color: AppColors.textMid)),
           const SizedBox(height: 2),
           Text('registration-table فارغ — قد يكون الـSSID بلا عملاء الآن',
               style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow),
@@ -450,10 +438,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('مراقبة حيّة (Mikrotik API)',
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
             const SizedBox(height: 2),
             Row(children: [
               if (_monitoring) ...[
@@ -563,10 +548,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.clock, size: 9, color: AppColors.brand),
             const SizedBox(width: 3),
             Text(_formatUptime(s.uptime),
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.brand)),
+                style: AppType.microBold(color: AppColors.brand)),
           ]),
         ),
         if (s.pppActiveCount > 0) ...[
@@ -578,10 +560,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Text('PPP: ${s.pppActiveCount}',
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.success)),
+                style: AppType.microBold(color: AppColors.success)),
           ),
         ],
       ]),
@@ -742,10 +721,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
             Text(label,
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMid)),
+                style: AppType.microBold(color: AppColors.textMid)),
           ]),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -793,10 +769,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(label,
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMid)),
+              style: AppType.microBold(color: AppColors.textMid)),
         ]),
         const SizedBox(height: 6),
         Row(
@@ -854,18 +827,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             ),
             const SizedBox(width: 4),
             Text(label.replaceAll(RegExp(r'[↓↑]'), '').trim(),
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMid)),
+                style: AppType.microBold(color: AppColors.textMid)),
           ]),
           // Row 2: اسم الـiface بحجم مقروء بلا تقطيع (لأنّه في سطره الخاصّ)
           if (hasData)
             Text(iface.name,
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.bodyBold()),
           // Row 3: value (big number)
           Text(hasData ? _formatBps(iface.bps) : '—',
               style: TextStyle(
@@ -917,10 +884,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           // الكراف يعرض trajectory أعلى interface (يتطابق مع كروت
           // "أعلى iface ↓ / ↑" اللي فوق)
           Text('أعلى interface (سير الترفك)',
-              style: TextStyle(
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.pillBold(color: AppColors.textHi)),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
           const SizedBox(width: 6),
@@ -985,11 +949,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                     final isTx = s.barIndex == 0; // الأوّل في lineBarsData
                     return LineTooltipItem(
                       '${isTx ? "↑" : "↓"} ${_formatBps(s.y.toInt())}',
-                      TextStyle(
-                        color: isTx ? txColor : rxColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10.5, height: 1.3,
-                      ),
+                      AppType.microBold(color: isTx ? txColor : rxColor),
                     );
                   }).toList(),
                 ),
@@ -1034,8 +994,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text('$arrow $value',
-          style: TextStyle(
-              fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w700, color: color)),
+          style: AppType.microBold(color: color)),
     );
   }
 
@@ -1070,10 +1029,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(LucideIcons.network, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('Ethernet Interfaces (${ethers.length})',
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.bodyBold()),
           const SizedBox(width: 8),
           _countBadge('↑ $up', AppColors.success),
           if (down > 0) ...[
@@ -1095,8 +1051,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text(text,
-          style: TextStyle(
-              fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w700, color: color)),
+          style: AppType.microBold(color: color)),
     );
   }
 
@@ -1141,11 +1096,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               ),
               child: Text(
                 _shortLinkSpeed(iface.linkSpeed!),
-                style: TextStyle(
-                  fontSize: 9.5, height: 1.2,
-                  fontWeight: FontWeight.w700,
-                  color: _linkSpeedColor(iface.linkSpeed!),
-                ),
+                style: AppType.daysWordBold(color: _linkSpeedColor(iface.linkSpeed!)),
               ),
             ),
           ],
@@ -1154,18 +1105,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Icon(LucideIcons.arrowDown, size: 9, color: AppColors.success),
             const SizedBox(width: 2),
             Text(_formatBps(rate.rxBps),
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.microBold(color: AppColors.textHi)),
             const SizedBox(width: 8),
             Icon(LucideIcons.arrowUp, size: 9, color: AppColors.brandAccent),
             const SizedBox(width: 2),
             Text(_formatBps(rate.txBps),
-                style: TextStyle(
-                    fontSize: 10.5, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.microBold(color: AppColors.textHi)),
           ] else if (iface.running) ...[
             Text('—',
                 style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
@@ -1210,10 +1155,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('Wireless (${wls.length})',
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 8),
         for (final w in wls) _wirelessCard(w),
@@ -1237,10 +1179,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               size: 14, color: color),
           const SizedBox(width: 6),
           Text(w.name,
-              style: TextStyle(
-                  fontSize: 11, height: 1.25,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.pillBold(color: AppColors.textHi)),
           const SizedBox(width: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1249,8 +1188,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               borderRadius: BorderRadius.circular(R.pill),
             ),
             child: Text(_modeLabel(w.mode),
-                style: TextStyle(
-                    fontSize: 9.5, height: 1.2, fontWeight: FontWeight.w700, color: color)),
+                style: AppType.daysWordBold(color: color)),
           ),
         ]),
         const SizedBox(height: 6),
@@ -1274,10 +1212,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Text(label, style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
         const Spacer(),
         Text(value,
-            style: TextStyle(
-                fontSize: 10.5, height: 1.3,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi)),
+            style: AppType.microBold(color: AppColors.textHi)),
       ]),
     );
   }
@@ -1304,10 +1239,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Icon(LucideIcons.users, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
           Text('العملاء المتّصلون (${cs.length})',
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textHi)),
+              style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 8),
         for (final c in cs.take(30)) _clientRow(c),
@@ -1355,11 +1287,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               final String primary =
                   hasName ? (c.hostname ?? c.comment!) : (c.ip ?? c.mac);
               return Text(primary,
-                  style: TextStyle(
-                    fontSize: 11, height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                  ),
+                  style: AppType.pillBold(color: AppColors.textHi),
                   overflow: TextOverflow.ellipsis);
             }(),
             const SizedBox(height: 2),
@@ -1386,10 +1314,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text(c.signalDisplay,
                 textDirection: TextDirection.ltr,
-                style: TextStyle(
-                    fontSize: 12.5, height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: signalColor)),
+                style: AppType.bodyBold(color: signalColor)),
             const SizedBox(width: 2),
             Text('dBm',
                 style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
@@ -1403,10 +1328,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 ),
                 child: Text('$ccq%',
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(
-                        fontSize: 12.5, height: 1.4,
-                        fontWeight: FontWeight.w700,
-                        color: ccqColor)),
+                    style: AppType.bodyBold(color: ccqColor)),
               ),
             ],
           ]),
@@ -1414,17 +1336,11 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(LucideIcons.arrowDown, size: 8, color: AppColors.success),
             Text(' ${c.rxRate}',
-                style: TextStyle(
-                    fontSize: 9.5, height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.daysWordBold(color: AppColors.textHi)),
             const SizedBox(width: 6),
             Icon(LucideIcons.arrowUp, size: 8, color: AppColors.brandAccent),
             Text(' ${c.txRate}',
-                style: TextStyle(
-                    fontSize: 9.5, height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+                style: AppType.daysWordBold(color: AppColors.textHi)),
             Text(' Mbps',
                 style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
           ]),

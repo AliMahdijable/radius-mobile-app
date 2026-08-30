@@ -309,11 +309,7 @@ class _MovementCard extends StatelessWidget {
                     ),
                     Text(
                       '${movement.signLabel}${formatIQD(movement.amount)}',
-                      style: TextStyle(
-                        color: style.color,
-                        fontSize: 13, height: 1.35,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: AppType.rowLabelBold(color: style.color),
                     ),
                   ],
                 ),
