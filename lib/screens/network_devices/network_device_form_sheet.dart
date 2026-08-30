@@ -6,6 +6,7 @@ import '../../api/network_devices_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'regions_screen.dart';
@@ -211,194 +212,122 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // keyboard-avoidance: نُضيف padding سفلي بحجم الكيبورد → الـsheet
-    // كامل يرتفع فوقه (نمط activate_sheet + add_debt_sheet).
-    // بدون هذا: الحقول السفليّة تختفي خلف الكيبورد.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (context, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: AppColors.surfaceSunken,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(R.card)),
-        ),
-        padding: EdgeInsets.only(bottom: bottomInset),
-        child: Column(children: [
-          _dragHandle(),
-          _header(),
-          Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(Sp.lg),
-                children: [
-                  _sectionTitle('المعلومات الأساسيّة'),
-                  const SizedBox(height: 8),
-                  _textField(_nameCtrl, 'اسم الجهاز *',
-                      hint: 'مثلاً: راوتر الطابق الثاني',
-                      icon: LucideIcons.tag,
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'مطلوب' : null),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                        child: _dropdown(
-                            'النوع *',
-                            _type,
-                            NetworkDeviceLabels.types.entries.toList(),
-                            (v) => setState(() => _type = v))),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child: _dropdown(
-                            'البراند *',
-                            _brand,
-                            NetworkDeviceLabels.brands.entries.toList(),
-                            _onBrandChanged)),
-                  ]),
-                  const SizedBox(height: 10),
-                  // 2026-08-18: dropdown مخصّص لأجهزة UBNT — يحدّد الموديل
-                  // بشكل حاسم فيحدّد أي Live Panel نعرض (AF60 vs classic).
-                  // الأنواع الأخرى تبقى بحقل نصّي حرّ كما كانت.
-                  if (_brand == 'ubnt')
-                    _ubntModelPicker()
-                  else
-                    _textField(_modelCtrl, 'الموديل',
-                        hint: 'مثلاً: RB4011، PBE-5AC، A5c',
-                        icon: LucideIcons.info),
-                  const SizedBox(height: 10),
-                  _textField(_locationCtrl, 'الموقع (اختياري)',
-                      hint: 'مثلاً: البرج الشمالي - قطاع 3',
-                      icon: LucideIcons.mapPin),
-                  const SizedBox(height: 10),
-                  _regionDropdown(),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: widget.existing == null ? LucideIcons.plus : LucideIcons.pencil,
+        title: widget.existing == null ? 'إضافة جهاز جديد' : 'تعديل الجهاز',
+        subtitle: '',
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: widget.existing == null ? 'إضافة الجهاز' : 'حفظ التعديلات',
+        icon: LucideIcons.check,
+        busy: _submitting,
+        onPressed: _submit,
+      ),
+      maxHeightFactor: 0.95,
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+          children: [
+            _sectionTitle('المعلومات الأساسيّة'),
+            const SizedBox(height: 8),
+            _textField(_nameCtrl, 'اسم الجهاز *',
+                hint: 'مثلاً: راوتر الطابق الثاني',
+                icon: LucideIcons.tag,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'مطلوب' : null),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                  child: _dropdown(
+                      'النوع *',
+                      _type,
+                      NetworkDeviceLabels.types.entries.toList(),
+                      (v) => setState(() => _type = v))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: _dropdown(
+                      'البراند *',
+                      _brand,
+                      NetworkDeviceLabels.brands.entries.toList(),
+                      _onBrandChanged)),
+            ]),
+            const SizedBox(height: 10),
+            // 2026-08-18: dropdown مخصّص لأجهزة UBNT — يحدّد الموديل
+            // بشكل حاسم فيحدّد أي Live Panel نعرض (AF60 vs classic).
+            // الأنواع الأخرى تبقى بحقل نصّي حرّ كما كانت.
+            if (_brand == 'ubnt')
+              _ubntModelPicker()
+            else
+              _textField(_modelCtrl, 'الموديل',
+                  hint: 'مثلاً: RB4011، PBE-5AC، A5c', icon: LucideIcons.info),
+            const SizedBox(height: 10),
+            _textField(_locationCtrl, 'الموقع (اختياري)',
+                hint: 'مثلاً: البرج الشمالي - قطاع 3',
+                icon: LucideIcons.mapPin),
+            const SizedBox(height: 10),
+            _regionDropdown(),
 
-                  const SizedBox(height: Sp.xl),
-                  _sectionTitle('الشبكة'),
-                  const SizedBox(height: 8),
-                  _textField(_ipCtrl, 'عنوان IP *',
-                      hint: '192.168.1.1',
-                      icon: LucideIcons.globe,
-                      // 2026-08-25: numberWithOptions(decimal:true) يُظهر نقطة
-                      // على iOS numeric keypad — TextInputType.number لا يُظهرها
-                      // (يظهر فقط 0-9 كأنّه رقم تلفون).
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: false), validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'مطلوب';
-                    if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$')
-                        .hasMatch(v.trim())) {
-                      return 'IP غير صالح';
-                    }
-                    return null;
-                  }),
-                  const SizedBox(height: 10),
-                  _textField(_macCtrl, 'MAC (اختياري)',
-                      hint: 'AA:BB:CC:DD:EE:FF', icon: LucideIcons.fingerprint),
+            const SizedBox(height: Sp.xl),
+            _sectionTitle('الشبكة'),
+            const SizedBox(height: 8),
+            _textField(_ipCtrl, 'عنوان IP *',
+                hint: '192.168.1.1',
+                icon: LucideIcons.globe,
+                // 2026-08-25: numberWithOptions(decimal:true) يُظهر نقطة
+                // على iOS numeric keypad — TextInputType.number لا يُظهرها
+                // (يظهر فقط 0-9 كأنّه رقم تلفون).
+                keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true, signed: false), validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'مطلوب';
+              if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(v.trim())) {
+                return 'IP غير صالح';
+              }
+              return null;
+            }),
+            const SizedBox(height: 10),
+            _textField(_macCtrl, 'MAC (اختياري)',
+                hint: 'AA:BB:CC:DD:EE:FF', icon: LucideIcons.fingerprint),
 
-                  const SizedBox(height: Sp.xl),
-                  _sectionTitle('بروتوكول الإدارة (اختياري — للمرحلة القادمة)'),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandSoftBg,
-                      borderRadius: BorderRadius.circular(R.sm),
-                      border: Border.all(color: AppColors.brandSoftBorder),
-                    ),
-                    child: Row(children: [
-                      Icon(LucideIcons.info, size: 14, color: AppColors.info),
-                      const SizedBox(width: 6),
-                      Expanded(
-                          child: Text(
-                        'الفحص (ICMP ping) يعمل تلقائيّاً بدون credentials. هذا القسم فقط لإدارة الجهاز في المرحلة القادمة (interfaces / traffic / reboot).',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMid,
-                            height: 1.4),
-                      )),
-                    ]),
-                  ),
-                  const SizedBox(height: 10),
-                  _protocolSelector(),
-                  const SizedBox(height: 12),
-                  if (_protocol != null) _credentialsSection(),
-
-                  const SizedBox(height: Sp.xl),
-                  _sectionTitle('ملاحظات (اختياري)'),
-                  const SizedBox(height: 8),
-                  _textField(_notesCtrl, 'ملاحظات', maxLines: 3),
-
-                  const SizedBox(height: Sp.xl),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: _submitting ? null : _submit,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: AppColors.onBrand))
-                          : const Icon(LucideIcons.check, size: 18),
-                      label: Text(widget.existing == null
-                          ? 'إضافة الجهاز'
-                          : 'حفظ التعديلات'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brand,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(R.sm)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: Sp.lg),
-                ],
+            const SizedBox(height: Sp.xl),
+            _sectionTitle('بروتوكول الإدارة (اختياري — للمرحلة القادمة)'),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.brandSoftBg,
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(color: AppColors.brandSoftBorder),
               ),
+              child: Row(children: [
+                Icon(LucideIcons.info, size: 14, color: AppColors.info),
+                const SizedBox(width: 6),
+                Expanded(
+                    child: Text(
+                  'الفحص (ICMP ping) يعمل تلقائيّاً بدون credentials. هذا القسم فقط لإدارة الجهاز في المرحلة القادمة (interfaces / traffic / reboot).',
+                  style: TextStyle(
+                      fontSize: 11, color: AppColors.textMid, height: 1.4),
+                )),
+              ]),
             ),
-          ),
-        ]),
+            const SizedBox(height: 10),
+            _protocolSelector(),
+            const SizedBox(height: 12),
+            if (_protocol != null) _credentialsSection(),
+
+            const SizedBox(height: Sp.xl),
+            _sectionTitle('ملاحظات (اختياري)'),
+            const SizedBox(height: 8),
+            _textField(_notesCtrl, 'ملاحظات', maxLines: 3),
+          ],
+        ),
       ),
     );
   }
-
-  Widget _dragHandle() => Container(
-        margin: const EdgeInsets.only(top: 8),
-        width: 40,
-        height: 4,
-        decoration: BoxDecoration(
-          color: AppColors.textLow.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(R.pill),
-        ),
-      );
-
-  Widget _header() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
-        child: Row(children: [
-          Icon(widget.existing == null ? LucideIcons.plus : LucideIcons.pencil,
-              color: AppColors.brand, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            widget.existing == null ? 'إضافة جهاز جديد' : 'تعديل الجهاز',
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textHi),
-          ),
-          const Spacer(),
-          if (_loadingCreds)
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.brand),
-            ),
-        ]),
-      );
 
   Widget _sectionTitle(String text) => Row(children: [
         Container(
