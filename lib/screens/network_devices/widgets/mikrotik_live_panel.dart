@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
+import '../detected_model.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -219,6 +220,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         _error = null;
         _lastFetch = now;
       });
+      // الموديل من الجهاز نفسه — `board-name` أدقّ ممّا يُكتب يدويّاً،
+      // وعليه تُطابَق صورة الجهاز في القائمة.
+      DetectedModel.save(widget.device, stats.boardName);
     } catch (e) {
       if (!mounted) return;
       setState(() {

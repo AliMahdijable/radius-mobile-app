@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
+import '../detected_model.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -179,6 +180,9 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         _error = null;
         _lastFetch = now;
       });
+      // airOS يُبلّغ الطراز في `devmodel` — أدقّ من «AirMax» التي
+      // يكتبها المدير (خطّ منتجات لا موديل).
+      DetectedModel.save(widget.device, stats.host.devmodel);
       // 2026-08-18: كشف AF60 من الـstats — مرّة واحدة فقط عبر lifecycle.
       // كنا نطلق الـcallback كل fetch (بين إطلاقها وrebuild+dispose، أي
       // fetch جارٍ سيُطلقها ثانية). local flag يمنع الإطلاق المتكرّر.

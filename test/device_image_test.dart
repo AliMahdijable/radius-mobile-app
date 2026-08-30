@@ -39,6 +39,25 @@ void main() {
     expect(DeviceImage.assetFor('جهاز غير معروف'), isNull);
   });
 
+  test('جزء فريد من الاسم يُطابق', () {
+    // «912» موجود في ملفّ واحد فقط — وهو ما يكتبه المدير فعلاً في
+    // قاعدة البيانات لهذا الجهاز.
+    expect(DeviceImage.assetFor('912'), 'RB912UAG-5HPnD-OUT.webp');
+  });
+
+  test('جزء يُطابق أكثر من طراز لا يُخمَّن', () {
+    // ⚠️ عرض أحدها اعتباطاً أسوأ من الشارة: يبدو صحيحاً فيُبنى عليه
+    // قرار.
+    //
+    // «RB5009» تُطابق طرازين (UG+S+IN و UPr+S+IN) — والثاني يدعم PoE
+    // خارجاً والأوّل لا. «CCR1036» تُطابق أربعة.
+    expect(DeviceImage.assetFor('RB5009'), isNull);
+    expect(DeviceImage.assetFor('CCR1036'), isNull);
+    expect(DeviceImage.assetFor('CRS326'), isNull);
+    // وبالطراز الكامل تُطابق بلا لبس
+    expect(DeviceImage.assetFor('RB5009UG+S+IN'), 'RB5009UG+S+IN.webp');
+  });
+
   test('مفتاح قصير جدّاً لا يُطابق بالاحتواء', () {
     // حدّ الستّة محارف يمنع «m5» أو «lhg» من مطابقة نصف الفهرس.
     expect(DeviceImage.assetFor('m5'), isNull);

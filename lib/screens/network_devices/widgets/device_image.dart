@@ -46,6 +46,21 @@ class DeviceImage extends StatelessWidget {
     for (final e in _byKey.entries) {
       if (e.key.length >= 6 && k.contains(e.key)) return e.value;
     }
+    // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT،
+    // و«rb5009» لـRB5009UG+S+IN.
+    //
+    // ⚠️ **بشرط ألّا يُطابق أكثر من ملفّ**: لو تعدّدت المطابقات فالمكتوب
+    // لا يميّز جهازاً بعينه، وعرض أحدها اعتباطاً أسوأ من الشارة — يبدو
+    // صحيحاً فيُبنى عليه قرار. مثال: «CCR1036» تُطابق أربعة طُرُز.
+    if (k.length >= 3) {
+      String? only;
+      for (final e in _byKey.entries) {
+        if (!e.key.contains(k)) continue;
+        if (only != null) return null; // تعدّد ⇒ لا نُخمّن
+        only = e.value;
+      }
+      if (only != null) return only;
+    }
     return null;
   }
 
