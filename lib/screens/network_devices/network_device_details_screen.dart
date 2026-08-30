@@ -22,6 +22,7 @@ import 'widgets/ruijie_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 import '../../api/network_devices_api.dart';
 import '../../theme/typography.dart';
+import 'sheets/device_image_picker.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -316,6 +317,44 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         _ => LucideIcons.plug,
       };
 
+  /// اختيار صورة الجهاز يدويّاً.
+  ///
+  /// يكتب اسم اللوحة في `model` — فلا حقل جديد ولا منطق عرض إضافي،
+  /// والمطابقة العاديّة تتكفّل بالباقي في القائمة والتفاصيل معاً.
+  Future<void> _pickImage() async {
+    final board = await showDeviceImagePicker(
+      context,
+      brand: _d.brand,
+      currentModel: _d.model,
+    );
+    if (board == null || !mounted) return;
+    try {
+      final updated = await NetworkDevicesApi.update(_d.id, {
+        'name': _d.name,
+        'type': _d.type,
+        'brand': _d.brand,
+        'ip': _d.ip,
+        'port': _d.port,
+        'api_port': _d.apiPort,
+        'protocol': _d.protocol,
+        'mac': _d.mac,
+        'location': _d.location,
+        'notes': _d.notes,
+        'region_id': _d.regionId,
+        'model': board,
+      });
+      if (!mounted) return;
+      setState(() => _d = updated);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('تعذّر الحفظ: $e'),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -439,7 +478,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         Row(children: [
           // Big brand badge with type icon corner + pulse ring
           Stack(clipBehavior: Clip.none, children: [
-            DeviceImage(brand: _d.brand, model: _d.model, size: 64),
+            // نقرة على الصورة تفتح المنتقي: أسماء الطُرُز ثنائيّة وغير
+            // منتظمة، وانتظار إصدار جديد لكلّ طراز لا يُطابق ليس حلّاً.
+            GestureDetector(
+              onTap: Perms.has('devices.manage') ? _pickImage : null,
+              child: DeviceImage(brand: _d.brand, model: _d.model, size: 64),
+            ),
             // Pulse ring when online
             if (online)
               Positioned.fill(

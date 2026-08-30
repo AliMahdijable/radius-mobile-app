@@ -47,6 +47,10 @@ class DeviceImage extends StatelessWidget {
     'sxtsq5nd': 'rbsxtsq5nd',
     'sxtsq2nd': 'rbsxtsq2nd',
     'sxt5achpsa': 'rbsxtg5hpacdsa',
+    // أكّده المستخدم: SXT SA5 = RBSXTG-5HPacD-SA
+    'sxtsa5': 'rbsxtg5hpacdsa',
+    'sxtsa5ac': 'rbsxtg5hpacdsa',
+    'sxtg5hpacdsa': 'rbsxtg5hpacdsa',
     'lhg5': 'rblhg5nd',
     'lhgxl5': 'rblhg5hpndxl',
     'ldf5': 'rbldf5nd',
@@ -148,6 +152,19 @@ class DeviceImage extends StatelessWidget {
     if (looksMikrotik && b != 'mikrotik') return null;
     if (!looksMikrotik && b == 'mikrotik') return null;
     return file;
+  }
+
+  /// كلّ الصور المتاحة، مرتّبة أبجديّاً — للمنتقي اليدوي.
+  static List<String> get allAssets {
+    final v = _byKey.values.toList()..sort();
+    return v;
+  }
+
+  /// اسم اللوحة (بلا امتداد) الذي يُطابق ملفّاً — يُكتب في `model` عند
+  /// الاختيار اليدوي، فيصير الجهاز مُطابَقاً للأبد بالمسار العادي.
+  static String boardNameOf(String file) {
+    final i = file.lastIndexOf('.');
+    return i > 0 ? file.substring(0, i) : file;
   }
 
   /// مفتاح مُطبَّع ← اسم الملفّ. مرتّب تنازليّاً بطول المفتاح.

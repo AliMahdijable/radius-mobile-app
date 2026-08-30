@@ -137,4 +137,22 @@ void main() {
       expect(DeviceImage.assetFor('Chateau LTE12'), isNull);
     });
   });
+
+  group('المنتقي اليدوي', () {
+    test('اسم اللوحة من الملفّ يُطابق الملفّ نفسه — الدورة مغلقة', () {
+      // المنتقي يكتب boardNameOf(file) في model، فالمطابقة التالية
+      // يجب أن تُعيد الملفّ ذاته. لو انكسرت هذه، اختيار المستخدم لا
+      // يُنتج صورة — وهو أسوأ من عدم وجود منتقٍ.
+      for (final f in DeviceImage.allAssets) {
+        final board = DeviceImage.boardNameOf(f);
+        expect(DeviceImage.assetFor(board), f,
+            reason: 'اسم اللوحة "$board" لا يُعيد "$f"');
+      }
+    });
+
+    test('كل صورة معروضة مرّة واحدة', () {
+      final all = DeviceImage.allAssets;
+      expect(all.toSet().length, all.length);
+    });
+  });
 }
