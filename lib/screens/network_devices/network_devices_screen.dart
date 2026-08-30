@@ -20,6 +20,7 @@ import 'regions_screen.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/device_image.dart';
 import '../../theme/typography.dart';
+import 'model_detector.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -64,6 +65,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   int _probeRoundCount = 0;
 
   Timer? _probeTimer;
+
+  /// كشف الطُرُز جارٍ — يمنع تشغيلين متوازيين.
+  bool _detecting = false;
   // Probe أسرع (20s بدل 60s) — المستخدم يشتكي إن التحديث بطيء.
   // 20s = توازن بين responsiveness والـbattery/network.
   static const _probeInterval = Duration(seconds: 20);
@@ -153,6 +157,40 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   ///
   /// نحافظ على `lastStatus/lastResponseMs` من الـstate القديم لتفادي
   /// وميض "unknown" أثناء انتظار الـprobe الجديد (~1-2s).
+  /// كشف طُرُز الأجهزة التي لا يُطابق طرازها صورةً.
+  ///
+  /// يُشغَّل بضغطة مطوّلة على زرّ التحديث. مرّةً واحدة تكفي: الطراز
+  /// يُكتب في قاعدة البيانات فتظهر الصور بعدها بلا إعادة كشف.
+  Future<void> _detectModels() async {
+    if (_detecting) return;
+    setState(() => _detecting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final updated = await ModelDetector.run(
+        _all,
+        isCanceled: () => !mounted,
+      );
+      if (!mounted) return;
+      if (updated.isEmpty) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('لا طُرُز جديدة — كلّ جهاز مكشوف أو غير متّصل'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      } else {
+        // نُحدّث القائمة من الخادم: الكشف كتب فيها، والصور تُبنى من
+        // الطراز المخزَّن.
+        await _refresh();
+        if (!mounted) return;
+        messenger.showSnackBar(SnackBar(
+          content: Text('كُشف طراز ${updated.length} جهاز'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _detecting = false);
+    }
+  }
+
   Future<void> _refresh() async {
     try {
       // devices + regions معاً — يضمن ظهور مناطق مُنشأة من شاشة أخرى.
@@ -540,7 +578,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               : IconButton(
                   icon: const Icon(LucideIcons.refreshCw, size: 20),
                   onPressed: _refresh,
-                  tooltip: 'تحديث فوري',
+                  // ضغطة مطوّلة = كشف الطُرُز. لا يُشغَّل تلقائيّاً:
+                  // يفتح جلسة مصادَقة على كلّ جهاز، وذلك قرار المستخدم
+                  // لا سلوك خفيّ يتّصل بأجهزته دون علمه.
+                  onLongPress: _detecting ? null : _detectModels,
+                  tooltip: 'تحديث فوري · ضغطة مطوّلة: كشف الطُرُز',
                 ),
           // زر "+" إضافة جهاز — manage tier فقط
           if (Perms.has('devices.manage'))

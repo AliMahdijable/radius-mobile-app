@@ -63,4 +63,45 @@ void main() {
     expect(DeviceImage.assetFor('m5'), isNull);
     expect(DeviceImage.assetFor('x'), isNull);
   });
+
+  group('بوّابة العلامة التجاريّة', () {
+    // ⚠️ فحص قاعدة الإنتاج (1319 جهازاً) أظهر أنّ المطابقة بلا هذه
+    // البوّابة تعرض **سويتشات مراكز بيانات على هوائيّات قطاعيّة**:
+    // «سكتر 208» المسجَّل ubnt مفتاحه بعد حذف العربيّة «208»، فيُطابق
+    // CRS320-8P-8B. الصورة تبدو صحيحة فيُبنى عليها قرار في الميدان.
+    //
+    // وعمود brand مملوء 100% بينما model فارغ في 55% — فهو الأوثق.
+
+    test('طراز ميكروتك يُرفض على جهاز ubnt', () {
+      expect(DeviceImage.assetFor('CRS320-8P-8B-4S+RM'), isNotNull);
+      expect(DeviceImage.assetFor('CRS320-8P-8B-4S+RM', brand: 'ubnt'), isNull);
+      expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: 'mimosa'), isNull);
+      expect(DeviceImage.assetFor('RB5009UG+S+IN', brand: 'ubnt'), isNull);
+    });
+
+    test('وطراز ubnt يُرفض على جهاز ميكروتك', () {
+      expect(DeviceImage.assetFor('rocket m5', brand: 'mikrotik'), isNull);
+      expect(DeviceImage.assetFor('powerbeam M5', brand: 'mikrotik'), isNull);
+    });
+
+    test('العلامة المطابقة تمرّ', () {
+      expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: 'mikrotik'),
+          'CCR2116-12G-4S+.webp');
+      expect(DeviceImage.assetFor('rocket m5', brand: 'ubnt'), 'rocket m5.png');
+    });
+
+    test('علامة غائبة لا تمنع — البوّابة تُحكّم ما تعرفه فقط', () {
+      expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: null),
+          'CCR2116-12G-4S+.webp');
+      expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: ''),
+          'CCR2116-12G-4S+.webp');
+    });
+
+    test('الرقم العربي المجرَّد لا يمرّ على جهاز ubnt', () {
+      // «سكتر 208» ⇒ المفتاح «208» ⇒ CRS320 — الحالة الحقيقيّة من
+      // قاعدة الإنتاج.
+      expect(DeviceImage.assetFor('208'), isNotNull);
+      expect(DeviceImage.assetFor('208', brand: 'ubnt'), isNull);
+    });
+  });
 }

@@ -1599,6 +1599,19 @@ class UbntTrafficSession {
     }
   }
 
+  /// يُنفّذ أمراً واحداً على الجلسة القائمة ويعيد خرجه نصّاً.
+  Future<String?> runCommand(String cmd) async {
+    if (_closed) return null;
+    try {
+      return utf8.decode(
+        await _client.run(cmd).timeout(const Duration(seconds: 5)),
+        allowMalformed: true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// مجموع البايتات على واجهات البيانات لحظة القراءة — تراكميّ لا معدّل.
   Future<({int down, int up})?> sample() async {
     if (_closed) return null;
@@ -1679,4 +1692,27 @@ class UbntTrafficSession {
       n.startsWith('ath') ||
       n.startsWith('wlan') ||
       n == 'br0';
+}
+
+extension UbntBoardName on UbntTrafficSession {
+  /// طراز اللوحة من `/etc/board.info` — أخفّ من `mca-dump` بكثير.
+  ///
+  /// الملفّ نصّ `key=value` موجود على كلّ إصدارات airOS، وفيه
+  /// `board.name` (الاسم التجاري) و`board.shortname`. نُفضّل الأوّل
+  /// لأنّه ما يُطابق أسماء ملفّات الصور.
+  Future<String?> readBoardName() async {
+    final out = await runCommand('cat /etc/board.info 2>/dev/null');
+    if (out == null || out.trim().isEmpty) return null;
+    String? shortName;
+    for (final line in out.split('\n')) {
+      final i = line.indexOf('=');
+      if (i <= 0) continue;
+      final k = line.substring(0, i).trim().toLowerCase();
+      final v = line.substring(i + 1).trim();
+      if (v.isEmpty) continue;
+      if (k == 'board.name') return v;
+      if (k == 'board.shortname') shortName = v;
+    }
+    return shortName;
+  }
 }

@@ -34,17 +34,20 @@ class DeviceImage extends StatelessWidget {
   /// اسم ملفّ الصورة الموافق للموديل، أو null.
   ///
   /// مكشوفة للاختبار: المطابقة بالسابقة سهلة الانزلاق إلى جهاز مجاور.
-  static String? assetFor(String? model) {
+  /// بادئات أسماء ملفّات ميكروتك — تُستعمل لبوّابة العلامة.
+  static const _mikrotikPrefixes = ['ccr', 'crs', 'css', 'rb', 'l0', 'l1', 'l2'];
+
+  static String? assetFor(String? model, {String? brand}) {
     if (model == null) return null;
     final k = _key(model);
     if (k.isEmpty) return null;
     // مطابقة تامّة أوّلاً — أدقّ ما يمكن.
     final exact = _byKey[k];
-    if (exact != null) return exact;
+    if (exact != null) return _gate(exact, brand);
     // ثمّ احتواء: المدير قد يكتب «Mikrotik CCR2116-12G-4S+ router».
     // المفاتيح مرتّبة تنازليّاً بالطول فيفوز الأطول = الأدقّ.
     for (final e in _byKey.entries) {
-      if (e.key.length >= 6 && k.contains(e.key)) return e.value;
+      if (e.key.length >= 6 && k.contains(e.key)) return _gate(e.value, brand);
     }
     // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT،
     // و«rb5009» لـRB5009UG+S+IN.
@@ -59,7 +62,7 @@ class DeviceImage extends StatelessWidget {
         if (only != null) return null; // تعدّد ⇒ لا نُخمّن
         only = e.value;
       }
-      if (only != null) return only;
+      if (only != null) return _gate(only, brand);
     }
     return null;
   }
@@ -67,7 +70,7 @@ class DeviceImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final file = assetFor(model);
+    final file = assetFor(model, brand: brand);
     if (file == null) return BrandBadge(brand: brand, size: size);
     return Container(
       width: size,
@@ -88,6 +91,23 @@ class DeviceImage extends StatelessWidget {
         errorBuilder: (_, __, ___) => BrandBadge(brand: brand, size: size),
       ),
     );
+  }
+
+  /// بوّابة العلامة: تمنع صورة طراز من علامة أخرى.
+  ///
+  /// ⚠️ ليست تجميلاً. فحص قاعدة الإنتاج أظهر أنّ المطابقة بلا هذه
+  /// البوّابة تعرض **سويتشات مراكز بيانات على هوائيّات قطاعيّة**:
+  /// «سكتر 208» المسجَّل ubnt يُطابق CRS320-8P-8B لأنّ مفتاحه بعد حذف
+  /// العربيّة يصير «208». عمود `brand` مملوء 100% في الأسطول بينما
+  /// `model` فارغ في 55% — فهو المصدر الأوثق، ونُحكّمه.
+  static String? _gate(String file, String? brand) {
+    if (brand == null || brand.isEmpty) return file;
+    final b = brand.toLowerCase();
+    final f = file.toLowerCase();
+    final looksMikrotik = _mikrotikPrefixes.any(f.startsWith);
+    if (looksMikrotik && b != 'mikrotik') return null;
+    if (!looksMikrotik && b == 'mikrotik') return null;
+    return file;
   }
 
   /// مفتاح مُطبَّع ← اسم الملفّ. مرتّب تنازليّاً بطول المفتاح.
