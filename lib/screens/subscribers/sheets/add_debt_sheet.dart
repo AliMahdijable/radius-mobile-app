@@ -259,7 +259,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
               icon: LucideIcons.arrowLeft,
               label: 'الدين بعد الإضافة',
               value: '${formatIQD(newBalance.abs().round())} د.ع',
-              tone: SheetTone.warning,
+              tone: AppTone.warning,
             ),
           ],
         ],

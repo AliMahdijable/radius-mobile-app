@@ -336,7 +336,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                         ? 'الرصيد للمشترك بعد التسديد'
                         : 'الدين المتبقي',
                     value: '${formatIQD(livePreview.abs().round())} د.ع',
-                    tone: SheetTone.brand,
+                    tone: AppTone.brand,
                   ),
                 ],
               ],

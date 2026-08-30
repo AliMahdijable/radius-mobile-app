@@ -293,7 +293,7 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
                     icon: LucideIcons.triangleAlert,
                     label: 'الخصم يساوي السعر أو يتجاوزه',
                     value: 'السعر النهائي 0',
-                    tone: SheetTone.warning,
+                    tone: AppTone.warning,
                   ),
                 ],
               ],

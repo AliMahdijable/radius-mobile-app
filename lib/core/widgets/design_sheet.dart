@@ -663,32 +663,19 @@ class SheetResultBanner extends StatelessWidget {
   final String label;
   final String value;
 
-  /// `SheetTone.brand` أخضر · `warning` كهرماني · `danger` أحمر.
-  final SheetTone tone;
+  /// أيّ نغمة من `AppTone` — الرباعيّة الدلاليّة تتكفّل بالباقي.
+  final AppTone tone;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final (bg, border, fg, strong) = switch (tone) {
-      SheetTone.warning => (
-          AppColors.warningSoftBg,
-          AppColors.warningSoftBorder,
-          AppColors.warningOnSoft,
-          AppColors.warningFill,
-        ),
-      SheetTone.danger => (
-          AppColors.dangerSoftBg,
-          AppColors.dangerSoftBorder,
-          AppColors.dangerOnSoft,
-          AppColors.error,
-        ),
-      SheetTone.brand => (
-          AppColors.brandSoftBg,
-          AppColors.brandSoftBorder,
-          AppColors.brandOnSoft,
-          AppColors.brandAccent,
-        ),
-    };
+    // كان هنا مفتاح يدويّ على `SheetTone` الثلاثيّ يعيد بناء ما
+    // تعرفه `AppTone` أصلاً للتسع. حُذف الـenum المكرّر: سلّما نغمات
+    // في طقم واحد يفرضان على القارئ تذكّر أيّهما لأيّ عنصر.
+    final bg = tone.softBg;
+    final border = tone.softBorder;
+    final fg = tone.onSoft;
+    final strong = tone.fill;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
       decoration: BoxDecoration(
@@ -719,7 +706,6 @@ class SheetResultBanner extends StatelessWidget {
   }
 }
 
-enum SheetTone { brand, warning, danger }
 
 /// بطاقة النتيجة الداكنة — «السعر بعد الخصم» في شيت الخصم و«الملخّص»
 /// في شيت التجديد. سطحها براند ثابت في الوضعين (طبقات `onBrand*`)،
@@ -1049,25 +1035,17 @@ Future<bool?> showConfirmSheet(
   required String confirmLabel,
   String? cancelLabel,
   IconData icon = Icons.help_outline_rounded,
-  SheetTone tone = SheetTone.brand,
+  AppTone tone = AppTone.brand,
   String subtitle = '',
 }) {
   final (tint, tintBg, fill) = switch (tone) {
-    SheetTone.danger => (
-        AppColors.error,
-        AppColors.dangerSoftBg,
-        AppColors.errorFill,
-      ),
-    SheetTone.warning => (
-        AppColors.warningFill,
-        AppColors.warningSoftBg,
-        AppColors.warningFill,
-      ),
-    SheetTone.brand => (
-        AppColors.brand,
-        AppColors.brandSoftBg,
-        AppColors.brand,
-      ),
+    // ⚠️ البراند هنا `brand` الداكن لا `tone.fill` (=`brandAccent`):
+    // زرّ التأكيد ممتلئ وعريض، والأكسنت عليه يبدو باهتاً بجانب
+    // الأزرار الأخرى في الشاشة نفسها.
+    AppTone.brand => (AppColors.brand, AppColors.brandSoftBg, AppColors.brand),
+    // والخطر يستعمل `errorFill` للتعبئة — أغمق من `error` النصّي.
+    AppTone.danger => (AppColors.error, AppColors.dangerSoftBg, AppColors.errorFill),
+    _ => (tone.fill, tone.softBg, tone.fill),
   };
   return showModalBottomSheet<bool>(
     context: context,
@@ -1085,7 +1063,7 @@ Future<bool?> showConfirmSheet(
       ),
       footer: SheetFooterBar(
         label: confirmLabel,
-        icon: tone == SheetTone.danger
+        icon: tone == AppTone.danger
             ? Icons.delete_outline_rounded
             : Icons.check_rounded,
         color: fill,

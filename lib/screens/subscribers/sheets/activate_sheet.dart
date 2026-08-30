@@ -452,7 +452,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             ? 'sheets.debt_after_activation'.tr()
             : 'sheets.credit_after_activation'.tr(),
         value: '${formatIQD(after.abs().round())} $cur',
-        tone: after < 0 ? SheetTone.danger : SheetTone.brand,
+        tone: after < 0 ? AppTone.danger : AppTone.brand,
       ),
     ];
   }
