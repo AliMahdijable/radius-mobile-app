@@ -444,4 +444,42 @@ void main() {
     AppColors.setDarkMode(false);
   });
 
+
+  test('أسطح الوضع الليلي تفصل بعضها فعلاً — لا كتلة واحدة', () {
+    // مراجعة 2026-08-30: الوضع الليلي كان «غير واضح» رغم أنّ كلّ
+    // تباينات النصّ فيه تعبر AA بمسافة. السبب لم يكن النصّ: الأسطح
+    // الأربعة كانت محشورة في نطاق إضاءة واحد (0.0067–0.0210)، فنسبة
+    // الكارت إلى الخلفيّة 1.079 — أي أنّ الكارت لا يُرى أصلاً، ومعه
+    // الفاصل الداخلي عند 1.221 تحت عتبة الرؤية. الشاشة تُقرأ كتلةً
+    // داكنة واحدة، وهو عطل لا يمسكه أيّ فحص نصّ.
+    //
+    // الحدود الدنيا هنا تجريبيّة لا معياريّة: WCAG لا يقول شيئاً عن
+    // سطح مقابل سطح. قيست على شاشة هاتف في إضاءة داخليّة.
+    AppColors.setDarkMode(true);
+    addTearDown(() => AppColors.setDarkMode(false));
+
+    final steps = <String, (Color, Color, double)>{
+      'الكارت على الخلفيّة': (AppColors.bg, AppColors.surface, 1.15),
+      'الشيت على الكارت': (AppColors.surface, AppColors.surfaceSheet, 1.12),
+      'الغاطس على الشيت': (AppColors.surfaceSheet, AppColors.surfaceSunken, 1.10),
+    };
+    steps.forEach((name, v) {
+      final (a, b, min) = v;
+      final ratio = contrast(a, b);
+      expect(ratio, greaterThanOrEqualTo(min),
+          reason: '$name: ${ratio.toStringAsFixed(3)} — يذوب أحدهما في الآخر');
+    });
+
+    // والحدّ يفصل حتى حين يتقارب السطحان.
+    for (final e in {
+      'الفاصل الداخلي': AppColors.divider,
+      'حدّ العناصر الناعم': AppColors.borderSoft,
+      'حدّ الكارت': AppColors.border,
+    }.entries) {
+      final ratio = contrast(e.value, AppColors.surface);
+      expect(ratio, greaterThanOrEqualTo(1.25),
+          reason: '${e.key} على الكارت: ${ratio.toStringAsFixed(3)} — لا يُرى');
+    }
+  });
+
 }

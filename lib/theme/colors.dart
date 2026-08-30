@@ -49,7 +49,7 @@ class AppColors {
   // fill الداكن يذوب في الخلفيّة الداكنة (1.41:1) فيُرفع في dark إلى
   // #1E7A5B — أبيض عليه 5.26:1 وفصله عن السطح 3.26:1.
   static const Color _lightBrand = Color(0xFF103D2E);
-  static const Color _darkBrand = Color(0xFF1E7A5B);
+  static const Color _darkBrand = Color(0xFF23855F);
   static Color get brand => _isDark ? _darkBrand : _lightBrand;
 
   /// سطح البطاقة الداكنة الكبيرة — بطاقة الهويّة وبطاقة الباقة وبطاقة
@@ -94,7 +94,7 @@ class AppColors {
   /// ⚠️ عُمّقت 2026-08-30: #F2F7F4 كانت بتباين 1.08 عن الأبيض — أي
   /// شبه بيضاء، فبدا مربّع الحالة «غير ملوّن» بينما نظائره ملوّنة.
   static Color get successSoftBg =>
-      _isDark ? const Color(0xFF152B25) : const Color(0xFFE6F4EC);
+      _isDark ? const Color(0xFF1E342E) : const Color(0xFFE6F4EC);
   static Color get successSoftBorder =>
       _isDark ? const Color(0xFF22483C) : const Color(0xFFDFEBE5);
 
@@ -109,7 +109,7 @@ class AppColors {
       _isDark ? const Color(0xFFE0B457) : const Color(0xFF97650B);
   static const Color warningFill = Color(0xFF97650B);
   static Color get warningSoftBg =>
-      _isDark ? const Color(0xFF33280F) : const Color(0xFFF8EFDD);
+      _isDark ? const Color(0xFF3A2F16) : const Color(0xFFF8EFDD);
   static Color get warningSoftBorder =>
       _isDark ? const Color(0xFF4D3D18) : const Color(0xFFF0E1C4);
   static Color get warningOnSoft =>
@@ -126,7 +126,7 @@ class AppColors {
   static Color get errorFill =>
       _isDark ? const Color(0xFFC8382F) : const Color(0xFFB02A22);
   static Color get dangerSoftBg =>
-      _isDark ? const Color(0xFF3A1F1D) : const Color(0xFFFBEBE9);
+      _isDark ? const Color(0xFF442927) : const Color(0xFFFBEBE9);
   static Color get dangerSoftBorder =>
       _isDark ? const Color(0xFF4E2B27) : const Color(0xFFF6DDDA);
 
@@ -145,50 +145,50 @@ class AppColors {
   static Color get bg => _isDark ? _darkBg : _lightBg;
 
   static const Color _lightSurface = Color(0xFFFFFFFF);
-  static const Color _darkSurface = Color(0xFF161D19);
+  static const Color _darkSurface = Color(0xFF1E2522);
   static Color get surface => _isDark ? _darkSurface : _lightSurface;
 
   /// سطح الـbottom sheet — أفتح من الشاشة وأدفأ من الأبيض.
   static Color get surfaceSheet =>
-      _isDark ? const Color(0xFF1B231F) : const Color(0xFFFBFBF9);
+      _isDark ? const Color(0xFF29302D) : const Color(0xFFFBFBF9);
 
   /// السطح الغاطس داخل الكارت — بلاطات تحميل/رفع/IP والإشارة/SNR/CCQ.
   /// هو نفسه `surfaceInput` (الاسم القديم محفوظ، 93 استدعاء).
   static const Color _lightSunken = Color(0xFFF7F8F5);
-  static const Color _darkSunken = Color(0xFF202A25);
+  static const Color _darkSunken = Color(0xFF323936);
   static Color get surfaceInput => _isDark ? _darkSunken : _lightSunken;
   static Color get surfaceSunken => surfaceInput;
 
   /// خلفيّة العنصر المعطّل بالكامل.
   static Color get surfaceDisabled =>
-      _isDark ? const Color(0xFF1E2622) : const Color(0xFFEFF1ED);
+      _isDark ? const Color(0xFF2A312E) : const Color(0xFFEFF1ED);
 
   // ══════════════════ الحدود والفواصل ══════════════════
   // أربع رتب مفصولة بالدور — اللوحة السابقة كان فيها اثنتان.
   static const Color _lightBorder = Color(0xFFE7E9E5);
-  static const Color _darkBorder = Color(0xFF2A3630);
+  static const Color _darkBorder = Color(0xFF39403D);
   static Color get border => _isDark ? _darkBorder : _lightBorder;
 
   static const Color _lightBorderStrong = Color(0xFFCDD2CC);
-  static const Color _darkBorderStrong = Color(0xFF3A4A42);
+  static const Color _darkBorderStrong = Color(0xFF4E5552);
   static Color get borderStrong =>
       _isDark ? _darkBorderStrong : _lightBorderStrong;
 
   /// فاصل شعري بين صفوف المعلومات داخل الكارت الواحد.
   static Color get divider =>
-      _isDark ? const Color(0xFF232E29) : const Color(0xFFF0F1EE);
+      _isDark ? const Color(0xFF303734) : const Color(0xFFF0F1EE);
 
   /// فاصل بنيوي — رأس الـsheet عن جسمه، وجسمه عن شريط الأزرار.
   static Color get dividerStrong =>
-      _isDark ? const Color(0xFF26312C) : const Color(0xFFEFF1ED);
+      _isDark ? const Color(0xFF353C39) : const Color(0xFFEFF1ED);
 
   /// حدّ العناصر التفاعليّة الفاتحة (شريط البحث، الشريحة غير المختارة).
   static Color get borderSoft =>
-      _isDark ? const Color(0xFF283330) : const Color(0xFFE4E7E2);
+      _isDark ? const Color(0xFF333A37) : const Color(0xFFE4E7E2);
 
   /// مقبض السحب في الـsheet (42×4) والنقطة الفاصلة بين الباقة والسعر.
   static Color get grabber =>
-      _isDark ? const Color(0xFF3A4A42) : const Color(0xFFDCE0DA);
+      _isDark ? const Color(0xFF4E5552) : const Color(0xFFDCE0DA);
 
   // ══════════════════ النصوص ══════════════════
   // اللوحة السابقة كانت ثلاث درجات؛ المخطّط يحتاج ستّاً. الأسماء
@@ -268,7 +268,7 @@ class AppColors {
   static Color get anomaly =>
       _isDark ? const Color(0xFFC86BF5) : const Color(0xFF5B21B6);
   static Color get anomalySoftBg =>
-      _isDark ? const Color(0xFF311F45) : const Color(0xFFF1ECFB);
+      _isDark ? const Color(0xFF3A284E) : const Color(0xFFF1ECFB);
 
   // ══════════════════ قنوات الإرسال ══════════════════
   // علامات طرف ثالث: اللون **ثابت في الوضعين** لأنّ المستخدم يتعرّف
@@ -289,7 +289,7 @@ class AppColors {
   /// يستعمل `brandSoftBg` الخضراء تحت أيقونة زرقاء — تناقض لاحظه
   /// المستخدم فوراً: «المتصل ملوّن فقط إشارة الواي فاي لا المربّع».
   static Color get infoSoftBg =>
-      _isDark ? const Color(0xFF1C2733) : const Color(0xFFE8EEF9);
+      _isDark ? const Color(0xFF26313D) : const Color(0xFFE8EEF9);
   static Color get infoSoftBorder =>
       _isDark ? const Color(0xFF2B3A4E) : const Color(0xFFCFDCF0);
 }
