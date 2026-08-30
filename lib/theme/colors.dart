@@ -270,6 +270,17 @@ class AppColors {
   static Color get anomalySoftBg =>
       _isDark ? const Color(0xFF311F45) : const Color(0xFFF1ECFB);
 
+  // ══════════════════ قنوات الإرسال ══════════════════
+  // علامات طرف ثالث: اللون **ثابت في الوضعين** لأنّ المستخدم يتعرّف
+  // على القناة منه — تغييره ليلاً يكسر التعرّف. الخلفيّة وحدها تتبع
+  // الوضع لتبقى مرئيّة على السطح.
+  static const Color channelWhatsApp = Color(0xFF25D366);
+  static Color get channelWhatsAppSoftBg =>
+      _isDark ? const Color(0xFF1B3126) : const Color(0xFFE6F7EC);
+  static const Color channelTelegram = Color(0xFF229ED9);
+  static Color get channelTelegramSoftBg =>
+      _isDark ? const Color(0xFF182D42) : const Color(0xFFE4F2FA);
+
   /// اللون الأزرق الوحيد في المخطّط (قيمة «رفع» فقط) — بلا عائلة.
   static Color get info =>
       _isDark ? const Color(0xFF8FAEE8) : const Color(0xFF3F5C99);
@@ -303,6 +314,12 @@ enum AppTone {
 
   /// الحالة الشاذّة: «منتهي لكنّه متصل» — لا تنتمي لأي عائلة.
   anomaly,
+
+  /// قناتا الإرسال. لونهما **علامة طرف ثالث** لا حالة: يبقى ثابتاً في
+  /// الوضعين لأنّ المستخدم يتعرّف على القناة منه. خلفيّتاهما وحدهما
+  /// تتبعان الوضع.
+  whatsapp,
+  telegram,
   neutral;
 
   /// اللون الصلب — الأيقونة والقيمة والتعبئة.
@@ -313,6 +330,8 @@ enum AppTone {
         AppTone.danger => AppColors.error,
         AppTone.info => AppColors.info,
         AppTone.anomaly => AppColors.anomaly,
+        AppTone.whatsapp => AppColors.channelWhatsApp,
+        AppTone.telegram => AppColors.channelTelegram,
         AppTone.neutral => AppColors.textMid,
       };
 
@@ -324,6 +343,8 @@ enum AppTone {
         AppTone.danger => AppColors.dangerSoftBg,
         AppTone.info => AppColors.infoSoftBg,
         AppTone.anomaly => AppColors.anomalySoftBg,
+        AppTone.whatsapp => AppColors.channelWhatsAppSoftBg,
+        AppTone.telegram => AppColors.channelTelegramSoftBg,
         AppTone.neutral => AppColors.surfaceSunken,
       };
 
@@ -335,6 +356,8 @@ enum AppTone {
         AppTone.danger => AppColors.dangerSoftBorder,
         AppTone.info => AppColors.infoSoftBorder,
         AppTone.anomaly => AppColors.anomalySoftBg,
+        AppTone.whatsapp => AppColors.channelWhatsAppSoftBg,
+        AppTone.telegram => AppColors.channelTelegramSoftBg,
         AppTone.neutral => AppColors.border,
       };
 
@@ -346,6 +369,8 @@ enum AppTone {
         AppTone.danger => AppColors.dangerOnSoft,
         AppTone.info => AppColors.info,
         AppTone.anomaly => AppColors.anomaly,
+        AppTone.whatsapp => AppColors.channelWhatsApp,
+        AppTone.telegram => AppColors.channelTelegram,
         AppTone.neutral => AppColors.textBody,
       };
 }

@@ -1138,3 +1138,256 @@ class _ConfirmCancelButton extends StatelessWidget {
     );
   }
 }
+
+/// حبّة حالة بنغمة — العنصر الأكثر تكراراً في التطبيق بعد البلاطة
+/// (٦٣ نسخة يدويّة عبر المودالات).
+///
+/// التوقيع يأخذ [AppTone] لا `Color` **عمداً**: تمرير لون مفرد هو ما
+/// كان يدفع كلّ موضع لاشتقاق خلفيّته بـ`.withValues(alpha:)` — وهو
+/// الاشتقاق الذي ينهار في الوضع الداكن لأنّ التوكن الأساس ينقلب
+/// اتّجاهاً. بحصر المدخل في النغمة يستحيل الاشتقاق الخام.
+class ToneChip extends StatelessWidget {
+  const ToneChip({
+    super.key,
+    required this.label,
+    this.tone = AppTone.neutral,
+    this.icon,
+    this.dense = false,
+    this.onTap,
+  });
+
+  final String label;
+  final AppTone tone;
+  final IconData? icon;
+
+  /// حبّة أضيق للصفوف المزدحمة.
+  final bool dense;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final body = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? Sp.sm : 11,
+        vertical: dense ? 3 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.pill),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: dense ? 11 : 13, color: tone.fill),
+            const SizedBox(width: Sp.xs),
+          ],
+          Text(
+            label,
+            style: AppType.pillLabel(color: tone.onSoft)
+                .copyWith(letterSpacing: 0),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return body;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(R.pill),
+      child: body,
+    );
+  }
+}
+
+/// حقل الملاحظة/السبب — يتكرّر في اثنين وثلاثين مودلاً بنفس الشكل:
+/// أيقونة وصف + نصّ حرّ اختياري بلا حدود داخليّة.
+class SheetNoteField extends StatelessWidget {
+  const SheetNoteField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    this.maxLength = 120,
+    this.minLines = 1,
+    this.maxLines = 3,
+    this.enabled = true,
+    this.icon = Icons.notes_rounded,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final int maxLength;
+  final int minLines;
+  final int maxLines;
+  final bool enabled;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return SheetBox(
+      icon: icon,
+      alignTop: minLines > 1,
+      child: TextField(
+        controller: controller,
+        enabled: enabled,
+        minLines: minLines,
+        maxLines: maxLines,
+        maxLength: maxLength,
+        style: AppType.input(),
+        decoration: InputDecoration(
+          isDense: true,
+          counterText: '',
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+          hintText: hint,
+          hintStyle: AppType.input(color: AppColors.textPlaceholder),
+        ),
+      ),
+    );
+  }
+}
+
+/// حقل البحث داخل الشيتات والشاشات — خمس عشرة نسخة يدويّة، كلٌّ
+/// بنصف قطر وحشوة مختلفة.
+class SheetSearchField extends StatelessWidget {
+  const SheetSearchField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    this.onChanged,
+    this.autofocus = false,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => SheetBox(
+        icon: Icons.search_rounded,
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                autofocus: autofocus,
+                onChanged: onChanged,
+                style: AppType.input(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: hint,
+                  hintStyle: AppType.input(color: AppColors.textPlaceholder),
+                ),
+              ),
+            ),
+            if (value.text.isNotEmpty)
+              InkWell(
+                onTap: () {
+                  controller.clear();
+                  onChanged?.call('');
+                },
+                borderRadius: BorderRadius.circular(R.pill),
+                child: Icon(Icons.close_rounded,
+                    size: 17, color: AppColors.textHint),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// صفّ مفتاح داخل مجموعة — تسمية وسطر شرح اختياري ومفتاح في الطرف.
+class SheetSwitchRow extends StatelessWidget {
+  const SheetSwitchRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.footnote,
+    this.icon,
+    this.enabled = true,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final String? footnote;
+  final IconData? icon;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 18, color: AppColors.textHint),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: AppType.rowValue()),
+                if ((footnote ?? '').isNotEmpty) ...[
+                  const SizedBox(height: Sp.xxs),
+                  Text(footnote!, style: AppType.muted()),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: Sp.sm),
+          Switch(
+            value: value,
+            onChanged: enabled ? onChanged : null,
+            activeThumbColor: AppColors.onBrand,
+            activeTrackColor: AppColors.brand,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// حاوية بيضاء تجمع عدّة [SheetSwitchRow] بخطوط شعريّة — امتداد
+/// [SheetRowsGroup] لصفوف تحمل ودجتاً لا نصّاً.
+class SheetSwitchGroup extends StatelessWidget {
+  const SheetSwitchGroup({super.key, required this.rows});
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: AppColors.divider),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+}

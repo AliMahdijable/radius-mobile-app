@@ -387,6 +387,8 @@ void main() {
           'dangerSoftBg': AppColors.dangerSoftBg,
           'infoSoftBg': AppColors.infoSoftBg,
           'anomalySoftBg': AppColors.anomalySoftBg,
+          'channelWhatsAppSoftBg': AppColors.channelWhatsAppSoftBg,
+          'channelTelegramSoftBg': AppColors.channelTelegramSoftBg,
         };
         for (final e in softs.entries) {
           final r = contrast(e.value, AppColors.surface);
