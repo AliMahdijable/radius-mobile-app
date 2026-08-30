@@ -283,12 +283,12 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           children: [
             Text(title,
                 style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 13, height: 1.35,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text(subtitle,
-                style: TextStyle(fontSize: 11, color: AppColors.textMid)),
+                style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
           ],
         ),
       ),
@@ -302,7 +302,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           child: Text(count,
               style: const TextStyle(
                   color: AppColors.onBrand,
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700)),
         ),
     ]);
@@ -343,7 +343,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 const SizedBox(width: 6),
                 Text('تفاصيل Wireless',
                     style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi)),
               ]),
@@ -367,7 +367,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                       ? 'العملاء المتّصلون (${_stickyStations.length})'
                       : 'الطرف الآخر (peer)',
                   style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12.5, height: 1.4,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi),
                 ),
@@ -379,7 +379,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text('+ ${_stickyStations.length - 20} عميل آخر',
                         style: TextStyle(
-                            fontSize: 10.5, color: AppColors.textLow)),
+                            fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
                   ),
               ]),
             ),
@@ -397,7 +397,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 const SizedBox(width: 6),
                 Text('Interfaces (${s.interfaces.where(_isDataIface).length})',
                     style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi)),
               ]),
@@ -438,7 +438,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 strokeWidth: 2, color: AppColors.brand)),
         const SizedBox(width: 10),
         Text('جاري الاتصال بـUBNT…',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textMid)),
+            style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid)),
       ]),
     );
   }
@@ -461,7 +461,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('مراقبة حيّة (UBNT via SSH)',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const SizedBox(height: 2),
@@ -485,7 +485,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               _monitoring
                   ? 'مباشر · كل ${_refreshInterval.inSeconds}s'
                   : 'متوقّف',
-              style: TextStyle(fontSize: 10.5, color: AppColors.textMid),
+              style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid),
             ),
           ]),
         ]),
@@ -539,7 +539,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           child: Text(
             '${h.devmodel} • airOS ${h.fwversion}',
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textHi),
             overflow: TextOverflow.ellipsis,
@@ -556,7 +556,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             const SizedBox(width: 3),
             Text(_formatUptime(h.uptime),
                 style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                     fontWeight: FontWeight.w700,
                     color: AppColors.brandAccent)),
           ]),
@@ -622,7 +622,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 4),
           Text(label,
               style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textMid)),
         ]),
@@ -639,7 +639,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                     height: 1)),
             const SizedBox(width: 2),
             Text('%',
-                style: TextStyle(fontSize: 10.5, color: AppColors.textLow)),
+                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
           ],
         ),
         const SizedBox(height: 6),
@@ -682,7 +682,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             const SizedBox(width: 4),
             Text(label,
                 style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textMid)),
           ]),
@@ -699,7 +699,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
                 Text(unit,
-                    style: TextStyle(fontSize: 11, color: AppColors.textLow)),
+                    style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textLow)),
               ],
             ],
           ),
@@ -759,7 +759,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 const SizedBox(height: 2),
                 Text('dBm',
                     style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 10.5, height: 1.3,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textMid)),
               ]),
@@ -773,7 +773,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('جودة الإشارة',
                 style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textMid)),
             const SizedBox(height: 4),
@@ -808,12 +808,12 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       SizedBox(
           width: 42,
           child: Text(label,
-              style: TextStyle(fontSize: 10.5, color: AppColors.textLow))),
+              style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow))),
       Text(value,
           style: TextStyle(
-              fontSize: 12.5, fontWeight: FontWeight.w700, color: color)),
+              fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w700, color: color)),
       const SizedBox(width: 2),
-      Text(unit, style: TextStyle(fontSize: 9.5, color: AppColors.textLow)),
+      Text(unit, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
     ]);
   }
 
@@ -866,17 +866,17 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       child: Row(children: [
         Icon(icon, size: 12, color: color ?? AppColors.textLow),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 10.5, color: AppColors.textMid)),
+        Text(label, style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
         const Spacer(),
         Text(value,
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w700,
                 color: color ?? AppColors.textHi)),
         if (suffix != null) ...[
           const SizedBox(width: 3),
           Text(suffix,
-              style: TextStyle(fontSize: 9.5, color: AppColors.textLow)),
+              style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
         ],
       ]),
     );
@@ -896,7 +896,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 6),
           Text('Ethernet (${ethers.length})',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -923,7 +923,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         const SizedBox(width: 6),
         Text(iface.ifname,
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textHi)),
         if (iface.speed != null && up) ...[
@@ -936,7 +936,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             ),
             child: Text(_speedLabel(iface.speed!),
                 style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 9.5, height: 1.2,
                     fontWeight: FontWeight.w700,
                     color: _speedColor(iface.speed!))),
           ),
@@ -947,7 +947,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 2),
           Text(_formatBps(rate.rxBps),
               style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const SizedBox(width: 8),
@@ -955,7 +955,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 2),
           Text(_formatBps(rate.txBps),
               style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ],
@@ -976,7 +976,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(width: 6),
           Text('العملاء المتّصلون (${ss.length})',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -986,7 +986,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text('+ ${ss.length - 20} عميل آخر',
-                style: TextStyle(fontSize: 10.5, color: AppColors.textLow)),
+                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
           ),
       ]),
     );
@@ -1016,7 +1016,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(s.hostname ?? s.ip ?? s.mac,
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis),
@@ -1025,7 +1025,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                   [s.ip, s.mac]
                       .where((e) => e != null && e.isNotEmpty)
                       .join(' • '),
-                  style: TextStyle(fontSize: 9.5, color: AppColors.textLow),
+                  style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
                   overflow: TextOverflow.ellipsis),
           ]),
         ),
@@ -1034,7 +1034,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             Text('${s.signalDisplay} dBm',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: signalColor)),
             if (s.ccq > 0) ...[
@@ -1049,7 +1049,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 child: Text('${s.ccq}%',
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 11, height: 1.25,
                         fontWeight: FontWeight.w700,
                         color: _percentColor(s.ccq.toDouble()))),
               ),
@@ -1058,7 +1058,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
           const SizedBox(height: 2),
           Text('↓${s.rxRate} / ↑${s.txRate} Mbps',
               textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 9.5, color: AppColors.textMid)),
+              style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textMid)),
         ]),
       ]),
     );
@@ -1276,7 +1276,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
           const SizedBox(width: 6),
           Text('أعلى interface (سير الترفك)',
               style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const Spacer(),
@@ -1315,7 +1315,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
                     interval: maxY / 3,
                     getTitlesWidget: (value, _) => Text(
                       _formatBpsShort(value.toInt()),
-                      style: TextStyle(fontSize: 9.5, color: AppColors.textLow),
+                      style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
                     ),
                   ),
                 ),
@@ -1341,7 +1341,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
                       TextStyle(
                         color: isTx ? txColor : rxColor,
                         fontWeight: FontWeight.w700,
-                        fontSize: 10.5,
+                        fontSize: 10.5, height: 1.3,
                       ),
                     );
                   }).toList(),
@@ -1386,7 +1386,7 @@ class _TrafficGraphCardState extends State<_TrafficGraphCard>
       ),
       child: Text('$arrow $value',
           style: TextStyle(
-              fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+              fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w700, color: color)),
     );
   }
 

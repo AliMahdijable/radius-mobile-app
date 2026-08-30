@@ -340,7 +340,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         const SizedBox(width: 8),
         Text(text,
             style: TextStyle(
-                fontSize: 13,
+                fontSize: 13, height: 1.35,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
       ]);
@@ -379,7 +379,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           const SizedBox(width: 6),
           Text(label,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w600,
                 color: active ? AppColors.onBrand : AppColors.textHi,
               )),
@@ -403,7 +403,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           Text(
             'بيانات الاتصال (${NetworkDeviceLabels.protocolLabel(_protocol!)})',
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi),
           ),
@@ -424,7 +424,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               'mimosa' => '💡 Mimosa يستعمل HTTPS 443 — أدخل admin credentials',
               _ => '💡 تأكّد من تفعيل API service على الجهاز',
             },
-            style: TextStyle(fontSize: 9.5, color: AppColors.textLow),
+            style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
           ),
         ],
         const SizedBox(height: 10),
@@ -456,16 +456,16 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   List<Widget> _snmpFields() => [
         Row(children: [
           Text('SNMP version:',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMid)),
+              style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid)),
           const SizedBox(width: 8),
           ChoiceChip(
-            label: const Text('v2c', style: TextStyle(fontSize: 11)),
+            label: const Text('v2c', style: TextStyle(fontSize: 11, height: 1.35)),
             selected: _snmpVersion == 'v2c',
             onSelected: (_) => setState(() => _snmpVersion = 'v2c'),
           ),
           const SizedBox(width: 6),
           ChoiceChip(
-            label: const Text('v3', style: TextStyle(fontSize: 11)),
+            label: const Text('v3', style: TextStyle(fontSize: 11, height: 1.35)),
             selected: _snmpVersion == 'v3',
             onSelected: (_) => setState(() => _snmpVersion = 'v3'),
           ),
@@ -581,7 +581,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               DropdownMenuItem<String?>(
                 value: p.key.isEmpty ? null : p.key,
                 child: Text(p.value,
-                    style: const TextStyle(fontSize: 13),
+                    style: const TextStyle(fontSize: 13, height: 1.45),
                     overflow: TextOverflow.ellipsis),
               ),
           ],
@@ -637,12 +637,12 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                 children: [
                   Text('لا توجد مناطق بعد',
                       style: TextStyle(
-                          fontSize: 12.5,
+                          fontSize: 12.5, height: 1.4,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textHi)),
                   const SizedBox(height: 2),
                   Text('اضغط لإنشاء منطقة (مثل: كرخ / رصافة / ...)',
-                      style: TextStyle(fontSize: 11, color: AppColors.textMid)),
+                      style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
                 ],
               ),
             ),
@@ -660,7 +660,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
           Icon(LucideIcons.slash, size: 14, color: AppColors.textLow),
           const SizedBox(width: 6),
           Text('بدون منطقة',
-              style: TextStyle(color: AppColors.textMid, fontSize: 13)),
+              style: TextStyle(color: AppColors.textMid, fontSize: 13, height: 1.45)),
         ]),
       ),
       for (final r in _regions)
@@ -673,7 +673,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             Expanded(child: Text(r.name, overflow: TextOverflow.ellipsis)),
             if (r.deviceCount > 0)
               Text(' (${r.deviceCount})',
-                  style: TextStyle(color: AppColors.textLow, fontSize: 11)),
+                  style: TextStyle(color: AppColors.textLow, fontSize: 11, height: 1.35)),
           ]),
         ),
     ];
@@ -695,7 +695,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             _regionsLoaded ? 'منطقة محذوفة' : 'قيد التحميل...',
             style: TextStyle(
               color: _regionsLoaded ? AppColors.warning : AppColors.textLow,
-              fontSize: 13,
+              fontSize: 13, height: 1.45,
             ),
           ),
         ]),
@@ -720,7 +720,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               icon:
                   Icon(LucideIcons.settings2, size: 14, color: AppColors.brand),
               label: Text('إدارة المناطق',
-                  style: TextStyle(color: AppColors.brand, fontSize: 12.5)),
+                  style: TextStyle(color: AppColors.brand, fontSize: 12.5, height: 1.4)),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 minimumSize: Size.zero,

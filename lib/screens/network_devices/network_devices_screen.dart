@@ -504,7 +504,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         count > 99 ? '99+' : '$count',
                         style: const TextStyle(
                             color: AppColors.onBrand,
-                            fontSize: 9.5,
+                            fontSize: 9.5, height: 1.2,
                             fontWeight: FontWeight.w700),
                         textAlign: TextAlign.center,
                       ),
@@ -630,7 +630,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           tooltip: 'إلغاء التحديد',
         ),
         title: Text('${_selectedIds.length} مُحدَّد',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.checkCheck, size: 20),
@@ -868,7 +868,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 children: [
                   Text(label,
                       style: TextStyle(
-                          fontSize: 10.5,
+                          fontSize: 10.5, height: 1.3,
                           color: AppColors.textLow,
                           fontWeight: FontWeight.w600)),
                   Text(value,
@@ -900,10 +900,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             if (mounted) setState(() => _search = v);
           });
         },
-        style: const TextStyle(fontSize: 14),
+        style: const TextStyle(fontSize: 14, height: 1.3),
         decoration: InputDecoration(
           hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
-          hintStyle: TextStyle(fontSize: 13, color: AppColors.textLow),
+          hintStyle: TextStyle(fontSize: 13, height: 1.45, color: AppColors.textLow),
           prefixIcon:
               Icon(LucideIcons.search, size: 18, color: AppColors.textMid),
           suffixIcon: _search.isEmpty
@@ -977,7 +977,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           Text(
             label,
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12.5, height: 1.4,
               fontWeight: FontWeight.w600,
               color: active ? AppColors.onBrand : AppColors.textHi,
             ),
@@ -995,7 +995,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               child: Text(
                 '$count',
                 style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.bold,
                   color: active ? AppColors.onBrand : AppColors.brand,
                 ),
@@ -1053,7 +1053,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           Text(
             '$label ($count)',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 11, height: 1.25,
               fontWeight: FontWeight.w600,
               color: active ? AppColors.onBrand : AppColors.textHi,
             ),
@@ -1142,7 +1142,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     Text(
                       d.name,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 14, height: 1.3,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       ),
@@ -1156,7 +1156,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       Text(
                         d.ip,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 11, height: 1.35,
                           color: AppColors.textMid,
                         ),
                       ),
@@ -1171,7 +1171,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         child: Text(
                           NetworkDeviceLabels.brandLabel(d.brand),
                           style: TextStyle(
-                            fontSize: 9.5,
+                            fontSize: 9.5, height: 1.2,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textMid,
                           ),
@@ -1189,7 +1189,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                           child: Text(
                             d.protocol!.toUpperCase(),
                             style: TextStyle(
-                              fontSize: 9.5,
+                              fontSize: 9.5, height: 1.2,
                               fontWeight: FontWeight.w700,
                               color: AppColors.brand,
                             ),
@@ -1220,7 +1220,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             child: Text(
                               region.name,
                               style: TextStyle(
-                                fontSize: 9.5,
+                                fontSize: 9.5, height: 1.2,
                                 fontWeight: FontWeight.w700,
                                 color: color,
                               ),
@@ -1239,7 +1239,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                           child: Text(
                             d.location!,
                             style: TextStyle(
-                                fontSize: 10.5, color: AppColors.textLow),
+                                fontSize: 10.5, height: 1.3, color: AppColors.textLow),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1256,7 +1256,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     Text(
                       '${d.lastResponseMs} ms',
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 10.5, height: 1.3,
                         fontWeight: FontWeight.w700,
                         color: statusCol,
                       ),
@@ -1315,7 +1315,7 @@ class _EmptyDevices extends StatelessWidget {
             const SizedBox(height: Sp.lg),
             Text(hasActiveFilter ? 'لا نتائج بهذا الفلتر' : 'لا توجد أجهزة',
                 style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 16, height: 1.3,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 4),
@@ -1323,7 +1323,7 @@ class _EmptyDevices extends StatelessWidget {
               hasActiveFilter
                   ? 'قد تكون كل الأجهزة مخفيّة — امسح الفلتر لرؤيتها'
                   : 'أضف أول جهاز شبكة من زرّ + أعلى الصفحة',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMid),
+              style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textMid),
               textAlign: TextAlign.center,
             ),
             if (hasActiveFilter && onClearFilter != null) ...[

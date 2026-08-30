@@ -208,7 +208,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                 ? (freshS != null ? 'مباشر · قبل ${freshS}ث' : 'مباشر')
                 : 'موقوف',
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 10.5, height: 1.3,
               fontWeight: FontWeight.w700,
               color: _monitoring ? AppColors.success : AppColors.textMid,
             ),
@@ -267,7 +267,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             child: Center(
               child: Text('M',
                   style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 16, height: 1.3,
                       fontWeight: FontWeight.w700,
                       color: AppColors.warning)),
             ),
@@ -278,12 +278,12 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(name,
                   style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 15, height: 1.2,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi)),
               if (s.sysDescr != null)
                 Text(s.sysDescr!,
-                    style: TextStyle(fontSize: 9.5, color: AppColors.textLow),
+                    style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
             ]),
@@ -296,7 +296,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               Text('${s.temperatureC!.toStringAsFixed(1)}°C',
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 11, height: 1.25,
                       fontWeight: FontWeight.w700,
                       color: _tempColor(s.temperatureC!))),
             ]),
@@ -354,7 +354,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       const SizedBox(height: 2),
       Text(label,
           style: TextStyle(
-              fontSize: 9.5,
+              fontSize: 9.5, height: 1.2,
               fontWeight: FontWeight.w700,
               color: AppColors.textMid)),
       const SizedBox(height: 2),
@@ -368,7 +368,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       if (unit.isNotEmpty)
         Text(unit,
             style: TextStyle(
-                fontSize: 9.5,
+                fontSize: 9.5, height: 1.2,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textLow)),
     ]);
@@ -393,7 +393,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           const SizedBox(width: 6),
           Text('هامش الإشارة',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -427,7 +427,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Text(label,
           style: TextStyle(
-              fontSize: 9.5,
+              fontSize: 9.5, height: 1.2,
               fontWeight: FontWeight.w700,
               color: AppColors.textMid)),
       const SizedBox(height: 2),
@@ -445,7 +445,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                     height: 1)),
             const SizedBox(width: 2),
             Text(unit,
-                style: TextStyle(fontSize: 9.5, color: AppColors.textLow)),
+                style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
           ]),
     ]);
   }
@@ -462,7 +462,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         const SizedBox(width: 6),
         Text('Chains (${s.chains.length})',
             style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
       ]),
@@ -486,7 +486,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           child: Center(
             child: Text('${c.index}',
                 style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     fontWeight: FontWeight.w700,
                     color: AppColors.warning)),
           ),
@@ -532,7 +532,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         const SizedBox(width: 6),
         Text('العملاء المتصلون (${_clients.length})',
             style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
         const SizedBox(width: 6),
@@ -544,7 +544,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           ),
           child: Text('$online online',
               style: TextStyle(
-                fontSize: 9.5,
+                fontSize: 9.5, height: 1.2,
                 fontWeight: FontWeight.w700,
                 color: AppColors.success,
               )),
@@ -586,7 +586,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               Expanded(
                 child: Text(label,
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12.5, height: 1.4,
                       fontWeight: FontWeight.w700,
                       color: c.online ? AppColors.textHi : AppColors.textMid,
                     ),
@@ -604,7 +604,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                   child: Text('${c.rssiDbm} dBm',
                       textDirection: TextDirection.ltr,
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 10.5, height: 1.3,
                         fontWeight: FontWeight.w700,
                         color: rssiColor,
                       )),
@@ -618,7 +618,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                 const SizedBox(width: 3),
                 Text(c.ip!,
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(fontSize: 10.5, color: AppColors.textMid)),
+                    style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
                 const SizedBox(width: 8),
                 Icon(LucideIcons.wifi, size: 10, color: AppColors.textLow),
                 const SizedBox(width: 3),
@@ -626,7 +626,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                     child: Text(c.mac,
                         textDirection: TextDirection.ltr,
                         style:
-                            TextStyle(fontSize: 9.5, color: AppColors.textLow),
+                            TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
                         overflow: TextOverflow.ellipsis)),
               ]),
               const SizedBox(height: 4),
@@ -666,7 +666,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       Text(value,
           textDirection: TextDirection.ltr,
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: 10.5, height: 1.3,
             fontWeight: FontWeight.w700,
             color: color,
           )),
@@ -678,12 +678,12 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
 
   Widget _chainMetric(String label, String value, Color color) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(fontSize: 9.5, color: AppColors.textLow)),
+      Text(label, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
       const SizedBox(height: 2),
       Text(value,
           textDirection: TextDirection.ltr,
           style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+              fontSize: 11, height: 1.25, fontWeight: FontWeight.w700, color: color)),
     ]);
   }
 
@@ -698,7 +698,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           const SizedBox(width: 6),
           Text('الأداء (PHY 5s)',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -761,7 +761,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           const SizedBox(width: 6),
           Text('النظام',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
         ]),
@@ -775,7 +775,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           padding: const EdgeInsets.only(top: 6),
           child: Text('CPU/RAM غير متوفّرين — firmware Mimosa يخفيهما',
               style: TextStyle(
-                  fontSize: 9.5,
+                  fontSize: 9.5, height: 1.2,
                   fontStyle: FontStyle.italic,
                   color: AppColors.textLow)),
         ),
@@ -797,13 +797,13 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           const SizedBox(width: 6),
           Text('GPS',
               style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textHi)),
           const Spacer(),
           if (s.gpsSats != null)
             Text('${s.gpsSats} satellites',
-                style: TextStyle(fontSize: 10.5, color: AppColors.textLow)),
+                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
         ]),
         const SizedBox(height: 8),
         Row(children: [
@@ -811,7 +811,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               child: Text('$lat, $lng',
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 11, height: 1.25,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi))),
           IconButton(
@@ -846,7 +846,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         const SizedBox(width: 6),
         Text('معلومات الجهاز',
             style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
       ]),
@@ -863,7 +863,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       child: Row(children: [
         Text(label,
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMid)),
         const Spacer(),
@@ -871,7 +871,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             child: Text(value,
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis,
@@ -915,7 +915,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           const SizedBox(width: 4),
           Text(label,
               style: TextStyle(
-                  fontSize: 9.5,
+                  fontSize: 9.5, height: 1.2,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textMid)),
         ]),
@@ -934,7 +934,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               const SizedBox(width: 2),
               Text(unit,
                   style: TextStyle(
-                      fontSize: 9.5,
+                      fontSize: 9.5, height: 1.2,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textLow)),
             ]),
@@ -956,7 +956,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Expanded(
             child: Text(_error ?? 'خطأ',
                 style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     fontWeight: FontWeight.w600,
                     color: AppColors.error))),
         TextButton(onPressed: _fetch, child: const Text('إعادة')),

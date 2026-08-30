@@ -152,12 +152,12 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 hintText: 'اكتب الرسالة هنا...',
                 hintStyle: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   color: AppColors.textLow,
                 ),
                 counterStyle: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   color: AppColors.textLow,
                 ),
               ),
@@ -225,7 +225,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     label: const Text('فحص مسبق',
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 13,
+                          fontSize: 13, height: 1.35,
                           fontWeight: FontWeight.w700,
                         )),
                     style: OutlinedButton.styleFrom(
@@ -258,7 +258,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                     label: const Text('إرسال',
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 13,
+                          fontSize: 13, height: 1.35,
                           fontWeight: FontWeight.w700,
                         )),
                     style: FilledButton.styleFrom(

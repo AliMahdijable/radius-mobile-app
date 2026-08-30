@@ -190,7 +190,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
               const SizedBox(width: 6),
               Text('Interfaces (${s.ifaces.length})',
                   style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12.5, height: 1.4,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi)),
             ]),
@@ -225,13 +225,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             Text(name,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 13, height: 1.35,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text(s.sysDescr?.split('\n').first ?? 'Ruijie / Reyee',
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: AppColors.textMid)),
+                style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
           ],
         ),
       ),
@@ -247,7 +247,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             Icon(LucideIcons.clock, size: 10, color: AppColors.textMid),
             const SizedBox(width: 4),
             Text(_formatUptime(s.uptime!),
-                style: TextStyle(fontSize: 10.5, color: AppColors.textMid)),
+                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
           ]),
         ),
     ]);
@@ -277,7 +277,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           _monitoring
               ? 'مراقبة حيّة (SNMP) • تحديث كل ${_refreshInterval.inSeconds}s'
               : 'المراقبة متوقّفة',
-          style: TextStyle(fontSize: 10.5, color: AppColors.textLow),
+          style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow),
         ),
       ),
     ]);
@@ -329,13 +329,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             const SizedBox(width: 4),
             Text(label,
                 style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textMid)),
             const Spacer(),
             Text(display,
                 style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+                    fontSize: 13, height: 1.35, fontWeight: FontWeight.w700, color: color)),
           ]),
           const SizedBox(height: 6),
           ClipRRect(
@@ -383,13 +383,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(iface.name,
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis),
             Text(iface.operUp ? 'up' : 'down',
                 style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 9.5, height: 1.2,
                     color:
                         iface.operUp ? AppColors.success : AppColors.textLow)),
           ]),
@@ -402,7 +402,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           ),
           child: Text(speedText,
               style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textMid)),
         ),
@@ -411,13 +411,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           Text('↓${_bpsShort(rxBps)}',
               textDirection: TextDirection.ltr,
               style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.success)),
           Text('↑${_bpsShort(txBps)}',
               textDirection: TextDirection.ltr,
               style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.brandAccent)),
         ]),
@@ -439,7 +439,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         const SizedBox(width: 6),
         Expanded(
           child: Text('آخر تحديث فشل — البيانات من آخر جولة ناجحة',
-              style: TextStyle(fontSize: 11, color: AppColors.error)),
+              style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.error)),
         ),
       ]),
     );
@@ -458,13 +458,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         const SizedBox(height: 8),
         Text('تعذّرت مراقبة الجهاز',
             style: TextStyle(
-                fontSize: 13,
+                fontSize: 13, height: 1.35,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi)),
         const SizedBox(height: 4),
         Text(_error ?? '',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: AppColors.textMid)),
+            style: TextStyle(fontSize: 11, height: 1.35, color: AppColors.textMid)),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _fetch,

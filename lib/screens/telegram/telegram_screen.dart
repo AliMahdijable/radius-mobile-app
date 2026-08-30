@@ -128,7 +128,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
           'تلغرام',
           style: TextStyle(
             fontFamily: 'Cairo',
-            fontSize: 16,
+            fontSize: 16, height: 1.3,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -198,7 +198,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                     'آخر محاولة فشلت: ${_status!.lastError}',
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 11.5,
+                      fontSize: 11.5, height: 1.35,
                       fontWeight: FontWeight.w600,
                       color: AppColors.error,
                     ),
@@ -273,7 +273,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
               label,
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMid,
               ),
@@ -376,7 +376,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                       a.subtitle,
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 11,
+                        fontSize: 11, height: 1.35,
                         fontWeight: FontWeight.w500,
                         color: AppColors.textMid,
                       ),
@@ -405,7 +405,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             'فصل البوت',
             style: TextStyle(
               fontFamily: 'Cairo',
-              fontSize: 13,
+              fontSize: 13, height: 1.35,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -468,7 +468,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                   subtitle,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11.5,
+                    fontSize: 11.5, height: 1.35,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textMid,
                   ),
@@ -563,7 +563,7 @@ class _StepsCard extends StatelessWidget {
             child: Text('$n',
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                   color: tgBlue,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -592,7 +592,7 @@ class _StepsCard extends StatelessWidget {
                     child: Text(botLink,
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 12.5,
+                          fontSize: 12.5, height: 1.4,
                           fontWeight: FontWeight.w700,
                           color: tgBlue,
                           decoration: TextDecoration.underline,
@@ -610,7 +610,7 @@ class _StepsCard extends StatelessWidget {
                     child: Text(code,
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 11.5,
+                          fontSize: 11.5, height: 1.35,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textHi,
                         )),
@@ -619,7 +619,7 @@ class _StepsCard extends StatelessWidget {
                   Text('"$codeBold"',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       )),
@@ -627,7 +627,7 @@ class _StepsCard extends StatelessWidget {
                   Text(suffix,
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w500,
                         color: AppColors.textMid,
                       )),
@@ -726,7 +726,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
           Text('توكن البوت',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 11,
+                fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textLow,
                 letterSpacing: 0.4,
@@ -751,7 +751,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                     obscureText: false,
                     style: const TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 12.5,
+                      fontSize: 12.5, height: 1.4,
                       fontWeight: FontWeight.w600,
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
@@ -761,7 +761,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                       hintText: '123456789:AAE...',
                       hintStyle: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         color: AppColors.textLow,
                       ),
                     ),
@@ -788,7 +788,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
             Text(_err!,
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                   color: AppColors.error,
                 )),
@@ -808,7 +808,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
               label: const Text('ربط البوت',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 13,
+                    fontSize: 13, height: 1.35,
                     fontWeight: FontWeight.w700,
                   )),
               style: FilledButton.styleFrom(
@@ -827,7 +827,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
               Text('التوكن يُحفظ مشفَّراً — لا يظهر مجدَّداً.',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                     color: AppColors.textLow,
                     fontWeight: FontWeight.w600,
                   )),

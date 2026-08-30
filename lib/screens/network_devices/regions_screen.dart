@@ -192,10 +192,10 @@ class _RegionsScreenState extends State<RegionsScreen> {
           Icon(LucideIcons.mapPin, size: 48, color: AppColors.textLow),
           const SizedBox(height: 12),
           Text('لا توجد مناطق بعد',
-              style: TextStyle(color: AppColors.textMid, fontSize: 14)),
+              style: TextStyle(color: AppColors.textMid, fontSize: 14, height: 1.3)),
           const SizedBox(height: 6),
           Text('اضغط + لإضافة أول منطقة',
-              style: TextStyle(color: AppColors.textLow, fontSize: 12.5)),
+              style: TextStyle(color: AppColors.textLow, fontSize: 12.5, height: 1.4)),
         ],
       ),
     );
@@ -235,7 +235,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     Text(r.name,
                         style: TextStyle(
                             color: AppColors.textHi,
-                            fontSize: 15,
+                            fontSize: 15, height: 1.2,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(
@@ -243,7 +243,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
                           ? 'لا يوجد أجهزة'
                           : '${r.deviceCount} جهاز',
                       style:
-                          TextStyle(color: AppColors.textMid, fontSize: 12.5),
+                          TextStyle(color: AppColors.textMid, fontSize: 12.5, height: 1.4),
                     ),
                   ],
                 ),
@@ -385,7 +385,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
           Text('اللون (اختياري)',
               style: TextStyle(
                   color: AppColors.textMid,
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Wrap(

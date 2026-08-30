@@ -332,7 +332,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           'الصفحات',
           style: TextStyle(
             fontFamily: 'Cairo',
-            fontSize: 16,
+            fontSize: 16, height: 1.3,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -508,7 +508,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             : '@${orig.username}',
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 11.5,
+                          fontSize: 11.5, height: 1.35,
                           fontWeight: FontWeight.w600,
                           color: AppColors.onBrand.withValues(alpha: 0.9),
                           fontFeatures: const [FontFeature.tabularFigures()],
@@ -627,7 +627,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               'أنت',
                               style: TextStyle(
                                 fontFamily: 'Cairo',
-                                fontSize: 9.5,
+                                fontSize: 9.5, height: 1.2,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.brand,
                               ),
@@ -647,7 +647,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               'معطّل',
                               style: TextStyle(
                                 fontFamily: 'Cairo',
-                                fontSize: 9.5,
+                                fontSize: 9.5, height: 1.2,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.error,
                               ),
@@ -663,7 +663,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         row.fullName,
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 11,
+                          fontSize: 11, height: 1.25,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textMid,
                         ),
@@ -683,7 +683,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     'الحالي',
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 12.5,
+                      fontSize: 12.5, height: 1.4,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textLow,
                     ),
@@ -708,7 +708,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       'دخول',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -739,7 +739,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             'لا يوجد مدراء فرعيّون',
             style: TextStyle(
               fontFamily: 'Cairo',
-              fontSize: 13,
+              fontSize: 13, height: 1.35,
               fontWeight: FontWeight.w600,
               color: AppColors.textMid,
             ),
@@ -760,7 +760,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             _error ?? 'خطأ',
             style: TextStyle(
               fontFamily: 'Cairo',
-              fontSize: 12.5,
+              fontSize: 12.5, height: 1.4,
               color: AppColors.textMid,
             ),
             textAlign: TextAlign.center,

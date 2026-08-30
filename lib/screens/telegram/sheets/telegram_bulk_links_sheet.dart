@@ -147,7 +147,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                 label: Text('أرسل لـ${_preview!.eligible} مشترك',
                     style: const TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 13,
+                      fontSize: 13, height: 1.35,
                       fontWeight: FontWeight.w700,
                     )),
                 style: FilledButton.styleFrom(
@@ -162,7 +162,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   color: AppColors.textMid,
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                 )),
         ],
       ),

@@ -218,7 +218,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           title: Text('إضافة $count جهاز'),
           content: Text(
             'ستُضاف $count جهاز دفعة واحدة. هل أنت متأكّد؟',
-            style: const TextStyle(fontSize: 14),
+            style: const TextStyle(fontSize: 14, height: 1.3),
           ),
           actions: [
             TextButton(
@@ -460,11 +460,11 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('$_done / $_total IP',
-              style: TextStyle(color: AppColors.textMid, fontSize: 11)),
+              style: TextStyle(color: AppColors.textMid, fontSize: 11, height: 1.35)),
           Text('${_found.length} جهاز',
               style: TextStyle(
                   color: AppColors.brand,
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 4),
@@ -490,7 +490,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           _scanning
               ? 'جاري الفحص… تظهر النتائج مباشرةً'
               : 'اضغط "ابدأ" لفحص الشبكة',
-          style: TextStyle(color: AppColors.textMid, fontSize: 13),
+          style: TextStyle(color: AppColors.textMid, fontSize: 13, height: 1.45),
         ),
       ]),
     );
@@ -569,7 +569,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                       Text(r.ip,
                           style: TextStyle(
                               color: AppColors.textHi,
-                              fontSize: 14,
+                              fontSize: 14, height: 1.3,
                               fontWeight: FontWeight.w700)),
                       const SizedBox(width: 6),
                       Container(
@@ -581,7 +581,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                         ),
                         child: Text('${r.responseMs}ms',
                             style: TextStyle(
-                                color: AppColors.textLow, fontSize: 10.5)),
+                                color: AppColors.textLow, fontSize: 10.5, height: 1.3)),
                       ),
                       if (alreadyExists) ...[
                         const SizedBox(width: 6),
@@ -598,7 +598,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                           child: Text('مضاف مسبقاً',
                               style: TextStyle(
                                 color: AppColors.success,
-                                fontSize: 9.5,
+                                fontSize: 9.5, height: 1.2,
                                 fontWeight: FontWeight.w700,
                               )),
                         ),
@@ -607,7 +607,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                     const SizedBox(height: 2),
                     Text('$label · port ${r.openPort} · ${r.guessProtocol}',
                         style:
-                            TextStyle(color: AppColors.textMid, fontSize: 11)),
+                            TextStyle(color: AppColors.textMid, fontSize: 11, height: 1.35)),
                   ],
                 ),
               ),
@@ -670,7 +670,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                     size: 16,
                     color: AppColors.brand),
                 label: Text(allSelected ? 'إلغاء' : 'تحديد الكل',
-                    style: TextStyle(color: AppColors.brand, fontSize: 12.5)),
+                    style: TextStyle(color: AppColors.brand, fontSize: 12.5, height: 1.4)),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
@@ -684,7 +684,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                 style: TextStyle(
                     color: AppColors.textHi,
                     fontWeight: FontWeight.w700,
-                    fontSize: 13),
+                    fontSize: 13, height: 1.35),
               ),
             ),
             FilledButton.icon(
@@ -703,7 +703,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   : const Icon(LucideIcons.plus, size: 14),
               label: Text(
                   _adding ? 'يُضيف $_added…' : 'أضف ${_selected.length}',
-                  style: const TextStyle(fontSize: 13)),
+                  style: const TextStyle(fontSize: 13, height: 1.45)),
             ),
           ]),
         ),
@@ -870,7 +870,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     if (r.deviceCount > 0)
                       Text(' (${r.deviceCount})',
                           style: TextStyle(
-                              color: AppColors.textLow, fontSize: 11)),
+                              color: AppColors.textLow, fontSize: 11, height: 1.35)),
                   ]),
                 ),
             ],
@@ -894,7 +894,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                 Text('بيانات الدخول المشتركة (اختياريّة)',
                     style: TextStyle(
                         color: AppColors.brand,
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700)),
               ]),
             ),

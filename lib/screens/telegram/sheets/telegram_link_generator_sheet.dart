@@ -182,7 +182,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
           child: Text('ابدأ الكتابة للبحث بين ${_allSubs.length} مشترك',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 color: AppColors.textLow,
               ),
               textAlign: TextAlign.center),
@@ -193,7 +193,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       return Center(
         child: Text('لا نتائج',
             style: TextStyle(
-                fontFamily: 'Cairo', fontSize: 12.5, color: AppColors.textLow)),
+                fontFamily: 'Cairo', fontSize: 12.5, height: 1.4, color: AppColors.textLow)),
       );
     }
     return ListView.builder(
@@ -234,7 +234,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                           ].join(' · '),
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 11,
+                            fontSize: 11, height: 1.35,
                             fontWeight: FontWeight.w500,
                             color: AppColors.textMid,
                           ),
@@ -268,7 +268,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
             Text(_err!,
                 style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     color: AppColors.textMid),
                 textAlign: TextAlign.center),
           ],
@@ -293,7 +293,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 Text('المشترك',
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 10.5,
+                      fontSize: 10.5, height: 1.3,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textLow,
                       letterSpacing: 0.5,
@@ -302,7 +302,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 Text(_selected!.fullName,
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 15,
+                      fontSize: 15, height: 1.2,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi,
                     )),
@@ -310,7 +310,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 Text('@${_selected!.username}',
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 11,
+                      fontSize: 11, height: 1.25,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textMid,
                     )),
@@ -333,7 +333,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                     Text('رابط الربط',
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 10.5,
+                          fontSize: 10.5, height: 1.3,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textLow,
                           letterSpacing: 0.5,
@@ -370,7 +370,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                             Text(_showQr ? 'إخفاء QR' : 'عرض QR',
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
-                                  fontSize: 11,
+                                  fontSize: 11, height: 1.25,
                                   fontWeight: FontWeight.w700,
                                   color: _showQr
                                       ? const Color(0xFF229ED9)
@@ -388,7 +388,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textHi,
                   ),
@@ -435,7 +435,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                           'اعرض الشاشة على المشترك — يفتحه بكاميرا هاتفه',
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 10.5,
+                            fontSize: 10.5, height: 1.3,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textMid,
                           ),
@@ -471,7 +471,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   label: const Text('نسخ',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 13,
+                        fontSize: 13, height: 1.35,
                         fontWeight: FontWeight.w700,
                       )),
                   style: OutlinedButton.styleFrom(
@@ -502,7 +502,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   label: const Text('أرسل عبر واتساب',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 13,
+                        fontSize: 13, height: 1.35,
                         fontWeight: FontWeight.w700,
                       )),
                   style: FilledButton.styleFrom(

@@ -178,7 +178,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                       onChanged: (_) => setState(() {}),
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 13,
+                        fontSize: 13, height: 1.45,
                         color: AppColors.textHi,
                       ),
                       decoration: InputDecoration(
@@ -187,7 +187,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                         hintText: 'بحث بالاسم / اليوزر / الرقم',
                         hintStyle: TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 12.5,
+                          fontSize: 12.5, height: 1.4,
                           color: AppColors.textLow,
                           fontWeight: FontWeight.w500,
                         ),
@@ -223,7 +223,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                                 'لا نتائج مطابقة للبحث',
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
-                                  fontSize: 13,
+                                  fontSize: 13, height: 1.45,
                                   color: AppColors.textMid,
                                 ),
                               ),
@@ -292,7 +292,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                           child: Text(display,
                               style: TextStyle(
                                 fontFamily: 'Cairo',
-                                fontSize: 14,
+                                fontSize: 14, height: 1.3,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textHi,
                               ),
@@ -311,7 +311,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                             child: Text('محظور',
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
-                                  fontSize: 9.5,
+                                  fontSize: 9.5, height: 1.2,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.error,
                                 )),
@@ -327,7 +327,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                       ].join(' · '),
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 11,
+                        fontSize: 11, height: 1.25,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textMid,
                         fontFeatures: const [FontFeature.tabularFigures()],
@@ -364,7 +364,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
           Text('لا يوجد مشتركون مربوطون بعد',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textMid,
               )),
@@ -372,7 +372,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
           Text('استعمل "ربط مشترك" أو "بث روابط جماعي"',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 11,
+                fontSize: 11, height: 1.35,
                 color: AppColors.textLow,
               )),
         ],
