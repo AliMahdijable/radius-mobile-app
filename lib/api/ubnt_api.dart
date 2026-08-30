@@ -1548,3 +1548,112 @@ int _n(dynamic v) {
   if (s.isEmpty) return 0;
   return int.tryParse(s) ?? (double.tryParse(s)?.toInt() ?? 0);
 }
+
+/// جلسة SSH معمَّرة لقياس الترافيك اللحظي على جهاز مشترك.
+///
+/// ⚠️ **لماذا صنف منفصل ولا نستعمل `UbntApi.fetchStats`**: تلك تفتح
+/// جلسة وتُغلقها في كلّ نداء، وتُنفّذ 4-10 أوامر بسقف 8-10 ثوانٍ. عند
+/// نبضة كلّ 3 ثوانٍ تعني مصافحة تشفير كاملة كلّ 3 ثوانٍ على معالج CPE
+/// ضعيف وظيفته تمرير حزم المشترك — أداة القياس تُفسد ما تقيسه،
+/// وتتراكب الدورات لأنّ سقفها أطول من الفاصل.
+///
+/// هنا: مصافحة **واحدة** لعمر الكارت، ثمّ أمر واحد يتيم في كلّ نبضة.
+/// و`/proc/net/dev` لا `ifconfig`: صيغته ثابتة عبر كلّ نوى لينكس —
+/// بينما `ifconfig` اختلف بين إصدارات airOS حتّى اضطُرّ المُحلِّل هنا
+/// لتغطية صيغتين — وخرجه بضع مئات من البايتات.
+class UbntTrafficSession {
+  UbntTrafficSession._(this._client, this._socket);
+
+  final SSHClient _client;
+  final SSHSocket _socket;
+  bool _closed = false;
+
+  static Future<UbntTrafficSession?> open({
+    required String ip,
+    int port = 22,
+    required String user,
+    required String pass,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    SSHClient? client;
+    SSHSocket? socket;
+    try {
+      socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      client = SSHClient(
+        socket,
+        username: user,
+        onPasswordRequest: () => pass,
+        onUserInfoRequest: (req) async => req.prompts.map((_) => pass).toList(),
+      );
+      await client.authenticated.timeout(timeout);
+      return UbntTrafficSession._(client, socket);
+    } catch (_) {
+      // ⚠️ لا نجرّب أسماء مستخدمين احتياطيّة هنا خلافاً لـfetchStats:
+      // أربع مصافحات فاشلة كلّ 3 ثوانٍ = 80 محاولة في الدقيقة، وdropbear
+      // على airOS يُسجّلها وقد يحظر. فشل واحد صامت أفضل.
+      try {
+        client?.close();
+        socket?.close();
+      } catch (_) {}
+      return null;
+    }
+  }
+
+  /// مجموع البايتات على واجهات البيانات لحظة القراءة — تراكميّ لا معدّل.
+  Future<({int rx, int tx})?> sample() async {
+    if (_closed) return null;
+    try {
+      final out = utf8.decode(
+        await _client
+            .run('cat /proc/net/dev')
+            .timeout(const Duration(seconds: 4)),
+        allowMalformed: true,
+      );
+      return parseProcNetDev(out);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    try {
+      _client.close();
+      _socket.close();
+    } catch (_) {}
+  }
+
+  /// يحلّل `/proc/net/dev`. الصيغة:
+  /// `  eth0: <rxBytes> <rxPkts> ... <txBytes> <txPkts> ...`
+  /// أوّل حقل بعد النقطتين = بايتات الاستقبال، والتاسع = الإرسال.
+  ///
+  /// مكشوفة للاختبار — الصيغة ثابتة لكنّ فهارس الحقول سهلة الخطأ.
+  static ({int rx, int tx})? parseProcNetDev(String out) {
+    var rx = 0, tx = 0;
+    var seen = false;
+    for (final line in out.split('\n')) {
+      final i = line.indexOf(':');
+      if (i <= 0) continue;
+      final name = line.substring(0, i).trim().toLowerCase();
+      if (!_isDataIface(name)) continue;
+      final f = line.substring(i + 1).trim().split(RegExp(r'\s+'));
+      if (f.length < 9) continue;
+      final r = int.tryParse(f[0]);
+      final t = int.tryParse(f[8]);
+      if (r == null || t == null) continue;
+      rx += r;
+      tx += t;
+      seen = true;
+    }
+    return seen ? (rx: rx, tx: tx) : null;
+  }
+
+  /// واجهات تحمل حركة المشترك. `lo` مستثناة، والواجهات الافتراضيّة
+  /// كذلك لأنّها تُضاعف نفس البايتات.
+  static bool _isDataIface(String n) =>
+      n.startsWith('eth') ||
+      n.startsWith('ath') ||
+      n.startsWith('wlan') ||
+      n == 'br0';
+}
