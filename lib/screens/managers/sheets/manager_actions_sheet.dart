@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/permissions_service.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -124,119 +125,74 @@ class _ActionsSheet extends StatelessWidget {
       ManagerAction.copyUsername,
       if (Perms.has('managers.delete')) ManagerAction.delete,
     ];
-    return SafeArea(
-      top: false,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(R.pill),
-              ),
-            ),
-            // Header — name + quick summary
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: AppColors.brandSoftBg,
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(LucideIcons.shield,
-                        size: 18, color: AppColors.brandAccent),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          manager.username,
-                          style: AppType.title(color: AppColors.textHi)
-                              .copyWith(fontSize: 15),
-                        ),
-                        Text(
-                          'managers.operations'.tr(),
-                          style: AppType.muted().copyWith(fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Summary chips
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.userCog,
+        title: manager.username,
+        subtitle: 'managers.operations'.tr(),
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Summary chips
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _summaryChip(
+                  LucideIcons.wallet,
+                  'managers.chip_balance'.tr(
+                      namedArgs: {'amount': formatIQD(manager.balance ?? 0)}),
+                  AppTone.brand,
+                ),
+                if (hasDebt)
                   _summaryChip(
-                    LucideIcons.wallet,
-                    'managers.chip_balance'.tr(
-                        namedArgs: {'amount': formatIQD(manager.balance ?? 0)}),
-                    AppTone.brand,
+                    LucideIcons.alertTriangle,
+                    'managers.chip_debt'
+                        .tr(namedArgs: {'amount': formatIQD(totalDebt)}),
+                    AppTone.warning,
                   ),
-                  if (hasDebt)
-                    _summaryChip(
-                      LucideIcons.alertTriangle,
-                      'managers.chip_debt'
-                          .tr(namedArgs: {'amount': formatIQD(totalDebt)}),
-                      AppTone.warning,
-                    ),
-                  _summaryChip(
-                    LucideIcons.users,
-                    'managers.chip_subs'
-                        .tr(namedArgs: {'n': '${manager.usersCount ?? 0}'}),
-                    AppTone.brand,
-                  ),
-                ],
-              ),
+                _summaryChip(
+                  LucideIcons.users,
+                  'managers.chip_subs'
+                      .tr(namedArgs: {'n': '${manager.usersCount ?? 0}'}),
+                  AppTone.brand,
+                ),
+              ],
             ),
-            const SizedBox(height: Sp.lg),
-            // Actions grid — 4 cols. مطلب 2026-06-11: نفس تنسيق
-            // عمليات المشتركين الجديد (subscriber_detail_screen
-            // _OpCard) — دائرة ملوّنة 52dp + أيقونة بيضاء + ظل ناعم
-            // بلون الدائرة + label تحت الزر بلون النص العادي.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-              // ⚠️ انحدار 2026-08-29: النسبة 0.82 كانت معايرة للدائرة
-              // القديمة (52dp + ظلّ + تسمية بسطرين). البلاطة الجديدة
-              // مسطّحة وأقصر — أيقونة 22 + فجوة 8 + سطر تسمية + حشوة
-              // 12×2 ≈ 66dp — فبقيت ~20dp فراغاً أسفل كلّ زرّ.
-              // النسبة 1.0 تطابق ارتفاع المحتوى الفعلي.
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 4,
-                crossAxisSpacing: Sp.sm,
-                mainAxisSpacing: Sp.sm,
-                // 2026-08-30: 1.0 ما زالت تترك فراغاً — الحشوة الرأسيّة
-                // Sp.md×2 كانت معايرة للدائرة. صارت Sp.sm×2 والنسبة
-                // 1.15، فالبلاطة تلتصق بمحتواها.
-                childAspectRatio: 1.15,
-                children: [
-                  for (final a in actions) _actionTile(context, a),
-                ],
-              ),
+          ),
+          const SizedBox(height: Sp.lg),
+          // Actions grid — 4 cols. مطلب 2026-06-11: نفس تنسيق
+          // عمليات المشتركين الجديد (subscriber_detail_screen
+          // _OpCard) — دائرة ملوّنة 52dp + أيقونة بيضاء + ظل ناعم
+          // بلون الدائرة + label تحت الزر بلون النص العادي.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+            // ⚠️ انحدار 2026-08-29: النسبة 0.82 كانت معايرة للدائرة
+            // القديمة (52dp + ظلّ + تسمية بسطرين). البلاطة الجديدة
+            // مسطّحة وأقصر — أيقونة 22 + فجوة 8 + سطر تسمية + حشوة
+            // 12×2 ≈ 66dp — فبقيت ~20dp فراغاً أسفل كلّ زرّ.
+            // النسبة 1.0 تطابق ارتفاع المحتوى الفعلي.
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 4,
+              crossAxisSpacing: Sp.sm,
+              mainAxisSpacing: Sp.sm,
+              // 2026-08-30: 1.0 ما زالت تترك فراغاً — الحشوة الرأسيّة
+              // Sp.md×2 كانت معايرة للدائرة. صارت Sp.sm×2 والنسبة
+              // 1.15، فالبلاطة تلتصق بمحتواها.
+              childAspectRatio: 1.15,
+              children: [
+                for (final a in actions) _actionTile(context, a),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
