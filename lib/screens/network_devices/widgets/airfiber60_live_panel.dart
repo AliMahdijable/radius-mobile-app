@@ -244,7 +244,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           const SizedBox(width: 6),
           Text(
               _monitoring
-                  ? (freshMs != null ? 'مباشر · قبل ${freshMs}ث' : 'مباشر')
+                  ? (freshMs != null ? 'مباشر · قبل $freshMsث' : 'مباشر')
                   : 'موقوف',
               style: AppType.microBold(color: _monitoring ? AppColors.success : AppColors.textMid)),
         ]),
@@ -886,9 +886,9 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: '$lat,$lng'));
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('نُسخت الإحداثيّات'),
-                    duration: const Duration(seconds: 2),
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('نُسخت الإحداثيّات'),
+                    duration: Duration(seconds: 2),
                     behavior: SnackBarBehavior.floating));
               }
             },
@@ -899,9 +899,9 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: mapsUrl));
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('نُسخ رابط Google Maps'),
-                    duration: const Duration(seconds: 2),
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('نُسخ رابط Google Maps'),
+                    duration: Duration(seconds: 2),
                     behavior: SnackBarBehavior.floating));
               }
             },

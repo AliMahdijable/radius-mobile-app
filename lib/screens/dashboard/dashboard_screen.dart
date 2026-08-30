@@ -250,8 +250,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _walletLive = r;
         _walletLoaded = true;
       });
-      if (r != null)
+      if (r != null) {
         DashboardCache.saveWallet(r); // persist for next cold start
+      }
     });
   }
 

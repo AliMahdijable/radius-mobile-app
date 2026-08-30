@@ -113,8 +113,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       final start = int.parse(rangeMatch.group(4)!);
       final end = int.parse(rangeMatch.group(5)!);
       if (![o1, o2, o3].every((n) => n >= 0 && n <= 255)) return null;
-      if (start < 1 || start > 254 || end < 1 || end > 254 || start > end)
+      if (start < 1 || start > 254 || end < 1 || end > 254 || start > end) {
         return null;
+      }
       return (base: '$o1.$o2.$o3', start: start, end: end);
     }
     // صيغة 4 octets: a.b.c.d → نتجاهل الرابع، scan كامل
@@ -144,11 +145,11 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     final parsed = _parseRange(_baseCtrl.text);
     if (parsed == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
+        content: const Text(
             'صيغة غير صحيحة — أمثلة: 192.168.1  •  10.70.241.0/24  •  10.70.241.5-100'),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 4),
+        duration: const Duration(seconds: 4),
       ));
       return;
     }
@@ -167,11 +168,12 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         startOctet: parsed.start,
         endOctet: parsed.end,
         onProgress: (done, total) {
-          if (mounted)
+          if (mounted) {
             setState(() {
               _done = done;
               _total = total;
             });
+          }
         },
         onFound: (r) {
           if (mounted) {
@@ -228,7 +230,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
-              child: Text('تابع'),
+              child: const Text('تابع'),
             ),
           ],
         ),
@@ -272,10 +274,12 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           creds['version'] = 'v2c';
         }
       } else {
-        if (opts.user != null && opts.user!.isNotEmpty)
+        if (opts.user != null && opts.user!.isNotEmpty) {
           creds['user'] = opts.user!;
-        if (opts.pass != null && opts.pass!.isNotEmpty)
+        }
+        if (opts.pass != null && opts.pass!.isNotEmpty) {
           creds['pass'] = opts.pass!;
+        }
       }
       payload.add({
         'name': '${opts.prefix} $lastOctet',
@@ -331,10 +335,11 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
         Navigator.pop(context, _mutated > 0);
-        return false;
       },
       child: Scaffold(
         backgroundColor: AppColors.bg,
@@ -823,7 +828,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
 
           // 2. المنطقة (dropdown)
           DropdownButtonFormField<int?>(
-            value: _regionId,
+            initialValue: _regionId,
             isExpanded: true,
             decoration: InputDecoration(
               labelText: 'المنطقة',

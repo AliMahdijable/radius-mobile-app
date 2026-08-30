@@ -121,7 +121,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(LucideIcons.fileText,
+                  const Icon(LucideIcons.fileText,
                       size: 13, color: AppColors.warningFill),
                   const SizedBox(width: Sp.x6),
                   Expanded(
@@ -345,7 +345,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
           ],
         ),
         const SizedBox(height: 14),
-        _DetailRow(label: 'نوع الجهاز', value: 'Huawei ONT', strong: true),
+        const _DetailRow(label: 'نوع الجهاز', value: 'Huawei ONT', strong: true),
         if (o.sendStatus.trim().isNotEmpty && o.sendStatus.trim() != '--')
           _DetailRow(label: 'حالة الليف', value: o.sendStatus),
       ],

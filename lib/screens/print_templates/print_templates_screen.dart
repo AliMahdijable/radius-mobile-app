@@ -292,7 +292,7 @@ class _TemplateViewCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: (exists && template!.isActive)
                         ? AppColors.brandSoftBg
-                        : AppColors.textMid.withOpacity(0.08),
+                        : AppColors.textMid.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
                   child: Text(

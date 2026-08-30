@@ -480,7 +480,7 @@ class _PackagesTabState extends State<_PackagesTab> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(LucideIcons.package,
-                size: 48, color: AppColors.textMid.withOpacity(0.5)),
+                size: 48, color: AppColors.textMid.withValues(alpha: 0.5)),
             const SizedBox(height: Sp.md),
             Text(
               'portal.packages_empty'.tr(),
@@ -516,7 +516,7 @@ class _PackageRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(Sp.md),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.textMid.withOpacity(0.15)),
+            border: Border.all(color: AppColors.textMid.withValues(alpha: 0.15)),
             borderRadius: BorderRadius.circular(R.md),
           ),
           child: Row(
@@ -821,7 +821,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                     subtitle: Text('portal.pkg_hidden_hint'.tr(),
                         style: AppType.subtitle(color: AppColors.textMid)
                             .copyWith(fontSize: 10.5)),
-                    activeColor: AppColors.brand,
+                    activeThumbColor: AppColors.brand,
                     contentPadding: EdgeInsets.zero,
                   ),
                 ],
@@ -876,16 +876,16 @@ Widget _labeledField({
         decoration: InputDecoration(
           hintText: hint,
           hintStyle:
-              AppType.subtitle(color: AppColors.textMid.withOpacity(0.5)),
+              AppType.subtitle(color: AppColors.textMid.withValues(alpha: 0.5)),
           filled: true,
           fillColor: AppColors.surfaceInput,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(R.sm),
-            borderSide: BorderSide(color: AppColors.textMid.withOpacity(0.2)),
+            borderSide: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(R.sm),
-            borderSide: BorderSide(color: AppColors.textMid.withOpacity(0.2)),
+            borderSide: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(R.sm),

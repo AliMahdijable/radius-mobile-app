@@ -194,8 +194,9 @@ class DeviceAlertsService {
       final lastFired = _lastFiredAt[dedupKey];
       if (lastFired != null &&
           DateTime.now().difference(lastFired) < _dedupWindow) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🔕 dedup: $dedupKey فُلتِر (نفس النوع خلال 5د)');
+        }
         return;
       }
     }

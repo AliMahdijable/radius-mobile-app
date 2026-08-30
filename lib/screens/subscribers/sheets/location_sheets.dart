@@ -257,8 +257,9 @@ class _EditSheetState extends State<_EditSheet> {
       return (null, null, 'قيم غير صالحة');
     }
     if (lat < -90 || lat > 90) return (null, null, 'خط العرض خارج المدى (±90)');
-    if (lng < -180 || lng > 180)
+    if (lng < -180 || lng > 180) {
       return (null, null, 'خط الطول خارج المدى (±180)');
+    }
     return (lat, lng, null);
   }
 

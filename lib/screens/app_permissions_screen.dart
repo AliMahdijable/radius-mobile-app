@@ -158,8 +158,9 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
         _bioTypes.contains(BiometricType.strong)) {
       return 'perms.bio_fingerprint_available'.tr();
     }
-    if (_bioTypes.contains(BiometricType.iris))
+    if (_bioTypes.contains(BiometricType.iris)) {
       return 'perms.bio_iris_available'.tr();
+    }
     return 'perms.bio_generic_available'.tr();
   }
 

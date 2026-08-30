@@ -1,6 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui' show FontFeature;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../widgets/reveal_password_sheet.dart';
@@ -678,13 +677,13 @@ class _ManagerTile extends StatelessWidget {
                     if ((manager.mobile ?? '').isNotEmpty)
                       _badge(
                         icon: LucideIcons.phone,
-                        label: manager.mobile!,
+                        label: manager.mobile,
                         color: AppColors.success,
                       ),
                     if ((manager.company ?? '').isNotEmpty)
                       _badge(
                         icon: LucideIcons.briefcase,
-                        label: manager.company!,
+                        label: manager.company,
                         color: AppColors.warning,
                       ),
                   ],

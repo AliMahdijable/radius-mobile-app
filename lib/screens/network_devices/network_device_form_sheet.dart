@@ -519,7 +519,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
     ValueChanged<String> onChanged,
   ) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       decoration: _inputDecoration(label),
       items: items
@@ -561,7 +561,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String?>(
-          value: matchedKey,
+          initialValue: matchedKey,
           isExpanded: true,
           decoration: _inputDecoration('موديل UBNT'),
           hint: current.isEmpty
@@ -690,7 +690,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<int?>(
-          value: _regionId,
+          initialValue: _regionId,
           isExpanded: true,
           decoration: _inputDecoration('المنطقة'),
           items: items,

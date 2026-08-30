@@ -1,6 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
@@ -11,7 +10,6 @@ import '../../../models/subscriber.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
-import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Bottom sheet for setting/removing a subscriber's package discount —
@@ -291,7 +289,7 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
                 ],
                 if (overshoot) ...[
                   const SizedBox(height: Sp.md),
-                  SheetResultBanner(
+                  const SheetResultBanner(
                     icon: LucideIcons.triangleAlert,
                     label: 'الخصم يساوي السعر أو يتجاوزه',
                     value: 'السعر النهائي 0',

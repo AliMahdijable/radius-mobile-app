@@ -253,8 +253,9 @@ class SubscribersApi {
       }
       _packagesCache = out;
       _packagesCacheTime = DateTime.now();
-      if (!kReleaseMode)
+      if (!kReleaseMode) {
         debugPrint('🟢 v2/packages: ${out.length} loaded (cached 5m)');
+      }
       return out;
     } on DioException catch (e) {
       _log('v2/packages', e);

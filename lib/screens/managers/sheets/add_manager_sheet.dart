@@ -3,8 +3,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/managers_api.dart';
 import '../../../theme/colors.dart';
-import '../../../theme/typography.dart';
-import '../../../services/subscriber_events.dart';
 import '_manager_form.dart';
 
 /// إنشاء مدير فرعي جديد. الـform موحّد بين add/edit في

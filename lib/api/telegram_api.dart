@@ -151,8 +151,9 @@ class TelegramApi {
       );
       final body = r.data ?? const {};
       final s = body['status'];
-      if (s is Map)
+      if (s is Map) {
         return TelegramStatus.fromJson(Map<String, dynamic>.from(s));
+      }
       return null;
     } catch (e) {
       _log('status', e);
@@ -300,10 +301,7 @@ class TelegramApi {
         data: {'dryRun': true},
       );
       final body = r.data ?? const {};
-      if (body is Map) {
-        return BroadcastLinksPreview.fromJson(Map<String, dynamic>.from(body));
-      }
-      return null;
+      return BroadcastLinksPreview.fromJson(Map<String, dynamic>.from(body));
     } catch (e) {
       _log('broadcast-links dry', e);
       return null;
@@ -341,10 +339,7 @@ class TelegramApi {
         },
       );
       final body = r.data ?? const {};
-      if (body is Map) {
-        return BroadcastPreview.fromJson(Map<String, dynamic>.from(body));
-      }
-      return null;
+      return BroadcastPreview.fromJson(Map<String, dynamic>.from(body));
     } catch (e) {
       _log('broadcast dry', e);
       return null;

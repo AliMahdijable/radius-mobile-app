@@ -471,8 +471,9 @@ class ReportsApi {
         return (ok: false, data: null, error: body['message']?.toString());
       }
       final data = body['data'];
-      if (data is! Map)
+      if (data is! Map) {
         return (ok: false, data: null, error: 'تنسيق غير متوقع');
+      }
       final kpisRaw = data['kpis'];
       final logsRaw = data['recentLogs'];
       final kpis = kpisRaw is Map
@@ -545,8 +546,9 @@ class ReportsApi {
         );
       }
       final list = body['data'];
-      if (list is! List)
+      if (list is! List) {
         return (ok: true, rows: const <ActivityRow>[], error: null);
+      }
       return (
         ok: true,
         rows: list
@@ -725,8 +727,9 @@ class ReportsApi {
         );
       }
       final list = body['data'];
-      if (list is! List)
+      if (list is! List) {
         return (ok: true, rows: const <SessionRow>[], error: null);
+      }
       return (
         ok: true,
         rows: list

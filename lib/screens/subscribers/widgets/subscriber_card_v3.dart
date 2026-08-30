@@ -611,9 +611,9 @@ class SubscriberCardV3 extends StatelessWidget {
     final d = seconds ~/ 86400;
     final h = (seconds % 86400) ~/ 3600;
     final m = (seconds % 3600) ~/ 60;
-    if (d > 0) return '$d يوم ${h}س ${m}د';
-    if (h > 0) return '${h}س ${m}د';
-    return '${m}د';
+    if (d > 0) return '$d يوم $hس $mد';
+    if (h > 0) return '$hس $mد';
+    return '$mد';
   }
 }
 

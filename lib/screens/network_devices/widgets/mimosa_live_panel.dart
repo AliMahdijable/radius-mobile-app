@@ -206,7 +206,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           const SizedBox(width: 6),
           Text(
             _monitoring
-                ? (freshS != null ? 'مباشر · قبل ${freshS}ث' : 'مباشر')
+                ? (freshS != null ? 'مباشر · قبل $freshSث' : 'مباشر')
                 : 'موقوف',
             style: AppType.microBold(color: _monitoring ? AppColors.success : AppColors.textMid),
           ),
@@ -759,9 +759,9 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: mapsUrl));
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('نُسخ رابط Google Maps'),
-                    duration: const Duration(seconds: 2),
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('نُسخ رابط Google Maps'),
+                    duration: Duration(seconds: 2),
                     behavior: SnackBarBehavior.floating));
               }
             },

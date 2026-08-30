@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -83,7 +82,7 @@ class MessageLog {
     final fn = j['recipient_firstname']?.toString().trim();
     final ln = j['recipient_lastname']?.toString().trim();
     final arabicName = [fn, ln]
-        .where((p) => p != null && p!.isNotEmpty)
+        .where((p) => p != null && p.isNotEmpty)
         .map((p) => p!)
         .join(' ');
     return MessageLog(

@@ -1,4 +1,3 @@
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -168,7 +167,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         color: _tgBlue,
       ),
       const SizedBox(height: 12),
-      _StepsCard(tgBlue: _tgBlue),
+      const _StepsCard(tgBlue: _tgBlue),
       const SizedBox(height: 12),
       _TokenEntryCard(
         adminId: _adminId!,
@@ -799,5 +798,5 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
 // ignore: unused_element
 void _unused() {
   // ignore: unused_local_variable
-  final _ = Sp.md;
+  const _ = Sp.md;
 }

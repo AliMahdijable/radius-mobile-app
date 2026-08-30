@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
@@ -86,6 +85,13 @@ class PrintService {
     String documentName = 'Receipt',
   }) async {
     try {
+      // ⚠️ `convertHtml` مهجورة بلا بديل جاهز: الحزمة تقترح «طريقة
+      // أخرى» أي بناء المستند بعناصر `pw` بدل HTML. لكنّ محرّر
+      // القوالب المرئي يُخرج HTML بـ33 حقل تصميم، وإعادة بنائه
+      // بـ`pw` تعني إعادة كتابة الطباعة كاملةً — مخاطرة على ميزة
+      // مستعملة يوميّاً مقابل إسكات تحذير. تبقى حتى تُقرَّر الهجرة
+      // كعمل مستقلّ.
+      // ignore: deprecated_member_use
       final Uint8List pdfBytes = await Printing.convertHtml(
         format: format,
         html: html,
@@ -332,7 +338,7 @@ class PrintService {
         pw.Center(
           child: pw.Text(
             'شكراً لتعاملكم معنا',
-            style: pw.TextStyle(fontSize: 11, color: PdfColors.grey600),
+            style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey600),
           ),
         ),
       ],

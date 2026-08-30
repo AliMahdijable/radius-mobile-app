@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
@@ -113,9 +112,9 @@ class _EditSheetState extends State<_EditSheet> {
     // re-evaluates _hasChanges on each keystroke — without these the
     // button was stuck disabled because nothing triggered a rebuild
     // when the admin typed (مطلب 2026-06-10).
-    final touch = () {
+    void touch() {
       if (mounted) setState(() {});
-    };
+    }
     _username.addListener(touch);
     _password.addListener(touch);
     _firstname.addListener(touch);
@@ -304,7 +303,7 @@ class _EditSheetState extends State<_EditSheet> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
         children: [
-          _FieldLabel(label: 'اسم المستخدم'),
+          const _FieldLabel(label: 'اسم المستخدم'),
           _Field(
             controller: _username,
             hint: 'username@admin',
@@ -312,7 +311,7 @@ class _EditSheetState extends State<_EditSheet> {
             icon: LucideIcons.user,
           ),
           const SizedBox(height: Sp.md),
-          _FieldLabel(label: 'كلمة السر'),
+          const _FieldLabel(label: 'كلمة السر'),
           _Field(
             controller: _password,
             hint: '••••••••',
@@ -337,7 +336,7 @@ class _EditSheetState extends State<_EditSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _FieldLabel(label: 'الاسم'),
+                    const _FieldLabel(label: 'الاسم'),
                     _Field(
                       controller: _firstname,
                       hint: 'الاسم',
@@ -352,7 +351,7 @@ class _EditSheetState extends State<_EditSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _FieldLabel(label: 'الكنية'),
+                    const _FieldLabel(label: 'الكنية'),
                     _Field(
                       controller: _lastname,
                       hint: 'الكنية',
@@ -365,7 +364,7 @@ class _EditSheetState extends State<_EditSheet> {
             ],
           ),
           const SizedBox(height: Sp.md),
-          _FieldLabel(label: 'رقم الهاتف'),
+          const _FieldLabel(label: 'رقم الهاتف'),
           _Field(
             controller: _phone,
             hint: '07XX XXX XXXX',
@@ -391,7 +390,7 @@ class _EditSheetState extends State<_EditSheet> {
             ),
           ),
           const SizedBox(height: Sp.md),
-          _FieldLabel(label: 'الباقة'),
+          const _FieldLabel(label: 'الباقة'),
           _PackagePicker(
             packages: _packages,
             loading: _loadingPackages,
@@ -401,7 +400,7 @@ class _EditSheetState extends State<_EditSheet> {
           ),
           if (_canEditExpiration) ...[
             const SizedBox(height: Sp.md),
-            _FieldLabel(label: 'تاريخ الانتهاء'),
+            const _FieldLabel(label: 'تاريخ الانتهاء'),
             _ExpirationPicker(
               value: _expiration,
               enabled: !_saving,
@@ -410,7 +409,7 @@ class _EditSheetState extends State<_EditSheet> {
           ],
           if (_canPickParent) ...[
             const SizedBox(height: Sp.md),
-            _FieldLabel(label: 'تابع إلى (المدير)'),
+            const _FieldLabel(label: 'تابع إلى (المدير)'),
             _ManagerPicker(
               managers: _managers,
               loading: _loadingManagers,

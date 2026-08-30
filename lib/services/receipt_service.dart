@@ -127,7 +127,7 @@ class ReceiptService {
     int? durationDays,
   }) {
     final now = DateTime.now();
-    DateTime expiry = _parseExpiration(newExpiration) ??
+    final DateTime expiry = _parseExpiration(newExpiration) ??
         (durationDays != null && durationDays > 0
             ? now.add(Duration(days: durationDays))
             : _addMonth(now));

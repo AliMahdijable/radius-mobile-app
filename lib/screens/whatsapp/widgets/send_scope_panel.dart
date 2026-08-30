@@ -148,7 +148,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
           children: [
             Switch(
               value: s.sendToAll,
-              activeColor: AppColors.brand,
+              activeThumbColor: AppColors.brand,
               onChanged: _saving
                   ? null
                   : (v) => _save(

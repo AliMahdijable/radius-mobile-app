@@ -324,7 +324,7 @@ class _ConsumptionSheet extends StatelessWidget {
   static String _fmtDuration(int seconds) {
     final h = seconds ~/ 3600;
     final m = (seconds % 3600) ~/ 60;
-    if (h > 0) return '${h}س ${m}د';
-    return '${m}د';
+    if (h > 0) return '$hس $mد';
+    return '$mد';
   }
 }

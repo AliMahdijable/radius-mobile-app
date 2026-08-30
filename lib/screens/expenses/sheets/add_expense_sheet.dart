@@ -146,7 +146,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
         children: [
-          _Lbl('المبلغ *'),
+          const _Lbl('المبلغ *'),
           _AmountField(
             controller: _amountCtrl,
             accent: accent,
@@ -160,7 +160,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
             onChipTap: _addToAmount,
           ),
           const SizedBox(height: Sp.md),
-          _Lbl('التاريخ'),
+          const _Lbl('التاريخ'),
           Material(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(R.sm),
@@ -209,7 +209,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
             ),
           ),
           const SizedBox(height: Sp.md),
-          _Lbl('ملاحظة (اختياري)'),
+          const _Lbl('ملاحظة (اختياري)'),
           TextField(
             controller: _noteCtrl,
             maxLines: 2,
@@ -218,7 +218,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
               hintText: 'وصف الصرفية…',
               hintStyle: AppType.input(color: AppColors.textLow),
               prefixIcon: Padding(
-                padding: EdgeInsets.only(left: 8, right: 4, bottom: 16),
+                padding: const EdgeInsets.only(left: 8, right: 4, bottom: 16),
                 child: Icon(LucideIcons.fileText,
                     size: 16, color: AppColors.textMid),
               ),

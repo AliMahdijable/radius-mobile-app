@@ -159,7 +159,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     if (_amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('أدخل قيمة الخصم'),
+          content: const Text('أدخل قيمة الخصم'),
           backgroundColor: AppColors.warning,
           behavior: SnackBarBehavior.floating,
         ),
@@ -169,7 +169,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     if (_selected.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('اختر مشتركاً واحداً على الأقل'),
+          content: const Text('اختر مشتركاً واحداً على الأقل'),
           backgroundColor: AppColors.warning,
           behavior: SnackBarBehavior.floating,
         ),

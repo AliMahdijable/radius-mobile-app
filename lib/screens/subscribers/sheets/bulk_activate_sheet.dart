@@ -903,7 +903,7 @@ class _PriceChip extends StatelessWidget {
         children: [
           if (hasDiscount) ...[
             Text(
-              '${formatIQD(row.originalPrice.round())}',
+              formatIQD(row.originalPrice.round()),
               style: AppType.muted(color: AppColors.textLow).copyWith(
                 fontSize: 9.5,
                 decoration: TextDecoration.lineThrough,

@@ -74,8 +74,9 @@ class ExpensesApi {
         },
       );
       final body = r.data ?? const {};
-      if (body['success'] != true)
+      if (body['success'] != true) {
         return (rows: const <ExpenseRow>[], total: 0);
+      }
       final list = body['expenses'];
       if (list is! List) return (rows: const <ExpenseRow>[], total: 0);
       final rows = list

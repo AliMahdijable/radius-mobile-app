@@ -467,28 +467,28 @@ class MimosaStats {
     List<MimosaChain> chains = const [],
   }) {
     Varbind? g(String oid) => m[oid];
-    double? _n10(String oid) {
+    double? n10(String oid) {
       final vb = m[oid];
       if (vb == null) return null;
       final v = vb.asInt;
       return v == 0 ? null : v / 10.0;
     }
 
-    int? _n(String oid) {
+    int? n(String oid) {
       final vb = m[oid];
       if (vb == null) return null;
       final v = vb.asInt;
       return v == 0 ? null : v;
     }
 
-    String? _s(String oid) {
+    String? s(String oid) {
       final vb = m[oid];
       if (vb == null) return null;
       final s = vb.asString.trim();
       return s.isEmpty ? null : s;
     }
 
-    double? _gps(String oid) {
+    double? gps(String oid) {
       // Mimosa GPS often stored as int × 1e7 (LibreNMS uses / 1e7)
       final vb = m[oid];
       if (vb == null) return null;
@@ -498,27 +498,27 @@ class MimosaStats {
     }
 
     return MimosaStats(
-      sysDescr: _s(MimosaApi._oidSysDescr),
-      sysName: _s(MimosaApi._oidSysName),
+      sysDescr: s(MimosaApi._oidSysDescr),
+      sysName: s(MimosaApi._oidSysName),
       sysUptimeSec: _parseUptime(g(MimosaApi._oidSysUpTime)),
-      deviceName: _s(MimosaApi._oidDeviceName),
-      serialNumber: _s(MimosaApi._oidSerialNumber),
-      firmwareVersion: _s(MimosaApi._oidFirmwareVersion),
-      temperatureC: _n10(MimosaApi._oidInternalTemp),
-      latitude: _gps(MimosaApi._oidLatitude),
-      longitude: _gps(MimosaApi._oidLongitude),
-      altitude: _n(MimosaApi._oidAltitude),
-      gpsSats: _n(MimosaApi._oidGpsSats),
-      wirelessMode: _n(MimosaApi._oidWirelessMode),
-      tdmaMode: _n(MimosaApi._oidTdmaMode),
-      antennaGainDbi: _n(MimosaApi._oidAntennaGain),
-      totalTxPowerDbm: _n10(MimosaApi._oidTotalTxPower),
-      totalRxPowerDbm: _n10(MimosaApi._oidTotalRxPower),
-      targetRxPowerDbm: _n10(MimosaApi._oidTargetRxPower),
-      phyTxRateMbps: _n(MimosaApi._oidPhyTxRate),
-      phyRxRateMbps: _n(MimosaApi._oidPhyRxRate),
-      perTxRatePct: _n10(MimosaApi._oidPerTxRate),
-      perRxRatePct: _n10(MimosaApi._oidPerRxRate),
+      deviceName: s(MimosaApi._oidDeviceName),
+      serialNumber: s(MimosaApi._oidSerialNumber),
+      firmwareVersion: s(MimosaApi._oidFirmwareVersion),
+      temperatureC: n10(MimosaApi._oidInternalTemp),
+      latitude: gps(MimosaApi._oidLatitude),
+      longitude: gps(MimosaApi._oidLongitude),
+      altitude: n(MimosaApi._oidAltitude),
+      gpsSats: n(MimosaApi._oidGpsSats),
+      wirelessMode: n(MimosaApi._oidWirelessMode),
+      tdmaMode: n(MimosaApi._oidTdmaMode),
+      antennaGainDbi: n(MimosaApi._oidAntennaGain),
+      totalTxPowerDbm: n10(MimosaApi._oidTotalTxPower),
+      totalRxPowerDbm: n10(MimosaApi._oidTotalRxPower),
+      targetRxPowerDbm: n10(MimosaApi._oidTargetRxPower),
+      phyTxRateMbps: n(MimosaApi._oidPhyTxRate),
+      phyRxRateMbps: n(MimosaApi._oidPhyRxRate),
+      perTxRatePct: n10(MimosaApi._oidPerTxRate),
+      perRxRatePct: n10(MimosaApi._oidPerRxRate),
       chains: chains,
     );
   }

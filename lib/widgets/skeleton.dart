@@ -105,27 +105,27 @@ class SkeletonDeviceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.card),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(children: [
-        const SkeletonBox(width: 44, height: 44, borderRadius: 22),
-        const SizedBox(width: 12),
+      child: const Row(children: [
+        SkeletonBox(width: 44, height: 44, borderRadius: 22),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SkeletonBox(width: 140, height: 14),
-              const SizedBox(height: 6),
-              Row(children: const [
+              SkeletonBox(width: 140, height: 14),
+              SizedBox(height: 6),
+              Row(children: [
                 SkeletonBox(width: 80, height: 10),
                 SizedBox(width: 6),
                 SkeletonBox(width: 40, height: 10),
               ]),
-              const SizedBox(height: 6),
-              const SkeletonBox(width: 100, height: 9),
+              SizedBox(height: 6),
+              SkeletonBox(width: 100, height: 9),
             ],
           ),
         ),
-        const SizedBox(width: 6),
-        const SkeletonBox(width: 30, height: 10),
+        SizedBox(width: 6),
+        SkeletonBox(width: 30, height: 10),
       ]),
     );
   }
@@ -161,13 +161,13 @@ class SkeletonRegionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.card),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(children: [
-        const SkeletonBox(width: 40, height: 40, borderRadius: 20),
-        const SizedBox(width: 12),
+      child: const Row(children: [
+        SkeletonBox(width: 40, height: 40, borderRadius: 20),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               SkeletonBox(width: 100, height: 14),
               SizedBox(height: 4),
               SkeletonBox(width: 60, height: 10),

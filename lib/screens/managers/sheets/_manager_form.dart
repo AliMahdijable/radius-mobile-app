@@ -278,7 +278,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
               style: AppType.muted().copyWith(fontSize: 11),
             ),
             value: _enabled,
-            activeColor: AppColors.brand,
+            activeThumbColor: AppColors.brand,
             onChanged: (v) => setState(() => _enabled = v),
           ),
         ],
@@ -326,7 +326,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
   Widget _parentPicker() {
     final parents = _parents ?? const [];
     return DropdownButtonFormField<int?>(
-      value: _parentId,
+      initialValue: _parentId,
       isExpanded: true,
       decoration: InputDecoration(
         filled: true,
@@ -387,7 +387,7 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
       );
     }
     return DropdownButtonFormField<int>(
-      value: _aclGroupId,
+      initialValue: _aclGroupId,
       isExpanded: true,
       decoration: InputDecoration(
         filled: true,

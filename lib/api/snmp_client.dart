@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -236,8 +235,9 @@ class SnmpV2c {
   /// OID → bytes (base-128 encoding). First byte = 40*a + b.
   List<int> _encodeOid(String oid) {
     final parts = oid.split('.').map(int.parse).toList();
-    if (parts.length < 2)
+    if (parts.length < 2) {
       throw ArgumentError('OID must have ≥2 components: $oid');
+    }
     final bytes = <int>[parts[0] * 40 + parts[1]];
     for (int i = 2; i < parts.length; i++) {
       bytes.addAll(_encodeBase128(parts[i]));
@@ -512,5 +512,5 @@ class SnmpException implements Exception {
 }
 
 class SnmpTimeoutException extends SnmpException {
-  SnmpTimeoutException(String msg) : super(msg);
+  SnmpTimeoutException(super.msg);
 }

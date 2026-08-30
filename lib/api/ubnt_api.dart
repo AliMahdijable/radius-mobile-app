@@ -208,8 +208,9 @@ class UbntApi {
           final result = await client.run('mca-status').timeout(timeout);
           output = utf8.decode(result, allowMalformed: true);
         } catch (e) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint('⚠️ mca-status failed: $e — trying ubntbox status');
+          }
           final result = await client.run('ubntbox status').timeout(timeout);
           output = utf8.decode(result, allowMalformed: true);
         }
@@ -273,7 +274,7 @@ class UbntApi {
       // fallback: لو الأمر المُجمَّع فشل (بعض airOS القديم يقفل shell)،
       // نرجع لسلوك القديم بأوامر منفصلة.
       String batchedOut = '';
-      final marker = '===MYSVCS_SECTION===';
+      const marker = '===MYSVCS_SECTION===';
       try {
         final cmd = [
           'wstalist 2>/dev/null',
@@ -319,8 +320,9 @@ class UbntApi {
               .trim();
           if (r.startsWith('[')) {
             wstaOut = r;
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint('🟢 [ubnt] wstalist recovered via fallback fetch');
+            }
           }
         } catch (_) {}
       }
@@ -584,9 +586,9 @@ class UbntApi {
 
       // stations: قد تكون في wireless.sta أو root.stations أو root.remote (airFiber)
       List sta = const [];
-      if (w?['sta'] is List)
+      if (w?['sta'] is List) {
         sta = w!['sta'] as List;
-      else if (root['stations'] is List)
+      } else if (root['stations'] is List)
         sta = root['stations'] as List;
       else if (root['peers'] is List) sta = root['peers'] as List;
       // airFiber remote peer
@@ -626,14 +628,16 @@ class UbntApi {
       final data = json.decode(jsonStr);
       if (data is! Map) return;
       final root = data as Map<String, dynamic>;
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint('🔵 af-status root keys: ${root.keys.toList()}');
+      }
 
       // airFiber structure: radio/local/remote/link
       final local = (root['local'] as Map?)?.cast<String, dynamic>();
       if (local != null) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🔵 af-status.local keys: ${local.keys.toList()}');
+        }
         map['wlanSignal'] ??= _asStr(
             local['rf']?['rxlevel'] ?? local['signal'] ?? local['rx_level']);
         map['wlanNoiseFloor'] ??=
@@ -642,8 +646,9 @@ class UbntApi {
       }
       final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
       if (remote != null) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🔵 af-status.remote keys: ${remote.keys.toList()}');
+        }
         // remote peer — لو ما فيه station من مكان آخر، نضيفه
         if (map['station1_mac'] == null) {
           _set(map, 'station1_mac', remote['mac']);
@@ -657,15 +662,17 @@ class UbntApi {
       }
       final link = (root['link'] as Map?)?.cast<String, dynamic>();
       if (link != null) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🔵 af-status.link keys: ${link.keys.toList()}');
+        }
         map['wlanTxRate'] ??= _asStr(link['tx_capacity'] ?? link['capacity']);
         map['wlanRxRate'] ??= _asStr(link['rx_capacity']);
       }
       final radio = (root['radio'] as Map?)?.cast<String, dynamic>();
       if (radio != null) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🔵 af-status.radio keys: ${radio.keys.toList()}');
+        }
         map['wlanFrequency'] ??= _asStr(radio['frequency']);
       }
       map.removeWhere((k, v) => v.isEmpty);
@@ -756,17 +763,19 @@ class UbntApi {
         // fallback: direct tx/rx (airMax)
         if (dlCap == null) {
           final rxr = j['rx'];
-          if (rxr is Map)
+          if (rxr is Map) {
             _set(map, 'station${idx}_rx', rxr['rate']);
-          else
+          } else {
             _set(map, 'station${idx}_rx', rxr);
+          }
         }
         if (ulCap == null) {
           final txr = j['tx'];
-          if (txr is Map)
+          if (txr is Map) {
             _set(map, 'station${idx}_tx', txr['rate']);
-          else
+          } else {
             _set(map, 'station${idx}_tx', txr);
+          }
         }
 
         // Distance (airFiber يعطي prs_sta.distance بالأمتار)
@@ -1082,8 +1091,9 @@ class UbntStats {
       // rates: airFiber يعطي 0 في mca-status، الحقيقي في station.prs_sta.capacity
       int txRate = _n(m['wlanTxRate']);
       int rxRate = _n(m['wlanRxRate']);
-      if (txRate == 0)
+      if (txRate == 0) {
         txRate = _n(m['station1_tx_capacity']) ~/ 1000; // Kbps → Mbps
+      }
       if (rxRate == 0) rxRate = _n(m['station1_rx_capacity']) ~/ 1000;
 
       // CCQ: أسماء متعدّدة في mca-status حسب الإصدار
@@ -1190,8 +1200,9 @@ class UbntStats {
           ccqValue = _n((s['rx'] as Map)['ccq']);
         }
         // بعض إصدارات airOS ترجع CCQ ×10 (961 → 96.1%)
-        if (ccqValue > 100 && ccqValue <= 1000)
+        if (ccqValue > 100 && ccqValue <= 1000) {
           ccqValue = (ccqValue / 10).round();
+        }
         if (ccqValue > 100) ccqValue = 100;
 
         // Debug (مرّة واحدة لأوّل station) — نعرف أسماء fields الحقيقيّة
@@ -1327,7 +1338,9 @@ class UbntStats {
     if (low.contains('master') || low.contains('ap')) return 'ap-ptmp';
     if (low.contains('managed') ||
         low.contains('station') ||
-        low.contains('sta')) return 'sta-ptp';
+        low.contains('sta')) {
+      return 'sta-ptp';
+    }
     return raw;
   }
 }

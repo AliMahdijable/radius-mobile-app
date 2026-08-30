@@ -54,8 +54,9 @@ class ContactPicker {
         }
         return (phone: _clean(full.phones.first.number), error: null);
       } on PlatformException catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('ContactPicker.pick: ${e.code} ${e.message}');
+        }
         // على Android بدون visibility declaration الحدث يرجع FailedResult
         // — نجرّب fallback لو الإذن معطى.
       } catch (e) {
@@ -80,7 +81,7 @@ class ContactPicker {
   }
 
   static String? _clean(String raw) {
-    var n = raw.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+    final n = raw.trim().replaceAll(RegExp(r'[^0-9+]'), '');
     return n.isEmpty ? null : n;
   }
 }

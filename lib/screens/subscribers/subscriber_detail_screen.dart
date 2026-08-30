@@ -896,9 +896,9 @@ class _LiveSessionCard extends StatelessWidget {
     final d = seconds ~/ 86400;
     final h = (seconds % 86400) ~/ 3600;
     final m = (seconds % 3600) ~/ 60;
-    if (d > 0) return '$d يوم ${h}س ${m}د';
-    if (h > 0) return '${h}س ${m}د';
-    return '${m}د';
+    if (d > 0) return '$d يوم $hس $mد';
+    if (h > 0) return '$hس $mد';
+    return '$mد';
   }
 
   static String _formatBytes(int bytes) {
@@ -1334,7 +1334,7 @@ class _SubscriberHero extends StatelessWidget {
             color: AppColors.onBrandFill3,
           ),
           if (pass == null)
-            SizedBox(
+            const SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
@@ -1437,9 +1437,9 @@ class _SubscriberHero extends StatelessWidget {
     final d = diff.inDays;
     final h = diff.inHours.remainder(24);
     final m = diff.inMinutes.remainder(60);
-    if (d > 0) return ('$d يوم', '${h}س ${m}د');
-    if (h > 0) return ('${h}س', '${m}د');
-    return ('${m}د', 'أقل من ساعة');
+    if (d > 0) return ('$d يوم', '$hس $mد');
+    if (h > 0) return ('$hس', '$mد');
+    return ('$mد', 'أقل من ساعة');
   }
 
   // ───────── الهاتف ─────────
@@ -1453,7 +1453,7 @@ class _SubscriberHero extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.call_rounded, size: 17, color: AppColors.onBrandSecondary),
+          const Icon(Icons.call_rounded, size: 17, color: AppColors.onBrandSecondary),
           const SizedBox(width: 10),
           Expanded(
             child: InkWell(
@@ -1496,7 +1496,7 @@ class _SubscriberHero extends StatelessWidget {
     return Row(
       children: [
         if (parent != null && parent.isNotEmpty) ...[
-          Icon(Icons.shield_rounded,
+          const Icon(Icons.shield_rounded,
               size: 15, color: AppColors.onBrandSecondary),
           const SizedBox(width: 6),
           Flexible(

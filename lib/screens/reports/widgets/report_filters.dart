@@ -474,7 +474,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       onTap: () => _showManagerMenu(
         byId: true,
         onPick: (v) => widget
-            .onChanged(widget.value.copyWith(actionManagerId: v as String?)),
+            .onChanged(widget.value.copyWith(actionManagerId: v)),
         current: selected,
       ),
     );
@@ -493,7 +493,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       onTap: () => _showManagerMenu(
         byId: false,
         onPick: (v) =>
-            widget.onChanged(widget.value.copyWith(userManager: v as String?)),
+            widget.onChanged(widget.value.copyWith(userManager: v)),
         current: selected,
       ),
     );

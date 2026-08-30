@@ -285,7 +285,7 @@ class _Pin extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(LucideIcons.mapPin, size: 44, color: AppColors.success),
-        SizedBox(
+        const SizedBox(
           width: 10,
           height: 4,
           child: DecoratedBox(

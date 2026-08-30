@@ -237,8 +237,8 @@ class MikrotikApi {
       //   - `/interface/wifi/print` — RouterOS 7 wifi (WiFi 6 / AX)
       //   - `/interface/wifiwave2/print` — legacy wifiwave2 (7.1-7.6)
       // نجرّب الأربعة، ونجمع النتائج (LHG 60G مثلاً لا يستجيب للأوّل بل للثاني).
-      List<Map<String, String>> wirelessRows = [];
-      List<Map<String, String>> wirelessClients = [];
+      final List<Map<String, String>> wirelessRows = [];
+      final List<Map<String, String>> wirelessClients = [];
       try {
         final rows = await client.query(['/interface/wireless/print']);
         wirelessRows.addAll(rows);
@@ -305,8 +305,9 @@ class MikrotikApi {
         final regs = await client.query([pickedPath],
             debugLog: true).timeout(const Duration(seconds: 12));
         wirelessClients.addAll(regs);
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🟢 [mikrotik] $pickedPath → ${regs.length} clients');
+        }
       } on TimeoutException {
         failureMsg = 'timeout';
       } catch (e) {
@@ -318,9 +319,10 @@ class MikrotikApi {
                 ['/interface/wifi/registration-table/print'],
                 debugLog: true).timeout(const Duration(seconds: 8));
             wirelessClients.addAll(regs);
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint(
                   '🟢 [mikrotik] wifi reg-table → ${regs.length} clients');
+            }
           } catch (e2) {
             final m2 = e2.toString();
             if (!m2.contains('no such command') &&
@@ -346,9 +348,10 @@ class MikrotikApi {
           ).timeout(const Duration(seconds: 8));
           if (regs.isNotEmpty) {
             wirelessClients.addAll(regs);
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint(
                   '🟢 [mikrotik] multi-word worked → ${regs.length} clients');
+            }
           }
         } catch (_) {}
       }
@@ -360,19 +363,22 @@ class MikrotikApi {
       if (wirelessClients.isEmpty &&
           failureMsg == null &&
           wirelessRows.isNotEmpty) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('🔁 [mikrotik] Binary API رجع 0 — جرّب SSH fallback');
+        }
         try {
           final sshClients = await _fetchClientsViaSsh(ip, user, pass);
           if (sshClients.isNotEmpty) {
             wirelessClients.addAll(sshClients);
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint(
                   '🟢 [mikrotik] SSH fallback → ${sshClients.length} clients');
+            }
           } else {
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint(
                   'ℹ️ [mikrotik] SSH fallback رجع 0 كذلك — الـAP فعلاً بلا عملاء');
+            }
           }
         } catch (e) {
           if (kDebugMode) {
@@ -393,9 +399,10 @@ class MikrotikApi {
               .query(['/caps-man/registration-table/print']).timeout(
                   const Duration(seconds: 8));
           wirelessClients.addAll(regs);
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint(
                 '🟢 [mikrotik] caps-man reg-table → ${regs.length} clients');
+          }
         } catch (_) {}
       }
       if (wirelessClients.isEmpty && wirelessRows.isNotEmpty && kDebugMode) {

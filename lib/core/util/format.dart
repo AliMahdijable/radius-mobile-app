@@ -1,5 +1,6 @@
 /// Tiny formatting helpers. No locale dance — IQD only, en_US digits for
 /// readability (per user feedback: ٥٤٠٬٠٠٠ harder than 540,000).
+library;
 
 final _grouper = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
 

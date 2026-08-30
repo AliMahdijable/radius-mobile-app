@@ -121,10 +121,11 @@ class _RegionsScreenState extends State<RegionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
         Navigator.pop(context, _mutated);
-        return false;
       },
       child: Scaffold(
         backgroundColor: AppColors.bg,
@@ -316,7 +317,7 @@ class _RegionFormSheetState extends State<_RegionFormSheet> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('اسم المنطقة مطلوب'),
+        content: const Text('اسم المنطقة مطلوب'),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));

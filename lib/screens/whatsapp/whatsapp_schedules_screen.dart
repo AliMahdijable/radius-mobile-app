@@ -393,7 +393,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         Switch.adaptive(
           value: enabled,
           onChanged: onToggle,
-          activeColor: color,
+          activeThumbColor: color,
         ),
       ],
     );

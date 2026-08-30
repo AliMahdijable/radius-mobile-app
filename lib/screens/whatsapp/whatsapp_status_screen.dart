@@ -1148,7 +1148,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     return SwitchListTile.adaptive(
       contentPadding: EdgeInsets.zero,
       dense: true,
-      activeColor: const Color(0xFF25D366),
+      activeThumbColor: const Color(0xFF25D366),
       title: Text(
         label,
         style:

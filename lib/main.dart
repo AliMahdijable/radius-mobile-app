@@ -321,7 +321,7 @@ class _MyServicesAppState extends State<MyServicesApp>
       // تلقائياً حسب Directionality: في RTL يكون Swipe من اليمين، وفي
       // LTR (إنجليزي) من اليسار. iOS النمط الأصلي، Android نُطبّقه
       // صراحةً لنفس السلوك.
-      pageTransitionsTheme: PageTransitionsTheme(
+      pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),

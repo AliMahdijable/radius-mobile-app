@@ -119,6 +119,7 @@ dependencies:
   # يقدر يوصل لأجهزة LAN خلف NAT. الإصدار 19.x متوافق مع Dart 3.4+.
   flutter_local_notifications: ^19.4.2
 
+  intl: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

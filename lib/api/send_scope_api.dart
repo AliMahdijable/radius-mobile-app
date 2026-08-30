@@ -28,15 +28,15 @@ class SendScope {
   final String? adminUsername;
 
   factory SendScope.fromJson(Map<String, dynamic> j) {
-    List<String> _list(dynamic v) => v is List
+    List<String> list(dynamic v) => v is List
         ? v.whereType<String>().toList()
         : v is Iterable
             ? v.map((e) => e.toString()).toList()
             : const <String>[];
     return SendScope(
       sendToAll: j['sendToAll'] == true,
-      managedUsernames: _list(j['managedUsernames']),
-      subManagers: _list(j['subManagers']),
+      managedUsernames: list(j['managedUsernames']),
+      subManagers: list(j['subManagers']),
       adminUsername: j['adminUsername']?.toString(),
     );
   }

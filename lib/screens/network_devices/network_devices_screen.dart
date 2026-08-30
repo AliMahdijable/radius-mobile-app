@@ -453,10 +453,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // Selection mode → AppBar تعرض عدد المحدَّد + أزرار bulk actions
     // بدل الـtitle العادي. زرّ الـback (Android) يخرج من selection بدل الخروج من الشاشة.
     if (_selectionMode) {
-      return WillPopScope(
-        onWillPop: () async {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
           _exitSelection();
-          return false;
         },
         child: _buildSelectionScaffold(),
       );

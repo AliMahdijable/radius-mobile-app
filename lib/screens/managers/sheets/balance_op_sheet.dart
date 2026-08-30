@@ -357,7 +357,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                   ),
                   Switch.adaptive(
                     value: _isLoan,
-                    activeColor: AppColors.warning,
+                    activeThumbColor: AppColors.warning,
                     onChanged: (v) => setState(() => _isLoan = v),
                   ),
                 ],
@@ -480,8 +480,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             title: Row(
               children: [
                 Icon(LucideIcons.bell, size: 14, color: AppColors.brandAccent),
-                SizedBox(width: 6),
-                Expanded(
+                const SizedBox(width: 6),
+                const Expanded(
                   child: Text(
                     'إشعار داخل تطبيق المدير',
                     style:

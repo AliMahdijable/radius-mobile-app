@@ -2,7 +2,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/subscribers_api.dart';
@@ -125,12 +124,14 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (_selectedPkg == null) return null;
     if (_method == _Method.points) {
       if (_selectedPoints <= 0) return 'sheets.no_points_support'.tr();
-      if (_pointsBalance < _selectedPoints)
+      if (_pointsBalance < _selectedPoints) {
         return 'sheets.insufficient_points'.tr();
+      }
     } else {
       if (_selectedPrice <= 0) return 'sheets.no_price'.tr();
-      if (_managerBalance < _selectedPrice)
+      if (_managerBalance < _selectedPrice) {
         return 'sheets.insufficient_balance'.tr();
+      }
     }
     return null;
   }

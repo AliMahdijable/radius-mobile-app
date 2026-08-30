@@ -173,7 +173,7 @@ class DeviceConfigApi {
         }
         // usernames اللي لم يرجعوا في الـconfigs = ما عندهم override.
         // نُخزّن DeviceConfig() فارغ لهم حتى ما نعيد fetch لاحقاً.
-        final returned = (configs as Map).keys.map((k) => k.toString()).toSet();
+        final returned = (configs).keys.map((k) => k.toString()).toSet();
         for (final u in chunk) {
           if (!returned.contains(u)) {
             _cache[u] = _CachedConfig(const DeviceConfig(), now);

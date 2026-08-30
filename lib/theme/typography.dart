@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'colors.dart';
-import 'typography.dart';
 
 /// سلّم الخطّ — Cairo دائماً، بقياسات مخطّط إعادة التصميم (2026-08-29).
 ///

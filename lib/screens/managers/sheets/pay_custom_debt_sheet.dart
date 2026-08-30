@@ -295,7 +295,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         Text(label, style: AppType.muted().copyWith(fontSize: 10.5)),
         const SizedBox(height: 2),
         Text(
-          '${formatIQD(value)}',
+          formatIQD(value),
           style: AppType.label(color: color)
               .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
         ),
@@ -366,7 +366,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                   onTap: () => _deletePayment(p),
                   radius: 16,
                   child: Padding(
-                    padding: EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(4),
                     child:
                         Icon(LucideIcons.x, size: 13, color: AppColors.error),
                   ),

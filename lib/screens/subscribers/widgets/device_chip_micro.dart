@@ -78,7 +78,9 @@ class _DeviceChipMicroState extends State<DeviceChipMicro> {
             opacity: anim,
             child: SizeTransition(
               sizeFactor: anim,
-              axisAlignment: -1,
+              // المقابل الحرفي لـ`axisAlignment: -1` على محور عمودي،
+              // كما يوثّقه مصدر Flutter (transitions.dart:500).
+              alignment: const AlignmentDirectional(-1.0, -1.0),
               child: child,
             ),
           ),

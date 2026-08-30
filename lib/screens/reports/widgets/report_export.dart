@@ -125,13 +125,13 @@ class ReportExportBar extends StatelessWidget {
                     style: pw.TextStyle(fontSize: 17, font: fontBold)),
                 pw.Text(_nowStr(),
                     style:
-                        pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
+                        const pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
               ],
             ),
             if (subtitle != null && subtitle!.isNotEmpty) ...[
               pw.SizedBox(height: 4),
               pw.Text(subtitle!,
-                  style: pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+                  style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
             ],
             pw.SizedBox(height: 12),
             // مطلب 2026-07-12: نُلف الجدول بـLTR Directionality عشان

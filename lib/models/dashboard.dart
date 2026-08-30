@@ -1,6 +1,7 @@
 /// Dashboard data shapes. Plain immutable classes — no defaults, no
 /// mock constants. When real data isn't loaded yet, callers pass `null`
 /// and the receiving widget renders a loading state.
+library;
 
 class DailyStats {
   const DailyStats({

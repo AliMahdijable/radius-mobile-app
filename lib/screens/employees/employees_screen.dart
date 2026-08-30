@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' show FontFeature;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../widgets/reveal_password_sheet.dart';
@@ -109,9 +108,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   /// 2026-08-26: عرض كلمة سرّ الموظّف من `employees.password_encrypted`.
   Future<void> _showEmployeePassword(Employee emp) async {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('جارٍ الجلب...'),
-      duration: const Duration(seconds: 1),
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('جارٍ الجلب...'),
+      duration: Duration(seconds: 1),
       behavior: SnackBarBehavior.floating,
     ));
     final res = await EmployeesApi.fetchPassword(emp.id);

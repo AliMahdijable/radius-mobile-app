@@ -616,7 +616,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         children: [
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            activeColor: accent,
+            activeThumbColor: accent,
             title: const Text(
               'القالب مفعّل',
               style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700),
@@ -730,7 +730,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               ],
               Text(
                 ph,
-                style: AppType.microBold(color: Color(0xFF25D366)),
+                style: AppType.microBold(color: const Color(0xFF25D366)),
               ),
             ],
           ),

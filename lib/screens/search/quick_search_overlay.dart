@@ -164,7 +164,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
             orElse: () => locales.firstWhere(
               (l) => l.localeId.toLowerCase().startsWith('ar'),
               orElse: () =>
-                  locales.isEmpty ? throw _NoLocales() : locales.first,
+                  locales.isEmpty ? throw const _NoLocales() : locales.first,
             ),
           )
           .localeId;
@@ -221,7 +221,6 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     if (kDebugMode) debugPrint('🎙️ listen with locale="$effectiveLocale"');
     try {
       await _speech.listen(
-        localeId: effectiveLocale,
         onResult: (r) {
           if (!mounted) return;
           // 2026-07-14: تنظيف نتيجة الصوت قبل ما تدخل الحقل:
@@ -250,6 +249,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         // listenMode=dictation + onDevice=false نبقيهما — أكثر توافقاً
         // ولا يؤثّران على iOS.
         listenOptions: SpeechListenOptions(
+          localeId: effectiveLocale,
           partialResults: true,
           cancelOnError: true,
           listenMode: ListenMode.dictation,
@@ -476,7 +476,7 @@ class _Results extends StatelessWidget {
       builder: (_, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Padding(
-            padding: EdgeInsets.symmetric(vertical: Sp.huge),
+            padding: const EdgeInsets.symmetric(vertical: Sp.huge),
             child: Center(
               child: CircularProgressIndicator(color: AppColors.brand),
             ),
@@ -557,7 +557,9 @@ class _Results extends StatelessWidget {
   /// 2026-07-14: تطبيع نصّ عربي قبل المقارنة. iOS Speech Recognition
   /// (وأحياناً Google) يحقن أحرفاً غير مرئيّة تكسر contains-match:
   ///
-  /// • علامات BiDi (‎ LRM, ‏ RLM, ‪-‮) — اتّجاه النصّ.
+  /// • علامات BiDi (U+200E LRM · U+200F RLM · U+202A..U+202E) — اتّجاه
+///   النصّ. مكتوبة بأسمائها لا بحروفها: المحرف الحرفي داخل تعليق
+///   يقلب ظاهر السطر عن حقيقته للمحلّل — صنف Trojan Source نفسه.
   /// • NBSP ( ) بدل المسافة العاديّة.
   /// • تشكيل (فتحة/كسرة/ضمّة/شدّة/سكون: ً-ٟ, ٰ).
   /// • تطويل (ـ: ـ) — أحياناً يُستخدم للتنسيق البصري.

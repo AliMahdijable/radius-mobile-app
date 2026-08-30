@@ -28,7 +28,12 @@ class Sas4Api {
     if (!kReleaseMode) debugPrint('🔵 SAS4 widgets → calling');
 
     Future<dynamic> hit(String name, String url) {
-      return ApiClient.sas4.get(url).then((r) {
+      // ⚠️ `then<dynamic>` ضروريّ لا تجميليّ: بدونه يبقى المستقبَل
+      // `Future<Response>`، فـ`catchError` التي تُعيد null ترمي
+      // TypeError وقت الفشل بدل أن تبتلعه — فيسقط `Future.wait`
+      // أدناه بكامله، وتنهار إحصاءات الداشبورد كلّها لأنّ نقطة
+      // واحدة تعطّلت.
+      return ApiClient.sas4.get(url).then<dynamic>((r) {
         if (!kReleaseMode) {
           debugPrint('🟢 SAS4 $name: status=${r.statusCode} data=${r.data}');
         }

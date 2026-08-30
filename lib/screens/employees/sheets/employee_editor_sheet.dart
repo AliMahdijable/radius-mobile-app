@@ -318,7 +318,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             style: AppType.muted().copyWith(fontSize: 11),
           ),
           contentPadding: EdgeInsets.zero,
-          activeColor: AppColors.brand,
+          activeThumbColor: AppColors.brand,
         ),
       ],
     );

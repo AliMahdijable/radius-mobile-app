@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/mikrotik_api.dart';
-import '../../api/mimosa_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_region.dart';
@@ -157,11 +156,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => NetworkDeviceFormSheet(existing: _d),
     );
-    if (updated != null)
+    if (updated != null) {
       setState(() {
         _d = updated;
         _changed = true;
       });
+    }
   }
 
   Future<void> _delete() async {
@@ -798,8 +798,9 @@ bool _isAirFiber60(NetworkDevice d) {
   if (combined.trim().isEmpty) return false;
   // Explicit 60 GHz mentions
   if (combined.contains('60ghz') || combined.contains('60 ghz')) return true;
-  if (combined.contains('airfiber 60') || combined.contains('airfiber60'))
+  if (combined.contains('airfiber 60') || combined.contains('airfiber60')) {
     return true;
+  }
   // AF-60 variants — لكن ليس AF-60-XG (5GHz backhaul)
   final af60Match =
       RegExp(r'af[\s-]?60[\s-]?(lr|xr|gp|lite)?\b').firstMatch(combined);
@@ -807,7 +808,9 @@ bool _isAirFiber60(NetworkDevice d) {
     // إذا كان جزء من "af-60-xg" → false
     if (combined.contains('af-60-xg') ||
         combined.contains('af60-xg') ||
-        combined.contains('af 60 xg')) return false;
+        combined.contains('af 60 xg')) {
+      return false;
+    }
     return true;
   }
   // Suffix variants: "LR 60" / "60 LR" / "gp 60" / "60 gp"

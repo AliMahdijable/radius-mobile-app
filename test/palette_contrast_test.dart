@@ -285,7 +285,7 @@ void main() {
         // البطاقة الخضراء تُرسم بـ`brandSurface` — ثابت في الوضعين
         // عمداً (راجع تعليقه في colors.dart). طبقاتها أبيض شفّاف
         // تُسطَّح قبل القياس.
-        final card = AppColors.brandSurface;
+        const card = AppColors.brandSurface;
         final secondary = flatten(AppColors.onBrandSecondary, card);
         expect(contrast(secondary, card), greaterThanOrEqualTo(4.5),
             reason: '$mode — onBrandSecondary فوق البطاقة');
@@ -317,7 +317,7 @@ void main() {
 
       test('onBrandTertiary مقروء فوق البطاقة', () {
         AppColors.setDarkMode(dark);
-        final card = AppColors.brandSurface;
+        const card = AppColors.brandSurface;
         final t = flatten(AppColors.onBrandTertiary, card);
         expect(contrast(t, card), greaterThanOrEqualTo(4.0),
             reason: '$mode — onBrandTertiary فوق البطاقة');
@@ -325,7 +325,7 @@ void main() {
 
       test('brandSurface ثابت في الوضعين — عليه معايرة كل طبقات on-brand', () {
         AppColors.setDarkMode(false);
-        final light = AppColors.brandSurface;
+        const light = AppColors.brandSurface;
         AppColors.setDarkMode(true);
         expect(AppColors.brandSurface, equals(light),
             reason: 'سطح البطاقة الداكنة يجب ألّا يتغيّر — طبقات onBrand* '

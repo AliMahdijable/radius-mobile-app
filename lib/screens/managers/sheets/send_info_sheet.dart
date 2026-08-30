@@ -187,7 +187,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
                 children: [
                   Icon(LucideIcons.triangleAlert,
                       size: 14, color: AppColors.error),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'لا يوجد رقم هاتف محفوظ — لن يُرسل واتساب',
