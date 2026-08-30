@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/discounts_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -168,151 +169,88 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.success;
     final filtered = _filtered;
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, _) {
-        // ما نريد نرجّع true إلا لو تغيّر شي.
-      },
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (_, controller) {
-          return Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.tag,
+        title: 'الخصومات القائمة',
+        subtitle: '',
+        tint: AppColors.success,
+        tintBg: AppColors.successSoftBg,
+        onClose: () => Navigator.of(context).pop(_changed),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(R.pill),
+                border: Border.all(color: AppColors.borderSoft),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      style: AppType.input(color: AppColors.textHi),
+                      decoration: InputDecoration(
+                        hintText: 'بحث في الخصومات…',
+                        hintStyle: AppType.input(color: AppColors.textLow),
+                        border: InputBorder.none,
+                        isCollapsed: true,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(R.pill),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                        child: Icon(LucideIcons.list, size: 16, color: accent),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'الخصومات الحالية',
-                              style: AppType.title(color: AppColors.textHi)
-                                  .copyWith(fontSize: 15),
-                            ),
-                            Text(
-                              '${_rows.length} خصم · إجمالي '
-                              '${formatIQD(_total)} د.ع',
-                              style: AppType.muted().copyWith(fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(_changed),
-                        icon: const Icon(LucideIcons.x, size: 16),
-                        color: AppColors.textMid,
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(R.pill),
-                      border: Border.all(color: AppColors.borderSoft),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.search,
-                            size: 16, color: AppColors.textMid),
-                        const SizedBox(width: Sp.sm),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchCtrl,
-                            style: AppType.input(color: AppColors.textHi),
-                            decoration: InputDecoration(
-                              hintText: 'بحث في الخصومات…',
-                              hintStyle:
-                                  AppType.input(color: AppColors.textLow),
-                              border: InputBorder.none,
-                              isCollapsed: true,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 10),
-                            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : filtered.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(Sp.huge),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(LucideIcons.percent,
+                                  size: 32, color: AppColors.textLow),
+                              const SizedBox(height: 10),
+                              Text(
+                                _query.isEmpty
+                                    ? 'لا توجد خصومات مطبّقة بعد'
+                                    : 'لا توجد نتائج لـ "$_query"',
+                                style: AppType.muted().copyWith(fontSize: 12.5),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : filtered.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.all(Sp.huge),
-                              child: Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(LucideIcons.percent,
-                                        size: 32, color: AppColors.textLow),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      _query.isEmpty
-                                          ? 'لا توجد خصومات مطبّقة بعد'
-                                          : 'لا توجد نتائج لـ "$_query"',
-                                      style: AppType.muted()
-                                          .copyWith(fontSize: 12.5),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              controller: controller,
-                              padding: const EdgeInsets.fromLTRB(
-                                  Sp.lg, 0, Sp.lg, Sp.huge),
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8),
-                              itemBuilder: (_, i) => _Tile(
-                                discount: filtered[i],
-                                fullName: _fullNameFor(
-                                    filtered[i].subscriberUsername),
-                                onEdit: () => _openEdit(filtered[i]),
-                                onDelete: () => _confirmDelete(filtered[i]),
-                              ),
-                            ),
-                ),
-              ],
-            ),
-          );
-        },
+                      )
+                    : ListView.separated(
+                        padding:
+                            const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _Tile(
+                          discount: filtered[i],
+                          fullName:
+                              _fullNameFor(filtered[i].subscriberUsername),
+                          onEdit: () => _openEdit(filtered[i]),
+                          onDelete: () => _confirmDelete(filtered[i]),
+                        ),
+                      ),
+          ),
+        ],
       ),
     );
   }
